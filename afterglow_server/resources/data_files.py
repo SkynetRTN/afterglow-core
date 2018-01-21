@@ -420,7 +420,7 @@ def get_data_file_path(id):
     return os.path.join(get_root(), '{}.fits'.format(id))
 
 
-# Data file cache: {id: [fits, timestamp]}
+# Data file cache: {(user_id, file_id): [fits, timestamp]}
 _data_file_cache = {}
 _data_file_cache_size = 0
 _data_file_cache_lock = Lock()
@@ -443,6 +443,7 @@ def get_data_file(id, update=False):
     """
     global _data_file_cache_size
 
+    full_id = (current_user.id, id)
     if update:
         try:
             fits = pyfits.open(get_data_file_path(id), 'update', memmap=False)
@@ -453,16 +454,17 @@ def get_data_file(id, update=False):
         # the next access, it will be re-cached as read-only
         try:
             with _data_file_cache_lock:
-                _data_file_cache_size -= _data_file_cache[id][0][-1].data.nbytes
-                _data_file_cache[id].close()
-                del _data_file_cache[id]
+                _data_file_cache_size -= \
+                    _data_file_cache[full_id][0][-1].data.nbytes
+                _data_file_cache[full_id].close()
+                del _data_file_cache[full_id]
         except KeyError:
             pass
     else:
         # Try getting the file from cache
         with _data_file_cache_lock:
             try:
-                fits = _data_file_cache[id][0]
+                fits = _data_file_cache[full_id][0]
             except KeyError:
                 # File not in cache, load it
                 try:
@@ -480,8 +482,8 @@ def get_data_file(id, update=False):
                         # Find and delete the oldest cached file
                         # noinspection PyTypeChecker
                         oldest_id = sorted(
-                            ((id, ts)
-                             for id, (_, ts) in _data_file_cache.items()),
+                            ((_full_id, ts)
+                             for _full_id, (_, ts) in _data_file_cache.items()),
                             key=itemgetter(1))[0][0]
                         _data_file_cache_size -= \
                             _data_file_cache[oldest_id][0][-1].data.nbytes
@@ -489,11 +491,11 @@ def get_data_file(id, update=False):
                         del _data_file_cache[oldest_id]
 
                 # Add file to cache with the current timestamp
-                _data_file_cache[id] = [fits, datetime.utcnow()]
+                _data_file_cache[full_id] = [fits, datetime.utcnow()]
                 _data_file_cache_size += data_size
             else:
                 # File found in cache, update the last access timestamp
-                _data_file_cache[id][1] = datetime.utcnow()
+                _data_file_cache[full_id][1] = datetime.utcnow()
 
     # noinspection PyUnboundLocalVariable
     return fits
@@ -1026,7 +1028,9 @@ def data_files(id=None):
             # Delete cached data
             with _data_file_cache_lock:
                 try:
-                    del _data_file_cache[id]
+                    full_id = (current_user.id, id)
+                    _data_file_cache[full_id].close()
+                    del _data_file_cache[full_id]
                 except KeyError:
                     pass
         except Exception:
