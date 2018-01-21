@@ -99,3 +99,9 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# py2exe
+MANIFEST
+
+# IntelliJ/PyCharm
+*.iml

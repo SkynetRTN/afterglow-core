@@ -1,0 +1,2 @@
+# Don't include Skynet OAuth plugins
+skynet_oauth.py

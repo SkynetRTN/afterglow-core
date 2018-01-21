@@ -1,0 +1,2 @@
+# Don't include local Skynet data provider
+skynet_local_provider.py
