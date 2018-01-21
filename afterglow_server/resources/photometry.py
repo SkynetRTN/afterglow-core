@@ -6,9 +6,10 @@ from __future__ import absolute_import, division, print_function
 from flask import request
 from numpy import array, sqrt
 from astropy.wcs import WCS
-import sep
-from skylib.calibration.background import sep_compatible
+
 from skylib.photometry.aperture import aperture_photometry
+from skylib.extraction.centroiding import centroid_iraf
+
 from .. import Float, Resource, app, errors, json_response, url_prefix
 from ..auth import auth_required
 from .data_files import (
@@ -125,13 +126,9 @@ def get_photometry(data, texp, gain, phot_cal, x, y, a, b=None, theta=0,
     if theta_out is None:
         theta_out = theta
 
-    data = sep_compatible(data)
-
     if centroid_radius:
-        # Find centroid coordinates using the windowed method
-        xc, yc, flags = sep.winpos(data, x - 1, y - 1, centroid_radius)
-        if not flags:
-            x, y = float(xc) + 1, float(yc) + 1
+        # Find centroid coordinates using the IRAF-like method
+        x, y = centroid_iraf(data, x, y, centroid_radius)
 
     source = aperture_photometry(
         data,
