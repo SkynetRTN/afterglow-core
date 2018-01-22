@@ -1172,7 +1172,7 @@ def data_files_pixels(id):
     Content-Type: application/json
 
     Binary data are returned in the little-endian byte order (LSB first, Intel)
-    by row, i.e. in C format.
+    by row, i.e. in C format, from bottom to top.
 
     :param int id: data file ID
 

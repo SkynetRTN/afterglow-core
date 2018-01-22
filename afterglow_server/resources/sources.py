@@ -100,6 +100,8 @@ class Source(Resource):
                 flux = 0
             if flux > 0:
                 self.mag = -2.5*log10(flux/texp)
+            else:
+                self.mag = None
 
         if self.mag is not None:
             try:
