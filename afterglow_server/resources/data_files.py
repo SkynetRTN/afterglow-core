@@ -456,7 +456,7 @@ def get_data_file(id, update=False):
             with _data_file_cache_lock:
                 _data_file_cache_size -= \
                     _data_file_cache[full_id][0][-1].data.nbytes
-                _data_file_cache[full_id].close()
+                _data_file_cache[full_id][0].close()
                 del _data_file_cache[full_id]
         except KeyError:
             pass
@@ -487,7 +487,7 @@ def get_data_file(id, update=False):
                             key=itemgetter(1))[0][0]
                         _data_file_cache_size -= \
                             _data_file_cache[oldest_id][0][-1].data.nbytes
-                        _data_file_cache[oldest_id].close()
+                        _data_file_cache[oldest_id][0].close()
                         del _data_file_cache[oldest_id]
 
                 # Add file to cache with the current timestamp
@@ -1029,7 +1029,7 @@ def data_files(id=None):
             with _data_file_cache_lock:
                 try:
                     full_id = (current_user.id, id)
-                    _data_file_cache[full_id].close()
+                    _data_file_cache[full_id][0].close()
                     del _data_file_cache[full_id]
                 except KeyError:
                     pass
