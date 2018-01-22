@@ -443,6 +443,8 @@ def get_data_file(id, update=False):
     """
     global _data_file_cache_size
 
+    max_cache_size = app.config.get('DATA_FILE_CACHE_SIZE', 0) << 20
+
     full_id = (current_user.id, id)
     if update:
         try:
@@ -450,17 +452,18 @@ def get_data_file(id, update=False):
         except Exception:
             raise UnknownDataFileError(id=id)
 
-        # If a data file is being opened for updating, remove it from cache; on
-        # the next access, it will be re-cached as read-only
-        try:
-            with _data_file_cache_lock:
-                _data_file_cache_size -= \
-                    _data_file_cache[full_id][0][-1].data.nbytes
-                _data_file_cache[full_id][0].close()
-                del _data_file_cache[full_id]
-        except KeyError:
-            pass
-    else:
+        if max_cache_size:
+            # If a data file is being opened for updating, remove it from cache;
+            # on the next access, it will be re-cached as read-only
+            try:
+                with _data_file_cache_lock:
+                    _data_file_cache_size -= \
+                        _data_file_cache[full_id][0][-1].data.nbytes
+                    _data_file_cache[full_id][0].close()
+                    del _data_file_cache[full_id]
+            except KeyError:
+                pass
+    elif max_cache_size:
         # Try getting the file from cache
         with _data_file_cache_lock:
             try:
@@ -474,8 +477,6 @@ def get_data_file(id, update=False):
                     raise UnknownDataFileError(id=id)
 
                 # Check if the cache is full
-                max_cache_size = app.config.get(
-                    'DATA_FILE_CACHE_SIZE', 512) << 20
                 data_size = fits[-1].data.nbytes
                 if data_size <= max_cache_size:
                     while _data_file_cache_size + data_size > max_cache_size:
@@ -496,6 +497,12 @@ def get_data_file(id, update=False):
             else:
                 # File found in cache, update the last access timestamp
                 _data_file_cache[full_id][1] = datetime.utcnow()
+    else:
+        # Don't use caching
+        try:
+            fits = pyfits.open(get_data_file_path(id), 'readonly')
+        except Exception:
+            raise UnknownDataFileError(id=id)
 
     # noinspection PyUnboundLocalVariable
     return fits
@@ -1026,13 +1033,14 @@ def data_files(id=None):
             adb.commit()
 
             # Delete cached data
-            with _data_file_cache_lock:
-                try:
-                    full_id = (current_user.id, id)
-                    _data_file_cache[full_id][0].close()
-                    del _data_file_cache[full_id]
-                except KeyError:
-                    pass
+            if app.config.get('DATA_FILE_CACHE_SIZE'):
+                with _data_file_cache_lock:
+                    try:
+                        full_id = (current_user.id, id)
+                        _data_file_cache[full_id][0].close()
+                        del _data_file_cache[full_id]
+                    except KeyError:
+                        pass
         except Exception:
             adb.rollback()
             raise

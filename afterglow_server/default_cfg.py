@@ -62,8 +62,8 @@ DATA_PROVIDERS = [
 # Root directory for data file storage
 DATA_FILE_ROOT = DATA_ROOT
 
-# Per-process data file cache size in megabytes
-DATA_FILE_CACHE_SIZE = 512
+# Per-process data file cache size in megabytes (0 = disable caching)
+DATA_FILE_CACHE_SIZE = 0
 
 # Data files authentication; defaults to any method registered in USER_AUTH
 DATA_FILE_AUTH = None
