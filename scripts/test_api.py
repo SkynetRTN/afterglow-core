@@ -86,7 +86,6 @@ if __name__ == '__main__':
                 while i <= len(s):
                     try:
                         headers['X-CSRF-Token'] = json.loads(s[:i])['csrf']
-                        print(json.loads(s[:i])['csrf'])
                         break
                     except ValueError:
                         i += 1
@@ -120,9 +119,10 @@ if __name__ == '__main__':
         args.resource)
     print('\n{} {}'.format(args.method, url), file=sys.stderr)
     if headers:
-        print('\n'.join('{}: {}'.format(h, v) for h, v in headers.items()))
+        print('\n'.join('{}: {}'.format(h, v) for h, v in headers.items()),
+              file=sys.stderr)
     if data and headers.get('Content-Type') == 'application/json':
-        print(data)
+        print(data, file=sys.stderr)
 
     r = requests.request(
         args.method, url,
