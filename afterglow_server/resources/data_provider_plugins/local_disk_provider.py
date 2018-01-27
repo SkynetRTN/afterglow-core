@@ -164,7 +164,7 @@ class LocalDiskDataProvider(DataProvider):
 
         # Asset is a file; try to read it and get metadata
         imtype = layers = imwidth = imheight = None
-        explength = exptime = None
+        explength = exptime = telescope = flt = None
 
         # A FITS file?
         # noinspection PyBroadException
@@ -177,6 +177,16 @@ class LocalDiskDataProvider(DataProvider):
 
                 try:
                     explength = f[0].header['EXPOSURE']
+                except KeyError:
+                    pass
+
+                try:
+                    telescope = f[0].header['TELESCOP']
+                except KeyError:
+                    pass
+
+                try:
+                    flt = f[0].header['FILTER']
                 except KeyError:
                     pass
 
@@ -310,6 +320,10 @@ class LocalDiskDataProvider(DataProvider):
         )
         if explength is not None:
             asset.metadata['exposure'] = explength
+        if telescope is not None:
+            asset.metadata['telescope'] = telescope
+        if flt is not None:
+            asset.metadata['filter'] = flt
 
         return asset
 
