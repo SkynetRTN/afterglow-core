@@ -276,7 +276,7 @@ def auth_required(fn, *roles, **kwargs):
     @wraps(fn)
     def wrapper(*args, **kw):
         authenticate(roles, **kwargs)
-        return _refresh_access_cookies(fn(*args, **kw))
+        return _set_access_cookies(fn(*args, **kw))
 
     return wrapper
 
@@ -294,17 +294,6 @@ def _create_token(*_, **__):
 def _set_access_cookies(*_, **__):
     """
     Set access cookies for browser access
-
-    :return: response
-    :rtype: flask.response
-
-    """
-    return
-
-
-def _refresh_access_cookies(*_, **__):
-    """
-    Refresh access cookies for browser access
 
     :return: response
     :rtype: flask.response
@@ -340,7 +329,7 @@ def init_auth():
 
     # noinspection PyGlobalUndefined
     global auth_plugins, authenticate, security, current_user, _create_token, \
-        _set_access_cookies, _refresh_access_cookies, _clear_access_cookies
+        _set_access_cookies, _clear_access_cookies
 
     current_user = _current_user
 
@@ -429,7 +418,7 @@ def init_auth():
 
     _create_token = __create_token
 
-    def __set_access_cookies(response, access_token):
+    def __set_access_cookies(response, access_token=None):
         """
         Adds two new cookies to response. The signature cookie is HTTP-Only (not
         accessible to the client-side JS and expires with the session. The
@@ -440,45 +429,30 @@ def init_auth():
         in-a-stateless-single-page-application-57d0c6474e3
 
         :param flask.Response response: Flask response object
-        :param str access_token: encoded access token
+        :param str | None access_token: encoded access token; if None, create
+            access token automatically
 
         :return: Flask response
         :rtype: flask.Response
         """
-        signature = access_token.split('.')[2]
+        expires_delta = app.config.get('ACCESS_TOKEN_EXPIRES')
+        if not access_token:
+            method = _request_ctx_stack.top.auth_method
+            access_token = __create_token(
+                current_user.username, expires_delta, dict(method=method))
+
+        hdr_payload, signature = access_token.rsplit('.', 1)
+        response.set_cookie(
+            'access_token', value=hdr_payload,
+            max_age=expires_delta.total_seconds() if expires_delta else None,
+            secure=False, httponly=False)
         response.set_cookie(
             'access_token_sig', value=signature, max_age=None, secure=False,
             httponly=True)
 
-        hdr_payload = '.'.join(access_token.split('.')[:2])
-        response.set_cookie(
-            'access_token', value=hdr_payload,
-            max_age=app.config['ACCESS_TOKEN_COOKIE_EXPIRES'].total_seconds(),
-            secure=False, httponly=False)
-
         return response
 
     _set_access_cookies = __set_access_cookies
-
-    def __refresh_access_cookies(response):
-        """
-        Refreshes the access cookies
-
-        See: https://medium.com/lightrail/getting-token-authentication-right-in-
-        a-stateless-single-page-application-57d0c6474e3
-
-        :param response: Flask response
-        :return: Flask response
-        """
-        token_sig = request.cookies.get('access_token_sig')
-        token_hdr_payload = request.cookies.get('access_token')
-        if token_sig and token_hdr_payload:
-            token = token_hdr_payload + '.' + token_sig
-            response = __set_access_cookies(response, token)
-
-        return response
-
-    _refresh_access_cookies = __refresh_access_cookies
 
     def __clear_access_cookies(response):
         """
@@ -488,7 +462,9 @@ def init_auth():
         a-stateless-single-page-application-57d0c6474e3
 
         :param response: Flask response
-        :return: Flask response
+
+        :return: Flask response with access token removed from cookies
+        :rtype: flask.Response
         """
         response.set_cookie('access_token_sig', '', expires=0)
         response.set_cookie('access_token', '', expires=0)
@@ -584,9 +560,8 @@ def init_auth():
     app.config.setdefault('SECURITY_PASSWORD_HASH', 'sha512_crypt')
     app.config.setdefault('SECURITY_PASSWORD_SALT', 'afterglow-server')
     app.config.setdefault('SECURITY_DEFAULT_HTTP_AUTH_REALM', USER_REALM)
-    app.config.setdefault('ACCESS_TOKEN_EXPIRES', timedelta(minutes=15))
+    app.config.setdefault('ACCESS_TOKEN_EXPIRES', timedelta(days=1))
     app.config.setdefault('REFRESH_TOKEN_EXPIRES', None)
-    app.config.setdefault('ACCESS_TOKEN_COOKIE_EXPIRES', timedelta(days=1))
 
     security = Security(app, user_datastore, register_blueprint=False)
 
@@ -936,16 +911,16 @@ def login(method=None):
         raise InactiveUserError()
 
     # Return access and refresh tokens
+    expires_delta = app.config.get('ACCESS_TOKEN_EXPIRES')
     access_token = _create_token(
-        user.username, app.config.get('ACCESS_TOKEN_COOKIE_EXPIRES'),
-        dict(method=method))
-    # return _set_access_cookies(json_response(), access_token)
-    return _set_access_cookies(json_response(dict(
-        access_token=access_token,
-        refresh_token=_create_token(
-            user.username, app.config.get('REFRESH_TOKEN_EXPIRES'),
-            dict(method=method), 'refresh'),
-    )), access_token)
+        user.username, expires_delta, dict(method=method))
+    return _set_access_cookies(json_response(
+        dict(
+            access_token=access_token,
+            refresh_token=_create_token(
+                user.username, app.config.get('REFRESH_TOKEN_EXPIRES'),
+                dict(method=method), 'refresh'),
+        )), access_token)
 
 
 @app.route(url_prefix + 'auth/logout', methods=['GET', 'POST'])
@@ -997,7 +972,7 @@ def logout():
 #         raise NotAuthenticatedError(
 #             error_msg='Refresh token does not contain auth method')
 #
-#     return _refresh_access_cookies(json_response(dict(
+#     return _set_access_cookies(json_response(dict(
 #         access_token=_create_token(
 #             current_user.username, app.config.get('ACCESS_TOKEN_EXPIRES'),
 #             dict(method=method)),
