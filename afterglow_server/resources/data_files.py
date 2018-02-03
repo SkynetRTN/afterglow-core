@@ -621,20 +621,13 @@ def make_data_response(data, status_code=200):
         allow_json = is_array
         allow_bin = True
 
+    allow_gzip = False
     accepted_encodings = request.headers['Accept-Encoding']
     if accepted_encodings is not None:
-        allow_gzip = False
         for enc in accepted_encodings.split(','):
-            enc = enc.split(';')[0].strip().lower()
-            if enc == 'gzip':
+            if enc.split(';')[0].strip().lower() == 'gzip':
                 allow_gzip = True
-            elif enc == '*':
-                allow_gzip = True
-    else:
-        # Accept-Encoding header not specified, assume all encodings are allowed
-        allow_gzip = True
 
-    # Prefer sending gzipped binary data
     if allow_bin:
         if is_array:
             # Make sure data are in little-endian byte order before sending over
@@ -1161,18 +1154,17 @@ def data_files_pixels(id):
     [Accept: */octet-stream]
     [Accept: application/*]
     [Accept: */*]
-    -> (compressed binary)
+    -> (uncompressed binary)
     Content-Type: application/octet-stream
-    Content-Encoding: gzip
 
     [Accept: application/octet-stream]
     [Accept: */octet-stream]
     [Accept: application/*]
     [Accept: */*]
-    Accept-Encoding:
-    Accept-Encoding: identity
-    -> (uncompressed binary)
+    Accept-Encoding: gzip
+    -> (compressed binary)
     Content-Type: application/octet-stream
+    Content-Encoding: gzip
 
     [Accept: application/json]
     [Accept: */json]
@@ -1207,12 +1199,17 @@ def data_files_fits(id):
     GET /data-files/[id]/fits
 
     Depending on the request headers (Accept and Accept-Encoding), the FITS
-    file is returned either as a gzipped (default) or uncompressed FITS.
+    file is returned either as a gzipped or uncompressed (default) FITS.
 
-    Accept-Encoding:
-    Accept-Encoding: identity
+    [Accept-Encoding:]
+    [Accept-Encoding: identity]
     -> (uncompressed FITS)
     Content-Type: application/octet-stream
+
+    Accept-Encoding: gzip
+    -> (compressed FITS)
+    Content-Type: application/octet-stream
+    Content-Encoding: gzip
 
     :param int id: data file ID
 
