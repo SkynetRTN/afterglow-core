@@ -622,11 +622,11 @@ def make_data_response(data, status_code=200):
         allow_bin = True
 
     allow_gzip = False
-    accepted_encodings = request.headers['Accept-Encoding']
-    if accepted_encodings is not None:
-        for enc in accepted_encodings.split(','):
-            if enc.split(';')[0].strip().lower() == 'gzip':
-                allow_gzip = True
+    # accepted_encodings = request.headers['Accept-Encoding']
+    # if accepted_encodings is not None:
+    #     for enc in accepted_encodings.split(','):
+    #         if enc.split(';')[0].strip().lower() == 'gzip':
+    #             allow_gzip = True
 
     if allow_bin:
         if is_array:
