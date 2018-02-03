@@ -303,7 +303,7 @@ def create_data_file(adb, name, fits, root, provider=None, path=None,
     # Save FITS to data file directory
     fits.writeto(
         os.path.join(root, '{}.fits'.format(sqla_data_file.id)),
-        'silentfix', overwrite=True, checksum=True)
+        'silentfix', overwrite=True)
 
     return data_file
 
@@ -1132,7 +1132,7 @@ def data_files_hist(id):
             hist.header['MAXBIN'] = max_bin, 'Upper histogram boundary'
             hist.writeto(
                 os.path.join(root, '{}.fits.hist'.format(id)),
-                overwrite=True, checksum=True)
+                overwrite=True)
         except errors.AfterglowError:
             raise
         except Exception:
