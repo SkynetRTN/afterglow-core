@@ -205,16 +205,16 @@ def data_providers(id=None):
     :rtype: flask.Response
     """
     if id is None:
-        # Data provider listing is available to all users authorized for any of
-        # the data provider
-        auth_methods = []
+        # List only data providers allowed for the current user's auth method
+        allowed_providers = []
         for provider in providers.values():
-            auth_methods += [
-                method for method in provider.auth_methods
-                if method not in auth_methods]
-        return json_response(
-            [provider for id, provider in providers.items()
-             if isinstance(id, int)])
+            try:
+                _check_provider_auth(provider)
+            except NotAuthenticatedError:
+                pass
+            else:
+                allowed_providers.append(provider)
+        return json_response(allowed_providers)
 
     try:
         provider = providers[id]
