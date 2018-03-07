@@ -179,10 +179,7 @@ class SqlaDataFile(Base):
 
     id = Column(Integer, primary_key=True, nullable=False)
     type = Column(String)
-    name = Column(
-        String,
-        default=lambda context: 'file{}'.format(
-            context.current_parameters['id']))
+    name = Column(String)
     width = Column(Integer)
     height = Column(Integer)
     data_provider = Column(String)
@@ -280,6 +277,15 @@ def create_data_file(adb, name, fits, root, provider=None, path=None,
         data_type = 'table'
         width = len(fits.data.columns)
         height = len(fits.data)
+
+    if not name:
+        name = datetime.utcnow().isoformat('_'). \
+            replace('-', '').replace(':', '')
+        try:
+            name = name[:name.index('.')]
+        except ValueError:
+            pass
+        name = 'file_{}'.format(name)
 
     # Add a database row and obtain its ID
     sqla_data_file = SqlaDataFile(
