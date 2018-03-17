@@ -807,7 +807,9 @@ def auth_plugins_view(id=None):
     :rtype: flask.Response
     """
     if id is None:
-        return json_response(list(auth_plugins.values()))
+        return json_response(
+            [auth_plugins[id] for id in sorted(
+                {str(id) for id in auth_plugins.keys()})])
 
     try:
         plugin = auth_plugins[id]
