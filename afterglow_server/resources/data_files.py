@@ -135,6 +135,8 @@ class DataFile(Resource):
         asset_path: for imported data files, the original asset path
         asset_metadata: dictionary of the originating data provider asset
             metadata
+        layer: layer ID for data files imported from multi-layer data provider
+            assets
         created_on: datetime.datetime of data file creation
     """
     __get_view__ = 'data_files'
@@ -147,6 +149,7 @@ class DataFile(Resource):
     data_provider = fields.String(default=None)
     asset_path = fields.String(default=None)
     asset_metadata = fields.Dict(default={})
+    layer = fields.String(default=None)
     created_on = fields.DateTime(default=None, format='%Y-%m-%d %H:%M:%S')
 
     def __init__(self, _obj=None, **kwargs):
@@ -185,6 +188,7 @@ class SqlaDataFile(Base):
     data_provider = Column(String)
     asset_path = Column(String)
     asset_metadata = Column(String)
+    layer = Column(String)
     created_on = Column(DateTime, default=func.now())
 
 
@@ -249,24 +253,30 @@ def get_data_file_db():
 
 
 def create_data_file(adb, name, fits, root, provider=None, path=None,
-                     params=None):
+                     metadata=None, layer=None, duplicates='ignore'):
     """
     Create a database entry for a new data file and save it to data file
     directory as a single image HDU FITS or a primary + table HDU FITS,
     depending on whether the input HDU contains an image or a table
 
-    :param :class:`sqlalchemy.orm.session.Session` adb: SQLA database session
+    :param sqlalchemy.orm.session.Session adb: SQLA database session
     :param str | None name: data file name
     :param astropy.io.fits.hdu.base._ValidHDU fits: FITS HDU containing image
         or table data
-    :param root: user's data file storage root directory
+    :param str root: user's data file storage root directory
     :param str provider: data provider ID/name if not creating an empty data
         file
     :param str path: path of the data provider asset the file was imported from
-    :param dict params: data provider params used to get the asset
+    :param dict metadata: data provider asset metadata
+    :param str layer: optional layer ID for multiple-layer assets
+    :param str duplicates: optional duplicate handling mode used if the data
+        file with the same `provider`, `path`, and `layer` was already imported
+        before: "ignore" (default) = don't re-import the existing data file,
+        "overwrite" = re-import the file and replace the existing data file,
+        "append" = always import as a new data file
 
     :return: data file instance
-    :rtype: :class:`DataFile`
+    :rtype: DataFile
     """
     if isinstance(fits, pyfits.ImageHDU.__base__):
         # Image HDU; get image dimensions from FITS
@@ -287,18 +297,40 @@ def create_data_file(adb, name, fits, root, provider=None, path=None,
             pass
         name = 'file_{}'.format(name)
 
-    # Add a database row and obtain its ID
-    sqla_data_file = SqlaDataFile(
+    # Create/update a database row
+    sqla_fields = dict(
         type=data_type,
         name=name,
         width=width,
         height=height,
         data_provider=provider,
         asset_path=path,
-        asset_metadata=json.dumps(params) if params is not None else None,
+        asset_metadata=json.dumps(metadata) if metadata is not None else None,
+        layer=layer,
     )
-    adb.add(sqla_data_file)
-    adb.flush()  # obtain the new row ID by flushing db
+
+    if duplicates in ('ignore', 'overwrite'):
+        # Look for an existing data file with the same import parameters
+        sqla_data_file = adb.query(SqlaDataFile).filter_by(
+            data_provider=provider, asset_path=path, layer=layer,
+        ).one_or_none()
+
+        if sqla_data_file is not None:
+            if duplicates == 'ignore':
+                # Don't reimport existing data files
+                return DataFile(sqla_data_file)
+
+            # Overwrite existing data file
+            for attr, val in sqla_fields.items():
+                setattr(sqla_data_file, attr, val)
+    else:
+        sqla_data_file = None
+
+    if sqla_data_file is None:
+        # Add a database row and obtain its ID
+        sqla_data_file = SqlaDataFile(**sqla_fields)
+        adb.add(sqla_data_file)
+        adb.flush()  # obtain the new row ID by flushing db
 
     data_file = DataFile(sqla_data_file)
 
@@ -312,6 +344,226 @@ def create_data_file(adb, name, fits, root, provider=None, path=None,
         'silentfix', overwrite=True)
 
     return data_file
+
+
+def import_data_file(adb, root, provider_id, asset_path, asset_metadata, fp,
+                     name, duplicates='ignore'):
+    """
+    Create data file(s) from a (possibly multi-layer) non-collection data
+    provider asset or from an uploaded file
+
+    :param sqlalchemy.orm.session.Session adb: SQLA database session
+    :param str root: user's data file storage root directory
+    :param str | None provider_id: data provider ID/name
+    :param str | None asset_path: data provider asset path
+    :param dict asset_metadata: data provider asset metadata
+    :param fp: file-like object containing the asset data, should be opened for
+        reading
+    :param str | None name: data file name
+    :param str duplicates: optional duplicate handling mode used if the data
+        file with the same `provider`, `path`, and `layer` was already imported
+        before: "ignore" (default) = don't re-import the existing data file,
+        "overwrite" = re-import the file and replace the existing data file,
+        "append" = always import as a new data file
+
+    :return: list of DataFile instances created/updated
+    :rtype: list[DataFile]
+    """
+    all_data_files = []
+
+    # A FITS file?
+    # noinspection PyBroadException
+    try:
+        fp.seek(0)
+        with pyfits.open(fp, 'readonly') as fits:
+            # Store non-default primary HDU header cards to copy them to all
+            # FITS files for separate extension HDUs
+            primary_header = fits[0].header.copy()
+            for kw in ('SIMPLE', 'BITPIX', 'NAXIS', 'EXTEND', 'CHECKSUM',
+                       'DATASUM'):
+                try:
+                    del primary_header[kw]
+                except KeyError:
+                    pass
+
+            # Import each HDU as a separate data file
+            for i, hdu in enumerate(fits):
+                if isinstance(hdu, pyfits.ImageHDU.__base__):
+                    # Image HDU; eliminate redundant extra dimensions if any,
+                    # skip non-2D images
+                    imshape = hdu.shape
+                    if len(imshape) < 2 or len(imshape) > 2 and \
+                            len([d for d in imshape if d != 1]) != 2 or \
+                            any(not d for d in imshape):
+                        continue
+                    if len(imshape) > 2:
+                        # Eliminate extra dimensions
+                        imshape = tuple([d for d in imshape if d != 1])
+                        hdu.header['NAXIS'] = 2
+                        hdu.header['NAXIS2'], hdu.header['NAXIS1'] = imshape
+                        hdu.data = hdu.data.reshape(imshape)
+
+                if name and len(fits) > 1 + int(
+                        isinstance(hdu, pyfits.TableHDU.__base__)):
+                    # When importing multiple HDUs, append a unique suffix to
+                    # DataFile.name (e.g. filter name)
+                    layer = hdu.header.get('FILTER')
+                    if not layer:
+                        # No channel name; use number
+                        layer = str(i + 1)
+                    fullname = name + '.' + layer
+                else:
+                    layer = None
+                    fullname = name
+
+                if i and primary_header:
+                    # Copy primary header cards to extension header
+                    h = primary_header.copy()
+                    for kw in hdu.header:
+                        if kw not in ('COMMENT', 'HISTORY'):
+                            try:
+                                del h[kw]
+                            except KeyError:
+                                pass
+                    hdu.header.update(h)
+
+                all_data_files.append(create_data_file(
+                    adb, fullname, hdu, root, provider_id,
+                    asset_path, asset_metadata, layer, duplicates))
+
+    except errors.AfterglowError:
+        raise
+    except Exception:
+        # Non-FITS file; try importing all color planes with Pillow and rawpy
+        exif = None
+        channels = {}
+
+        if PILImage is not None:
+            # noinspection PyBroadException
+            try:
+                fp.seek(0)
+                with PILImage.open(fp) as im:
+                    width, height = im.size
+                    band_names = im.getbands()
+                    if len(band_names) > 1:
+                        bands = im.split()
+                    else:
+                        bands = (im,)
+                    channels = {
+                        band_name: numpy.fromstring(
+                            band.tobytes(), numpy.uint8).reshape(
+                            [height, width])
+                        for band_name, band in zip(band_names, bands)}
+                    if exifread is None:
+                        exif = {
+                            ExifTags.TAGS[key]: convert_exif_field(val)
+                            for key, val in getattr(im, '_getexif')()
+                        }
+            except Exception:
+                pass
+
+        if not channels and rawpy is not None:
+            # noinspection PyBroadException
+            try:
+                # Intercept stderr to disable rawpy warnings on non-raw files
+                save_stderr = sys.stderr
+                sys.stderr = os.devnull
+                try:
+                    fp.seek(0)
+                    im = rawpy.imread(fp)
+                finally:
+                    sys.stderr = save_stderr
+                r, g, b = numpy.rollaxis(im.postprocess(output_bps=16), 2)
+                channels = {'R': r, 'G': g, 'B': b}
+            except Exception:
+                pass
+
+        if channels and exifread is not None:
+            # noinspection PyBroadException
+            try:
+                # Use ExifRead when available; remove "EXIF " etc. prefixes
+                fp.seek(0)
+                exif = {
+                    key.split(None, 1)[-1]: convert_exif_field(val)
+                    for key, val in exifread.process_file(fp).items()}
+            except Exception:
+                pass
+
+        hdr = pyfits.Header()
+        if exif is not None:
+            # Exposure length
+            # noinspection PyBroadException
+            try:
+                hdr['EXPOSURE'] = (exif['ExposureTime'], '[s] Integration time')
+            except Exception:
+                pass
+
+            # Exposure time
+            try:
+                t = exif['DateTime']
+            except KeyError:
+                try:
+                    t = exif['DateTimeOriginal']
+                except KeyError:
+                    try:
+                        t = exif['DateTimeDigitized']
+                    except KeyError:
+                        t = None
+            if t:
+                try:
+                    t = datetime.strptime(str(t), '%Y:%m:%d %H:%M:%S')
+                except ValueError:
+                    try:
+                        t = datetime.strptime(str(t), '%Y:%m:%d %H:%M:%S.%f')
+                    except ValueError:
+                        t = None
+            if t:
+                hdr['DATE-OBS'] = (
+                    t.isoformat(),
+                    'UTC date/time of exposure start')
+
+            # Focal length
+            # noinspection PyBroadException
+            try:
+                hdr['FOCLEN'] = (exif['FocalLength'],
+                                 '[mm] Effective focal length')
+            except Exception:
+                pass
+
+            # Pixel size
+            # noinspection PyBroadException
+            try:
+                hdr['XPIXSZ'] = (
+                    25.4/exif['FocalPlaneXResolution'],
+                    '[mm] Horizontal pixel size')
+            except Exception:
+                pass
+            # noinspection PyBroadException
+            try:
+                hdr['YPIXSZ'] = (
+                    25.4/exif['FocalPlaneYResolution'],
+                    '[mm] Vertical pixel size')
+            except Exception:
+                pass
+
+        for channel, data in channels.items():
+            # Store FITS image bottom to top
+            hdu = pyfits.PrimaryHDU(data[::-1], hdr)
+            if channel:
+                hdu.header['FILTER'] = (channel, 'Filter name')
+
+            if name and len(channels) > 1 and channel:
+                layer = channel
+                fullname = name + '.' + channel
+            else:
+                layer = None
+                fullname = name
+
+            all_data_files.append(create_data_file(
+                adb, fullname, hdu, root, provider_id, asset_path,
+                asset_metadata, layer, duplicates))
+
+    return all_data_files
 
 
 def convert_exif_field(val):
@@ -539,7 +791,6 @@ def get_exp_length(hdr):
     :return: exposure length in seconds; None if unknown
     :rtype: float
     """
-    texp = None
     for name in ('EXPOSURE', 'EXPTIME'):
         try:
             texp = float(hdr[name])
@@ -559,7 +810,6 @@ def get_gain(hdr):
     :return: effective gain in e-/ADU; None if unknown
     :rtype: float
     """
-    gain = None
     for name in ('GAIN', 'EGAIN', 'EPERADU'):
         try:
             gain = float(hdr[name])
@@ -686,13 +936,14 @@ def data_files(id=None):
     POST /data-files?name=...
         - import data file from the request body
 
-    POST /data-files?provider_id=...&path=...
-        - import file(s) from a data provider asset at the given path
-
-    POST /data-files?provider_id=[provider_id]&path=value...
-        - import file(s) from the given data provider asset; [provider_id]
-          defines either the ID or name of the data provider, and params must
-          uniquely define the asset to import from
+    POST /data-files?provider_id=...&path=...&duplicates=...
+        - import file(s) from a data provider asset at the given path; if the
+          path identifies a collection asset of a browseable data provider,
+          recursively import all child assets; the `duplicates` argument defines
+          the import behavior in the case when a certain non-collection asset
+          was already imported: "ignore" (default) = skip already imported
+          assets, "overwrite" = re-import, "append" = always create a new data
+          file; multiple asset paths can be passed as a JSON list
 
     DELETE /data-files/[id]
         - delete the given data file
@@ -766,21 +1017,23 @@ def data_files(id=None):
                         # noinspection PyPropertyAccess
                         fits.data += pixel_value
 
-                all_data_files.append(create_data_file(adb, name, fits, root))
+                all_data_files.append(create_data_file(
+                    adb, name, fits, root, duplicates='append'))
             else:
                 # Import data file from the specified provider
                 import_params = request.args.to_dict()
                 provider_id = import_params.pop('provider_id', None)
+                duplicates = import_params.pop('duplicates', 'ignore')
                 if provider_id is None:
                     # Data file upload: get data from request body
-                    data = request.data
-                    name = import_params.get('name')
-                    asset_path = None
-                    asset_metadata = import_params
+                    all_data_files += import_data_file(
+                        adb, root, None, None, import_params,
+                        BytesIO(request.data), import_params.get('name'),
+                        duplicates)
                 else:
                     # Import data from the given data provider
                     try:
-                        path = import_params.pop('path')
+                        asset_path = import_params.pop('path')
                     except KeyError:
                         raise errors.MissingFieldError('path')
 
@@ -791,221 +1044,28 @@ def data_files(id=None):
                             id=provider_id)
                     provider_id = provider.id
 
-                    asset = provider.get_asset(path)
-                    if asset.collection:
-                        raise CannotImportFromCollectionAssetError(
-                            provider_id=provider_id, path=path)
-                    data = provider.get_asset_data(path)
-                    name = asset.name
-                    asset_path = asset.path
-                    asset_metadata = asset.metadata
-                fp = BytesIO(data)
+                    def recursive_import(path):
+                        asset = provider.get_asset(path)
+                        if asset.collection:
+                            if not provider.browseable:
+                                raise CannotImportFromCollectionAssetError(
+                                    provider_id=provider_id, path=path)
+                            return sum(
+                                [recursive_import(child_asset.path)
+                                 for child_asset in provider.get_child_assets(
+                                    asset.path)], [])
+                        return import_data_file(
+                            adb, root, provider_id, asset.path, asset.metadata,
+                            BytesIO(provider.get_asset_data(asset.path)),
+                            asset.name, duplicates)
 
-                # A FITS file?
-                # noinspection PyBroadException
-                try:
-                    with pyfits.open(fp, 'readonly') as fits:
-                        # Store non-default primary HDU header cards to copy
-                        # them to all FITS files for separate extension HDUs
-                        primary_header = fits[0].header.copy()
-                        for kw in ('SIMPLE', 'BITPIX', 'NAXIS', 'EXTEND',
-                                   'CHECKSUM', 'DATASUM'):
-                            try:
-                                del primary_header[kw]
-                            except KeyError:
-                                pass
+                    if not isinstance(asset_path, list):
+                        asset_path = [asset_path]
+                    all_data_files += sum(
+                        [recursive_import(p) for p in asset_path], [])
 
-                        # Import each HDU as a separate data file
-                        for i, hdu in enumerate(fits):
-                            if isinstance(hdu, pyfits.ImageHDU.__base__):
-                                # Image HDU; eliminate redundant extra
-                                # dimensions if any, skip non-2D images
-                                imshape = hdu.shape
-                                if len(imshape) < 2 or len(imshape) > 2 and \
-                                        len([d for d in imshape
-                                             if d != 1]) != 2 or \
-                                        any(not d for d in imshape):
-                                    continue
-                                if len(imshape) > 2:
-                                    # Eliminate extra dimensions
-                                    imshape = tuple(
-                                        [d for d in imshape if d != 1])
-                                    hdu.header['NAXIS'] = 2
-                                    hdu.header['NAXIS2'], \
-                                        hdu.header['NAXIS1'] = imshape
-                                    hdu.data = hdu.data.reshape(imshape)
-
-                            if name and len(fits) > 1 + int(
-                                    isinstance(hdu, pyfits.TableHDU.__base__)):
-                                # When importing multiple HDUs, append a unique
-                                # suffix to DataFile.name (e.g. filter name)
-                                suffix = hdu.header.get('FILTER')
-                                if not suffix:
-                                    # No channel name; use number
-                                    suffix = str(i + 1)
-                                fullname = name + '.' + suffix
-                            else:
-                                fullname = name
-
-                            if i and primary_header:
-                                # Copy primary header cards to extension header
-                                h = primary_header.copy()
-                                for kw in hdu.header:
-                                    if kw not in ('COMMENT', 'HISTORY'):
-                                        try:
-                                            del h[kw]
-                                        except KeyError:
-                                            pass
-                                hdu.header.update(h)
-
-                            all_data_files.append(create_data_file(
-                                adb, fullname, hdu, root, provider_id,
-                                asset_path, asset_metadata))
-
-                except errors.AfterglowError:
-                    raise
-                except Exception:
-                    # Non-FITS file; try importing all color planes with Pillow
-                    # and rawpy
-                    exif = None
-                    channels = {}
-
-                    if PILImage is not None:
-                        # noinspection PyBroadException
-                        try:
-                            fp.seek(0)
-                            with PILImage.open(fp) as im:
-                                width, height = im.size
-                                band_names = im.getbands()
-                                if len(band_names) > 1:
-                                    bands = im.split()
-                                else:
-                                    bands = (im,)
-                                channels = {
-                                    band_name: numpy.fromstring(
-                                        band.tobytes(), numpy.uint8).reshape(
-                                            [height, width])
-                                    for band_name, band in zip(
-                                        band_names, bands)}
-                                if exifread is None:
-                                    exif = {
-                                        ExifTags.TAGS[key]:
-                                            convert_exif_field(val)
-                                        for key, val in getattr(
-                                            im, '_getexif')()
-                                    }
-                        except Exception:
-                            pass
-
-                    if not channels and rawpy is not None:
-                        # noinspection PyBroadException
-                        try:
-                            # Intercept stderr to disable rawpy warnings on
-                            # non-raw files
-                            save_stderr = sys.stderr
-                            sys.stderr = os.devnull
-                            try:
-                                fp.seek(0)
-                                # noinspection PyTypeChecker
-                                im = rawpy.imread(fp)
-                            finally:
-                                sys.stderr = save_stderr
-                            r, g, b = numpy.rollaxis(
-                                im.postprocess(output_bps=16), 2)
-                            channels = {'R': r, 'G': g, 'B': b}
-                        except Exception:
-                            pass
-
-                    if channels and exifread is not None:
-                        # noinspection PyBroadException
-                        try:
-                            # Use ExifRead when available; remove "EXIF "
-                            # etc. prefixes
-                            fp.seek(0)
-                            exif = {
-                                key.split(None, 1)[-1]: convert_exif_field(val)
-                                for key, val in exifread.process_file(fp).
-                                items()}
-                        except Exception:
-                            pass
-
-                    hdr = pyfits.Header()
-                    if exif is not None:
-                        # Exposure length
-                        # noinspection PyBroadException
-                        try:
-                            hdr['EXPOSURE'] = (exif['ExposureTime'],
-                                               '[s] Integration time')
-                        except Exception:
-                            pass
-
-                        # Exposure time
-                        try:
-                            t = exif['DateTime']
-                        except KeyError:
-                            try:
-                                t = exif['DateTimeOriginal']
-                            except KeyError:
-                                try:
-                                    t = exif['DateTimeDigitized']
-                                except KeyError:
-                                    t = None
-                        if t:
-                            try:
-                                t = datetime.strptime(
-                                    str(t), '%Y:%m:%d %H:%M:%S')
-                            except ValueError:
-                                try:
-                                    t = datetime.strptime(
-                                        str(t),
-                                        '%Y:%m:%d %H:%M:%S.%f')
-                                except ValueError:
-                                    t = None
-                        if t:
-                            hdr['DATE-OBS'] = (
-                                t.isoformat(),
-                                'UTC date/time of exposure start')
-
-                        # Focal length
-                        # noinspection PyBroadException
-                        try:
-                            hdr['FOCLEN'] = (exif['FocalLength'],
-                                             '[mm] Effective focal length')
-                        except Exception:
-                            pass
-
-                        # Pixel size
-                        # noinspection PyBroadException
-                        try:
-                            hdr['XPIXSZ'] = (
-                                25.4/exif['FocalPlaneXResolution'],
-                                '[mm] Horizontal pixel size')
-                        except Exception:
-                            pass
-                        # noinspection PyBroadException
-                        try:
-                            hdr['YPIXSZ'] = (
-                                25.4/exif['FocalPlaneYResolution'],
-                                '[mm] Vertical pixel size')
-                        except Exception:
-                            pass
-
-                    for channel, data in channels.items():
-                        # Store FITS image bottom to top
-                        hdu = pyfits.PrimaryHDU(data[::-1], hdr)
-                        if channel:
-                            hdu.header['FILTER'] = (channel, 'Filter name')
-
-                        if name and len(channels) > 1 and channel:
-                            fullname = name + '.' + channel
-                        else:
-                            fullname = name
-
-                        all_data_files.append(create_data_file(
-                            adb, fullname, hdu, root, provider_id, asset_path,
-                            asset_metadata))
-
-            adb.commit()
+            if all_data_files:
+                adb.commit()
         except Exception:
             adb.rollback()
             raise
