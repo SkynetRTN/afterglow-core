@@ -791,6 +791,7 @@ def get_exp_length(hdr):
     :return: exposure length in seconds; None if unknown
     :rtype: float
     """
+    texp = None
     for name in ('EXPOSURE', 'EXPTIME'):
         try:
             texp = float(hdr[name])
@@ -810,6 +811,7 @@ def get_gain(hdr):
     :return: effective gain in e-/ADU; None if unknown
     :rtype: float
     """
+    gain = None
     for name in ('GAIN', 'EGAIN', 'EPERADU'):
         try:
             gain = float(hdr[name])
