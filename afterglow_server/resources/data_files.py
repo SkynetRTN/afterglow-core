@@ -791,6 +791,7 @@ def get_exp_length(hdr):
     :return: exposure length in seconds; None if unknown
     :rtype: float
     """
+    # noinspection PyUnusedLocal
     texp = None
     for name in ('EXPOSURE', 'EXPTIME'):
         try:
@@ -811,6 +812,7 @@ def get_gain(hdr):
     :return: effective gain in e-/ADU; None if unknown
     :rtype: float
     """
+    # noinspection PyUnusedLocal
     gain = None
     for name in ('GAIN', 'EGAIN', 'EPERADU'):
         try:
@@ -938,10 +940,11 @@ def data_files(id=None):
     POST /data-files?name=...
         - import data file from the request body
 
-    POST /data-files?provider_id=...&path=...&duplicates=...
+    POST /data-files?provider_id=...&path=...&duplicates=...&recurse=...
         - import file(s) from a data provider asset at the given path; if the
           path identifies a collection asset of a browseable data provider,
-          recursively import all child assets; the `duplicates` argument defines
+          import all non-collection child assets (and, optionally, all
+          collection assets too if recurse=1); the `duplicates` argument defines
           the import behavior in the case when a certain non-collection asset
           was already imported: "ignore" (default) = skip already imported
           assets, "overwrite" = re-import, "append" = always create a new data
@@ -1046,14 +1049,18 @@ def data_files(id=None):
                             id=provider_id)
                     provider_id = provider.id
 
-                    def recursive_import(path):
+                    recurse = import_params.pop('recurse', False)
+
+                    def recursive_import(path, depth=0):
                         asset = provider.get_asset(path)
                         if asset.collection:
                             if not provider.browseable:
                                 raise CannotImportFromCollectionAssetError(
                                     provider_id=provider_id, path=path)
+                            if not recurse and depth:
+                                return []
                             return sum(
-                                [recursive_import(child_asset.path)
+                                [recursive_import(child_asset.path, depth + 1)
                                  for child_asset in provider.get_child_assets(
                                     asset.path)], [])
                         return import_data_file(
@@ -1062,7 +1069,12 @@ def data_files(id=None):
                             asset.name, duplicates)
 
                     if not isinstance(asset_path, list):
-                        asset_path = [asset_path]
+                        try:
+                            asset_path = json.loads(asset_path)
+                        except ValueError:
+                            pass
+                        if not isinstance(asset_path, list):
+                            asset_path = [asset_path]
                     all_data_files += sum(
                         [recursive_import(p) for p in asset_path], [])
 
@@ -1072,10 +1084,7 @@ def data_files(id=None):
             adb.rollback()
             raise
 
-        if not all_data_files:
-            raise UnrecognizedDataFileError()
-
-        return json_response(all_data_files, 201)
+        return json_response(all_data_files, 201 if all_data_files else 200)
 
     if request.method == 'DELETE':
         # Delete data file
