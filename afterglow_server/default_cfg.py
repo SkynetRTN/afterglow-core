@@ -39,6 +39,31 @@ REGISTER_AUTHENTICATED_USERS = True
 # Allow remote admin access with HTTP user auth enabled
 REMOTE_ADMIN = False
 
+# OAuth2 server: list of client descriptions:
+#     OAUTH_CLIENTS = [
+#         {'name': '<client name>',
+#          'description': '<description>',
+#          'client_id': '<random string>',
+#          'client_secret': '<random string>',
+#          'redirect_uris': ['<redirect URI>', ...],
+#          'consent_uri': '<consent URI>',
+#          'is_confidential': False,
+#          'default_scopes': ['email', 'profile', ...],
+#          'allowed_grant_types': ['authorization_code'],
+#         },
+#         ...
+#     ]
+# All attributes except `name`, `client_id`, `client_secret`, `redirect_uris`,
+# and `consent_uri` are optional. OAuth2 server endpoints are not enabled if the
+# list is empty.
+OAUTH_CLIENTS = []
+
+# OAuth2 error redirect URI
+OAUTH2_PROVIDER_ERROR_URI = '/oauth2/errors'
+
+# OAuth2 bearer token expiration time in seconds
+OAUTH2_PROVIDER_TOKEN_EXPIRES_IN = 3600
+
 
 ################################################################################
 # Data provider options

@@ -204,6 +204,10 @@ from . import auth
 if app.config.get('USER_AUTH'):
     auth.init_auth()
 
+# Initialize OAuth2 server if enabled
+if app.config.get('OAUTH_CLIENTS'):
+    from . import oauth2
+    oauth2.init_oauth()
 
 # Define API resources.
 from .resources import *

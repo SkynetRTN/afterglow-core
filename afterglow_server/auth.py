@@ -176,7 +176,7 @@ class UnknownAuthMethodError(AuthError):
     Extra attributes::
         method: auth method ID
     """
-    code = 403
+    code = 404
     subcode = 110
     message = 'Unknown authentication method'
 
