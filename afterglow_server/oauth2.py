@@ -225,6 +225,18 @@ oauth = None
 oauth_clients = {}
 
 
+def create_access_token(req):
+    return create_token(
+        req.user.username, app.config.get('ACCESS_TOKEN_EXPIRES'),
+        dict(method='oauth2'))
+
+
+def create_refresh_token(req):
+    return create_token(
+        req.user.username, app.config.get('REFRESH_TOKEN_EXPIRES'),
+        dict(method='oauth2'), 'refresh'),
+
+
 def init_oauth():
     global memory_engine, memory_session, oauth
 
@@ -239,10 +251,10 @@ def init_oauth():
     Base.metadata.create_all(bind=memory_engine)
     memory_session = scoped_session(sessionmaker(bind=memory_engine))()
 
-    app.config['OAUTH2_PROVIDER_TOKEN_GENERATOR'] = \
-        'afterglow_server.oauth2.create_access_token'
-    app.config['OAUTH2_PROVIDER_REFRESH_TOKEN_GENERATOR'] = \
-        'afterglow_server.oauth2.create_refresh_token'
+    # Make sure Afterglow OAuth2 returns the same tokens as the normal auth
+    app.config['OAUTH2_PROVIDER_TOKEN_GENERATOR'] = create_access_token
+    app.config['OAUTH2_PROVIDER_REFRESH_TOKEN_GENERATOR'] = create_refresh_token
+
     oauth = OAuth2Provider(app)
 
     @oauth.clientgetter
@@ -425,15 +437,3 @@ def init_oauth():
         return json_response()
 
     app.logger.info('Initialized Afterglow OAuth2 Service')
-
-
-def create_access_token(req):
-    expires_delta = app.config.get('ACCESS_TOKEN_EXPIRES')
-    return create_token(
-        req.user.username, expires_delta, dict(method='oauth2'))
-
-
-def create_refresh_token(req):
-    return create_token(
-        req.user.username, app.config.get('REFRESH_TOKEN_EXPIRES'),
-        dict(method='oauth2'), 'refresh'),
