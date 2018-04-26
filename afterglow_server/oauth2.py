@@ -255,7 +255,7 @@ def init_oauth():
             code=code['code'],
             redirect_uri=req.redirect_uri,
             _scopes=' '.join(req.scopes),
-            user_id=current_user.id,
+            user_id=req.user.id,
             expires=datetime.utcnow() + timedelta(seconds=100),
         )
         try:
@@ -279,7 +279,7 @@ def init_oauth():
     @oauth.tokensetter
     def save_token(tok, req, *args, **kwargs):
         toks = memory_session.query(Token).filter_by(
-            client_id=req.client.client_id, user_id=current_user.id)
+            client_id=req.client.client_id, user_id=req.user.id)
         for t in toks:
             memory_session.delete(t)
 
@@ -296,7 +296,7 @@ def init_oauth():
             _scopes=tok['scope'],
             expires=expires,
             client_id=req.client.client_id,
-            user_id=current_user.id,
+            user_id=req.user.id,
         )
         try:
             memory_session.add(t)
@@ -351,7 +351,6 @@ def init_oauth():
 
     # noinspection PyUnusedLocal
     @app.route(url_prefix + 'oauth2/token', methods=['POST'])
-    @auth_required('user')
     @oauth.token_handler
     def oauth2_token(*args, **kwargs):
         return None
