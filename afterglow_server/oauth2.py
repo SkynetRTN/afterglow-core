@@ -255,7 +255,7 @@ def init_oauth():
             code=code['code'],
             redirect_uri=req.redirect_uri,
             _scopes=' '.join(req.scopes),
-            user_id=req.user.id,
+            user_id=current_user.id,
             expires=datetime.utcnow() + timedelta(seconds=100),
         )
         try:
@@ -387,19 +387,34 @@ def init_oauth():
             client_id = request.args['client_id']
         except KeyError:
             raise MissingClientIdError()
-        else:
-            if client_id not in oauth_clients:
-                raise UnknownClientError(id=client_id)
-            if not UserClient.query.filter_by(
-                    user_id=current_user.id, client_id=client_id).count():
-                try:
-                    db.session.add(UserClient(
-                        user_id=current_user.id, client_id=client_id))
-                    db.session.commit()
-                except Exception:
-                    db.session.rollback()
-                    raise
-                return json_response('', 201)
-            return json_response()
+
+        if client_id not in oauth_clients:
+            raise UnknownClientError(id=client_id)
+        if not UserClient.query.filter_by(
+                user_id=current_user.id, client_id=client_id).count():
+            try:
+                db.session.add(UserClient(
+                    user_id=current_user.id, client_id=client_id))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                raise
+            return json_response('', 201)
+        return json_response()
+
+    @app.route(url_prefix + 'oauth2/user-clients/<client_id>',
+               methods=['DELETE'])
+    @auth_required('user')
+    def oauth2_user_clients_delete(client_id):
+        if UserClient.query.filter_by(
+                user_id=current_user.id, client_id=client_id).count():
+            try:
+                UserClient.query.filter_by(
+                    user_id=current_user.id, client_id=client_id).delete()
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                raise
+        return json_response()
 
     app.logger.info('Initialized Afterglow OAuth2 Service')
