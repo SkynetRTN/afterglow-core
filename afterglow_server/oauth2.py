@@ -310,7 +310,8 @@ def init_oauth():
             try:
                 return redirect(
                     oauth_clients[kwargs['client_id']].consent_uri + '?' +
-                    urlencode(dict(client_id=kwargs['client_id'])))
+                    urlencode(dict(client_id=kwargs['client_id'],
+                                   next=request.url)))
             except KeyError:
                 # Unknown client ID
                 return json_response(dict(
@@ -328,7 +329,8 @@ def init_oauth():
                 return redirect(
                     oauth_clients[kwargs['client_id']].consent_uri + '?' +
                     urlencode(dict(
-                        client_id=kwargs['client_id'], user_id=user.id)))
+                        client_id=kwargs['client_id'], user_id=user.id,
+                        next=request.url)))
             except KeyError:
                 return json_response(dict(
                     exception=UnknownClientError.__name__,
