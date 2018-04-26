@@ -39,7 +39,7 @@ from flask_oauthlib.provider import OAuth2Provider
 
 from . import app, errors, json_response, url_prefix
 from .users import User, db
-from .auth import auth_required, authenticate, current_user
+from .auth import auth_required, authenticate, create_token, current_user
 
 if sys.version_info.major < 3:
     # noinspection PyUnresolvedReferences,PyCompatibility
@@ -49,7 +49,10 @@ else:
     from urllib.parse import urlencode
 
 
-__all__ = ['init_oauth', 'oauth', 'oauth_clients']
+__all__ = [
+    'init_oauth', 'oauth', 'oauth_clients', 'create_access_token',
+    'create_refresh_token',
+]
 
 
 class UnknownClientError(errors.AfterglowError):
@@ -236,6 +239,10 @@ def init_oauth():
     Base.metadata.create_all(bind=memory_engine)
     memory_session = scoped_session(sessionmaker(bind=memory_engine))()
 
+    app.config['OAUTH2_PROVIDER_TOKEN_GENERATOR'] = \
+        'afterglow_server.oauth2.create_access_token'
+    app.config['OAUTH2_PROVIDER_REFRESH_TOKEN_GENERATOR'] = \
+        'afterglow_server.oauth2.create_refresh_token'
     oauth = OAuth2Provider(app)
 
     @oauth.clientgetter
@@ -418,3 +425,15 @@ def init_oauth():
         return json_response()
 
     app.logger.info('Initialized Afterglow OAuth2 Service')
+
+
+def create_access_token(req):
+    expires_delta = app.config.get('ACCESS_TOKEN_EXPIRES')
+    return create_token(
+        req.user.username, expires_delta, dict(method='oauth2'))
+
+
+def create_refresh_token(req):
+    return create_token(
+        req.user.username, app.config.get('REFRESH_TOKEN_EXPIRES'),
+        dict(method='oauth2'), 'refresh'),

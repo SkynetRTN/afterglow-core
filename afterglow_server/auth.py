@@ -20,8 +20,10 @@ from __future__ import absolute_import, division, print_function
 import os
 import errno
 import shutil
+import uuid
 from datetime import datetime, timedelta
 from functools import wraps
+import jwt
 from flask import request
 from werkzeug.exceptions import HTTPException
 from . import app, errors, json_response, url_prefix
@@ -30,7 +32,7 @@ from .users import AnonymousUser, Role, User, UserSchema, db, user_datastore
 
 __all__ = [
     'auth_plugins', 'auth_required', 'authenticate', 'security',
-    'current_user', 'anonymous_user', 'jwt_manager',
+    'current_user', 'anonymous_user', 'jwt_manager', 'create_token',
     'AuthError', 'NotAuthenticatedError', 'NoAdminRegisteredError',
     'RoleRequiredError', 'AdminRequiredError', 'AdminOrSameUserRequiredError',
     'UnknownUserError', 'InactiveUserError', 'RemoteAdminDisabledError',
@@ -281,14 +283,89 @@ def auth_required(fn, *roles, **kwargs):
     return wrapper
 
 
-def _create_token(*_, **__):
+def encode_jwt(additional_token_data, expires_delta):
     """
-    Create a JWT
+    Creates a JWT with the optional user data
 
-    :return: JWT
+    :param dict additional_token_data: additional data to add to the JWT
+    :param datetime.datetime expires_delta: token expiration time;
+        False = never expire
+
+    :return: encoded JWT
     :rtype: str
     """
-    return ''
+    now = datetime.utcnow()
+    token_data = {
+        'iat': now,
+        'nbf': now,
+        'jti': str(uuid.uuid4()),
+    }
+
+    # If expires_delta is False, the JWT should never expire
+    # and the 'exp' claim is not set.
+    if expires_delta:
+        token_data['exp'] = now + expires_delta
+
+    token_data.update(additional_token_data)
+    return jwt.encode(
+        token_data, app.config['SECRET_KEY'], algorithm='HS256').decode('utf-8')
+
+
+def decode_jwt(encoded_token):
+    """
+    Decodes an encoded JWT
+
+    :param str encoded_token: The encoded JWT string to decode
+
+    :return: dictionary containing contents of the JWT
+    :rtype: dict
+    """
+    # This call verifies the ext, iat, and nbf claims
+    data = jwt.decode(
+        encoded_token, app.config['SECRET_KEY'], algorithms=['HS256'])
+
+    # Make sure that any custom claims we expect in the token are present
+    if 'jti' not in data:
+        raise NotAuthenticatedError(error_msg='Missing claim: jti')
+    if 'identity' not in data:
+        raise NotAuthenticatedError(
+            error_msg='Missing claim: {}'.format('identity'))
+    if 'type' not in data or data['type'] not in ('refresh', 'access'):
+        raise NotAuthenticatedError(
+            error_msg='Missing or invalid claim: type')
+    if data['type'] == 'access':
+        if 'user_claims' not in data:
+            data['user_claims'] = {}
+
+    return data
+
+
+def create_token(identity, expires_delta=None, user_claims=None,
+                 token_type='access'):
+    """
+    Creates a new encoded (utf-8) access or refresh token.
+
+    :param identity: identifier for who this token is for (ex, username);
+        must be json serializable.
+    :param datetime.timedelta expires_delta: how far in the future this
+        token should expire (set to False to disable expiration)
+    :param dict user_claims: custom claims to include in this token; must be
+        json serializable
+    :param str token_type: token type: "access" or "refresh"
+
+    :return: encoded access/refresh token
+    :rtype: str
+    """
+    token_data = {
+        'identity': identity,
+        'type': token_type,
+    }
+
+    # Don't add extra data to the token if user_claims is empty.
+    if user_claims:
+        token_data['user_claims'] = user_claims
+
+    return encode_jwt(token_data, expires_delta)
 
 
 def _set_access_cookies(*_, **__):
@@ -318,9 +395,6 @@ def init_auth():
     # To reduce dependencies, only import marshmallow, flask-security, and
     # flask-sqlalchemy if user auth is enabled
     # noinspection PyProtectedMember
-    import uuid
-    import jwt
-    # noinspection PyProtectedMember
     from flask import _request_ctx_stack
     from flask_security import Security, current_user as _current_user
     from flask_security.utils import hash_password
@@ -328,95 +402,10 @@ def init_auth():
     from .auth_plugins import AuthPlugin
 
     # noinspection PyGlobalUndefined
-    global auth_plugins, authenticate, security, current_user, _create_token, \
+    global auth_plugins, authenticate, security, current_user, \
         _set_access_cookies, _clear_access_cookies
 
     current_user = _current_user
-
-    def encode_jwt(additional_token_data, expires_delta):
-        """
-        Creates a JWT with the optional user data
-
-        :param dict additional_token_data: additional data to add to the JWT
-        :param datetime.datetime expires_delta: token expiration time;
-            False = never expire
-
-        :return: encoded JWT
-        :rtype: str
-        """
-        now = datetime.utcnow()
-        token_data = {
-            'iat': now,
-            'nbf': now,
-            'jti': str(uuid.uuid4()),
-        }
-
-        # If expires_delta is False, the JWT should never expire
-        # and the 'exp' claim is not set.
-        if expires_delta:
-            token_data['exp'] = now + expires_delta
-
-        token_data.update(additional_token_data)
-        return jwt.encode(
-            token_data, app.config['SECRET_KEY'],
-            algorithm='HS256').decode('utf-8')
-
-    def decode_jwt(encoded_token):
-        """
-        Decodes an encoded JWT
-
-        :param str encoded_token: The encoded JWT string to decode
-
-        :return: dictionary containing contents of the JWT
-        :rtype: dict
-        """
-        # This call verifies the ext, iat, and nbf claims
-        data = jwt.decode(
-            encoded_token, app.config['SECRET_KEY'], algorithms=['HS256'])
-
-        # Make sure that any custom claims we expect in the token are present
-        if 'jti' not in data:
-            raise NotAuthenticatedError(error_msg='Missing claim: jti')
-        if 'identity' not in data:
-            raise NotAuthenticatedError(
-                error_msg='Missing claim: {}'.format('identity'))
-        if 'type' not in data or data['type'] not in ('refresh', 'access'):
-            raise NotAuthenticatedError(
-                error_msg='Missing or invalid claim: type')
-        if data['type'] == 'access':
-            if 'user_claims' not in data:
-                data['user_claims'] = {}
-
-        return data
-
-    def __create_token(identity, expires_delta=None, user_claims=None,
-                       token_type='access'):
-        """
-        Creates a new encoded (utf-8) access or refresh token.
-
-        :param identity: identifier for who this token is for (ex, username);
-            must be json serializable.
-        :param datetime.timedelta expires_delta: how far in the future this
-            token should expire (set to False to disable expiration)
-        :param dict user_claims: custom claims to include in this token; must be
-            json serializable
-        :param str token_type: token type: "access" or "refresh"
-
-        :return: encoded access/refresh token
-        :rtype: str
-        """
-        token_data = {
-            'identity': identity,
-            'type': token_type,
-        }
-
-        # Don't add extra data to the token if user_claims is empty.
-        if user_claims:
-            token_data['user_claims'] = user_claims
-
-        return encode_jwt(token_data, expires_delta)
-
-    _create_token = __create_token
 
     def __set_access_cookies(response, access_token=None):
         """
@@ -438,7 +427,7 @@ def init_auth():
         expires_delta = app.config.get('ACCESS_TOKEN_EXPIRES')
         if not access_token:
             method = _request_ctx_stack.top.auth_method
-            access_token = __create_token(
+            access_token = create_token(
                 current_user.username, expires_delta, dict(method=method))
 
         hdr_payload, signature = access_token.rsplit('.', 1)
@@ -539,8 +528,9 @@ def init_auth():
                         name=role).one_or_none() in user.roles:
                     raise RoleRequiredError(role=role)
 
-        # Make the authenticated user object available via `current_user`
-        _request_ctx_stack.top.user = user
+        # Make the authenticated user object available via `current_user` and
+        # request.user
+        _request_ctx_stack.top.user = request.user = user
 
         # Make the user's auth method available via the request context stack
         method = token_decoded.get('user_claims', {}).get('method')
@@ -914,12 +904,12 @@ def login(method=None):
 
     # Return access and refresh tokens
     expires_delta = app.config.get('ACCESS_TOKEN_EXPIRES')
-    access_token = _create_token(
+    access_token = create_token(
         user.username, expires_delta, dict(method=method))
     return _set_access_cookies(json_response(
         dict(
             access_token=access_token,
-            refresh_token=_create_token(
+            refresh_token=create_token(
                 user.username, app.config.get('REFRESH_TOKEN_EXPIRES'),
                 dict(method=method), 'refresh'),
         )), access_token)
