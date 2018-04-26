@@ -38,7 +38,7 @@ from flask import redirect, request
 from flask_oauthlib.provider import OAuth2Provider
 
 from . import app, errors, json_response, url_prefix
-from .users import db
+from .users import User, db
 from .auth import auth_required, authenticate, current_user
 
 if sys.version_info.major < 3:
@@ -173,6 +173,10 @@ class Grant(Base):
         return self
 
     @property
+    def user(self):
+        return User.query.get(self.user_id)
+
+    @property
     def scopes(self):
         if self._scopes:
             return self._scopes.split()
@@ -202,6 +206,10 @@ class Token(Base):
             memory_session.rollback()
             raise
         return self
+
+    @property
+    def user(self):
+        return User.query.get(self.user_id)
 
     @property
     def scopes(self):
