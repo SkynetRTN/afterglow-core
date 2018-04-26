@@ -343,7 +343,6 @@ def init_oauth():
 
     # noinspection PyUnusedLocal
     @app.route(url_prefix + 'oauth2/token', methods=['POST'])
-    @auth_required('user')
     @oauth.token_handler
     def oauth2_token(*args, **kwargs):
         return None
