@@ -13,7 +13,9 @@ from .__version__ import __version__, url_prefix
 
 
 __all__ = [
-    '__version__', 'url_prefix', 'Float', 'Resource', 'app', 'json_response',
+    '__version__', 'url_prefix',
+    'Float', 'AfterglowSchema', 'Resource',
+    'app', 'json_response',
 ]
 
 
@@ -41,7 +43,86 @@ class Float(fields.Float):
         return super(Float, self)._serialize(value, attr, obj)
 
 
-class Resource(Schema):
+class AfterglowSchema(Schema):
+    """
+    A :class:`marshmallow.Schema` subclass that allows initialization from an
+    object or keyword arguments and explicitly assigns default values to all
+    uninitialized fields. Serves as a self-contained schema that can both hold
+    field values and dump itself to a dict or a JSON string.
+    """
+    def __init__(self, _obj=None, **kwargs):
+        """
+        Create a resource class instance
+
+        resource = MyResource(field1=value1, ...)
+            or
+        resource = MyResource(sqla_object)
+
+        :param _obj: initialize fields from the given object (usually an SQLA
+            declarative instance)
+        :param kwargs: keyword arguments are assigned to the corresponding
+            instance attributes, including fields
+        """
+        super(AfterglowSchema, self).__init__()
+
+        if _obj is not None:
+            for name, val in self.dump(_obj).data.items():
+                try:
+                    if isinf(val) or isnan(val):
+                        # Convert floating-point NaNs/Infs to string
+                        val = str(val)
+                except TypeError:
+                    pass
+
+                setattr(self, name, val)
+
+        for name, val in kwargs.items():
+            setattr(self, name, val)
+
+        # Initialize the missing fields with their defaults or None
+        for name, f in self.fields.items():
+            if not hasattr(self, name):
+                setattr(
+                    self, name,
+                    None if f.default == fields.missing_ else f.default)
+
+    def __setattr__(self, name, value):
+        """
+        Deserialize nested fields on assignment
+
+        :param str name: attribute name
+        :param value: attribute value
+
+        :return: None
+        """
+        if value is not None:
+            try:
+                field = self.fields[name]
+            except (AttributeError, KeyError):
+                pass
+            else:
+                if hasattr(field, 'nested') and \
+                        issubclass(field.nested, AfterglowSchema):
+                    value = field.nested(value)
+                elif isinstance(field, fields.List) and \
+                        hasattr(field.container, 'nested') and \
+                        issubclass(field.container.nested, AfterglowSchema):
+                    klass = field.container.nested
+                    value = [klass(item) for item in value]
+        super(AfterglowSchema, self).__setattr__(name, value)
+
+    def json(self):
+        """
+        Serialize resource class instance to JSON
+
+        :return: JSON string containing all resource fields plus its URI if
+            the resource has ID
+        :rtype: str
+        """
+        return self.dumps(self)[0]
+
+
+class Resource(AfterglowSchema):
     """
     Base class for Afterglow Server resources (data providers, data files, etc.)
 
@@ -77,52 +158,6 @@ class Resource(Schema):
 
     uri = fields.String(attribute='_uri')
 
-    def __init__(self, _obj=None, **kwargs):
-        """
-        Create a resource class instance
-
-        resource = MyResource(field1=value1, ...)
-            or
-        resource = MyResource(sqla_object)
-
-        :param _obj: initialize fields from the given object (usually an SQLA
-            declarative instance)
-        :param kwargs: keyword arguments are assigned to the corresponding
-            instance attributes, including fields
-        """
-        super(Resource, self).__init__()
-
-        if _obj is not None:
-            for name, val in self.dump(_obj).data.items():
-                try:
-                    if isinf(val) or isnan(val):
-                        # Convert floating-point NaNs/Infs to string
-                        val = str(val)
-                except TypeError:
-                    pass
-
-                setattr(self, name, val)
-
-        for name, val in kwargs.items():
-            setattr(self, name, val)
-
-        # Initialize the missing fields with their defaults or None
-        for name, f in self.fields.items():
-            if not hasattr(self, name):
-                setattr(
-                    self, name,
-                    None if f.default == fields.missing_ else f.default)
-
-    def json(self):
-        """
-        Serialize resource class instance to JSON
-
-        :return: JSON string containing all resource fields plus its URI if
-            the resource has ID
-        :rtype: str
-        """
-        return self.dumps(self)[0]
-
 
 class ResourceEncoder(json.JSONEncoder):
     """
@@ -136,19 +171,20 @@ class ResourceEncoder(json.JSONEncoder):
         return super(ResourceEncoder, self).default(obj)
 
 
-def json_response(obj='', status_code=None):
+def json_response(obj='', status_code=None, headers=None):
     """
     Serialize a Python object to a JSON-type flask.Response
 
     :param obj: object to serialize; can be a Resource instance or a compound
         object (list, dict, ...) possibly including Resource instances
     :param int status_code: optional HTTP status code; defaults to 200 - OK
+    :param dict headers: optional extra HTTP headers
 
     :return: Flask response object with mimetype set to application/json
     :rtype: `flask.Response`
     """
     if obj == '' or status_code == 204:
-        resp = Response('', 204)
+        resp = Response('', 204, headers=headers)
         del resp.headers['Content-Type']
         return resp
 
@@ -156,7 +192,7 @@ def json_response(obj='', status_code=None):
         status_code = 200
     return Response(
         json.dumps(obj, cls=ResourceEncoder), status_code,
-        mimetype='application/json')
+        mimetype='application/json', headers=headers)
 
 
 app = Flask(__name__)

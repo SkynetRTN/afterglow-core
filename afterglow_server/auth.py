@@ -194,12 +194,11 @@ except IOError:
     d = os.path.dirname(keyfile)
     if os.path.isfile(d):
         os.remove(d)
-    if not os.path.exists(d):
-        try:
-            os.makedirs(d)
-        except IOError as _e:
-            if _e.errno != errno.EEXIST:
-                raise
+    try:
+        os.makedirs(d)
+    except OSError as _e:
+        if _e.errno != errno.EEXIST:
+            raise
     del d
     with open(keyfile, 'wb') as f:
         f.write(key)

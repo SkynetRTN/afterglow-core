@@ -52,7 +52,7 @@ class DataProvider(Resource):
         icon: optional data provider icon name
         display_name: data provider plugin visible in the Afterglow UI
         description: a longer description of the data provider
-        columns: list of dictionary 
+        columns: list of dictionary
             {name: string, field_name: string, sortable: boolean}
         sort_by: string - name of column to use for initial sort
         sort_asc: boolean - initial sort order should be ascending
@@ -262,6 +262,3 @@ class DataProviderAsset(Resource):
     collection = Boolean(default=False)
     path = String(default=None)
     metadata = Dict(default={})
-
-
-providers = {}

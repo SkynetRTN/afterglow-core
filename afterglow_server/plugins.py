@@ -15,7 +15,38 @@ from . import app
 __all__ = ['load_plugins']
 
 
-def load_plugins(descr, package, plugin_class, specs):
+def add_plugin(plugins, descr, instance):
+    """
+    Add a plugin instance to the plugin dictionary, with the possible alias for
+    integer plugin IDs; adjust plugin ID and display name
+
+    :param dict plugins: dictionary {str(id): instance, int(id): instance}
+    :param str descr: plugin description
+    :param instance: plugin class instance
+
+    :return: None
+    """
+    if not hasattr(instance, 'display_name') or \
+            not instance.display_name:
+        instance.display_name = instance.name
+
+    if hasattr(instance, 'id') and instance.id is not None:
+        id = instance.id
+    else:
+        id = instance.name
+    plugins[str(id)] = instance
+    try:
+        instance.id = int(id)
+    except ValueError:
+        pass
+    else:
+        plugins[instance.id] = instance
+
+    app.logger.info(
+        'Loaded %s plugin "%s" (ID %s)', descr, instance.display_name, id)
+
+
+def load_plugins(descr, package, plugin_class, specs=None):
     """
     Load and initialize plugins from the given directory
 
@@ -26,13 +57,15 @@ def load_plugins(descr, package, plugin_class, specs):
     :param list specs: list of plugin specifications: [{"name": "plugin_name",
         "param": value, ...}, ...]; parameters are used to construct the plugin
         class; this can be the value of the corresponding option in app config,
-        e.g. DATA_PROVIDERS
+        e.g. DATA_PROVIDERS; if omitted or None, load all available plugins
+        without passing any parameters on initialization (suitable e.g. for the
+        jobs)
 
     :return: dictionary containing plugin class instances indexed by their
         unique IDs (both as integers and strings)
     :rtype: dict
     """
-    if not specs:
+    if not specs and specs is not None:
         # No plugins of this type are required
         return {}
 
@@ -104,47 +137,40 @@ def load_plugins(descr, package, plugin_class, specs):
 
     # Instantiate plugins using the specified display names and options
     plugins = {}
-    for id, spec in enumerate(specs):
-        try:
-            name = spec.pop('name')
-        except (TypeError, KeyError):
-            raise RuntimeError(
-                'Missing name in {} plugin spec ({})'.format(descr, spec))
-
-        try:
-            klass = plugin_classes[name]
-        except KeyError:
-            raise RuntimeError(
-                'Unknown {} plugin "{}"'.format(descr, name))
-
-        # Initialize plugin instance using the provided parameters
-        try:
-            instance = klass(**spec)
-        except Exception:
-            app.logger.exception(
-                'Error loading %s plugin "%s" with options %s',
-                descr, name, spec)
-            raise
-
-        if not hasattr(instance, 'display_name') or not instance.display_name:
-            instance.display_name = instance.name
-
-        if hasattr(instance, 'id') and instance.id is not None:
-            # Plugin provides its own instance ID
-            plugins[str(instance.id)] = instance
+    if specs is None:
+        for name, klass in plugin_classes.items():
+            # Initialize plugin instance
             try:
-                instance.id = int(instance.id)
-            except ValueError:
-                pass
-            else:
-                plugins[instance.id] = instance
-        else:
-            # Use the automatically assigned integer instance ID
-            instance.id = id
-            plugins[id] = plugins[str(id)] = instance
+                instance = klass()
+            except Exception:
+                app.logger.exception(
+                    'Error loading %s plugin "%s"', descr, name)
+                raise
 
-        app.logger.info(
-            'Loaded %s plugin "%s" (ID %s)',
-            descr, instance.display_name, instance.id)
+            add_plugin(plugins, descr, instance)
+    else:
+        for id, spec in enumerate(specs):
+            try:
+                name = spec.pop('name')
+            except (TypeError, KeyError):
+                raise RuntimeError(
+                    'Missing name in {} plugin spec ({})'.format(descr, spec))
+
+            try:
+                klass = plugin_classes[name]
+            except KeyError:
+                raise RuntimeError(
+                    'Unknown {} plugin "{}"'.format(descr, name))
+
+            # Initialize plugin instance using the provided parameters
+            try:
+                instance = klass(**spec)
+            except Exception:
+                app.logger.exception(
+                    'Error loading %s plugin "%s" with options %s',
+                    descr, name, spec)
+                raise
+
+            add_plugin(plugins, descr, instance)
 
     return plugins

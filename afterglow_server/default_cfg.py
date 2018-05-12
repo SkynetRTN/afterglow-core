@@ -97,3 +97,18 @@ DATA_FILE_AUTH = None
 # ("auto", "fd", "doane", "scott", "rice", "sturges", or "sqrt", see
 # https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html)
 HISTOGRAM_BINS = 1024
+
+
+################################################################################
+# Job server options
+################################################################################
+
+# Use encryption (if available) in the message exchange between Flask and job
+# server
+JOB_SERVER_ENCRYPTION = True
+
+# Initial job pool size
+JOB_POOL_MIN = 1
+
+# Maximum job pool size; 0 = no limit
+JOB_POOL_MAX = 16

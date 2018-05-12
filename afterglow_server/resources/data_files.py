@@ -51,9 +51,11 @@ __all__ = [
     'UnknownDataFileError', 'CannotCreateDataFileDirError',
     'CannotImportFromCollectionAssetError', 'UnrecognizedDataFileError',
     'MissingWCSError', 'DataFile',
-    'get_data_file', 'get_data_file_data', 'get_data_file_db',
-    'get_data_file_path', 'get_exp_length', 'get_gain', 'get_phot_cal',
-    'get_root', 'get_subframe', 'convert_exif_field',
+    'data_files_engine', 'data_files_engine_lock',
+    'create_data_file', 'get_data_file', 'get_data_file_data',
+    'get_data_file_db', 'get_data_file_path', 'get_exp_length', 'get_gain',
+    'get_image_time', 'get_phot_cal', 'get_root', 'get_subframe',
+    'convert_exif_field',
 ]
 
 
@@ -168,7 +170,8 @@ class DataFile(Resource):
 
         # Convert fields stored as strings in the db to their proper schema
         # types
-        kw['asset_metadata'] = json.loads(kw['asset_metadata'])
+        if kw.get('asset_metadata') is not None:
+            kw['asset_metadata'] = json.loads(kw['asset_metadata'])
 
         super(DataFile, self).__init__(**kw)
 
@@ -192,27 +195,28 @@ class SqlaDataFile(Base):
     created_on = Column(DateTime, default=func.now())
 
 
-def get_root():
+def get_root(user_id):
     """
     Return the absolute path to the current authenticated user's data storage
     root directory
+
+    :param int | None user_id: current user ID (None if user auth is disabled)
 
     :return: user's data storage path
     :rtype: str
     """
     root = app.config['DATA_FILE_ROOT']
-    user_id = current_user.id
     if user_id:
         root = os.path.join(root, str(user_id))
     return os.path.abspath(os.path.expanduser(root))
 
 
 # SQLA database engine
-_data_files_engine = {}
-_data_files_engine_lock = Lock()
+data_files_engine = {}
+data_files_engine_lock = Lock()
 
 
-def get_data_file_db():
+def get_data_file_db(user_id):
     """
     Initialize the given user's data file storage directory and database as
     needed and return the database object
@@ -220,11 +224,13 @@ def get_data_file_db():
     This function should be used instead of directly accessing the global
     `adb` variable to ensure thread safety
 
+    :param int | None user_id: current user ID (None if user auth is disabled)
+
     :return: SQLAlchemy session object
     :rtype: sqlalchemy.orm.session.Session
     """
     try:
-        root = get_root()
+        root = get_root(user_id)
 
         # Make sure the user's data directory exists
         if os.path.isfile(root):
@@ -232,13 +238,13 @@ def get_data_file_db():
         if not os.path.isdir(root):
             os.makedirs(root)
 
-        with _data_files_engine_lock:
+        with data_files_engine_lock:
             try:
                 # Get engine from cache
-                engine = _data_files_engine[root]
+                engine = data_files_engine[root]
             except KeyError:
                 # Engine does not exist, create it
-                engine = _data_files_engine[root] = create_engine(
+                engine = data_files_engine[root] = create_engine(
                     'sqlite:///{}'.format(os.path.join(root, 'data_files.db')))
 
                 # Create table
@@ -595,19 +601,24 @@ def convert_exif_field(val):
     return str(val)
 
 
-def get_subframe(id):
+def get_subframe(user_id, file_id, x0=None, y0=None, w=None, h=None):
     """
     Return pixel data for the given image data file ID within a rectangle
     defined by the optional request parameters "x", "y", "width", and "height";
     XY are in the FITS system with (1,1) at the bottom left corner of the image
 
-    :param int id: data file ID
+    :param int | None user_id: current user ID (None if user auth is disabled)
+    :param int file_id: data file ID
+    :param int x0: optional subframe origin X coordinate (1-based)
+    :param int y0: optional subframe origin Y coordinate (1-based)
+    :param int w: optional subframe width
+    :param int h: optional subframe height
 
     :return: NumPy float32 array containing image data within the specified
         region
     :rtype: `numpy.ndarray`
     """
-    fits = get_data_file(id)
+    fits = get_data_file(user_id, file_id)
     data = fits[0].data
     is_image = data is not None
     if is_image:
@@ -618,16 +629,20 @@ def get_subframe(id):
         width = len(data.columns)
         height = len(data)
 
+    if x0 is None:
+        x0 = request.args.get('x', 1)
     try:
-        x0 = int(request.args.get('x', 1)) - 1
+        x0 = int(x0) - 1
         if x0 < 0 or x0 >= width:
             raise errors.ValidationError(
                 'x', 'X must be positive and not greater than image width', 422)
     except ValueError:
         raise errors.ValidationError('x', 'X must be a positive integer')
 
+    if y0 is None:
+        y0 = request.args.get('y', 1)
     try:
-        y0 = int(request.args.get('y', 1)) - 1
+        y0 = int(y0) - 1
         if y0 < 0 or y0 >= height:
             raise errors.ValidationError(
                 'y', 'Y must be positive and not greater than image height',
@@ -635,8 +650,12 @@ def get_subframe(id):
     except ValueError:
         raise errors.ValidationError('y', 'Y must be a positive integer')
 
+    if w is None:
+        w = request.args.get('width', width - x0)
+    elif not w:
+        w = width - x0
     try:
-        w = int(request.args.get('width', width - x0))
+        w = int(w)
         if w <= 0 or w > width - x0:
             raise errors.ValidationError(
                 'width',
@@ -646,8 +665,12 @@ def get_subframe(id):
         raise errors.ValidationError(
             'width', 'Width must be a positive integer')
 
+    if h is None:
+        h = request.args.get('height', height - y0)
+    elif not h:
+        h = height - y0
     try:
-        h = int(request.args.get('height', height - y0))
+        h = int(h)
         if h <= 0 or h > height - y0:
             raise errors.ValidationError(
                 'height',
@@ -666,16 +689,17 @@ def get_subframe(id):
     return data[list(data.dtype.names[x0:x0+w])][y0:y0+h]
 
 
-def get_data_file_path(id):
+def get_data_file_path(user_id, file_id):
     """
     Return data file path on disk
 
-    :param int id: data file ID
+    :param int | None user_id: current user ID (None if user auth is disabled)
+    :param int file_id: data file ID
 
     :return: path to data file
     :rtype: str
     """
-    return os.path.join(get_root(), '{}.fits'.format(id))
+    return os.path.join(get_root(user_id), '{}.fits'.format(file_id))
 
 
 # Data file cache: {(user_id, file_id): [fits, timestamp]}
@@ -684,7 +708,7 @@ _data_file_cache_size = 0
 _data_file_cache_lock = Lock()
 
 
-def get_data_file(id, update=False):
+def get_data_file(user_id, file_id, update=False):
     """
     Return FITS file object for data file with the given ID
 
@@ -692,23 +716,25 @@ def get_data_file(id, update=False):
     kept in the cache for a faster access. When the cached data size exceeds the
     limit set in afterglow.cfg, the oldest files are removed from the cache.
 
-    :param int id: data file ID
+    :param int | None user_id: current user ID (None if user auth is disabled)
+    :param int file_id: data file ID
     :param bool update: open FITS file for reading only (False, default) or for
         updating (True)
 
     :return: FITS file object
-    :rtype: `astropy.io.fits.PrimaryHDU`
+    :rtype: astropy.io.fits.HDUList
     """
     global _data_file_cache_size
 
     max_cache_size = app.config.get('DATA_FILE_CACHE_SIZE', 0) << 20
 
-    full_id = (current_user.id, id)
+    full_id = (user_id, file_id)
     if update:
         try:
-            fits = pyfits.open(get_data_file_path(id), 'update', memmap=False)
+            fits = pyfits.open(
+                get_data_file_path(user_id, file_id), 'update', memmap=False)
         except Exception:
-            raise UnknownDataFileError(id=id)
+            raise UnknownDataFileError(id=file_id)
 
         if max_cache_size:
             # If a data file is being opened for updating, remove it from cache;
@@ -730,9 +756,10 @@ def get_data_file(id, update=False):
                 # File not in cache, load it
                 try:
                     fits = pyfits.open(
-                        get_data_file_path(id), 'readonly', memmap=False)
+                        get_data_file_path(user_id, file_id), 'readonly',
+                        memmap=False)
                 except Exception:
-                    raise UnknownDataFileError(id=id)
+                    raise UnknownDataFileError(id=file_id)
 
                 # Check if the cache is full
                 data_size = fits[-1].data.nbytes
@@ -758,28 +785,63 @@ def get_data_file(id, update=False):
     else:
         # Don't use caching
         try:
-            fits = pyfits.open(get_data_file_path(id), 'readonly')
+            fits = pyfits.open(get_data_file_path(user_id, file_id), 'readonly')
         except Exception:
-            raise UnknownDataFileError(id=id)
+            raise UnknownDataFileError(id=file_id)
 
     # noinspection PyUnboundLocalVariable
     return fits
 
 
-def get_data_file_data(id):
+def get_data_file_data(user_id, file_id):
     """
     Return FITS file data for data file with the given ID
 
-    :param int id: data file ID
+    :param int | None user_id: current user ID (None if user auth is disabled)
+    :param int file_id: data file ID
 
     :return: data file bytes
     :rtype: bytes
     """
     try:
-        with open(get_data_file_path(id), 'rb') as f:
+        with open(get_data_file_path(user_id, file_id), 'rb') as f:
             return f.read()
     except Exception:
-        raise UnknownDataFileError(id=id)
+        raise UnknownDataFileError(id=file_id)
+
+
+def get_image_time(hdr):
+    """
+    Get exposure start time from FITS header
+
+    :param astropy.io.fits.Header hdr: FITS file header
+
+    :return: exposure start time; None if unknown
+    :rtype: datetime.datetime | None
+    """
+    try:
+        dateobs = hdr['DATE-OBS']
+    except KeyError:
+        raise Exception('Unable to determine image time.  '
+                        'Key DATE-OBS must be present')
+
+    # check if time is also in date by looking for 'T'
+    if 'T' not in dateobs:
+        try:
+            timeobs = hdr['TIME-OBS']
+        except KeyError:
+            return None
+        else:
+            # Normalize to standard format
+            dateobs += 'T' + timeobs
+
+    try:
+        return datetime.strptime(dateobs, '%Y-%m-%dT%H:%M:%S.%f')
+    except ValueError:
+        try:
+            return datetime.strptime(dateobs, '%Y-%m-%dT%H:%M:%S')
+        except ValueError:
+            return None
 
 
 def get_exp_length(hdr):
@@ -962,8 +1024,8 @@ def data_files(id=None):
         DELETE: empty response
     :rtype: flask.Response | str
     """
-    root = get_root()
-    adb = get_data_file_db()
+    root = get_root(current_user.id)
+    adb = get_data_file_db(current_user.id)
 
     if id is not None:
         # When getting, updating, or deleting a data file, check that it
@@ -1134,7 +1196,7 @@ def data_files_header(id):
         underlying FITS file header
     :rtype: flask.Response | str
     """
-    hdr = get_data_file(id)[-1].header
+    hdr = get_data_file(current_user.id, id)[-1].header
     return json_response([
         dict(key=key, value=value, comment=hdr.comments[i])
         for i, (key, value) in enumerate(hdr.items())])
@@ -1162,7 +1224,7 @@ def data_files_hist(id):
         floating-point left and right histogram limits set from the data
     :rtype: flask.Response
     """
-    root = get_root()
+    root = get_root(current_user.id)
 
     # noinspection PyBroadException
     try:
@@ -1176,7 +1238,7 @@ def data_files_hist(id):
     except Exception:
         # Cached histogram not found, calculate and return
         try:
-            data = get_data_file(id)[-1].data
+            data = get_data_file(current_user.id, id)[-1].data
             min_bin, max_bin = float(data.min()), float(data.max())
             bins = app.config['HISTOGRAM_BINS']
             if isinstance(bins, int) and not (data % 1).any():
@@ -1260,7 +1322,7 @@ def data_files_pixels(id):
     :rtype: flask.Response
     """
     try:
-        return make_data_response(get_subframe(id))
+        return make_data_response(get_subframe(current_user.id, id))
     except errors.AfterglowError:
         raise
     except Exception:
@@ -1294,7 +1356,7 @@ def data_files_fits(id):
         above), either the gzipped or uncompressed FITS file data
     :rtype: flask.Response
     """
-    return make_data_response(get_data_file_data(id))
+    return make_data_response(get_data_file_data(current_user.id, id))
 
 
 @app.route(resource_prefix + '<int:id>/sonification')
@@ -1338,7 +1400,7 @@ def data_files_sonification(id):
     :rtype: flask.Response
     """
     try:
-        pixels = get_subframe(id)
+        pixels = get_subframe(current_user.id, id)
     except errors.AfterglowError:
         raise
     except Exception:
@@ -1356,7 +1418,7 @@ def data_files_sonification(id):
     for arg in ('width', 'height', 'bkg', 'rms', 'bkg_scale'):
         args.pop(arg, None)
 
-    adb = get_data_file_db()
+    adb = get_data_file_db(current_user.id)
     df = adb.query(SqlaDataFile).get(id)
     height, width = pixels.shape
     if width != df.width or height != df.height:
@@ -1366,7 +1428,7 @@ def data_files_sonification(id):
             bkg_scale = float(args.pop('bkg_scale', 1/64))
         except ValueError:
             bkg_scale = 1/64
-        full_img = get_data_file(id)[-1].data
+        full_img = get_data_file(current_user.id, id)[-1].data
         bkg, rms = estimate_background(full_img, size=bkg_scale)
         bkg = bkg[y0:y0+height, x0:x0+width]
         rms = rms[y0:y0+height, x0:x0+width]

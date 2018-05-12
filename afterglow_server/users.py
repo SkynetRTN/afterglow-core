@@ -62,6 +62,11 @@ class User(db.Model, UserMixin):
         backref=db.backref('users', lazy='dynamic'))
     auth_methods = db.Column(db.String(255), default='')
 
+    @property
+    def is_admin(self):
+        """Does the user have admin role?"""
+        return Role.query.filter_by(name='admin').one() in self.roles
+
 
 # noinspection PyClassHasNoInit
 class UserSchema(Schema):
