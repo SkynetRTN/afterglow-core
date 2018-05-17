@@ -33,14 +33,11 @@ class DateTime(fields.DateTime):
     Use this instead of :class:`marshmallow.fields.DateTime` to make sure that
     the data stored in JSONType database columns is deserialized properly
     """
-    # noinspection PyShadowingBuiltins
-    def __init__(self, format='%Y-%m-%d %H:%M:%S.%f', **kwargs):
-        super(DateTime, self).__init__(format, **kwargs)
-
     def _serialize(self, value, attr, obj):
-        if isinstance(value, str) or isinstance(value, unicode):
+        if value is None or isinstance(value, str) or \
+                isinstance(value, unicode):
             return value
-        return super(DateTime, self)._serialize(value, attr, obj)
+        return value.strftime('%Y-%m-%d %H:%M:%S.%f')
 
 
 class Date(fields.Date):

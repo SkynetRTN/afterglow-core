@@ -3,7 +3,7 @@ Afterglow Access Server: main app package
 """
 
 from __future__ import absolute_import, division, print_function
-from datetime import datetime
+import datetime
 import json
 from math import isinf, isnan
 from marshmallow import Schema, fields
@@ -88,7 +88,7 @@ class AfterglowSchema(Schema):
 
     def __setattr__(self, name, value):
         """
-        Deserialize nested fields on assignment
+        Deserialize fields on assignment
 
         :param str name: attribute name
         :param value: attribute value
@@ -109,6 +109,20 @@ class AfterglowSchema(Schema):
                         issubclass(field.container.nested, AfterglowSchema):
                     klass = field.container.nested
                     value = [klass(item) for item in value]
+                elif value is not None:
+                    # noinspection PyBroadException
+                    try:
+                        value = field.deserialize(value)
+                    except Exception:
+                        if isinstance(field, fields.DateTime) and \
+                                isinstance(value, datetime.datetime) or \
+                                isinstance(field, fields.Date) and \
+                                isinstance(value, datetime.date) or \
+                                isinstance(field, fields.Time) and \
+                                isinstance(value, datetime.time):
+                            pass
+                        else:
+                            raise
         super(AfterglowSchema, self).__setattr__(name, value)
 
     def json(self):
@@ -166,7 +180,7 @@ class ResourceEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Resource):
             return obj.dump(obj)[0]
-        if isinstance(obj, datetime):
+        if isinstance(obj, datetime.datetime):
             return obj.isoformat(' ')
         return super(ResourceEncoder, self).default(obj)
 

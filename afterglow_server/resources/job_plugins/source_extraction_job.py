@@ -36,7 +36,7 @@ class Astrometry(AfterglowSchema):
     y = Float()  # type: float
     pm_pixel = Float()  # type: float
     pm_pos_angle_pixel = Float()  # type: float
-    pm_epoch = Float()  # type: float
+    pm_epoch = DateTime()  # type: datetime.datetime
     fwhm_x = Float()  # type: float
     fwhm_y = Float()  # type: float
     theta = Float()  # type: float
@@ -47,11 +47,11 @@ class SourceExtractionData(HeaderData, Astrometry):
     Description of object returned by source extraction
     """
     @classmethod
-    def create(cls, s, x0, y0, wcs, **kwargs):
+    def from_source_table(cls, row, x0, y0, wcs, **kwargs):
         """
         Create source extraction data class instance from a source table row
 
-        :param astropy.table.row.Row s: source table row
+        :param numpy.void row: source table row
         :param int x0: X offset to convert from source table coordinates to
             global image coordinates
         :param int y0: Y offset to convert from source table coordinates to
@@ -67,11 +67,11 @@ class SourceExtractionData(HeaderData, Astrometry):
         """
         data = cls(**kwargs)
 
-        data.x = s['x'] + x0
-        data.y = s['y'] + y0
-        data.fwhm_x = s['a']*sigma_to_fwhm
-        data.fwhm_y = s['b']*sigma_to_fwhm
-        data.theta = rad2deg(s['theta'])
+        data.x = row['x'] + x0
+        data.y = row['y'] + y0
+        data.fwhm_x = row['a']*sigma_to_fwhm
+        data.fwhm_y = row['b']*sigma_to_fwhm
+        data.theta = rad2deg(row['theta'])
 
         if wcs is not None:
             # Apply astrometric calibration
@@ -153,6 +153,11 @@ class SourceExtractionJob(Job):
                 else:
                     gain = settings.gain
 
+                epoch = get_image_time(hdr)
+                texp = get_exp_length(hdr)
+                flt = hdr.get('FILTER')
+                scope = hdr.get('TELESCOP')
+
                 # Extract sources
                 source_table, background, background_rms = extract_sources(
                     pixels, gain=gain, **extraction_kw)
@@ -167,21 +172,19 @@ class SourceExtractionJob(Job):
                     wcs = None
 
                 self.result.data += [
-                    SourceExtractionData.create(
-                        s=s,
+                    SourceExtractionData.from_source_table(
+                        row=row,
                         x0=settings.x,
                         y0=settings.y,
                         wcs=wcs,
                         file_id=id,
-                        time=get_image_time(hdr),
-                        filter=hdr.get('FILTER'),
-                        telescope=hdr.get('TELESCOP'),
-                        exp_length=get_exp_length(hdr),
+                        time=epoch,
+                        filter=flt,
+                        telescope=scope,
+                        exp_length=texp,
                     )
-                    for s in source_table]
+                    for row in source_table]
                 self.state.progress = (file_no + 1)/len(self.file_ids)*100
                 self.update()
             except Exception as e:
-                self.add_error(str(e))
-                from ... import app
-                app.logger.warn('Source extraction error', exc_info=True)
+                self.add_error('Data file ID {}: {}'.format(id, e))

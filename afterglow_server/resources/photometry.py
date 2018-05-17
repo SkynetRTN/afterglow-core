@@ -11,7 +11,7 @@ from skylib.photometry.aperture import aperture_photometry
 from skylib.extraction.centroiding import centroid_iraf
 
 from .. import Float, Resource, app, errors, json_response, url_prefix
-from ..auth import auth_required
+from ..auth import auth_required, current_user
 from .data_files import (
     MissingWCSError, get_exp_length, get_gain, get_data_file, get_phot_cal)
 
@@ -375,7 +375,7 @@ def data_file_photometry(id):
         centroid_radius = None
 
     # Get image data
-    fits = get_data_file(id)
+    fits = get_data_file(current_user.id, id)
     hdr = fits[0].header
     data = fits[0].data
 

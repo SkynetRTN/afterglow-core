@@ -522,10 +522,7 @@ class JobWorkerProcess(Process):
                     job.state.status = 'canceled'
                 except Exception as e:
                     # Unexpected job exception
-                    job.result.errors.append(
-                        e.message if hasattr(e, 'message') and e.message
-                        else ', '.join(str(arg) for arg in e.args) if e.args
-                        else str(e))
+                    job.result.errors.append(str(e))
                 finally:
                     # Notify the job server about job completion
                     if job.state.status != 'canceled':

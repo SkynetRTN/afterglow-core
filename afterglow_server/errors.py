@@ -166,6 +166,21 @@ class AfterglowError(exceptions.HTTPException):
             self.description = self.__doc__
         self.payload = kwargs
 
+    def __str__(self):
+        """
+        Return a string representation of an Afterglow error showing both error
+        message and payload
+
+        :return: stringified Afterglow error
+        :rtype: str
+        """
+        msg = self.message
+        if self.payload:
+            msg += ' ({})'.format(
+                ', '.join('{}={}'.format(name, val)
+                          for name, val in self.payload.items()))
+        return msg
+
 
 class MethodNotImplementedError(AfterglowError):
     """
