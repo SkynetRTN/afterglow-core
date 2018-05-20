@@ -10,10 +10,13 @@ from astropy.wcs import WCS
 from skylib.photometry import aperture_photometry
 from skylib.extraction.centroiding import centroid_iraf
 from . import Job, JobResult
-from .source_extraction_job import SourceExtractionData, sigma_to_fwhm
+from .data_structures import SourceExtractionData, sigma_to_fwhm
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time, get_phot_cal)
 from ... import AfterglowSchema, errors
+
+
+__all__ = ['PhotometryData', 'PhotometryJob', 'get_source_xy']
 
 
 class PhotometryData(SourceExtractionData):
