@@ -12,7 +12,9 @@ from marshmallow import fields
 from ... import AfterglowSchema, errors
 
 
-__all__ = ['Date', 'DateTime', 'Time', 'Job', 'JobResult', 'JobState']
+__all__ = [
+    'Boolean', 'Date', 'DateTime', 'Time', 'Job', 'JobResult', 'JobState',
+]
 
 
 class CannotCreateJobFileError(errors.AfterglowError):
@@ -26,6 +28,19 @@ class CannotCreateJobFileError(errors.AfterglowError):
     code = 500
     subcode = 350
     message = 'Cannot create job file'
+
+
+class Boolean(fields.Boolean):
+    """
+    Use this instead of :class:`marshmallow.fields.Boolean` to allow assigning
+    values such as "yes" and "no"
+    """
+    truthy = {
+        True, 't', 'T', 'true', 'True', 'TRUE', 'yes', 'Yes', 'YES', 'on', 'On',
+        'ON', '1', 1, 1.0}
+    falsy = {
+        False, 'f', 'F', 'false', 'False', 'FALSE', 'no', 'No', 'NO', 'off',
+        'Off', 'OFF', '0', 0, 0.0}
 
 
 class DateTime(fields.DateTime):
