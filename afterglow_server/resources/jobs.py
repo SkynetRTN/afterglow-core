@@ -140,7 +140,7 @@ class CannotDeleteJobError(errors.AfterglowError):
     """
     code = 403
     subcode = 307
-    message = 'Cannot delete job in its current status'
+    message = 'Cannot delete job in its current state'
 
 
 # Read/write lock by Fazal Majid
@@ -664,7 +664,7 @@ class JobRequestHandler(BaseRequestHandler):
     """
     def handle(self):
         server = self.server
-        session = self.server.session
+        session = self.server.session_factory()
 
         http_status = 200
         binary_result = False
@@ -1029,9 +1029,10 @@ def job_server(notify_queue):
             pass
         engine = create_engine(
             'sqlite:///{}'.format(db_path),
-            connect_args={'check_same_thread': False})
+            connect_args={'check_same_thread': False},
+        )
         Base.metadata.create_all(bind=engine)
-        session = scoped_session(sessionmaker(bind=engine))()
+        session_factory = scoped_session(sessionmaker(bind=engine))
 
         # Erase old job files
         try:
@@ -1098,49 +1099,53 @@ def job_server(notify_queue):
                             'for non-existent worker process %s', job_pid)
                     continue
 
-                if job_file is not None:
-                    # Job file creation message
+                sess = session_factory()
+                try:
+                    if job_file is not None:
+                        # Job file creation message
+                        # noinspection PyBroadException
+                        try:
+                            sess.add(DbJobFile(
+                                job_id=job_id,
+                                file_id=job_file['id'],
+                                mimetype=job_file.get('mimetype'),
+                                headers=job_file.get('headers')))
+                            sess.commit()
+                        except Exception:
+                            sess.rollback()
+                            app.logger.warn(
+                                'Could not add job file "%s" to database',
+                                exc_info=True)
+                        continue
+
+                    if not job_state and not job_result:
+                        # Empty message, nothing to do
+                        continue
+
+                    job = sess.query(DbJob).get(job_id)
+                    if job is None:
+                        # State update for a job that was already deleted;
+                        # silently ignore
+                        continue
+
                     # noinspection PyBroadException
                     try:
-                        session.add(DbJobFile(
-                            job_id=job_id,
-                            file_id=job_file['id'],
-                            mimetype=job_file.get('mimetype'),
-                            headers=job_file.get('headers')))
-                        session.commit()
+                        # Update job state
+                        for name, val in job_state.items():
+                            setattr(job.state, name, val)
+
+                        # Update job result
+                        for name, val in job_result.items():
+                            setattr(job.result, name, val)
+
+                        sess.commit()
                     except Exception:
-                        session.rollback()
+                        sess.rollback()
                         app.logger.warn(
-                            'Could not add job file "%s" to database',
-                            exc_info=True)
-                    continue
-
-                if not job_state and not job_result:
-                    # Empty message, nothing to do
-                    continue
-
-                job = session.query(DbJob).get(job_id)
-                if job is None:
-                    # State update for a job that was already deleted; silently
-                    # ignore
-                    continue
-
-                # noinspection PyBroadException
-                try:
-                    # Update job state
-                    for name, val in job_state.items():
-                        setattr(job.state, name, val)
-
-                    # Update job result
-                    for name, val in job_result.items():
-                        setattr(job.result, name, val)
-
-                    session.commit()
-                except Exception:
-                    session.rollback()
-                    app.logger.warn(
-                        'Could not update job state/result "%s"',
-                        msg, exc_info=True)
+                            'Could not update job state/result "%s"',
+                            msg, exc_info=True)
+                finally:
+                    sess.close()
 
         state_update_listener = threading.Thread(
             target=state_update_listener_body)
@@ -1150,7 +1155,7 @@ def job_server(notify_queue):
         tcp_server = ThreadingTCPServer(('localhost', 0), JobRequestHandler)
         tcp_server.db_job_types = db_job_types
         tcp_server.db_job_result_types = db_job_result_types
-        tcp_server.session = session
+        tcp_server.session_factory = session_factory
         tcp_server.job_queue = job_queue
         tcp_server.result_queue = result_queue
         tcp_server.pool = pool
