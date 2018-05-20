@@ -136,7 +136,7 @@ def merge_sources(sources, settings):
                 'automatic merge tolerance')
         tol = 0.5*min(min_dist)
     elif pos_type == 'sky':
-        tol = deg2rad(settings.tol)
+        tol = deg2rad(settings.tol)/3600  # arcsecs for pos_type=sky
 
     # Create k-d trees for each file
     trees = [cKDTree(c) for c in coords]
