@@ -75,6 +75,9 @@ class SourceExtractionJob(Job):
             centroid=settings.centroid,
         )
 
+        do_merge = self.file_ids and len(self.file_ids) > 1 and \
+            self.merge_sources
+
         for file_no, id in enumerate(self.file_ids):
             try:
                 # Get image data
@@ -126,11 +129,11 @@ class SourceExtractionJob(Job):
                     )
                     for row in source_table]
                 self.state.progress = (file_no + 1)/len(self.file_ids)*(
-                    100 - 10*self.merge_sources)
+                    100 - 10*do_merge)
                 self.update()
             except Exception as e:
                 self.add_error('Data file ID {}: {}'.format(id, e))
 
-        if self.merge_sources:
+        if do_merge:
             self.result.data = merge_sources(
-                self.result.data, self.source_merge_settings)
+                self.result.data, self.source_merge_settings, self.id)
