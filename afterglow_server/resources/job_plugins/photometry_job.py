@@ -4,6 +4,7 @@ Afterglow Access Server: batch photometry job plugin
 
 from __future__ import absolute_import, division, print_function
 
+from datetime import datetime
 from marshmallow.fields import Float, Integer, List, Nested, String
 from numpy import clip, cos, deg2rad, hypot, sin, zeros
 from astropy.wcs import WCS
@@ -152,15 +153,20 @@ class PhotometryJob(Job):
                     if source.file_id is not None}
         if len(file_ids) < 2:
             # Same source object for all images specified in file_ids;
-            # replicate each source to all images
+            # replicate each source to all images; merge them by assigning the
+            # same source ID
             if not self.file_ids and not file_ids:
                 raise errors.MissingFieldError(field='file_ids')
             if self.file_ids:
                 file_ids |= set(self.file_ids)
+            prefix = '{}_{}_'.format(
+                datetime.utcnow().strftime('%Y%m%d%H%M%S'), self.id)
             sources = {
-                file_id: [SourceExtractionData(source, file_id=file_id)
-                          for source in self.sources]
-                for file_id in file_ids
+                file_id: [
+                    SourceExtractionData(
+                        source, file_id=file_id, id=prefix + str(i + 1))
+                    for i, source in enumerate(self.sources)
+                ] for file_id in file_ids
             }
         else:
             # Individual source object for each image; ignore file_ids
