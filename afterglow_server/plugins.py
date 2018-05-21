@@ -15,7 +15,7 @@ from . import app
 __all__ = ['load_plugins']
 
 
-def add_plugin(plugins, descr, instance):
+def add_plugin(plugins, descr, instance, default_id=None):
     """
     Add a plugin instance to the plugin dictionary, with the possible alias for
     integer plugin IDs; adjust plugin ID and display name
@@ -23,6 +23,7 @@ def add_plugin(plugins, descr, instance):
     :param dict plugins: dictionary {str(id): instance, int(id): instance}
     :param str descr: plugin description
     :param instance: plugin class instance
+    :param int default_id: numeric ID assigned to plugin by default
 
     :return: None
     """
@@ -34,6 +35,13 @@ def add_plugin(plugins, descr, instance):
         id = instance.id
     else:
         id = instance.name
+        # noinspection PyBroadException
+        try:
+            instance.id = id
+        except Exception:
+            if default_id is not None:
+                instance.id = default_id
+                plugins[default_id] = plugins[str(default_id)] = instance
     plugins[str(id)] = instance
     try:
         instance.id = int(id)
@@ -43,7 +51,8 @@ def add_plugin(plugins, descr, instance):
         plugins[instance.id] = instance
 
     app.logger.info(
-        'Loaded %s plugin "%s" (ID %s)', descr, instance.display_name, id)
+        'Loaded %s plugin "%s"%s', descr, instance.display_name,
+        ' (ID {})'.format(instance.id) if instance.id is not None else '')
 
 
 def load_plugins(descr, package, plugin_class, specs=None):
@@ -171,6 +180,6 @@ def load_plugins(descr, package, plugin_class, specs=None):
                     descr, name, spec)
                 raise
 
-            add_plugin(plugins, descr, instance)
+            add_plugin(plugins, descr, instance, id)
 
     return plugins

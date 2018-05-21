@@ -121,6 +121,8 @@ class AfterglowSchema(Schema):
                                 isinstance(field, fields.Time) and \
                                 isinstance(value, datetime.time):
                             pass
+                        elif isinstance(field, fields.String):
+                            value = field.deserialize(str(value))
                         else:
                             raise
         super(AfterglowSchema, self).__setattr__(name, value)
