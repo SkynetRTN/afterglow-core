@@ -4,6 +4,7 @@ Afterglow Access Server: source merge job plugin
 
 from __future__ import absolute_import, division, print_function
 
+from datetime import datetime
 from marshmallow.fields import Float, List, Nested, String
 from numpy import asarray, cos, deg2rad, pi, sin, sqrt, transpose, zeros
 from scipy.spatial import cKDTree
@@ -39,7 +40,7 @@ def dcs2c(ra, dec):
     return transpose([cos(ra)*cd, sin(ra)*cd, sin(dec)])
 
 
-def merge_sources(sources, settings):
+def merge_sources(sources, settings, job_id=None):
     """
     Find matching sources in multiple images by doing a nearest neighbor match
     using either RA/Dec or XY coordinates, depending on `settings`.pos_type;
@@ -47,6 +48,7 @@ def merge_sources(sources, settings):
 
     :param list[SourceExtractionData] sources: list of sources to merge
     :param SourceMergeSettings settings: merge settings
+    :param int job_id: optional job ID included in the merged source IDs
 
     :return: the same sources in the same order, with
         :class:`SourceExtractionData`.id field set to the same unique value for
@@ -142,6 +144,11 @@ def merge_sources(sources, settings):
     trees = [cKDTree(c) for c in coords]
     chains = []
     for i in range(n):
+        # Create a (M x N) chain matrix (M = number of sources in the i-th
+        # image): its k-th row is a sequence of indices of neighbors to the k-th
+        # source in the i-th image for all images (including the i-th one, so
+        # CM[k,i] = k); absence of a neighbor in the particular image is
+        # indicated by -1
         cm = zeros([len(sources_by_file[file_ids[i]]), n], int)
         for j in range(n):
             cm[:, j] = trees[j].query(coords[i], distance_upper_bound=tol)[1]
@@ -152,13 +159,21 @@ def merge_sources(sources, settings):
             if (chain >= 0).sum() > 1:
                 chains.append(tuple(chain))
 
+    # A merged source is a closed group that occurs in the list of chains
+    # exactly as many times as the number of points it contains (non-negative
+    # elements in the chain)
     stars = []
     for chain in chains:
         if chain not in stars and chains.count(chain) == n - chain.count(-1):
             stars.append(chain)
 
+    # Generate a unique ID of the form <YYYYMMDDhhmmss>_<job ID>_<source #>
+    # for each merged source
+    prefix = datetime.utcnow().strftime('%Y%m%d%H%M%S_')
+    if job_id:
+        prefix += str(job_id) + '_'
     for chain_no, chain in enumerate(stars):
-        merged_source_id = str(chain_no + 1)
+        merged_source_id = prefix + str(chain_no + 1)
         for i, j in enumerate(chain):
             if j != -1:
                 source = merged_sources[sources_by_file[file_ids[i]][j][0]]
@@ -176,4 +191,4 @@ class SourceMergeJob(Job):
         SourceMergeSettings, default={})  # type: SourceMergeSettings
 
     def run(self):
-        self.result.data = merge_sources(self.sources, self.settings)
+        self.result.data = merge_sources(self.sources, self.settings, self.id)
