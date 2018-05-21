@@ -6,7 +6,7 @@ from __future__ import absolute_import, division, print_function
 import datetime
 import json
 from math import isinf, isnan
-from marshmallow import Schema, fields
+from marshmallow import Schema, fields, post_dump
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
 from flask import Flask, Response, request, url_for
 from .__version__ import __version__, url_prefix
@@ -124,6 +124,18 @@ class AfterglowSchema(Schema):
                         else:
                             raise
         super(AfterglowSchema, self).__setattr__(name, value)
+
+    @post_dump
+    def remove_nones(self, data):
+        """
+        Don't dump fields containing None
+
+        :param data: serialized schema
+
+        :return: input data with Non-valued fields stripped
+        :rtype: dict
+        """
+        return {key: value for key, value in data.items() if value is not None}
 
     def json(self):
         """
