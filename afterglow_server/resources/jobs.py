@@ -407,25 +407,10 @@ class JobWorkerProcess(Process):
     Job worker process class
     """
     abort_event = None
-    _job_id_lock = None
-    _job_id = None
-
-    @property
-    def job_id(self):
-        """Currently running job ID"""
-        with self._job_id_lock.acquire_read():
-            return self._job_id
-
-    @job_id.setter
-    def job_id(self, value):
-        with self._job_id_lock.acquire_write():
-            self._job_id = value
 
     def __init__(self, job_queue, result_queue):
         if WINDOWS:
             self.abort_event = Event()
-
-        self._job_id_lock = RWLock()
 
         super(JobWorkerProcess, self).__init__(
             target=self.body, args=(job_queue, result_queue, self.abort_event))
@@ -546,6 +531,36 @@ class JobWorkerProcess(Process):
             abort_event.set()
             abort_event_listener.join()
 
+
+class JobWorkerProcessWrapper(object):
+    """
+    Wrapper class that holds a :class:`JobWorkerProcess` instance and a job ID
+    currently run by this process
+    """
+    process = None
+    _job_id_lock = None
+    _job_id = None
+
+    @property
+    def job_id(self):
+        """Currently running job ID"""
+        with self._job_id_lock.acquire_read():
+            return self._job_id
+
+    @job_id.setter
+    def job_id(self, value):
+        with self._job_id_lock.acquire_write():
+            self._job_id = value
+
+    @property
+    def ident(self):
+        """Worker process ID"""
+        return self.process.ident
+
+    def __init__(self, job_queue, result_queue):
+        self._job_id_lock = RWLock()
+        self.process = JobWorkerProcess(job_queue, result_queue)
+
     def cancel_current_job(self):
         """
         Send abort signal to the current job that is being executed by the
@@ -554,7 +569,7 @@ class JobWorkerProcess(Process):
         :return: None
         """
         if WINDOWS:
-            self.abort_event.set()
+            self.process.abort_event.set()
         else:
             os.kill(self.ident, signal.SIGINT)
 
@@ -758,7 +773,7 @@ class JobRequestHandler(BaseRequestHandler):
                             app.logger.info(
                                 'Adding one more worker to job pool')
                             with server.pool_lock.acquire_write():
-                                server.pool.append(JobWorkerProcess(
+                                server.pool.append(JobWorkerProcessWrapper(
                                     server.job_queue, server.result_queue))
 
                     try:
@@ -1050,7 +1065,7 @@ def job_server(notify_queue):
             app.logger.info(
                 'Starting %d job worker process%s', min_pool_size,
                 '' if min_pool_size == 1 else 'es')
-            pool = [JobWorkerProcess(job_queue, result_queue)
+            pool = [JobWorkerProcessWrapper(job_queue, result_queue)
                     for _ in range(min_pool_size)]
         else:
             pool = []
