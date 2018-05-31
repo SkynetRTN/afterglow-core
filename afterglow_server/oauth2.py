@@ -234,7 +234,7 @@ def create_access_token(req):
 def create_refresh_token(req):
     return create_token(
         req.user.username, app.config.get('REFRESH_TOKEN_EXPIRES'),
-        dict(method='oauth2'), 'refresh'),
+        dict(method='oauth2'), 'refresh')
 
 
 def init_oauth():
