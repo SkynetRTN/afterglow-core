@@ -207,7 +207,7 @@ def data_providers(id=None):
     if id is None:
         # List only data providers allowed for the current user's auth method
         allowed_providers = []
-        for id in sorted({str(id) for id in providers.keys()}):
+        for id in sorted({provider.id for provider in providers.values()}):
             provider = providers[id]
             try:
                 _check_provider_auth(provider)
