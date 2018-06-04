@@ -983,7 +983,7 @@ resource_prefix = url_prefix + 'data-files/'
 
 
 @app.route(resource_prefix[:-1], methods=['GET', 'POST'])
-@app.route(resource_prefix + '<int:id>', methods=['GET', 'DELETE'])
+@app.route(resource_prefix + '<int:id>', methods=['GET', 'PUT', 'DELETE'])
 @auth_required('user')
 def data_files(id=None):
     """
@@ -1011,6 +1011,9 @@ def data_files(id=None):
           was already imported: "ignore" (default) = skip already imported
           assets, "overwrite" = re-import, "append" = always create a new data
           file; multiple asset paths can be passed as a JSON list
+
+    PUT /data-files/[id]?name=...
+        - rename data file
 
     DELETE /data-files/[id]
         - delete the given data file
@@ -1148,6 +1151,19 @@ def data_files(id=None):
 
         return json_response(all_data_files, 201 if all_data_files else 200)
 
+    if request.method == 'PUT':
+        # Update data file
+        name = request.args.get('name')
+        if name:
+            try:
+                data_file.name = name
+                adb.commit()
+            except Exception:
+                adb.rollback()
+                raise
+
+        return json_response(DataFile(data_file))
+
     if request.method == 'DELETE':
         # Delete data file
         try:
@@ -1180,13 +1196,15 @@ def data_files(id=None):
         return json_response()
 
 
-@app.route(resource_prefix + '<int:id>/header')
+@app.route(resource_prefix + '<int:id>/header', methods=['GET', 'PUT'])
 @auth_required('user')
 def data_files_header(id):
     """
-    Return the data file header
+    Return or update data file header
 
     GET /data-files/[id]/header
+
+    PUT /data-files/[id]/header?keyword=value...
 
     :param int id: data file ID
 
@@ -1196,7 +1214,15 @@ def data_files_header(id):
         underlying FITS file header
     :rtype: flask.Response | str
     """
-    hdr = get_data_file(current_user.id, id)[-1].header
+
+    if request.method == 'GET':
+        hdr = get_data_file(current_user.id, id)[-1].header
+    else:
+        with get_data_file(current_user.id, id, True) as fits:
+            hdr = fits[-1].header
+            for name, val in request.args.items():
+                hdr[name] = val
+
     return json_response([
         dict(key=key, value=value, comment=hdr.comments[i])
         for i, (key, value) in enumerate(hdr.items())])
