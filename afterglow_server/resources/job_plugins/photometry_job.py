@@ -14,7 +14,7 @@ from . import Job, JobResult
 from .data_structures import SourceExtractionData, sigma_to_fwhm
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time, get_phot_cal)
-from ... import AfterglowSchema, errors
+from ... import AfterglowSchema
 
 
 __all__ = ['PhotometryData', 'PhotometryJob', 'get_source_xy']
@@ -116,11 +116,12 @@ class PhotometryJob(Job):
         if settings.mode == 'aperture':
             # Fixed-aperture photometry
             if settings.a is None:
-                raise errors.MissingFieldError(field='settings.a')
+                raise ValueError(
+                    'Missing aperture radius/semi-major axis for '
+                    'mode="aperture"')
             if settings.a <= 0:
-                raise errors.ValidationError(
-                    'settings.a',
-                    'Aperture radius/semi-major axis must be positive', 422)
+                raise ValueError(
+                    'Aperture radius/semi-major axis must be positive')
             phot_kw = dict(
                 a=settings.a,
                 b=settings.b,
@@ -141,12 +142,9 @@ class PhotometryJob(Job):
             # Make sure that all input sources have FWHMs
             if any(None in (source.fwhm_x, source.fwhm_y, source.theta)
                    for source in self.sources):
-                raise errors.ValidationError(
-                    'sources', 'Missing FWHM data for automatic photometry')
+                raise ValueError('Missing FWHM data for automatic photometry')
         else:
-            raise errors.ValidationError(
-                'settings.mode',
-                'Photometry mode must be "aperture" or "auto"', 422)
+            raise ValueError('Photometry mode must be "aperture" or "auto"')
 
         # Extract file IDs from sources
         file_ids = {source.file_id for source in self.sources
@@ -156,7 +154,7 @@ class PhotometryJob(Job):
             # replicate each source to all images; merge them by assigning the
             # same source ID
             if not self.file_ids and not file_ids:
-                raise errors.MissingFieldError(field='file_ids')
+                raise ValueError('Missing data file IDs')
             if self.file_ids:
                 file_ids |= set(self.file_ids)
             prefix = '{}_{}_'.format(
@@ -171,8 +169,7 @@ class PhotometryJob(Job):
         else:
             # Individual source object for each image; ignore file_ids
             if any(source.file_id is None for source in self.sources):
-                raise errors.ValidationError(
-                    'sources', 'Missing data file ID for at least one source')
+                raise ValueError('Missing data file ID for at least one source')
             sources = {}
             for source in self.sources:
                 sources.setdefault(source.file_id, []).append(source)

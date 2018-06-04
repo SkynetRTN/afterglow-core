@@ -10,7 +10,7 @@ from numpy import asarray, cos, deg2rad, pi, sin, sqrt, transpose, zeros
 from scipy.spatial import cKDTree
 from . import Job, JobResult
 from .data_structures import SourceExtractionData
-from ... import AfterglowSchema, errors
+from ... import AfterglowSchema
 
 
 __all__ = ['SourceMergeJob', 'SourceMergeSettings', 'merge_sources']
@@ -68,25 +68,22 @@ def merge_sources(sources, settings, job_id=None):
         # No data or same file ID for all sources; nothing to merge
         return merged_sources
     if None in sources_by_file:
-        raise errors.ValidationError('sources', 'Missing file ID')
+        raise ValueError('Missing file ID')
     file_ids = list(sorted(sources_by_file))
     n = len(file_ids)
 
     pos_type = settings.pos_type
     if pos_type not in ('sky', 'pixel', 'auto'):
-        raise errors.ValidationError(
-            'settings.pos_type', 'Position type for source merge must be '
-            '"sky", "pixel", or "auto"')
+        raise ValueError(
+            'Position type for source merge must be "sky", "pixel", or "auto"')
 
     tol = settings.tol
     if tol is not None and tol < 0:
-        raise errors.ValidationError(
-            'settings.tol', 'Match tolerance must be a positive number')
+        raise ValueError('Match tolerance must be a positive number')
 
     if pos_type == 'auto':
         if tol:
-            raise errors.ValidationError(
-                'settings.tol',
+            raise ValueError(
                 'pos_type="auto" implies the automatic merge tolerance')
 
         # Prefer RA/Decs if all input sources have them
@@ -96,14 +93,12 @@ def merge_sources(sources, settings, job_id=None):
         elif all(None not in (source.x, source.y) for source in sources):
             pos_type = 'pixel'
         else:
-            raise errors.ValidationError(
-                'sources', 'Missing either RA/Dec or XY for pos_type="auto"')
+            raise ValueError('Missing either RA/Dec or XY for pos_type="auto"')
 
     if pos_type == 'sky':
         if any(None in (source.ra_hours, source.dec_degs)
                for source in sources):
-            raise errors.ValidationError(
-                'sources', 'Missing RA/Dec for pos_type="sky"')
+            raise ValueError('Missing RA/Dec for pos_type="sky"')
 
         # Use Euclidean metric in 3D for RA/Dec
         coords = [dcs2c(*transpose([(source[1].ra_hours, source[1].dec_degs)
@@ -111,8 +106,7 @@ def merge_sources(sources, settings, job_id=None):
                   for file_id in file_ids]
     else:
         if any(None in (source.x, source.y) for source in sources):
-            raise errors.ValidationError(
-                'sources', 'Missing RA/Dec for pos_type="sky"')
+            raise ValueError('Missing RA/Dec for pos_type="sky"')
 
         coords = [[asarray([source[1].x, source[1].y])
                    for source in sources_by_file[file_id]]
@@ -132,8 +126,7 @@ def merge_sources(sources, settings, job_id=None):
             if dist_for_file:
                 min_dist.append(min(dist_for_file))
         if not min_dist:
-            raise errors.ValidationError(
-                'settings.tol',
+            raise ValueError(
                 'Need more than one source in at least some images to use the '
                 'automatic merge tolerance')
         tol = 0.5*min(min_dist)

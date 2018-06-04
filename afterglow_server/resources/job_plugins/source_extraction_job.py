@@ -11,9 +11,8 @@ from . import Boolean, Job, JobResult
 from .data_structures import SourceExtractionData
 from .source_merge_job import SourceMergeSettings, merge_sources
 from ..data_files import (
-    UnknownDataFileError, get_data_file, get_exp_length, get_gain,
-    get_image_time, get_subframe)
-from ... import AfterglowSchema, errors
+    get_data_file, get_exp_length, get_gain, get_image_time, get_subframe)
+from ... import AfterglowSchema
 
 
 __all__ = ['SourceExtractionJob']
@@ -81,14 +80,9 @@ class SourceExtractionJob(Job):
         for file_no, id in enumerate(self.file_ids):
             try:
                 # Get image data
-                try:
-                    pixels = get_subframe(
-                        self.user_id, id, settings.x, settings.y,
-                        settings.width, settings.height)
-                except errors.AfterglowError:
-                    raise
-                except Exception:
-                    raise UnknownDataFileError(id=id)
+                pixels = get_subframe(
+                    self.user_id, id, settings.x, settings.y,
+                    settings.width, settings.height)
 
                 hdr = get_data_file(self.user_id, id)[0].header
 

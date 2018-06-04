@@ -9,7 +9,7 @@ from skylib.combine.stacking import combine
 from . import Job, JobResult
 from ..data_files import (
     create_data_file, get_data_file, get_data_file_db, get_root)
-from ... import AfterglowSchema, errors
+from ... import AfterglowSchema
 
 
 __all__ = ['StackingJob']
@@ -42,18 +42,15 @@ class StackingJob(Job):
         settings = self.stacking_settings
 
         if settings.mode not in ('average', 'sum', 'percentile', 'mode'):
-            raise errors.ValidationError(
-                'settings.mode',
+            raise ValueError(
                 'Stacking mode must be "average", "sum", "percentile", or '
-                '"mode"', 422)
+                '"mode"')
 
         if settings.scaling is not None and \
                 settings.scaling.lower() not in ('none', 'average', 'median',
                                                  'mode'):
-            raise errors.ValidationError(
-                'settings.scaling',
-                'Stacking mode must be "none", "average", "median", or "mode"',
-                422)
+            raise ValueError(
+                'Stacking mode must be "none", "average", "median", or "mode"')
         if settings.scaling is not None:
             settings.scaling = settings.scaling.lower()
             if settings.scaling == 'none':
@@ -62,10 +59,9 @@ class StackingJob(Job):
         if settings.rejection is not None and \
                 settings.rejection.lower() not in ('none', 'chauvenet', 'iraf',
                                                    'minmax', 'sigclip'):
-            raise errors.ValidationError(
-                'settings.rejection',
+            raise ValueError(
                 'Rejection mode must be "none", "chauvenet", "iraf", "minmax", '
-                'or "sigclip"', 422)
+                'or "sigclip"')
         if settings.rejection is not None:
             settings.rejection = settings.rejection.lower()
             if settings.rejection == 'none':
@@ -75,17 +71,15 @@ class StackingJob(Job):
         if settings.rejection == 'iraf':
             if lo is not None:
                 if lo % 1:
-                    raise errors.ValidationError(
-                        'settings.lo',
+                    raise ValueError(
                         'Number of lowest values to clip for rejection=iraf '
-                        'must be integer', 422)
+                        'must be integer')
                 lo = int(lo)
             if hi is not None:
                 if hi % 1:
-                    raise errors.ValidationError(
-                        'settings.hi',
+                    raise ValueError(
                         'Number of highest values to clip for rejection=iraf '
-                        'must be integer', 422)
+                        'must be integer')
                 hi = int(hi)
 
         # Load data files
