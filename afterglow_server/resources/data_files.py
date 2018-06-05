@@ -50,7 +50,7 @@ except ImportError:
 __all__ = [
     'UnknownDataFileError', 'CannotCreateDataFileDirError',
     'CannotImportFromCollectionAssetError', 'UnrecognizedDataFileError',
-    'MissingWCSError', 'DataFile',
+    'MissingWCSError', 'DataFile', 'SqlaDataFile',
     'data_files_engine', 'data_files_engine_lock',
     'create_data_file', 'get_data_file', 'get_data_file_data',
     'get_data_file_db', 'get_data_file_path', 'get_exp_length', 'get_gain',
