@@ -21,6 +21,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--host', metavar='HOSTNAME', default='localhost',
         help='Afterglow server hostname or IP address')
+    # noinspection PyTypeChecker
     parser.add_argument(
         '-o', '--port', metavar='PORT', type=int, default=5000,
         help='Afterglow server port')
@@ -126,8 +127,8 @@ if __name__ == '__main__':
 
     r = requests.request(
         args.method, url,
-        params=dict([item.split('=') for item in args.params]), headers=headers,
-        data=data, auth=auth)
+        params=dict([item.split('=', 1) for item in args.params]),
+        headers=headers, data=data, auth=auth)
 
     print('\nHTTP {:d} - {}'.format(
         r.status_code,
