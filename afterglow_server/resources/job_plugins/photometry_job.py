@@ -176,9 +176,7 @@ class PhotometryJob(Job):
 
         for file_no, file_id in enumerate(file_ids):
             try:
-                fits = get_data_file(self.user_id, file_id)[0]
-                hdr = fits.header
-                data = fits.data
+                data, hdr = get_data_file(self.user_id, file_id)
 
                 if settings.gain is None:
                     gain = get_gain(hdr)

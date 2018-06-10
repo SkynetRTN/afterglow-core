@@ -84,7 +84,7 @@ class SourceExtractionJob(Job):
                     self.user_id, id, settings.x, settings.y,
                     settings.width, settings.height)
 
-                hdr = get_data_file(self.user_id, id)[0].header
+                hdr = get_data_file(self.user_id, id)[1]
 
                 if settings.gain is None:
                     gain = get_gain(hdr)

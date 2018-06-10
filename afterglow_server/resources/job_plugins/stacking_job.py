@@ -89,9 +89,9 @@ class StackingJob(Job):
                       for file_id in self.file_ids]
 
         # Check data dimensions
-        shape = data_files[0][0].data.shape
+        shape = data_files[0][0].shape
         for i, data_file in enumerate(list(data_files[1:])):
-            if data_file[0].data.shape != shape:
+            if data_file[0].shape != shape:
                 self.add_error(
                     'Data file {0} shape mismatch: expected {1[1]}x{1[0]}, got '
                     '{2[1]}x{2[0]}'.format(
@@ -108,7 +108,7 @@ class StackingJob(Job):
         adb = get_data_file_db(self.user_id)
         try:
             self.result.file_id = create_data_file(
-                adb, None, fits[0], get_root(self.user_id),
+                adb, None, get_root(self.user_id), fits[0].data, fits[0].header,
                 duplicates='append').id
             adb.commit()
         except Exception:

@@ -375,9 +375,7 @@ def data_file_photometry(id):
         centroid_radius = None
 
     # Get image data
-    fits = get_data_file(current_user.id, id)
-    hdr = fits[0].header
-    data = fits[0].data
+    data, hdr = get_data_file(current_user.id, id)
 
     if ra is not None and dec is not None:
         # Convert RA/Dec to XY if we have astrometric calibration

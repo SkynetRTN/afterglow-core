@@ -8,11 +8,11 @@ from types import ModuleType
 import numpy
 import numpy.fft.fftpack
 import scipy.ndimage as ndimage
-from astropy.io.fits import PrimaryHDU
 from marshmallow.fields import Float, Integer, List, Nested, String
 from . import Boolean, Job, JobResult
 from ..data_files import (
-    SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root)
+    SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,
+    save_data_file)
 
 
 __all__ = ['PixelOpsJob']
@@ -88,8 +88,7 @@ class PixelOpsJob(Job):
             # Cases 2 and 3; each output must have access to all input images
             if {'img', 'hdr'} & set(co.co_names):
                 raise ValueError('Cannot mix "imgs"/"hdrs" with "img"/"hdr"')
-            local_vars['imgs'] = [f[-1].data for f in data_files]
-            local_vars['hdrs'] = [f[-1].header for f in data_files]
+            local_vars['imgs'], local_vars['hdrs'] = zip(*data_files)
 
             if 'i' in co.co_names:
                 # Case 3: mixed input images; evaluate expression and create
@@ -119,8 +118,7 @@ class PixelOpsJob(Job):
         else:
             # Case 1: iterate over all input images
             for i in range(len(data_files)):
-                local_vars['img'] = data_files[i][-1].data
-                local_vars['hdr'] = data_files[i][-1].header
+                local_vars['img'], local_vars['hdr'] = data_files[i]
 
                 try:
                     self.handle_expr(
@@ -154,9 +152,11 @@ class PixelOpsJob(Job):
             # create a new one
             if nd != 2:
                 raise ValueError('Expression must yield 2D array or scalar')
+
+            res = numpy.asarray(res).astype(numpy.float32)
             if self.inplace:
-                with get_data_file(self.user_id, file_id, True) as fits:
-                    fits[-1].data = numpy.asarray(res).astype(numpy.float32)
+                hdr = get_data_file(self.user_id, file_id)[1]
+                save_data_file(get_root(self.user_id), file_id, res, hdr)
 
                 # May need to update the image size
                 try:
@@ -170,14 +170,13 @@ class PixelOpsJob(Job):
                     raise
             else:
                 if file_id is None:
-                    fits = PrimaryHDU()
+                    hdr = None
                 else:
-                    fits = get_data_file(self.user_id, file_id)[-1]
-                fits.data = res
+                    hdr = get_data_file(self.user_id, file_id)[1]
 
                 try:
                     self.result.file_ids.append(create_data_file(
-                        adb, None, fits, get_root(self.user_id),
+                        adb, None, get_root(self.user_id), res, hdr,
                         duplicates='append').id)
                     adb.commit()
                 except Exception:

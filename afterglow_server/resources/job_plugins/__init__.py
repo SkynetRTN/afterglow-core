@@ -241,12 +241,13 @@ class Job(AfterglowSchema):
         file_id = fields.Integer()  # input data file ID
 
         def run(self):
-            fits = get_data_file(self.user_id, self.file_id)
-            ...  # do some processing on fits[0].data
+            data, hdr = get_data_file(self.user_id, self.file_id)
+            ...  # do some processing
             # create a new data file and return its ID
             adb = get_data_file_db(self.user_id)
             self.result.file_id = create_data_file(
-                adb, None, fits[0], get_root(self.user_id), duplicates='append',
+                adb, None, get_root(self.user_id), data, hdr,
+                duplicates='append',
             ).id
 
     In addition to the regular data files, a job may create extra "job files"

@@ -13,7 +13,6 @@ import tempfile
 import shutil
 import subprocess
 from threading import Lock
-from operator import itemgetter
 from io import BytesIO
 
 from marshmallow import fields
@@ -52,7 +51,7 @@ __all__ = [
     'CannotImportFromCollectionAssetError', 'UnrecognizedDataFileError',
     'MissingWCSError', 'DataFile', 'SqlaDataFile',
     'data_files_engine', 'data_files_engine_lock',
-    'create_data_file', 'get_data_file', 'get_data_file_data',
+    'save_data_file', 'create_data_file', 'get_data_file', 'get_data_file_data',
     'get_data_file_db', 'get_data_file_path', 'get_exp_length', 'get_gain',
     'get_image_time', 'get_phot_cal', 'get_root', 'get_subframe',
     'convert_exif_field',
@@ -258,18 +257,60 @@ def get_data_file_db(user_id):
             else ', '.join(str(arg) for arg in e.args) if e.args else str(e))
 
 
-def create_data_file(adb, name, fits, root, provider=None, path=None,
+def save_data_file(root, file_id, data, hdr):
+    """
+    Save data file to the user's data file directory as an single (image) or
+    double (image + mask) HDU FITS or a primary + table HDU FITS, depending on
+    whether the input HDU contains an image or a table
+
+    :param str root: user's data file storage root directory
+    :param int file_id: data file ID
+    :param array_like data: image or table data; image data can be a masked
+        array
+    :param astropy.io.fits.Header hdr: FITS header
+
+    :return: None
+    """
+    # Convert image data to float32
+    if data.dtype.fields is None:
+        data = data.astype(numpy.float32)
+        if isinstance(data, numpy.ma.MaskedArray) and data.mask.any():
+            # Store masked array in two HDUs
+            fits = pyfits.HDUList(
+                [pyfits.PrimaryHDU(data.data, hdr),
+                 pyfits.ImageHDU(data.mask, name='MASK')])
+        else:
+            fits = pyfits.PrimaryHDU(data.data, hdr)
+    else:
+        # Treat normal arrays with NaN's as masked arrays
+        mask = numpy.isnan(data)
+        if mask.any():
+            fits = pyfits.HDUList(
+                [pyfits.PrimaryHDU(data, hdr),
+                 pyfits.ImageHDU(mask, name='MASK')])
+        else:
+            fits = pyfits.BinTableHDU(data, hdr)
+
+    # Save FITS to data file directory
+    fits.writeto(
+        os.path.join(root, '{}.fits'.format(file_id)),
+        'silentfix', overwrite=True)
+
+
+def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
                      metadata=None, layer=None, duplicates='ignore'):
     """
     Create a database entry for a new data file and save it to data file
-    directory as a single image HDU FITS or a primary + table HDU FITS,
-    depending on whether the input HDU contains an image or a table
+    directory as an single (image) or double (image + mask) HDU FITS or
+    a primary + table HDU FITS, depending on whether the input HDU contains
+    an image or a table
 
     :param sqlalchemy.orm.session.Session adb: SQLA database session
     :param str | None name: data file name
-    :param astropy.io.fits.hdu.base._ValidHDU fits: FITS HDU containing image
-        or table data
     :param str root: user's data file storage root directory
+    :param array_like data: image or table data; image data can be a masked
+        array
+    :param astropy.io.fits.Header | None hdr: FITS header
     :param str provider: data provider ID/name if not creating an empty data
         file
     :param str path: path of the data provider asset the file was imported from
@@ -284,15 +325,12 @@ def create_data_file(adb, name, fits, root, provider=None, path=None,
     :return: data file instance
     :rtype: DataFile
     """
-    if isinstance(fits, pyfits.ImageHDU.__base__):
-        # Image HDU; get image dimensions from FITS
-        data_type = 'image'
-        height, width = fits.data.shape
+    if data.dtype.fields is None:
+        # Image HDU; get image dimensions from array shape
+        height, width = data.shape
     else:
         # Table HDU; width = number of columns, height = number of rows
-        data_type = 'table'
-        width = len(fits.data.columns)
-        height = len(fits.data)
+        height, width = len(data), len(data.dtype.fields)
 
     if not name:
         name = datetime.utcnow().isoformat('_'). \
@@ -305,7 +343,7 @@ def create_data_file(adb, name, fits, root, provider=None, path=None,
 
     # Create/update a database row
     sqla_fields = dict(
-        type=data_type,
+        type='image' if data.dtype.fields is None else 'table',
         name=name,
         width=width,
         height=height,
@@ -338,18 +376,9 @@ def create_data_file(adb, name, fits, root, provider=None, path=None,
         adb.add(sqla_data_file)
         adb.flush()  # obtain the new row ID by flushing db
 
-    data_file = DataFile(sqla_data_file)
+    save_data_file(root, sqla_data_file.id, data, hdr)
 
-    # Convert image data to float32
-    if data_type == 'image':
-        fits.data = fits.data.astype(numpy.float32)
-
-    # Save FITS to data file directory
-    fits.writeto(
-        os.path.join(root, '{}.fits'.format(sqla_data_file.id)),
-        'silentfix', overwrite=True)
-
-    return data_file
+    return DataFile(sqla_data_file)
 
 
 def import_data_file(adb, root, provider_id, asset_path, asset_metadata, fp,
@@ -434,7 +463,7 @@ def import_data_file(adb, root, provider_id, asset_path, asset_metadata, fp,
                     hdu.header.update(h)
 
                 all_data_files.append(create_data_file(
-                    adb, fullname, hdu, root, provider_id,
+                    adb, fullname, root, hdu.data, hdu.header, provider_id,
                     asset_path, asset_metadata, layer, duplicates))
 
     except errors.AfterglowError:
@@ -553,10 +582,8 @@ def import_data_file(adb, root, provider_id, asset_path, asset_metadata, fp,
                 pass
 
         for channel, data in channels.items():
-            # Store FITS image bottom to top
-            hdu = pyfits.PrimaryHDU(data[::-1], hdr)
             if channel:
-                hdu.header['FILTER'] = (channel, 'Filter name')
+                hdr['FILTER'] = (channel, 'Filter name')
 
             if name and len(channels) > 1 and channel:
                 layer = channel
@@ -565,8 +592,9 @@ def import_data_file(adb, root, provider_id, asset_path, asset_metadata, fp,
                 layer = None
                 fullname = name
 
+            # Store FITS image bottom to top
             all_data_files.append(create_data_file(
-                adb, fullname, hdu, root, provider_id, asset_path,
+                adb, fullname, root, data[::-1], hdr, provider_id, asset_path,
                 asset_metadata, layer, duplicates))
 
     return all_data_files
@@ -618,15 +646,13 @@ def get_subframe(user_id, file_id, x0=None, y0=None, w=None, h=None):
         region
     :rtype: `numpy.ndarray`
     """
-    fits = get_data_file(user_id, file_id)
-    data = fits[0].data
-    is_image = data is not None
+    data = get_data_file(user_id, file_id)[0]
+    is_image = data.dtype.fields is None
     if is_image:
         height, width = data.shape
     else:
         # FITS table
-        data = fits[1].data
-        width = len(data.columns)
+        width = len(data.dtype.fields)
         height = len(data)
 
     if x0 is None:
@@ -702,95 +728,40 @@ def get_data_file_path(user_id, file_id):
     return os.path.join(get_root(user_id), '{}.fits'.format(file_id))
 
 
-# Data file cache: {(user_id, file_id): [fits, timestamp]}
-_data_file_cache = {}
-_data_file_cache_size = 0
-_data_file_cache_lock = Lock()
-
-
-def get_data_file(user_id, file_id, update=False):
+def get_data_file(user_id, file_id):
     """
-    Return FITS file object for data file with the given ID
-
-    This function handles data file caching. Data files opened for reading are
-    kept in the cache for a faster access. When the cached data size exceeds the
-    limit set in afterglow.cfg, the oldest files are removed from the cache.
+    Return FITS file data and header for a data file with the given ID; handles
+    masked images
 
     :param int | None user_id: current user ID (None if user auth is disabled)
     :param int file_id: data file ID
-    :param bool update: open FITS file for reading only (False, default) or for
-        updating (True)
 
-    :return: FITS file object
-    :rtype: astropy.io.fits.HDUList
+    :return: tuple (data, hdr); if the underlying FITS file contains a mask in
+        an extra image HDU, it is converted into a :class:`numpy.ma.MaskedArray`
+        instance
+    :rtype: tuple(array_like, astropy.io.fits.Header)
     """
-    global _data_file_cache_size
+    try:
+        fits = pyfits.open(get_data_file_path(user_id, file_id), 'readonly')
+    except Exception:
+        raise UnknownDataFileError(id=file_id)
 
-    max_cache_size = app.config.get('DATA_FILE_CACHE_SIZE', 0) << 20
-
-    full_id = (user_id, file_id)
-    if update:
-        try:
-            fits = pyfits.open(
-                get_data_file_path(user_id, file_id), 'update', memmap=False)
-        except Exception:
-            raise UnknownDataFileError(id=file_id)
-
-        if max_cache_size:
-            # If a data file is being opened for updating, remove it from cache;
-            # on the next access, it will be re-cached as read-only
-            try:
-                with _data_file_cache_lock:
-                    _data_file_cache_size -= \
-                        _data_file_cache[full_id][0][-1].data.nbytes
-                    _data_file_cache[full_id][0].close()
-                    del _data_file_cache[full_id]
-            except KeyError:
-                pass
-    elif max_cache_size:
-        # Try getting the file from cache
-        with _data_file_cache_lock:
-            try:
-                fits = _data_file_cache[full_id][0]
-            except KeyError:
-                # File not in cache, load it
-                try:
-                    fits = pyfits.open(
-                        get_data_file_path(user_id, file_id), 'readonly',
-                        memmap=False)
-                except Exception:
-                    raise UnknownDataFileError(id=file_id)
-
-                # Check if the cache is full
-                data_size = fits[-1].data.nbytes
-                if data_size <= max_cache_size:
-                    while _data_file_cache_size + data_size > max_cache_size:
-                        # Find and delete the oldest cached file
-                        # noinspection PyTypeChecker
-                        oldest_id = sorted(
-                            ((_full_id, ts)
-                             for _full_id, (_, ts) in _data_file_cache.items()),
-                            key=itemgetter(1))[0][0]
-                        _data_file_cache_size -= \
-                            _data_file_cache[oldest_id][0][-1].data.nbytes
-                        _data_file_cache[oldest_id][0].close()
-                        del _data_file_cache[oldest_id]
-
-                # Add file to cache with the current timestamp
-                _data_file_cache[full_id] = [fits, datetime.utcnow()]
-                _data_file_cache_size += data_size
-            else:
-                # File found in cache, update the last access timestamp
-                _data_file_cache[full_id][1] = datetime.utcnow()
+    if fits[0].data is None:
+        # Table stored in extension HDU
+        data = fits[1].data
+    elif fits[0].data.dtype.fields is None:
+        # Image stored in the primary HDU, with an optional mask
+        if len(fits) == 1:
+            # Normal image data
+            data = fits[0].data
+        else:
+            # Masked data
+            data = numpy.ma.MaskedArray(fits[0].data, fits[1].data)
     else:
-        # Don't use caching
-        try:
-            fits = pyfits.open(get_data_file_path(user_id, file_id), 'readonly')
-        except Exception:
-            raise UnknownDataFileError(id=file_id)
+        # Table data in the primary HDU (?)
+        data = fits[0].data
 
-    # noinspection PyUnboundLocalVariable
-    return fits
+    return data, fits[0].header
 
 
 def get_data_file_data(user_id, file_id):
@@ -1075,8 +1046,7 @@ def data_files(id=None):
                     raise errors.ValidationError(
                         'width', 'Width must be a positive integer')
 
-                fits = pyfits.PrimaryHDU(
-                    numpy.zeros([height, width], dtype=numpy.float32))
+                data = numpy.zeros([height, width], dtype=numpy.float32)
                 if request.args.get('pixel_value') is not None:
                     try:
                         pixel_value = float(request.args['pixel_value'])
@@ -1085,10 +1055,10 @@ def data_files(id=None):
                             'pixel_value', 'Pixel value must be a number')
                     else:
                         # noinspection PyPropertyAccess
-                        fits.data += pixel_value
+                        data += pixel_value
 
                 all_data_files.append(create_data_file(
-                    adb, name, fits, root, duplicates='append'))
+                    adb, name, root, data, duplicates='append'))
             else:
                 # Import data file from the specified provider
                 import_params = request.args.to_dict()
@@ -1179,16 +1149,6 @@ def data_files(id=None):
                         else ', '.join(str(arg) for arg in e.args) if e.args
                         else e)
             adb.commit()
-
-            # Delete cached data
-            if app.config.get('DATA_FILE_CACHE_SIZE'):
-                with _data_file_cache_lock:
-                    try:
-                        full_id = (current_user.id, id)
-                        _data_file_cache[full_id][0].close()
-                        del _data_file_cache[full_id]
-                    except KeyError:
-                        pass
         except Exception:
             adb.rollback()
             raise
@@ -1216,10 +1176,11 @@ def data_files_header(id):
     """
 
     if request.method == 'GET':
-        hdr = get_data_file(current_user.id, id)[-1].header
+        hdr = get_data_file(current_user.id, id)[1]
     else:
-        with get_data_file(current_user.id, id, True) as fits:
-            hdr = fits[-1].header
+        with pyfits.open(get_data_file_path(current_user.id, id),
+                         'update') as fits:
+            hdr = fits[0].header
             for name, val in request.args.items():
                 hdr[name] = val
 
@@ -1264,7 +1225,7 @@ def data_files_hist(id):
     except Exception:
         # Cached histogram not found, calculate and return
         try:
-            data = get_data_file(current_user.id, id)[-1].data
+            data = get_data_file(current_user.id, id)[0]
             min_bin, max_bin = float(data.min()), float(data.max())
             bins = app.config['HISTOGRAM_BINS']
             if isinstance(bins, int) and not (data % 1).any():
@@ -1454,7 +1415,7 @@ def data_files_sonification(id):
             bkg_scale = float(args.pop('bkg_scale', 1/64))
         except ValueError:
             bkg_scale = 1/64
-        full_img = get_data_file(current_user.id, id)[-1].data
+        full_img = get_data_file(current_user.id, id)[0]
         bkg, rms = estimate_background(full_img, size=bkg_scale)
         bkg = bkg[y0:y0+height, x0:x0+width]
         rms = rms[y0:y0+height, x0:x0+width]

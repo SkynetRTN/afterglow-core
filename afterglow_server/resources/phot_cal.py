@@ -3,13 +3,14 @@ Afterglow Access Server: photometric calibration of image data files
 """
 
 from __future__ import absolute_import, division, print_function
+import astropy.io.fits as pyfits
 from marshmallow.fields import Bool
 from flask import request
 from numpy import array
 from .. import Float, Resource, app, errors, json_response, url_prefix
-from ..auth import auth_required
-from .data_files import get_data_file
-from .data_files import get_exp_length, get_gain, get_phot_cal
+from ..auth import auth_required, current_user
+from .data_files import (
+    get_data_file, get_data_file_path, get_exp_length, get_gain, get_phot_cal)
 from .photometry import get_photometry
 
 
@@ -75,11 +76,12 @@ def data_file_phot_cal(id):
 
     if request.method == 'GET':
         # Get data file header
-        hdr = get_data_file(id)[0].header
+        hdr = get_data_file(current_user.id, id)[1]
 
     else:
         # Update calibration
-        with get_data_file(id, update=True) as fits:
+        with pyfits.open(get_data_file_path(current_user.id, id),
+                         'update') as fits:
             hdr = fits[0].header
             texp = get_exp_length(hdr)
             gain = get_gain(hdr)
