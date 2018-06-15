@@ -280,7 +280,7 @@ def save_data_file(root, file_id, data, hdr):
                 [pyfits.PrimaryHDU(data.data, hdr),
                  pyfits.ImageHDU(data.mask, name='MASK')])
         else:
-            fits = pyfits.PrimaryHDU(data.data, hdr)
+            fits = pyfits.PrimaryHDU(data, hdr)
     else:
         # Treat normal arrays with NaN's as masked arrays
         mask = numpy.isnan(data)
