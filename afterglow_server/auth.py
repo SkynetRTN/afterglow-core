@@ -53,7 +53,7 @@ class NotAuthenticatedError(AuthError):
     User authentication failed, access denied
 
     Extra attributes::
-        None
+        error_msg: authentication error message
     """
     code = 401
     subcode = 100
@@ -493,7 +493,8 @@ def init_auth():
                 token = token_hdr_payload + '.' + token_sig
 
         if not token:
-            raise NotAuthenticatedError()
+            raise NotAuthenticatedError(
+                error_msg='Missing authentication token')
 
         try:
             token_decoded = decode_jwt(token)
@@ -501,7 +502,8 @@ def init_auth():
             app.logger.info(
                 'Error decoding token: %s',
                 exc.message if exc.message else exc)
-            raise NotAuthenticatedError()
+            raise NotAuthenticatedError(
+                error_msg='Invalid authentication token')
 
         if token_decoded.get('type') != request_type:
             raise NotAuthenticatedError(
@@ -509,12 +511,12 @@ def init_auth():
 
         username = token_decoded.get('identity')
         if not username:
-            raise NotAuthenticatedError()
+            raise NotAuthenticatedError(error_msg='Missing username in token')
 
         # Get the user from db
         user = User.query.filter_by(username=username).one_or_none()
         if user is None:
-            raise NotAuthenticatedError()
+            raise NotAuthenticatedError(error_msg='Unknown username')
         if not user.active:
             raise InactiveUserError()
 
@@ -840,6 +842,7 @@ def login(method=None):
     # Try all requested auth methods
     username = None
     plugin = None
+    error_msgs = {}
     for method in methods:
         try:
             plugin = auth_plugins[method]
@@ -855,14 +858,17 @@ def login(method=None):
                     # Allow redirects from multi-stage auth plugins like
                     # OAuth
                     raise
-            except Exception:
-                # Auth failed, try other methods
-                pass
+                error_msgs[method] = str(e)
+            except Exception as e:
+                # Auth failed, try other methods if any
+                error_msgs[method] = str(e)
             else:
                 # Auth succeeded
                 break
     if username is None:
-        raise NotAuthenticatedError()
+        raise NotAuthenticatedError(
+            error_msg='; '.join('{}: {}'.format(method, msg)
+                                for method, msg in error_msgs.items()))
 
     # Get the user from db
     need_commit = False

@@ -160,8 +160,9 @@ class OAuthPlugin(AuthPlugin):
                 self.access_token_method, self.access_token_url,
                 params=args, data=data, headers=self.access_token_headers)
             if resp.status_code not in (200, 201):
-                raise Exception('OAuth server returned HTTP status {}'.format(
-                    resp.status_code))
+                raise Exception(
+                    'OAuth server returned HTTP status {}, message: {}'.format(
+                        resp.status_code, resp.text))
             data = resp.json()
 
             # Get token expiration time
