@@ -12,6 +12,7 @@ import json
 from io import BytesIO
 from gzip import GzipFile
 from pprint import PrettyPrinter
+import warnings
 
 
 if __name__ == '__main__':
@@ -125,8 +126,9 @@ if __name__ == '__main__':
     if data and headers.get('Content-Type') == 'application/json':
         print(data, file=sys.stderr)
 
+    warnings.filterwarnings('ignore', 'Unverified HTTPS request is being made')
     r = requests.request(
-        args.method, url,
+        args.method, url, verify=False,
         params=dict([item.split('=', 1) for item in args.params]),
         headers=headers, data=data, auth=auth)
 
