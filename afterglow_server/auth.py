@@ -34,8 +34,8 @@ __all__ = [
     'auth_plugins', 'auth_required', 'authenticate', 'security',
     'current_user', 'anonymous_user', 'jwt_manager', 'create_token',
     'AuthError', 'NotAuthenticatedError', 'NoAdminRegisteredError',
-    'RoleRequiredError', 'AdminRequiredError', 'AdminOrSameUserRequiredError',
-    'UnknownUserError', 'InactiveUserError', 'RemoteAdminDisabledError',
+    'AdminRequiredError', 'AdminOrSameUserRequiredError', 'UnknownUserError',
+    'InactiveUserError', 'RemoteAdminDisabledError',
     'CannotDeactivateTheOnlyAdminError', 'DuplicateUsernameError',
     'UnknownAuthMethodError',
 ]
@@ -73,18 +73,6 @@ class NoAdminRegisteredError(AuthError):
     message = 'No admins registered'
 
 
-class RoleRequiredError(AuthError):
-    """
-    Authenticated user does not have the required role to access the resource
-
-    Extra attributes::
-        role: required role name
-    """
-    code = 403
-    subcode = 102
-    message = 'Missing required role'
-
-
 class AdminRequiredError(AuthError):
     """
     Request needs authentication with admin role
@@ -93,7 +81,7 @@ class AdminRequiredError(AuthError):
         None
     """
     code = 403
-    subcode = 103
+    subcode = 102
     message = 'Must be admin to do that'
 
 
@@ -105,7 +93,7 @@ class AdminOrSameUserRequiredError(AuthError):
         None
     """
     code = 403
-    subcode = 104
+    subcode = 103
     message = 'Must be admin or same user to do that'
 
 
@@ -117,7 +105,7 @@ class UnknownUserError(AuthError):
         id: user ID
     """
     code = 404
-    subcode = 105
+    subcode = 104
     message = 'Unknown user'
 
 
@@ -129,7 +117,7 @@ class InactiveUserError(errors.AfterglowError):
         None
     """
     code = 403
-    subcode = 106
+    subcode = 105
     message = 'The user is deactivated'
 
 
@@ -141,7 +129,7 @@ class RemoteAdminDisabledError(AuthError):
         None
     """
     code = 403
-    subcode = 107
+    subcode = 106
     message = 'Remote administration not allowed'
 
 
@@ -154,7 +142,7 @@ class CannotDeactivateTheOnlyAdminError(AuthError):
         None
     """
     code = 403
-    subcode = 108
+    subcode = 107
     message = 'Cannot deactivate/delete the only admin in the system'
 
 
@@ -167,7 +155,7 @@ class DuplicateUsernameError(AuthError):
         username: duplicate username
     """
     code = 403
-    subcode = 109
+    subcode = 108
     message = 'User with this username already exists'
 
 
@@ -179,7 +167,7 @@ class UnknownAuthMethodError(AuthError):
         method: auth method ID
     """
     code = 404
-    subcode = 110
+    subcode = 109
     message = 'Unknown authentication method'
 
 
@@ -277,7 +265,16 @@ def auth_required(fn, *roles, **kwargs):
     @wraps(fn)
     def wrapper(*args, **kw):
         authenticate(roles, **kwargs)
-        return _set_access_cookies(fn(*args, **kw))
+        result = fn(*args, **kw)
+
+        # Update access cookie if present in request
+        token_sig = request.cookies.get('access_token_sig')
+        token_hdr_payload = request.cookies.get('access_token')
+        if token_sig and token_hdr_payload:
+            result = _set_access_cookies(
+                result, token_hdr_payload + '.' + token_sig)
+
+        return result
 
     return wrapper
 
@@ -475,68 +472,66 @@ def init_auth():
         """
         # If access token in HTTP Authorization header, verify and authorize.
         # otherwise, attempt to reconstruct token from cookies
-        token = None
+        tokens = []
         token_hdr = request.headers.get('Authorization')
         if token_hdr:
             parts = token_hdr.split()
             if parts[0] == 'Bearer' and len(parts) == 2:
-                token = parts[1]
+                tokens.append(('headers', parts[1]))
 
-        # for now, disable the custom header check which protects against CSRF
-        # sonification requests can't have custom headers added
+        token_sig = request.cookies.get('access_token_sig')
+        token_hdr_payload = request.cookies.get('access_token')
+        if token_sig and token_hdr_payload:
+            tokens.append(('cookies', token_hdr_payload + '.' + token_sig))
 
-        # if token is None and 'X-Requested-With' in request.headers:
-        if token is None:
-            token_sig = request.cookies.get('access_token_sig')
-            token_hdr_payload = request.cookies.get('access_token')
-            if token_sig and token_hdr_payload:
-                token = token_hdr_payload + '.' + token_sig
-
-        if not token:
+        if not tokens:
             raise NotAuthenticatedError(
                 error_msg='Missing authentication token')
 
-        try:
-            token_decoded = decode_jwt(token)
-        except jwt.InvalidTokenError as exc:
-            app.logger.info(
-                'Error decoding token: %s',
-                exc.message if exc.message else exc)
-            raise NotAuthenticatedError(
-                error_msg='Invalid authentication token')
+        user = None
+        error_msgs = []
+        for token_source, token in tokens:
+            try:
+                token_decoded = decode_jwt(token)
 
-        if token_decoded.get('type') != request_type:
-            raise NotAuthenticatedError(
-                error_msg='Expected {} token'.format(request_type))
+                if token_decoded.get('type') != request_type:
+                    raise ValueError('Expected {} token'.format(request_type))
 
-        username = token_decoded.get('identity')
-        if not username:
-            raise NotAuthenticatedError(error_msg='Missing username in token')
+                username = token_decoded.get('identity')
+                if not username:
+                    raise ValueError('Missing username')
 
-        # Get the user from db
-        user = User.query.filter_by(username=username).one_or_none()
+                # Make the user's auth method available via the request context
+                # stack
+                method = token_decoded.get('user_claims', {}).get('method')
+                if method:
+                    _request_ctx_stack.top.auth_method = method
+
+                # Get the user from db
+                user = User.query.filter_by(username=username).one_or_none()
+                if user is None:
+                    raise ValueError('Unknown username')
+                if not user.active:
+                    raise ValueError('The user is deactivated')
+
+                # Check roles if any
+                if roles:
+                    if isinstance(roles, str) or isinstance(roles, type(u'')):
+                        roles = [roles]
+                    for role in roles:
+                        if not Role.query.filter_by(
+                                name=role).one_or_none() in user.roles:
+                            raise ValueError('"{}" role required'.format(role))
+            except Exception as e:
+                error_msgs.append('{} (source: {})'.format(e, token_source))
+            else:
+                break
         if user is None:
-            raise NotAuthenticatedError(error_msg='Unknown username')
-        if not user.active:
-            raise InactiveUserError()
-
-        # Check roles if any
-        if roles:
-            if isinstance(roles, str) or isinstance(roles, type(u'')):
-                roles = [roles]
-            for role in roles:
-                if not Role.query.filter_by(
-                        name=role).one_or_none() in user.roles:
-                    raise RoleRequiredError(role=role)
+            raise NotAuthenticatedError(error_msg='. '.join(error_msgs))
 
         # Make the authenticated user object available via `current_user` and
         # request.user
         _request_ctx_stack.top.user = request.user = user
-
-        # Make the user's auth method available via the request context stack
-        method = token_decoded.get('user_claims', {}).get('method')
-        if method:
-            _request_ctx_stack.top.auth_method = method
 
         return user
 
