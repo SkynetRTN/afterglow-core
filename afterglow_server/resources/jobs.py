@@ -733,10 +733,10 @@ class JobRequestHandler(BaseRequestHandler):
                 if method == 'get':
                     job_id = msg.get('id')
                     if job_id is None:
-                        # Return all user's jobs; hide user_id
+                        # Return all user's jobs; hide user_id and result
                         result = [
                             job_types[job.type].__class__(
-                                exclude=['user_id']).dump(job)[0]
+                                exclude=['user_id', 'result']).dump(job)[0]
                             for job in session.query(DbJob).filter(
                                 DbJob.user_id == user_id)
                         ]
@@ -746,7 +746,7 @@ class JobRequestHandler(BaseRequestHandler):
                         if job is None or job.user_id != user_id:
                             raise UnknownJobError(id=job_id)
                         result = job_types[job.type].__class__(
-                            exclude=['user_id']).dump(job)[0]
+                            exclude=['user_id', 'result']).dump(job)[0]
 
                 elif method == 'post':
                     # Submit a job
