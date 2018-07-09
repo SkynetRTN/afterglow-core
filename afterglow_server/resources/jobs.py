@@ -384,11 +384,25 @@ encrypt = decrypt = lambda _msg: _msg
 
 if app.config.get('JOB_SERVER_ENCRYPTION', True):
     try:
-        from Crypto import Random
-        from Crypto.Cipher import AES
+        # Try pycryptodomex first
+        from Cryptodome import Random
+        from Cryptodome.Cipher import AES
     except ImportError:
-        app.logger.warn('Job server encryption not enabled')
-        Random = AES = None
+        # Fall back to pycryptodome
+        try:
+            # noinspection PyProtectedMember
+            from Crypto import Random, __version__
+            from Crypto.Cipher import AES
+            if int(__version__.split('.')[0]) < 3:
+                # This is actually pycrypto, which is not supported
+                Random = AES = None
+            del __version__
+        except (ImportError, AttributeError):
+            Random = AES = None
+    if Random is None or AES is None:
+        app.logger.warn(
+            'Job server encryption not enabled, please install pycryptodome or '
+            'pycryptodomex')
     else:
         job_server_key = os.urandom(32)
         job_server_iv = Random.new().read(AES.block_size)
