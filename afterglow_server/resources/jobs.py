@@ -42,6 +42,24 @@ else:
     # noinspection PyShadowingBuiltins
     unicode = str
 
+# Encryption imports
+try:
+    # Try pycryptodomex first
+    from Cryptodome import Random
+    from Cryptodome.Cipher import AES
+except ImportError:
+    # Fall back to pycryptodome
+    try:
+        # noinspection PyProtectedMember
+        from Crypto import Random, __version__
+        from Crypto.Cipher import AES
+        if int(__version__.split('.')[0]) < 3:
+            # This is actually pycrypto, which is not supported
+            Random = AES = None
+        del __version__
+    except (ImportError, AttributeError):
+        Random = AES = None
+
 
 __all__ = ['init_jobs', 'job_file_path']
 
@@ -375,45 +393,38 @@ class DbJob(Base):
 WINDOWS = sys.platform.startswith('win')
 
 
-# Initialize message encryption
+# Message encryption
 job_server_port = None
 job_server_key = None
 job_server_iv = None
 
-encrypt = decrypt = lambda _msg: _msg
 
-if app.config.get('JOB_SERVER_ENCRYPTION', True):
-    try:
-        # Try pycryptodomex first
-        from Cryptodome import Random
-        from Cryptodome.Cipher import AES
-    except ImportError:
-        # Fall back to pycryptodome
-        try:
-            # noinspection PyProtectedMember
-            from Crypto import Random, __version__
-            from Crypto.Cipher import AES
-            if int(__version__.split('.')[0]) < 3:
-                # This is actually pycrypto, which is not supported
-                Random = AES = None
-            del __version__
-        except (ImportError, AttributeError):
-            Random = AES = None
-    if Random is None or AES is None:
-        app.logger.warn(
-            'Job server encryption not enabled, please install pycryptodome or '
-            'pycryptodomex')
-    else:
-        job_server_key = os.urandom(32)
-        job_server_iv = Random.new().read(AES.block_size)
+def encrypt(msg):
+    """
+    Encrypt a job server communication message
 
-        def encrypt(_msg):
-            return AES.new(
-                job_server_key, AES.MODE_CFB, job_server_iv).encrypt(_msg)
+    :param bytes msg: message to encrypt
 
-        def decrypt(_msg):
-            return AES.new(
-                job_server_key, AES.MODE_CFB, job_server_iv).decrypt(_msg)
+    :return: encrypted message or original message if encryption is not enabled
+    :rtype: bytes
+    """
+    if job_server_key is None:
+        return msg
+    return AES.new(job_server_key, AES.MODE_CFB, job_server_iv).encrypt(msg)
+
+
+def decrypt(msg):
+    """
+    Decrypt a job server communication message
+
+    :param bytes msg: message to decrypt
+
+    :return: decrypted message or original message if encryption is not enabled
+    :rtype: bytes
+    """
+    if job_server_key is None:
+        return msg
+    return AES.new(job_server_key, AES.MODE_CFB, job_server_iv).decrypt(msg)
 
 
 class JobWorkerProcess(Process):
@@ -1018,17 +1029,24 @@ class JobRequestHandler(BaseRequestHandler):
                 pass
 
 
-def job_server(notify_queue):
+def job_server(notify_queue, key, iv):
     """
     Main job server process
 
     :param multiprocessing.Queue notify_queue: queue used to send messages to
         the main process on the job server process initialization and errors
+    :param bytes key: message encryption key
+    :param bytes iv: message encryption initialization vector
 
     :return: None
     """
+    global job_server_key, job_server_iv
+
     try:
         app.logger.info('Starting Afterglow job server (pid %d)', os.getpid())
+
+        # Inherit encryption key/IV from the parent process
+        job_server_key, job_server_iv = key, iv
 
         # Initialize job database
         # Create DbJob and DbJobResult subclasses for each job type based on
@@ -1213,15 +1231,26 @@ def job_server(notify_queue):
 
 def init_jobs():
     """
-    Initialize job subsystem
+    Initialize the job subsystem
 
     :return: None
     """
-    global job_server_port
+    global job_server_port, job_server_key, job_server_iv
+
+    # Initialize message encryption
+    if app.config.get('JOB_SERVER_ENCRYPTION', True):
+        if Random is None or AES is None:
+            app.logger.warn(
+                'Job server encryption not enabled, please install '
+                'pycryptodome or pycryptodomex')
+        else:
+            job_server_key = os.urandom(32)
+            job_server_iv = Random.new().read(AES.block_size)
 
     # Start job server process
     notify_queue = Queue()
-    p = Process(target=job_server, args=(notify_queue,))
+    p = Process(
+        target=job_server, args=(notify_queue, job_server_key, job_server_iv))
     p.start()
 
     # Wait for initialization
