@@ -61,7 +61,7 @@ except ImportError:
         Random = AES = None
 
 
-__all__ = ['init_jobs', 'job_file_path']
+__all__ = ['job_file_path']
 
 
 class JobServerError(errors.AfterglowError):
@@ -1060,11 +1060,13 @@ def job_server(notify_queue, key, iv):
                 job_schema.name)
 
         # Enable foreign keys in sqlite; required for ON DELETE CASCADE to work
-        # when deleting jobs
+        # when deleting jobs; set journal mode to WAL to allow concurrent access
+        # from multiple Apache processes
         @event.listens_for(Engine, 'connect')
         def set_sqlite_pragma(dbapi_connection, _):
             cursor = dbapi_connection.cursor()
             cursor.execute('PRAGMA foreign_keys=ON')
+            cursor.execute('PRAGMA journal_mode=WAL')
             cursor.close()
 
         # Recreate all tables on startup
@@ -1076,7 +1078,7 @@ def job_server(notify_queue, key, iv):
             pass
         engine = create_engine(
             'sqlite:///{}'.format(db_path),
-            connect_args={'check_same_thread': False},
+            connect_args={'check_same_thread': False, 'isolation_level': None},
         )
         Base.metadata.create_all(bind=engine)
         session_factory = scoped_session(sessionmaker(bind=engine))
@@ -1229,6 +1231,7 @@ def job_server(notify_queue, key, iv):
         app.logger.warn('Error in job server process', exc_info=True)
 
 
+@app.before_first_request
 def init_jobs():
     """
     Initialize the job subsystem

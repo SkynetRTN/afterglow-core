@@ -234,6 +234,7 @@ if app.config.get('PROFILE'):
     app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[10])
 
 
+@app.before_request
 def resolve_request_body():
     """
     Before every request, combine `request.form` and `request.get_json()` into
@@ -258,9 +259,6 @@ def resolve_request_body():
     # Replace immutable Request.args with the combined args dict
     # noinspection PyPropertyAccess
     request.args = CombinedMultiDict(ds)
-
-
-app.before_request(resolve_request_body)
 
 
 # Initialize the user authentication engine

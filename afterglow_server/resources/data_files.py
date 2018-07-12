@@ -16,9 +16,12 @@ from threading import Lock
 from io import BytesIO
 
 from marshmallow import fields
-from sqlalchemy import Column, DateTime, Integer, String, create_engine, func
+from sqlalchemy import (
+    Column, DateTime, Integer, String, create_engine, event, func)
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+# noinspection PyProtectedMember
+from sqlalchemy.engine import Engine
 import numpy
 import astropy.io.fits as pyfits
 from flask import Response, request
@@ -243,8 +246,16 @@ def get_data_file_db(user_id):
                 engine = data_files_engine[root]
             except KeyError:
                 # Engine does not exist, create it
+                @event.listens_for(Engine, 'connect')
+                def set_sqlite_pragma(dbapi_connection, _):
+                    cursor = dbapi_connection.cursor()
+                    cursor.execute('PRAGMA journal_mode=WAL')
+                    cursor.close()
                 engine = data_files_engine[root] = create_engine(
-                    'sqlite:///{}'.format(os.path.join(root, 'data_files.db')))
+                    'sqlite:///{}'.format(os.path.join(root, 'data_files.db')),
+                    connect_args={'check_same_thread': False,
+                                  'isolation_level': None},
+                )
 
                 # Create table
                 Base.metadata.create_all(bind=engine)
