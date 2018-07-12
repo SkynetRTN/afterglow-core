@@ -12,6 +12,7 @@ import gzip
 import tempfile
 import shutil
 import subprocess
+import sqlite3
 from threading import Lock
 from io import BytesIO
 
@@ -247,10 +248,11 @@ def get_data_file_db(user_id):
             except KeyError:
                 # Engine does not exist, create it
                 @event.listens_for(Engine, 'connect')
-                def set_sqlite_pragma(dbapi_connection, _):
-                    cursor = dbapi_connection.cursor()
-                    cursor.execute('PRAGMA journal_mode=WAL')
-                    cursor.close()
+                def set_sqlite_pragma(dbapi_connection, _rec):
+                    if isinstance(dbapi_connection, sqlite3.Connection):
+                        cursor = dbapi_connection.cursor()
+                        cursor.execute('PRAGMA journal_mode=WAL')
+                        cursor.close()
                 engine = data_files_engine[root] = create_engine(
                     'sqlite:///{}'.format(os.path.join(root, 'data_files.db')),
                     connect_args={'check_same_thread': False,
