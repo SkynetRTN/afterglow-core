@@ -36,6 +36,7 @@ class SourceExtractionSettings(AfterglowSchema):
     gain = Float()  # type: float
     clean = Float(default=1)  # type: float
     centroid = Boolean(default=True)  # type: bool
+    limit = Integer()  # type: int
 
 
 class SourceExtractionJobResult(JobResult):
@@ -99,6 +100,11 @@ class SourceExtractionJob(Job):
                 # Extract sources
                 source_table, background, background_rms = extract_sources(
                     pixels, gain=gain, **extraction_kw)
+
+                if settings.limit and len(source_table) > settings.limit:
+                    # Leave only the given number of the brightest sources
+                    source_table.sort(order='flux')
+                    source_table = source_table[:-(settings.limit + 1):-1]
 
                 # Apply astrometric calibration if present
                 # noinspection PyBroadException
