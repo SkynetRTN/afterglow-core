@@ -244,17 +244,7 @@ def resolve_request_body():
 
     body = request.get_json()
     if body:
-        multi_dict_items = []
-        for key, value in body.items():
-            if isinstance(value, list):
-                for item in value:
-                    if not isinstance(item, list) and \
-                            not isinstance(item, dict):
-                        multi_dict_items.append((key, item))
-            elif not isinstance(value, dict):
-                multi_dict_items.append((key, value))
-
-        ds.append(MultiDict(multi_dict_items))
+        ds.append(MultiDict(body.items()))
 
     # Replace immutable Request.args with the combined args dict
     # noinspection PyPropertyAccess
