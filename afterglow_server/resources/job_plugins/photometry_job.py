@@ -9,7 +9,7 @@ from marshmallow.fields import Float, Integer, List, Nested, String
 from numpy import clip, cos, deg2rad, hypot, sin, zeros
 from astropy.wcs import WCS
 from skylib.photometry import aperture_photometry
-from skylib.extraction.centroiding import centroid_iraf
+from skylib.extraction.centroiding import centroid_sources
 from . import Job, JobResult
 from .data_structures import SourceExtractionData, sigma_to_fwhm
 from ..data_files import (
@@ -219,7 +219,7 @@ class PhotometryJob(Job):
                     source_table['theta'] = deg2rad(source_table['theta'])
 
                 if settings.centroid_radius > 0:
-                    source_table['x'], source_table['y'] = centroid_iraf(
+                    source_table['x'], source_table['y'] = centroid_sources(
                         data, source_table['x'], source_table['y'],
                         settings.centroid_radius)
 
