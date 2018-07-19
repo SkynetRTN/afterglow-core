@@ -162,7 +162,9 @@ class PhotometryJob(Job):
             sources = {
                 file_id: [
                     SourceExtractionData(
-                        source, file_id=file_id, id=prefix + str(i + 1))
+                        source, file_id=file_id,
+                        id=source.id if hasattr(source, 'id') and source.id
+                        else prefix + str(i + 1))
                     for i, source in enumerate(self.sources)
                 ] for file_id in file_ids
             }
