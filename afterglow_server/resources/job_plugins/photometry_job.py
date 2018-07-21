@@ -6,8 +6,9 @@ from __future__ import absolute_import, division, print_function
 
 from datetime import datetime
 from marshmallow.fields import Float, Integer, List, Nested, String
-from numpy import clip, cos, deg2rad, hypot, sin, zeros
+from numpy import clip, cos, deg2rad, hypot, isfinite, sin, zeros
 from astropy.wcs import WCS
+import sep
 from skylib.photometry import aperture_photometry
 from skylib.extraction.centroiding import centroid_sources
 from . import Job, JobResult
@@ -254,7 +255,10 @@ class PhotometryJob(Job):
                         telescope=scope,
                         exp_length=texp,
                     )
-                    for row, source in zip(source_table, sources[file_id])]
+                    for row, source in zip(source_table, sources[file_id])
+                    if row['flag'] & (0xF0 & ~sep.APER_HASMASKED) == 0 and
+                    isfinite([row['x'], row['y'], row['flux'], row['flux_err'],
+                              row['mag'], row['mag_err']]).all()]
                 self.state.progress = (file_no + 1)/len(file_ids)*100
                 self.update()
             except Exception as e:
