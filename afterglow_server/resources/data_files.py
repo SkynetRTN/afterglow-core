@@ -185,6 +185,7 @@ Base = declarative_base()
 # noinspection PyClassHasNoInit
 class SqlaDataFile(Base):
     __tablename__ = 'data_files'
+    __table_args__ = dict(sqlite_autoincrement=True)
 
     id = Column(Integer, primary_key=True, nullable=False)
     type = Column(String)
