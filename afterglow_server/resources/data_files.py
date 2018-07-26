@@ -49,6 +49,15 @@ try:
 except ImportError:
     exifread = None
 
+try:
+    # noinspection PyUnresolvedReferences
+    from alembic import config as alembic_config, context as alembic_context
+    from alembic.script import ScriptDirectory
+    from alembic.runtime.environment import EnvironmentContext
+except ImportError:
+    ScriptDirectory = EnvironmentContext = None
+    alembic_config = alembic_context = None
+
 
 __all__ = [
     'UnknownDataFileError', 'CannotCreateDataFileDirError',
@@ -260,8 +269,37 @@ def get_data_file_db(user_id):
                                   'isolation_level': None},
                 )
 
-                # Create table
-                Base.metadata.create_all(bind=engine)
+                # Create data_files table
+                if alembic_config is None:
+                    # Alembic not available, create table from SQLA metadata
+                    Base.metadata.create_all(bind=engine)
+                else:
+                    # Create/upgrade table via Alembic
+                    cfg = alembic_config.Config()
+                    cfg.set_main_option(
+                        'script_location',
+                        os.path.abspath(os.path.join(
+                            __file__, '..', '..', 'db_migration', 'data_files'))
+                    )
+                    script = ScriptDirectory.from_config(cfg)
+
+                    def upgrade(rev, _):
+                        # noinspection PyProtectedMember
+                        return script._upgrade_revs('head', rev)
+
+                    with EnvironmentContext(
+                                cfg,
+                                script,
+                                fn=upgrade,
+                                as_sql=False,
+                                starting_rev=None,
+                                destination_rev='head',
+                                tag=None,
+                            ), engine.connect() as connection:
+                        alembic_context.configure(connection=connection)
+
+                        with alembic_context.begin_transaction():
+                            alembic_context.run_migrations()
 
             return scoped_session(sessionmaker(bind=engine))()
 
