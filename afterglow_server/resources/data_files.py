@@ -323,6 +323,11 @@ def save_data_file(root, file_id, data, hdr):
 
     :return: None
     """
+    # Initialize header
+    if hdr is None:
+        hdr = pyfits.Header()
+    hdr['FILE_ID'] = (file_id, 'Afterglow Access data file ID')
+
     # Convert image data to float32
     if data.dtype.fields is None:
         data = data.astype(numpy.float32)
@@ -330,7 +335,7 @@ def save_data_file(root, file_id, data, hdr):
             # Store masked array in two HDUs
             fits = pyfits.HDUList(
                 [pyfits.PrimaryHDU(data.data, hdr),
-                 pyfits.ImageHDU(data.mask, name='MASK')])
+                 pyfits.ImageHDU(data.mask.astype(numpy.uint8), name='MASK')])
         else:
             fits = pyfits.PrimaryHDU(data, hdr)
     else:
@@ -808,7 +813,7 @@ def get_data_file(user_id, file_id):
             data = fits[0].data
         else:
             # Masked data
-            data = numpy.ma.MaskedArray(fits[0].data, fits[1].data)
+            data = numpy.ma.MaskedArray(fits[0].data, fits[1].data.astype(bool))
     else:
         # Table data in the primary HDU (?)
         data = fits[0].data
