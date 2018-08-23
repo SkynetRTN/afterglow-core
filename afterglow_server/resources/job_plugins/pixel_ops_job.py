@@ -8,6 +8,7 @@ from types import ModuleType
 import numpy
 import numpy.fft.fftpack
 import scipy.ndimage as ndimage
+import astropy.io.fits as pyfits
 from marshmallow.fields import Float, Integer, List, Nested, String
 from . import Boolean, Job, JobResult
 from ..data_files import (
@@ -107,7 +108,7 @@ class PixelOpsJob(Job):
                     except Exception as e:
                         self.add_error('Image #{:d}: {}'.format(i, e))
                     finally:
-                        self.state.progress = (i + 1)/len(data_files)
+                        self.state.progress = (i + 1)/len(data_files)*100
                         self.update()
             else:
                 # Case 2: reduce to a single image/scalar; always create a new
@@ -128,7 +129,7 @@ class PixelOpsJob(Job):
                     self.add_error(
                         'Data file ID {}: {}'.format(self.file_ids[i], e))
                 finally:
-                    self.state.progress = (i + 1)/len(data_files)
+                    self.state.progress = (i + 1)/len(data_files)*100
                     self.update()
 
     def handle_expr(self, expr, local_vars, file_id=None):
@@ -151,11 +152,13 @@ class PixelOpsJob(Job):
             # Evaluation yields an array; replace the original data file or
             # create a new one
             if nd != 2:
-                raise ValueError('Expression must yield 2D array or scalar')
+                raise ValueError('Expression must yield a 2D array or scalar')
 
             res = numpy.asarray(res).astype(numpy.float32)
             if self.inplace:
                 hdr = get_data_file(self.user_id, file_id)[1]
+                hdr.add_history(
+                    'Updated by evaluating expression "{}"'.format(expr))
                 save_data_file(get_root(self.user_id), file_id, res, hdr)
 
                 # May need to update the image size
@@ -170,18 +173,25 @@ class PixelOpsJob(Job):
                     raise
             else:
                 if file_id is None:
-                    hdr = None
+                    hdr = pyfits.Header()
+                    hdr.add_history(
+                        'Created by evaluating expression "{}"'.format(expr))
                 else:
                     hdr = get_data_file(self.user_id, file_id)[1]
+                    hdr.add_history(
+                        'Created from data file {:d} by evaluating expression '
+                        '"{}"'.format(file_id, expr))
 
                 try:
-                    self.result.file_ids.append(create_data_file(
+                    file_id = create_data_file(
                         adb, None, get_root(self.user_id), res, hdr,
-                        duplicates='append').id)
+                        duplicates='append').id
                     adb.commit()
                 except Exception:
                     adb.rollback()
                     raise
+
+            self.result.file_ids.append(file_id)
         else:
             # Evaluation yields a scalar; append to result
             self.result.data.append(float(res))
