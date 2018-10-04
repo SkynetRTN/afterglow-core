@@ -14,6 +14,7 @@ import signal
 import json
 import struct
 import socket
+import cProfile
 from datetime import datetime
 from multiprocessing import Event, Process, Queue
 import threading
@@ -526,7 +527,15 @@ class JobWorkerProcess(Process):
                 result_queue.put(dict(id=job_descr['id'], pid=self.ident))
                 job.update()
                 try:
-                    job.run()
+                    if app.config.get('PROFILE'):
+                        # Profile the job if enabled
+                        print('{}\nProfiling job "{}" (ID {})'.format(
+                            '-'*80, job.name, job.id))
+                        cProfile.runctx(
+                            'job.run()', {}, {'job': job}, sort='time')
+                        print('-'*80)
+                    else:
+                        job.run()
                 except KeyboardInterrupt:
                     # Job canceled
                     job.state.status = 'canceled'
