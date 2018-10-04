@@ -177,6 +177,7 @@ class PhotometryJob(Job):
             for source in self.sources:
                 sources.setdefault(source.file_id, []).append(source)
 
+        result_data = []
         for file_no, file_id in enumerate(file_ids):
             try:
                 data, hdr = get_data_file(self.user_id, file_id)
@@ -247,7 +248,7 @@ class PhotometryJob(Job):
                             'error'.format(file_id))
 
                 # noinspection PyTypeChecker
-                self.result.data += [
+                result_data += [
                     PhotometryData.from_phot_table(
                         row, source,
                         time=epoch,
@@ -259,7 +260,8 @@ class PhotometryJob(Job):
                     if row['flag'] & (0xF0 & ~sep.APER_HASMASKED) == 0 and
                     isfinite([row['x'], row['y'], row['flux'], row['flux_err'],
                               row['mag'], row['mag_err']]).all()]
-                self.state.progress = (file_no + 1)/len(file_ids)*100
-                self.update()
+                self.update_progress((file_no + 1)/len(file_ids)*100)
             except Exception as e:
                 self.add_error('Data file ID {}: {}'.format(file_id, e))
+
+        self.result.data = result_data
