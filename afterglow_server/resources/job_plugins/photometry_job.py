@@ -5,17 +5,20 @@ Afterglow Access Server: batch photometry job plugin
 from __future__ import absolute_import, division, print_function
 
 from datetime import datetime
-from marshmallow.fields import Float, Integer, List, Nested, String
+
+from marshmallow.fields import Integer, List, Nested, String
 from numpy import clip, cos, deg2rad, hypot, isfinite, sin, zeros
 from astropy.wcs import WCS
 import sep
+
 from skylib.photometry import aperture_photometry
 from skylib.extraction.centroiding import centroid_sources
+
 from . import Job, JobResult
 from .data_structures import SourceExtractionData, sigma_to_fwhm
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time, get_phot_cal)
-from ... import AfterglowSchema
+from ... import AfterglowSchema, Float
 
 
 __all__ = ['PhotometryData', 'PhotometryJob', 'get_source_xy']

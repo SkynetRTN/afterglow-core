@@ -34,37 +34,37 @@ class Photometry(Resource):
         a: aperture radius (or semi-major axis) in pixels
         b: semi-minor axis of the aperture
         theta: aperture position angle in degrees CCW if `a` != `b`
-        a_in: inner annulus radius (or semi-major axis) in pixels; None if
+        a_in: inner annulus radius (or semi-major axis) in pixels; not set if
             local background subtraction was not used
         a_out: outer annulus radius (or semi-major axis) in pixels
         b_out: semi-minor outer axis of the annulus
         theta_out: annulus position angle in degrees CCW if `a` != `b`
         area: area within the aperture in square pixels
         background_area: annulus area in pixels if local background subtraction
-            was enabled; null otherwise
+            was enabled; not set otherwise
         background: mean background within the aperture estimated from the
-            annulus if enabled; null otherwise
+            annulus if enabled; not set otherwise
         background_rms: RMS of background within the annulus if local background
-            subtraction was enabled; null otherwise
+            subtraction was enabled; not set otherwise
 
     """
-    flux = Float(default=None)
-    flux_err = Float(default=None)
-    mag = Float(default=None)
-    mag_err = Float(default=None)
-    x = Float(default=None)
-    y = Float(default=None)
-    a = Float(default=None)
-    b = Float(default=None)
-    theta = Float(default=None)
-    a_in = Float(default=None)
-    a_out = Float(default=None)
-    b_out = Float(default=None)
-    theta_out = Float(default=None)
-    area = Float(default=None)
-    background_area = Float(default=None)
-    background = Float(default=None)
-    background_rms = Float(default=None)
+    flux = Float()  # type: float
+    flux_err = Float()  # type: float
+    mag = Float()  # type: float
+    mag_err = Float()  # type: float
+    x = Float()  # type: float
+    y = Float()  # type: float
+    a = Float()  # type: float
+    b = Float()  # type: float
+    theta = Float()  # type: float
+    a_in = Float()  # type: float
+    a_out = Float()  # type: float
+    b_out = Float()  # type: float
+    theta_out = Float()  # type: float
+    area = Float()  # type: float
+    background_area = Float()  # type: float
+    background = Float()  # type: float
+    background_rms = Float()  # type: float
 
 
 def get_photometry(data, texp, gain, phot_cal, x, y, a, b=None, theta=0,

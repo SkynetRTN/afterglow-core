@@ -14,9 +14,57 @@ from .__version__ import __version__, url_prefix
 
 __all__ = [
     '__version__', 'url_prefix',
-    'Float', 'AfterglowSchema', 'Resource',
+    'Boolean', 'DateTime', 'Date', 'Time', 'Float',
+    'AfterglowSchema', 'Resource',
     'app', 'json_response',
 ]
+
+
+class Boolean(fields.Boolean):
+    """
+    Use this instead of :class:`marshmallow.fields.Boolean` to allow assigning
+    values such as "yes" and "no"
+    """
+    truthy = {
+        True, 't', 'T', 'true', 'True', 'TRUE', 'yes', 'Yes', 'YES', 'on', 'On',
+        'ON', '1', 1, 1.0}
+    falsy = {
+        False, 'f', 'F', 'false', 'False', 'FALSE', 'no', 'No', 'NO', 'off',
+        'Off', 'OFF', '0', 0, 0.0}
+
+
+class DateTime(fields.DateTime):
+    """
+    Use this instead of :class:`marshmallow.fields.DateTime` to make sure that
+    the data stored in JSONType database columns is deserialized properly
+    """
+    def _serialize(self, value, attr, obj):
+        if value is None or isinstance(value, str) or \
+                isinstance(value, type(u'')):
+            return value
+        return value.strftime('%Y-%m-%d %H:%M:%S.%f')
+
+
+class Date(fields.Date):
+    """
+    Use this instead of :class:`marshmallow.fields.Date` to make sure that
+    the data stored in JSONType database columns is deserialized properly
+    """
+    def _serialize(self, value, attr, obj):
+        if isinstance(value, str) or isinstance(value, type(u'')):
+            return value
+        return super(Date, self)._serialize(value, attr, obj)
+
+
+class Time(fields.Time):
+    """
+    Use this instead of :class:`marshmallow.fields.Time` to make sure that
+    the data stored in JSONType database columns is deserialized properly
+    """
+    def _serialize(self, value, attr, obj):
+        if isinstance(value, str) or isinstance(value, type(u'')):
+            return value
+        return super(Time, self)._serialize(value, attr, obj)
 
 
 class Float(fields.Float):
@@ -74,17 +122,17 @@ class AfterglowSchema(Schema):
                 except TypeError:
                     pass
 
-                setattr(self, name, val)
+                if val is not None:
+                    setattr(self, name, val)
 
         for name, val in kwargs.items():
-            setattr(self, name, val)
+            if val is not None:
+                setattr(self, name, val)
 
-        # Initialize the missing fields with their defaults or None
+        # Initialize the missing fields with their defaults
         for name, f in self.fields.items():
-            if not hasattr(self, name):
-                setattr(
-                    self, name,
-                    None if f.default == fields.missing_ else f.default)
+            if not hasattr(self, name) and f.default != fields.missing_:
+                setattr(self, name, f.default)
 
     def __setattr__(self, name, value):
         """

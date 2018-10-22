@@ -5,15 +5,18 @@ Afterglow Access Server: pixel operations job plugin
 from __future__ import absolute_import, division, print_function
 
 from types import ModuleType
+
 import numpy
 import numpy.fft.fftpack
 import scipy.ndimage as ndimage
 import astropy.io.fits as pyfits
 from marshmallow.fields import Float, Integer, List, Nested, String
-from . import Boolean, Job, JobResult
+
+from . import Job, JobResult
 from ..data_files import (
     SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,
     save_data_file)
+from ... import Boolean
 
 
 __all__ = ['PixelOpsJob']

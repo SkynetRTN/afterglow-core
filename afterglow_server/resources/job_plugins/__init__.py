@@ -5,16 +5,17 @@ A job plugin must subclass :class:`Job` and implement its run() method.
 """
 
 from __future__ import absolute_import, division, print_function
+
 import os
 import errno
 from datetime import datetime
+
 from marshmallow import fields
-from ... import AfterglowSchema, errors
+
+from ... import AfterglowSchema, DateTime, Float, errors
 
 
-__all__ = [
-    'Boolean', 'Date', 'DateTime', 'Time', 'Job', 'JobResult', 'JobState',
-]
+__all__ = ['Job', 'JobResult', 'JobState']
 
 
 class CannotCreateJobFileError(errors.AfterglowError):
@@ -28,53 +29,6 @@ class CannotCreateJobFileError(errors.AfterglowError):
     code = 500
     subcode = 350
     message = 'Cannot create job file'
-
-
-class Boolean(fields.Boolean):
-    """
-    Use this instead of :class:`marshmallow.fields.Boolean` to allow assigning
-    values such as "yes" and "no"
-    """
-    truthy = {
-        True, 't', 'T', 'true', 'True', 'TRUE', 'yes', 'Yes', 'YES', 'on', 'On',
-        'ON', '1', 1, 1.0}
-    falsy = {
-        False, 'f', 'F', 'false', 'False', 'FALSE', 'no', 'No', 'NO', 'off',
-        'Off', 'OFF', '0', 0, 0.0}
-
-
-class DateTime(fields.DateTime):
-    """
-    Use this instead of :class:`marshmallow.fields.DateTime` to make sure that
-    the data stored in JSONType database columns is deserialized properly
-    """
-    def _serialize(self, value, attr, obj):
-        if value is None or isinstance(value, str) or \
-                isinstance(value, unicode):
-            return value
-        return value.strftime('%Y-%m-%d %H:%M:%S.%f')
-
-
-class Date(fields.Date):
-    """
-    Use this instead of :class:`marshmallow.fields.Date` to make sure that
-    the data stored in JSONType database columns is deserialized properly
-    """
-    def _serialize(self, value, attr, obj):
-        if isinstance(value, str) or isinstance(value, unicode):
-            return value
-        return super(Date, self)._serialize(value, attr, obj)
-
-
-class Time(fields.Time):
-    """
-    Use this instead of :class:`marshmallow.fields.Time` to make sure that
-    the data stored in JSONType database columns is deserialized properly
-    """
-    def _serialize(self, value, attr, obj):
-        if isinstance(value, str) or isinstance(value, unicode):
-            return value
-        return super(Time, self)._serialize(value, attr, obj)
 
 
 class JobState(AfterglowSchema):
@@ -93,7 +47,7 @@ class JobState(AfterglowSchema):
     status = fields.String(default='in_progress')  # type: str
     created_on = DateTime()  # type: datetime
     completed_on = DateTime()  # type: datetime
-    progress = fields.Float(default=0)  # type: float
+    progress = Float(default=0)  # type: float
 
     def __init__(self, *args, **kwargs):
         super(JobState, self).__init__(*args, **kwargs)

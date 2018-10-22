@@ -5,12 +5,14 @@ Afterglow Access Server: source merge job plugin
 from __future__ import absolute_import, division, print_function
 
 from datetime import datetime
-from marshmallow.fields import Float, List, Nested, String
+
+from marshmallow.fields import List, Nested, String
 from numpy import asarray, cos, deg2rad, pi, sin, sqrt, transpose, zeros
 from scipy.spatial import cKDTree
+
 from . import Job, JobResult
 from .data_structures import SourceExtractionData
-from ... import AfterglowSchema
+from ... import AfterglowSchema, Float
 
 
 __all__ = ['SourceMergeJob', 'SourceMergeSettings', 'merge_sources']

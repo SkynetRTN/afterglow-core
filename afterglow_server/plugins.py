@@ -144,9 +144,9 @@ def load_plugins(descr, package, plugin_class, specs=None):
             app.logger.debug(
                 'Could not import module "%s"', name, exc_info=True)
 
-    # Instantiate plugins using the specified display names and options
     plugins = {}
     if specs is None:
+        # Initialize all available plugins without any options
         for name, klass in plugin_classes.items():
             # Initialize plugin instance
             try:
@@ -158,6 +158,8 @@ def load_plugins(descr, package, plugin_class, specs=None):
 
             add_plugin(plugins, descr, instance)
     else:
+        # Instantiate only the given plugins using the specified display names
+        # and options
         for id, spec in enumerate(specs):
             try:
                 name = spec.pop('name')

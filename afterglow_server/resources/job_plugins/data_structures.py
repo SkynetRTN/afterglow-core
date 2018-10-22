@@ -5,10 +5,11 @@ Afterglow Access Server: data structures common to multiple job plugins
 from __future__ import absolute_import, division, print_function
 
 import datetime
-from marshmallow.fields import Float, Integer, String
+
+from marshmallow.fields import Integer, String
 from numpy import log, rad2deg, sqrt
-from . import DateTime
-from ... import AfterglowSchema
+
+from ... import AfterglowSchema, DateTime, Float
 
 
 __all__ = [

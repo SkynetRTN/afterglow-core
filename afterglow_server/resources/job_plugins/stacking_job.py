@@ -4,12 +4,14 @@ Afterglow Access Server: image stacking job plugin
 
 from __future__ import absolute_import, division, print_function
 
-from marshmallow.fields import Float, Integer, List, Nested, String
+from marshmallow.fields import Integer, List, Nested, String
+
 from skylib.combine.stacking import combine
+
 from . import Job, JobResult
 from ..data_files import (
     create_data_file, get_data_file, get_data_file_db, get_root)
-from ... import AfterglowSchema
+from ... import AfterglowSchema, Float
 
 
 __all__ = ['StackingJob']

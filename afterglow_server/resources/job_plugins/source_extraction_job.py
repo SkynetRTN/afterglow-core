@@ -4,15 +4,17 @@ Afterglow Access Server: source extraction job plugin
 
 from __future__ import absolute_import, division, print_function
 
-from marshmallow.fields import Float, Integer, List, Nested
+from marshmallow.fields import Integer, List, Nested
 from astropy.wcs import WCS
+
 from skylib.extraction import extract_sources
-from . import Boolean, Job, JobResult
+
+from . import Job, JobResult
 from .data_structures import SourceExtractionData
 from .source_merge_job import SourceMergeSettings, merge_sources
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time, get_subframe)
-from ... import AfterglowSchema
+from ... import AfterglowSchema, Boolean, Float
 
 
 __all__ = ['SourceExtractionJob']
