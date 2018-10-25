@@ -232,9 +232,9 @@ class Job(AfterglowSchema):
 
     name = None
 
-    id = fields.Integer()  # type: int
+    id = fields.Integer(default=None)  # type: int
     type = fields.String()  # type: str
-    user_id = fields.Integer()  # type: int
+    user_id = fields.Integer(default=None)  # type: int
     state = fields.Nested(JobState)  # type: JobState
     result = fields.Nested(JobResult)  # type: JobResult
 
