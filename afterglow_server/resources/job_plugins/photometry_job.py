@@ -153,7 +153,7 @@ class PhotometryJob(Job):
 
         # Extract file IDs from sources
         file_ids = {source.file_id for source in self.sources
-                    if source.file_id is not None}
+                    if getattr(source, 'file_id', None) is not None}
         if len(file_ids) < 2:
             # Same source object for all images specified in file_ids;
             # replicate each source to all images; merge them by assigning the
@@ -175,7 +175,8 @@ class PhotometryJob(Job):
             }
         else:
             # Individual source object for each image; ignore file_ids
-            if any(source.file_id is None for source in self.sources):
+            if any(getattr(source, 'file_id', None) is None
+                   for source in self.sources):
                 raise ValueError('Missing data file ID for at least one source')
             sources = {}
             for source in self.sources:

@@ -91,7 +91,7 @@ class AlignmentJob(Job):
 
             # Extract alignment stars for reference image
             ref_sources = [source for source in self.sources
-                           if source.file_id == ref_file_id]
+                           if getattr(source, 'file_id', None) == ref_file_id]
             ref_stars = {getattr(source, 'id', None): (source.x, source.y)
                          for source in ref_sources}
             if not ref_stars:
@@ -125,7 +125,8 @@ class AlignmentJob(Job):
                         # Extract current image sources that are also present
                         # in the reference image
                         img_sources = [source for source in self.sources
-                                       if source.file_id == file_id]
+                                       if getattr(source, 'file_id', None) ==
+                                       file_id]
                         img_stars = {getattr(source, 'id', None):
                                      (source.x, source.y)
                                      for source in img_sources}
