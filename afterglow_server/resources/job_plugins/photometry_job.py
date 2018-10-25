@@ -87,8 +87,9 @@ def get_source_xy(source, epoch, wcs):
     if None not in (source.ra_hours, source.dec_degs, wcs):
         # Prefer RA/Dec if WCS is present
         ra, dec = source.ra_hours*15, source.dec_degs
-        if None not in (source.pm_sky, source.pm_pos_angle_sky, source.pm_epoch,
-                        epoch):
+        if None not in [getattr(source, name, None)
+                        for name in ('source.pm_sky', 'source.pm_pos_angle_sky',
+                                     'source.pm_epoch', 'epoch')]:
             mu = source.pm_sky*(epoch - source.pm_epoch).total_seconds()
             theta = deg2rad(source.pm_pos_angle_sky)
             cd = cos(deg2rad(dec))
@@ -97,8 +98,9 @@ def get_source_xy(source, epoch, wcs):
                 clip(dec + mu*cos(theta), -90, 90), 1)
         return wcs.all_world2pix(ra, dec, 1)
 
-    if None not in (source.pm_pixel, source.pm_pos_angle_pixel, source.pm_epoch,
-                    epoch):
+    if None not in [getattr(source, name, None)
+                    for name in ('source.pm_pixel', 'source.pm_pos_angle_pixel',
+                                 'source.pm_epoch', 'epoch')]:
         mu = source.pm_pixel*(epoch - source.pm_epoch).total_seconds()
         theta = deg2rad(source.pm_pos_angle_pixel)
         return source.x + mu*cos(theta), source.y + mu*sin(theta)
