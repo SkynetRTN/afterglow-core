@@ -35,8 +35,8 @@ class AlignmentJob(Job):
     """
     name = 'alignment'
     description = 'Align Images'
-    result = Nested(AlignmentJobResult)  # type: AlignmentJobResult
-    file_ids = List(Integer())  # type: list
+    result = Nested(AlignmentJobResult, default={})  # type: AlignmentJobResult
+    file_ids = List(Integer(), default=[])  # type: list
     settings = Nested(AlignmentSettings, default={})  # type: AlignmentSettings
     sources = List(Nested(SourceExtractionData), default=[])  # type: list
     inplace = Boolean(default=False)  # type: bool

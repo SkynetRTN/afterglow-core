@@ -57,14 +57,14 @@ class PhotometryData(SourceExtractionData):
 
 class PhotSettings(AfterglowSchema):
     mode = String(default='aperture')  # type: str
-    a = Float()  # type: float
-    b = Float()  # type: float
+    a = Float(default=None)  # type: float
+    b = Float(default=None)  # type: float
     theta = Float(default=0)  # type: float
-    a_in = Float()  # type: float
-    a_out = Float()  # type: float
-    b_out = Float()  # type: float
-    theta_out = Float()  # type: float
-    gain = Float()  # type: float
+    a_in = Float(default=None)  # type: float
+    a_out = Float(default=None)  # type: float
+    b_out = Float(default=None)  # type: float
+    theta_out = Float(default=None)  # type: float
+    gain = Float(default=None)  # type: float
     centroid_radius = Float(default=0)  # type: float
 
 
@@ -109,9 +109,10 @@ def get_source_xy(source, epoch, wcs):
 class PhotometryJob(Job):
     name = 'photometry'
     description = 'Photometer Sources'
-    result = Nested(PhotometryJobResult)  # type: PhotometryJobResult
-    file_ids = List(Integer())  # type: list
-    sources = List(Nested(SourceExtractionData))  # type: list
+    result = Nested(
+        PhotometryJobResult, default={})  # type: PhotometryJobResult
+    file_ids = List(Integer(), default=[])  # type: list
+    sources = List(Nested(SourceExtractionData), default=[])  # type: list
     settings = Nested(PhotSettings, default={})  # type: PhotSettings
 
     def run(self):

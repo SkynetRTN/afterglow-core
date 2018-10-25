@@ -20,7 +20,7 @@ __all__ = ['SourceMergeJob', 'SourceMergeSettings', 'merge_sources']
 
 class SourceMergeSettings(AfterglowSchema):
     pos_type = String(default='auto')  # type: str
-    tol = Float()  # type: float
+    tol = Float(default=None)  # type: float
 
 
 class SourceMergeJobResult(JobResult):

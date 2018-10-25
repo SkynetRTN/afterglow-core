@@ -70,8 +70,8 @@ class PixelOpsJob(Job):
     name = 'pixel_ops'
     description = 'Pixel Operations'
     result = Nested(PixelOpsJobResult)  # type: PixelOpsJobResult
-    file_ids = List(Integer())  # type: list
-    op = String()  # type: str
+    file_ids = List(Integer(), default=[])  # type: list
+    op = String(default=None)  # type: str
     inplace = Boolean(default=False)  # type: bool
 
     def run(self):

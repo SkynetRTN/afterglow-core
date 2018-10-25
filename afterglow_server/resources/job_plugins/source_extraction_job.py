@@ -35,10 +35,10 @@ class SourceExtractionSettings(AfterglowSchema):
     deblend = Boolean(default=False)  # type: bool
     deblend_levels = Integer(default=32)  # type: int
     deblend_contrast = Float(default=0.005)  # type: float
-    gain = Float()  # type: float
+    gain = Float(default=None)  # type: float
     clean = Float(default=1)  # type: float
     centroid = Boolean(default=True)  # type: bool
-    limit = Integer()  # type: int
+    limit = Integer(default=None)  # type: int
 
 
 class SourceExtractionJobResult(JobResult):
@@ -50,7 +50,7 @@ class SourceExtractionJob(Job):
     description = 'Extract Sources'
     result = Nested(
         SourceExtractionJobResult)  # type: SourceExtractionJobResult
-    file_ids = List(Integer())  # type: list
+    file_ids = List(Integer(), default=[])  # type: list
     source_extraction_settings = Nested(
         SourceExtractionSettings, default={})  # type: SourceExtractionSettings
     merge_sources = Boolean(default=True)  # type: bool
