@@ -500,7 +500,12 @@ def import_data_file(adb, root, provider_id, asset_path, asset_metadata, fp,
                     # When importing multiple HDUs, append a unique suffix to
                     # DataFile.name (e.g. filter name)
                     layer = hdu.header.get('FILTER')
-                    if not layer:
+                    if layer:
+                        # Check that the filter is unique among other HDUs
+                        if any(_hdu.header.get('FILTER') == layer
+                               for _hdu in fits if _hdu is not hdu):
+                            layer += '.' + str(i + 1)
+                    else:
                         # No channel name; use number
                         layer = str(i + 1)
                     fullname = name + '.' + layer
