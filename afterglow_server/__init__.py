@@ -132,7 +132,12 @@ class AfterglowSchema(Schema):
         # Initialize the missing fields with their defaults
         for name, f in self.fields.items():
             if not hasattr(self, name) and f.default != fields.missing_:
-                setattr(self, name, f.default)
+                try:
+                    setattr(self, name, f.default)
+                except AttributeError:
+                    # Possibly missing attribute with a default in the base
+                    # class was turned into a read-only property in a subclass
+                    pass
 
     def __setattr__(self, name, value):
         """
