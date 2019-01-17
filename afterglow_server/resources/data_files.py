@@ -63,10 +63,11 @@ __all__ = [
     'UnknownDataFileError', 'CannotCreateDataFileDirError',
     'CannotImportFromCollectionAssetError', 'UnrecognizedDataFileError',
     'MissingWCSError', 'DataFile', 'SqlaDataFile',
-    'data_files_engine', 'data_files_engine_lock',
-    'save_data_file', 'create_data_file', 'get_data_file', 'get_data_file_data',
-    'get_data_file_db', 'get_data_file_path', 'get_exp_length', 'get_gain',
-    'get_image_time', 'get_phot_cal', 'get_root', 'get_subframe',
+    'data_files_engine', 'data_files_engine_lock', 'create_data_file',
+    'save_data_file', 'get_data_file', 'get_data_file_data',
+    'get_data_file_db', 'get_data_file_fits', 'get_data_file_path',
+    'get_exp_length', 'get_gain', 'get_image_time', 'get_phot_cal',
+    'get_root', 'get_subframe',
     'convert_exif_field',
 ]
 
@@ -790,6 +791,22 @@ def get_data_file_path(user_id, file_id):
     return os.path.join(get_root(user_id), '{}.fits'.format(file_id))
 
 
+def get_data_file_fits(user_id, file_id):
+    """
+    Return FITS file given the data file ID
+
+    :param int | None user_id: current user ID (None if user auth is disabled)
+    :param int file_id: data file ID
+
+    :return: FITS file object
+    :rtype: astropy.io.fits.HDUList
+    """
+    try:
+        return pyfits.open(get_data_file_path(user_id, file_id), 'readonly')
+    except Exception:
+        raise UnknownDataFileError(id=file_id)
+
+
 def get_data_file(user_id, file_id):
     """
     Return FITS file data and header for a data file with the given ID; handles
@@ -803,10 +820,7 @@ def get_data_file(user_id, file_id):
         instance
     :rtype: tuple(array_like, astropy.io.fits.Header)
     """
-    try:
-        fits = pyfits.open(get_data_file_path(user_id, file_id), 'readonly')
-    except Exception:
-        raise UnknownDataFileError(id=file_id)
+    fits = get_data_file_fits(user_id, file_id)
 
     if fits[0].data is None:
         # Table stored in extension HDU

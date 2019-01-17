@@ -6,8 +6,8 @@ from __future__ import absolute_import, division, print_function
 
 from datetime import datetime
 
-from marshmallow.fields import Integer, List, Nested, String
-from numpy import clip, cos, deg2rad, hypot, isfinite, sin, zeros
+from marshmallow.fields import Integer, List, Nested
+from numpy import clip, cos, deg2rad, hypot, isfinite, sin, vstack, zeros
 from astropy.wcs import WCS
 import sep
 
@@ -15,57 +15,13 @@ from skylib.photometry import aperture_photometry
 from skylib.extraction.centroiding import centroid_sources
 
 from . import Job, JobResult
-from .data_structures import SourceExtractionData, sigma_to_fwhm
+from .data_structures import (
+    PhotSettings, PhotometryData, SourceExtractionData, sigma_to_fwhm)
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time, get_phot_cal)
-from ... import AfterglowSchema, Float
 
 
-__all__ = ['PhotometryData', 'PhotometryJob', 'get_source_xy']
-
-
-class PhotometryData(SourceExtractionData):
-    """
-    Description of object returned by batch photometry
-    """
-    mag = Float()  # type: float
-    mag_error = Float()  # type: float
-    flux = Float()  # type: float
-    flux_error = Float()  # type: float
-
-    @classmethod
-    def from_phot_table(cls, row, source, **kwargs):
-        """
-        Create photometry data class instance from a source extraction object
-        and a photometry table row
-
-        :param numpy.void row: photometry table row
-        :param SourceExtractionData source: input source object
-        :param kwargs: see :meth:`from_source_table`
-        """
-        data = cls(source, **kwargs)
-
-        data.x = row['x']
-        data.y = row['y']
-        data.flux = row['flux']
-        data.flux_error = row['flux_err']
-        data.mag = row['mag']
-        data.mag_error = row['mag_err']
-
-        return data
-
-
-class PhotSettings(AfterglowSchema):
-    mode = String(default='aperture')  # type: str
-    a = Float(default=None)  # type: float
-    b = Float(default=None)  # type: float
-    theta = Float(default=0)  # type: float
-    a_in = Float(default=None)  # type: float
-    a_out = Float(default=None)  # type: float
-    b_out = Float(default=None)  # type: float
-    theta_out = Float(default=None)  # type: float
-    gain = Float(default=None)  # type: float
-    centroid_radius = Float(default=0)  # type: float
+__all__ = ['PhotometryJob', 'get_source_xy', 'run_photometry_job']
 
 
 class PhotometryJobResult(JobResult):
@@ -84,7 +40,8 @@ def get_source_xy(source, epoch, wcs):
     :return: XY coordinates of the source, 1-based
     :rtype: tuple(float, float)
     """
-    if None not in (source.ra_hours, source.dec_degs, wcs):
+    if None not in (getattr(source, 'ra_hours', None),
+                    getattr(source, 'dec_degs', None), wcs):
         # Prefer RA/Dec if WCS is present
         ra, dec = source.ra_hours*15, source.dec_degs
         if None not in [getattr(source, name, None)
@@ -108,6 +65,180 @@ def get_source_xy(source, epoch, wcs):
     return source.x, source.y
 
 
+def run_photometry_job(job, settings, job_file_ids, job_sources):
+    """
+    Batch photometry job body; also used during photometric calibration
+
+    :param Job job: job class instance
+    :param .data_structures.PhotSettings settings: photometry settings
+    :param list job_file_ids: data file IDs to process
+    :param list job_sources: list of SourceExtractionData-compatible source defs
+
+    :return: list of photometry results
+    :rtype: list[PhotometryData]
+    """
+    if settings.mode == 'aperture':
+        # Fixed-aperture photometry
+        if settings.a is None:
+            raise ValueError(
+                'Missing aperture radius/semi-major axis for mode="aperture"')
+        if settings.a <= 0:
+            raise ValueError('Aperture radius/semi-major axis must be positive')
+        phot_kw = dict(
+            a=settings.a,
+            b=settings.b,
+            theta=settings.theta,
+            a_in=settings.a_in,
+            a_out=settings.a_out,
+            b_out=settings.b_out,
+            theta_out=settings.theta_out,
+        )
+    elif settings.mode == 'auto':
+        # Automatic (Kron-like) photometry
+        phot_kw = dict(
+            k=settings.a if settings.a > 0 else 2.5,
+            k_in=settings.a_in,
+            k_out=settings.a_out,
+        )
+
+        # Make sure that all input sources have FWHMs
+        if any(getattr(source, attr, None) is None
+               for attr in ('fwhm_x', 'fwhm_y', 'theta')
+               for source in job_sources):
+            raise ValueError('Missing FWHM data for automatic photometry')
+    else:
+        raise ValueError('Photometry mode must be "aperture" or "auto"')
+
+    # Extract file IDs from sources
+    file_ids = {source.file_id for source in job_sources
+                if getattr(source, 'file_id', None) is not None}
+    if len(file_ids) < 2:
+        # Same source object for all images specified in file_ids;
+        # replicate each source to all images; merge them by assigning the
+        # same source ID
+        if not job_file_ids and not file_ids:
+            raise ValueError('Missing data file IDs')
+        if job_file_ids:
+            file_ids |= set(job_file_ids)
+        prefix = '{}_{}_'.format(
+            datetime.utcnow().strftime('%Y%m%d%H%M%S'), job.id)
+        sources = {
+            file_id: [
+                SourceExtractionData(
+                    source, file_id=file_id,
+                    id=source.id if hasattr(source, 'id') and source.id
+                    else prefix + str(i + 1))
+                for i, source in enumerate(job_sources)
+            ] for file_id in file_ids
+        }
+    else:
+        # Individual source object for each image; ignore file_ids
+        if any(getattr(source, 'file_id', None) is None
+               for source in job_sources):
+            raise ValueError('Missing data file ID for at least one source')
+        sources = {}
+        for source in job_sources:
+            sources.setdefault(source.file_id, []).append(source)
+
+    result_data = []
+    for file_no, file_id in enumerate(file_ids):
+        try:
+            data, hdr = get_data_file(job.user_id, file_id)
+
+            if settings.gain is None:
+                gain = get_gain(hdr)
+            else:
+                gain = settings.gain
+            if gain:
+                phot_kw['gain'] = gain
+
+            epoch = get_image_time(hdr)
+            texp = get_exp_length(hdr)
+            phot_cal = get_phot_cal(hdr)
+            flt = hdr.get('FILTER')
+            scope = hdr.get('TELESCOP')
+
+            if texp:
+                phot_kw['texp'] = texp
+
+            # noinspection PyBroadException
+            try:
+                wcs = WCS(hdr)
+                if not wcs.has_celestial:
+                    wcs = None
+            except Exception:
+                wcs = None
+
+            source_table = zeros(
+                len(sources[file_id]),
+                [('x', float), ('y', float), ('a', float), ('b', float),
+                 ('theta', float), ('flux', float), ('saturated', int),
+                 ('flag', int)])
+            i = 0
+            while i < len(sources[file_id]):
+                x, y = get_source_xy(sources[file_id][i], epoch, wcs)
+                if 0 <= x < data.shape[1] and 0 <= y < data.shape[0]:
+                    source_table[i]['x'], source_table[i]['y'] = x, y
+                    i += 1
+                else:
+                    # Source outside image boundaries, skip
+                    del sources[file_id][i]
+                    source_table = vstack([source_table[:i],
+                                           source_table[i + 1:]])
+
+            if settings.mode == 'auto':
+                for i, source in enumerate(sources[file_id]):
+                    row = source_table[i]
+                    row['a'] = source.fwhm_x/sigma_to_fwhm
+                    row['b'] = source.fwhm_y/sigma_to_fwhm
+                    row['theta'] = source.theta
+                source_table['theta'] = deg2rad(source_table['theta'])
+
+            if settings.centroid_radius > 0:
+                source_table['x'], source_table['y'] = centroid_sources(
+                    data, source_table['x'], source_table['y'],
+                    settings.centroid_radius)
+
+            # Photometer all sources in the current image
+            source_table = aperture_photometry(
+                data, source_table, **phot_kw)
+
+            # Apply photometric calibration if present in data file
+            if phot_cal:
+                try:
+                    source_table['mag'] += phot_cal['m0']
+                except (KeyError, TypeError):
+                    job.add_warning(
+                        'Data file ID {}: Could not apply photometric '
+                        'calibration'.format(file_id))
+                try:
+                    source_table['mag_err'] = hypot(
+                        source_table['mag_err'], phot_cal['m0_err'])
+                except (KeyError, TypeError):
+                    job.add_warning(
+                        'Data file ID {}: Could not calculate photometric '
+                        'error'.format(file_id))
+
+            # noinspection PyTypeChecker
+            result_data += [
+                PhotometryData.from_phot_table(
+                    row, source,
+                    time=epoch,
+                    filter=flt,
+                    telescope=scope,
+                    exp_length=texp,
+                )
+                for row, source in zip(source_table, sources[file_id])
+                if row['flag'] & (0xF0 & ~sep.APER_HASMASKED) == 0 and
+                isfinite([row['x'], row['y'], row['flux'], row['flux_err'],
+                          row['mag'], row['mag_err']]).all()]
+            job.update_progress((file_no + 1)/len(file_ids)*100)
+        except Exception as e:
+            job.add_error('Data file ID {}: {}'.format(file_id, e))
+
+    return result_data
+
+
 class PhotometryJob(Job):
     name = 'photometry'
     description = 'Photometer Sources'
@@ -118,157 +249,5 @@ class PhotometryJob(Job):
     settings = Nested(PhotSettings, default={})  # type: PhotSettings
 
     def run(self):
-        settings = self.settings
-
-        if settings.mode == 'aperture':
-            # Fixed-aperture photometry
-            if settings.a is None:
-                raise ValueError(
-                    'Missing aperture radius/semi-major axis for '
-                    'mode="aperture"')
-            if settings.a <= 0:
-                raise ValueError(
-                    'Aperture radius/semi-major axis must be positive')
-            phot_kw = dict(
-                a=settings.a,
-                b=settings.b,
-                theta=settings.theta,
-                a_in=settings.a_in,
-                a_out=settings.a_out,
-                b_out=settings.b_out,
-                theta_out=settings.theta_out,
-            )
-        elif settings.mode == 'auto':
-            # Automatic (Kron-like) photometry
-            phot_kw = dict(
-                k=settings.a if settings.a > 0 else 2.5,
-                k_in=settings.a_in,
-                k_out=settings.a_out,
-            )
-
-            # Make sure that all input sources have FWHMs
-            if any(None in (source.fwhm_x, source.fwhm_y, source.theta)
-                   for source in self.sources):
-                raise ValueError('Missing FWHM data for automatic photometry')
-        else:
-            raise ValueError('Photometry mode must be "aperture" or "auto"')
-
-        # Extract file IDs from sources
-        file_ids = {source.file_id for source in self.sources
-                    if getattr(source, 'file_id', None) is not None}
-        if len(file_ids) < 2:
-            # Same source object for all images specified in file_ids;
-            # replicate each source to all images; merge them by assigning the
-            # same source ID
-            if not self.file_ids and not file_ids:
-                raise ValueError('Missing data file IDs')
-            if self.file_ids:
-                file_ids |= set(self.file_ids)
-            prefix = '{}_{}_'.format(
-                datetime.utcnow().strftime('%Y%m%d%H%M%S'), self.id)
-            sources = {
-                file_id: [
-                    SourceExtractionData(
-                        source, file_id=file_id,
-                        id=source.id if hasattr(source, 'id') and source.id
-                        else prefix + str(i + 1))
-                    for i, source in enumerate(self.sources)
-                ] for file_id in file_ids
-            }
-        else:
-            # Individual source object for each image; ignore file_ids
-            if any(getattr(source, 'file_id', None) is None
-                   for source in self.sources):
-                raise ValueError('Missing data file ID for at least one source')
-            sources = {}
-            for source in self.sources:
-                sources.setdefault(source.file_id, []).append(source)
-
-        result_data = []
-        for file_no, file_id in enumerate(file_ids):
-            try:
-                data, hdr = get_data_file(self.user_id, file_id)
-
-                if settings.gain is None:
-                    gain = get_gain(hdr)
-                else:
-                    gain = settings.gain
-                if gain:
-                    phot_kw['gain'] = gain
-
-                epoch = get_image_time(hdr)
-                texp = get_exp_length(hdr)
-                phot_cal = get_phot_cal(hdr)
-                flt = hdr.get('FILTER')
-                scope = hdr.get('TELESCOP')
-
-                if texp:
-                    phot_kw['texp'] = texp
-
-                # noinspection PyBroadException
-                try:
-                    wcs = WCS(hdr)
-                    if not wcs.has_celestial:
-                        wcs = None
-                except Exception:
-                    wcs = None
-
-                source_table = zeros(
-                    len(sources[file_id]),
-                    [('x', float), ('y', float), ('a', float), ('b', float),
-                     ('theta', float), ('flux', float), ('saturated', int),
-                     ('flag', int)])
-                for i, source in enumerate(sources[file_id]):
-                    row = source_table[i]
-                    row['x'], row['y'] = get_source_xy(source, epoch, wcs)
-                if settings.mode == 'auto':
-                    for i, source in enumerate(sources[file_id]):
-                        row = source_table[i]
-                        row['a'] = source.fwhm_x/sigma_to_fwhm
-                        row['b'] = source.fwhm_y/sigma_to_fwhm
-                        row['theta'] = source.theta
-                    source_table['theta'] = deg2rad(source_table['theta'])
-
-                if settings.centroid_radius > 0:
-                    source_table['x'], source_table['y'] = centroid_sources(
-                        data, source_table['x'], source_table['y'],
-                        settings.centroid_radius)
-
-                # Photometer all sources in the current image
-                source_table = aperture_photometry(
-                    data, source_table, **phot_kw)
-
-                # Apply photometric calibration if present in data file
-                if phot_cal:
-                    try:
-                        source_table['mag'] += phot_cal['m0']
-                    except (KeyError, TypeError):
-                        self.add_warning(
-                            'Data file ID {}: Could not apply photometric '
-                            'calibration'.format(file_id))
-                    try:
-                        source_table['mag_err'] = hypot(
-                            source_table['mag_err'], phot_cal['m0_err'])
-                    except (KeyError, TypeError):
-                        self.add_warning(
-                            'Data file ID {}: Could not calculate photometric '
-                            'error'.format(file_id))
-
-                # noinspection PyTypeChecker
-                result_data += [
-                    PhotometryData.from_phot_table(
-                        row, source,
-                        time=epoch,
-                        filter=flt,
-                        telescope=scope,
-                        exp_length=texp,
-                    )
-                    for row, source in zip(source_table, sources[file_id])
-                    if row['flag'] & (0xF0 & ~sep.APER_HASMASKED) == 0 and
-                    isfinite([row['x'], row['y'], row['flux'], row['flux_err'],
-                              row['mag'], row['mag_err']]).all()]
-                self.update_progress((file_no + 1)/len(file_ids)*100)
-            except Exception as e:
-                self.add_error('Data file ID {}: {}'.format(file_id, e))
-
-        self.result.data = result_data
+        self.result.data = run_photometry_job(
+            self, self.settings, self.file_ids, self.sources)
