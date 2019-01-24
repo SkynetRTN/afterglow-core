@@ -8,12 +8,14 @@ from datetime import datetime
 
 from marshmallow.fields import Dict, Integer, List, Nested, String
 import numpy
+from astropy.wcs import WCS
 
 from . import Job, JobResult
 from .data_structures import (
     CatalogSource, PhotSettings, PhotometryData, SourceExtractionSettings)
-from .photometry_job import run_photometry_job
-from ..data_files import get_data_file_fits
+from .source_extraction_job import run_source_extraction_job
+from .photometry_job import get_source_xy, run_photometry_job
+from ..data_files import get_data_file_fits, get_image_time
 from ... import AfterglowSchema, Float
 
 
@@ -68,43 +70,144 @@ class FieldCalJob(Job):
         # be used later to match photometry results to catalog sources
         prefix = '{}_{}_'.format(
             datetime.utcnow().strftime('%Y%m%d%H%M%S'), self.id)
-        source_ids = []
+        source_ids = set()
         for i, source in enumerate(self.field_cal.catalog_sources):
             id = getattr(source, 'id', None)
             if id is None:
                 # Auto-assign source ID
                 source.id = id = prefix + str(i + 1)
-            elif id in source_ids:
-                raise ValueError('Non-unique source ID "{}"'.format(id))
-            source_ids.append(id)
+            if getattr(source, 'file_id', None) is not None:
+                id = (id, source.file_id)
+            if id in source_ids:
+                if isinstance(id, tuple):
+                    raise ValueError(
+                        'Non-unique source ID "{0[0]}" for file ID '
+                        '{0[1]}'.format(id))
+                else:
+                    raise ValueError('Non-unique source ID "{}"'.format(id))
+            source_ids.add(id)
+
+        if getattr(self, 'source_extraction_settings', None) is not None:
+            # Detect sources using settings provided and match them to input
+            # catalog sources by XY position in each image
+            tol = getattr(self.field_cal, 'source_match_tol', None)
+            if tol is None:
+                raise ValueError('Missing catalog source match tolerance')
+            if tol <= 0:
+                raise ValueError(
+                    'Positive catalog source match tolerance expected')
+            epochs, wcss = {}, {}
+            catalog_sources = []
+            detected_sources = run_source_extraction_job(
+                self, self.source_extraction_settings, self.file_ids)
+            if not detected_sources:
+                raise RuntimeError('Could not detect any sources')
+            for source in detected_sources:
+                file_id = source.file_id
+                catalog_source, match_found = None, False
+                for catalog_source in self.field_cal.catalog_sources:
+                    if getattr(catalog_source, 'file_id', None) is None or \
+                            catalog_source.file_id == file_id:
+                        try:
+                            epoch = epochs[file_id]
+                        except KeyError:
+                            # noinspection PyBroadException
+                            try:
+                                with get_data_file_fits(
+                                        self.user_id, file_id) as f:
+                                    epoch = get_image_time(f[0].header)
+                            except Exception:
+                                epoch = None
+                            epochs[file_id] = epoch
+                        try:
+                            wcs = wcss[file_id]
+                        except KeyError:
+                            # noinspection PyBroadException
+                            try:
+                                with get_data_file_fits(
+                                        self.user_id, file_id) as f:
+                                    wcs = WCS(f[0].header)
+                                    if not wcs.has_celestial:
+                                        wcs = None
+                            except Exception:
+                                wcs = None
+                            wcss[file_id] = wcs
+                        x, y = get_source_xy(catalog_source, epoch, wcs)
+                        if numpy.hypot(x - source.x, y - source.y) < tol:
+                            if any(other_source.id == catalog_source.id and
+                                   (getattr(other_source, 'file_id', None) is
+                                    None or other_source.file_id == file_id)
+                                   for other_source in catalog_sources):
+                                self.add_warning(
+                                    'Data file ID {}: Multiple matches for '
+                                    'catalog source "{}" within {} '
+                                    'pixel{}'.format(
+                                        file_id, catalog_source.id, tol,
+                                        '' if tol == 1 else 's'))
+                                break
+                            match_found = True
+                            break
+                if match_found:
+                    # Copy catalog source data to extracted source and set
+                    # the latter as a new catalog source
+                    for attr in ('id', 'catalog_name', 'mags', 'label',
+                                 'mag', 'mag_error'):
+                        val = getattr(catalog_source, attr, None)
+                        if val is not None:
+                            setattr(source, attr, val)
+                    catalog_sources.append(source)
+            if not catalog_sources:
+                raise RuntimeError(
+                    'Could not match any detected sources to the catalog '
+                    'sources provided')
+        else:
+            catalog_sources = self.field_cal.catalog_sources
 
         if getattr(self, 'photometry_settings', None) is not None:
             # Do batch photometry using refstar positions
-            phot_data = run_photometry_job(
-                self, self.photometry_settings, self.file_ids,
-                self.field_cal.catalog_sources)
+            phot_data = [source for source in run_photometry_job(
+                self, self.photometry_settings, self.file_ids, catalog_sources)
+                if source.mag]
             if not phot_data:
                 raise RuntimeError('No catalog sources could be photometered')
         else:
             # If photometry is disabled, use instrumental magnitudes provided
             # by the user
-            phot_data = self.field_cal.catalog_sources
-            if any(getattr(source, 'file_id', None) is None or
-                   getattr(source, 'mag', None) is None
+            phot_data = catalog_sources
+            if len(self.file_ids) > 1:
+                if any(getattr(source, 'file_id', None) is None
+                       for source in phot_data):
+                    raise ValueError(
+                        '"file_id" is required for all sources when photometry '
+                        'is not enabled')
+            else:
+                # Assume the same file ID for all sources if processing a single
+                # file
+                file_id = self.file_ids[0]
+                for source in phot_data:
+                    if getattr(source, 'file_id', None) is None:
+                        source.file_id = file_id
+            if any(getattr(source, 'mag', None) is None
                    for source in phot_data):
                 raise ValueError(
-                    '"file_id" and "mag" are required for all sources when '
-                    'photometry is not enabled')
+                    '"mag" is required for all sources when photometry is not '
+                    'enabled')
 
             # Get filters from data file headers (will need them to map
             # to catalog mags
-            filters = {
-                file_id: get_data_file_fits(
-                    self.user_id, file_id)[0].header.get('FILTER')
-                for file_id in self.file_ids
-            }
+            filters = {}
             for source in phot_data:
-                source.filter = filters[source.file_id]
+                file_id = source.file_id
+                try:
+                    source.filter = filters[file_id]
+                except KeyError:
+                    # noinspection PyBroadException
+                    try:
+                        with get_data_file_fits(self.user_id, file_id) as f:
+                            source.filter = f[0].header.get('FILTER')
+                    except Exception:
+                        source.filter = None
+                    filters[file_id] = source.filter
 
         min_snr, max_snr = self.field_cal.min_snr, self.field_cal.max_snr
         if min_snr or max_snr:
