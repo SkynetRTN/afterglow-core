@@ -1,16 +1,10 @@
-"""Initial revision
-
-Revision ID: 4c75de87ac47
-Revises:
-Create Date: 2018-07-25 18:22:29.591826
-
-"""
+"""Initial revision"""
 from alembic import context, op
 import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '4c75de87ac47'
+revision = '1'
 down_revision = None
 branch_labels = None
 depends_on = None

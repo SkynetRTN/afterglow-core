@@ -1,16 +1,10 @@
-"""Don't reuse IDs
-
-Revision ID: 5ac66c0b458a
-Revises: 4c75de87ac47
-Create Date: 2018-07-25 18:38:54.515858
-
-"""
+"""Don't reuse IDs"""
 from alembic import op
 
 
 # revision identifiers, used by Alembic.
 revision = '5ac66c0b458a'
-down_revision = '4c75de87ac47'
+down_revision = '1'
 branch_labels = None
 depends_on = None
 
