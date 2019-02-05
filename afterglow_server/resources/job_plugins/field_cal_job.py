@@ -354,4 +354,17 @@ class FieldCalJob(Job):
                 zero_point_error=m0_error,
             ))
 
+            # Update photometric calibration info in data file header
+            try:
+                with get_data_file_fits(self.user.id, file_id, 'update') as f:
+                    hdr = f[0].header
+                    hdr['PHOT_M0'] = m0, 'Photometric zero point'
+                    if m0_error:
+                        hdr['PHOT_M0E'] = (
+                            m0_error, 'Photometric zero point error')
+            except Exception as e:
+                self.add_warning(
+                    'Data file ID {}: Error saving photometric calibration '
+                    'info to FITS header'.format(file_id, e))
+
         self.result.data = result_data

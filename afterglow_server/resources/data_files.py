@@ -791,18 +791,20 @@ def get_data_file_path(user_id, file_id):
     return os.path.join(get_root(user_id), '{}.fits'.format(file_id))
 
 
-def get_data_file_fits(user_id, file_id):
+def get_data_file_fits(user_id, file_id, mode='readonly'):
     """
     Return FITS file given the data file ID
 
     :param int | None user_id: current user ID (None if user auth is disabled)
     :param int file_id: data file ID
+    :param str mode: optional FITS file open mode: "readonly" (default)
+        or "update"
 
     :return: FITS file object
     :rtype: astropy.io.fits.HDUList
     """
     try:
-        return pyfits.open(get_data_file_path(user_id, file_id), 'readonly')
+        return pyfits.open(get_data_file_path(user_id, file_id), mode)
     except Exception:
         raise UnknownDataFileError(id=file_id)
 
