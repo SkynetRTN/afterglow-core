@@ -15,7 +15,8 @@ from skylib.photometry import aperture_photometry
 from skylib.extraction.centroiding import centroid_sources
 
 from ...data_structures import (
-    PhotSettings, PhotometryData, SourceExtractionData, sigma_to_fwhm)
+    FieldCalResult, PhotSettings, PhotometryData, SourceExtractionData,
+    sigma_to_fwhm)
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time, get_phot_cal)
 from . import Job, JobResult
@@ -65,7 +66,8 @@ def get_source_xy(source, epoch, wcs):
     return source.x, source.y
 
 
-def run_photometry_job(job, settings, job_file_ids, job_sources):
+def run_photometry_job(job, settings, job_file_ids, job_sources,
+                       field_cal_results=None):
     """
     Batch photometry job body; also used during photometric calibration
 
@@ -74,6 +76,12 @@ def run_photometry_job(job, settings, job_file_ids, job_sources):
         settings
     :param list job_file_ids: data file IDs to process
     :param list job_sources: list of SourceExtractionData-compatible source defs
+    :param list field_cal_results: optional list of
+        :class:`afterglow_server.data_structures.FieldCalResult` instances
+        having `zero_point` and optionaly `zero_point_error` that will be used
+        for photometric calibration; if none provided for the given data file,
+        its existing photometric calibration info will be used if present
+        in the header
 
     :return: list of photometry results
     :rtype: list[PhotometryData]
@@ -144,6 +152,13 @@ def run_photometry_job(job, settings, job_file_ids, job_sources):
         for source in job_sources:
             sources.setdefault(source.file_id, []).append(source)
 
+    # Index field cal info by file ID
+    if field_cal_results:
+        field_cal = {cal.file_id: cal for cal in field_cal_results
+                     if getattr(cal, 'file_id', None) is not None}
+    else:
+        field_cal = {}
+
     result_data = []
     for file_no, file_id in enumerate(file_ids):
         try:
@@ -209,21 +224,36 @@ def run_photometry_job(job, settings, job_file_ids, job_sources):
             source_table = aperture_photometry(
                 data, source_table, **phot_kw)
 
-            # Apply photometric calibration if present in data file
-            if phot_cal:
+            # Apply photometric calibration if supplied by the user or present
+            # in data file
+            m0 = m0_err = None
+            try:
+                m0 = field_cal[file_id].zero_point
+            except (AttributeError, KeyError):
+                pass
+            else:
                 try:
-                    source_table['mag'] += phot_cal['m0']
+                    m0_err = field_cal[file_id].zero_point_error
+                except AttributeError:
+                    pass
+            if m0 is None and phot_cal:
+                try:
+                    m0 = phot_cal['m0']
                 except (KeyError, TypeError):
                     job.add_warning(
                         'Data file ID {}: Could not apply photometric '
                         'calibration'.format(file_id))
-                try:
-                    source_table['mag_err'] = hypot(
-                        source_table['mag_err'], phot_cal['m0_err'])
-                except (KeyError, TypeError):
-                    job.add_warning(
-                        'Data file ID {}: Could not calculate photometric '
-                        'error'.format(file_id))
+                else:
+                    try:
+                        m0_err = phot_cal['m0_err']
+                    except (KeyError, TypeError):
+                        job.add_warning(
+                            'Data file ID {}: Could not calculate photometric '
+                            'error'.format(file_id))
+            if m0 is not None:
+                source_table['mag'] += m0
+            if m0_err is not None:
+                source_table['mag_err'] = hypot(source_table['mag_err'], m0_err)
 
             # noinspection PyTypeChecker
             result_data += [
@@ -253,6 +283,7 @@ class PhotometryJob(Job):
     file_ids = List(Integer(), default=[])  # type: list
     sources = List(Nested(SourceExtractionData), default=[])  # type: list
     settings = Nested(PhotSettings, default={})  # type: PhotSettings
+    field_cal_results = List(Nested(FieldCalResult))  # type: list
 
     def run(self):
         self.result.data = run_photometry_job(

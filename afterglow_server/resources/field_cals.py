@@ -5,22 +5,19 @@ Afterglow Access Server: field-cals resource
 from __future__ import absolute_import, division, print_function
 
 import os
-import json
 import sqlite3
 from threading import Lock
 
-from marshmallow import fields
 from sqlalchemy import Column, Float, String, create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 # noinspection PyProtectedMember
 from sqlalchemy.engine import Engine
-from flask import request, url_for
+from flask import request
 
-from ..data_structures import CatalogSource
+from ..data_structures import FieldCal
 from ..auth import auth_required, current_user
-from .. import (
-    Float as AfterglowFloat, Resource, app, errors, json_response, url_prefix)
+from .. import app, errors, json_response, url_prefix
 from .data_files import CannotCreateDataFileDirError, get_root
 
 try:
@@ -34,7 +31,7 @@ except ImportError:
 
 
 __all__ = [
-    'FieldCal', 'DuplicateFieldCalError', 'UnknownFieldCalError',
+    'DuplicateFieldCalError', 'UnknownFieldCalError',
     'get_field_cal', 'get_field_cal_db',
 ]
 
@@ -60,55 +57,6 @@ class DuplicateFieldCalError(errors.AfterglowError):
     """
     subcode = 4001
     message = 'Duplicate field cal name'
-
-
-class FieldCal(Resource):
-    """
-    Field calibration prescription
-    """
-    name = fields.String()  # type: str
-    catalog_sources = fields.List(fields.Nested(CatalogSource))  # type: list
-    catalogs = fields.List(fields.String())  # type: list
-    custom_filter_lookup = fields.Dict(default=None)  # type: dict
-    source_inclusion_percent = AfterglowFloat(default=0)  # type: float
-    min_snr = AfterglowFloat(default=0)  # type: float
-    max_snr = AfterglowFloat(default=0)  # type: float
-    source_match_tol = AfterglowFloat()  # type: float
-
-    @property
-    def _uri(self):
-        if getattr(self, 'name', None) is not None:
-            return url_for('field_cals', _external=True) + '/' + self.name
-        raise AttributeError('_uri')
-
-    @classmethod
-    def from_db(cls, _obj=None, **kwargs):
-        """
-        Create field cal resource instance from database object
-
-        :param SqlaFieldCal _obj: field cal object returned by database query
-        :param kwargs: if `_obj` is not set, initialize from the given
-            keyword=value pairs or override `_obj` fields
-
-        :return: serialized field cal resource object
-        :rtype: FieldCal
-        """
-        # Extract fields from SQLA object
-        if _obj is None:
-            kw = {}
-        else:
-            # noinspection PyProtectedMember
-            kw = {name: getattr(_obj, name) for name in cls._declared_fields
-                  if name not in Resource._declared_fields}
-        kw.update(kwargs)
-
-        # Convert fields stored as strings in the db to their proper schema
-        # types
-        for name in ('custom_filter_lookup', 'catalog_sources'):
-            if kw.get(name) is not None:
-                kw[name] = json.loads(kw[name])
-
-        return cls(**kw)
 
 
 Base = declarative_base()

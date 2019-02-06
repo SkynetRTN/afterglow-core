@@ -11,26 +11,15 @@ import numpy
 from astropy.wcs import WCS
 
 from ...data_structures import (
-    PhotSettings, PhotometryData, SourceExtractionSettings)
-from ... import AfterglowSchema, Float
+    FieldCal, FieldCalResult, PhotSettings, SourceExtractionSettings)
 from ..data_files import get_data_file_fits, get_image_time
-from ..field_cals import FieldCal, get_field_cal
+from ..field_cals import get_field_cal
 from .source_extraction_job import run_source_extraction_job
 from .photometry_job import get_source_xy, run_photometry_job
 from . import Job, JobResult
 
 
 __all__ = ['FieldCalJob']
-
-
-class FieldCalResult(AfterglowSchema):
-    """
-    Result of field calibration for a data file
-    """
-    file_id = Integer()  # type: int
-    phot_results = List(Nested(PhotometryData), default=[])  # type: list
-    zero_point = Float()  # type: float
-    zero_point_error = Float()  # type: float
 
 
 class FieldCalJobResult(JobResult):

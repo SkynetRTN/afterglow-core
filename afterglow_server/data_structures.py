@@ -5,17 +5,20 @@ Afterglow Access Server: data structures common to multiple job plugins
 from __future__ import absolute_import, division, print_function
 
 import datetime
+import json
 
-from marshmallow.fields import Dict, Integer, String
+from marshmallow.fields import Dict, Integer, List, Nested, String
+from flask import url_for
 from numpy import log, rad2deg, sqrt
 
 from . import AfterglowSchema, Boolean, DateTime, Float
 
 
 __all__ = [
-    'CatalogSource', 'IAstrometry', 'ICatalogSource', 'IFWHM', 'IPhotometry',
-    'ISourceId', 'ISourceMeta', 'Mag', 'PhotSettings', 'PhotometryData',
-    'SourceExtractionData', 'SourceExtractionSettings', 'sigma_to_fwhm',
+    'CatalogSource', 'FieldCal', 'FieldCalResult', 'IAstrometry',
+    'ICatalogSource', 'IFWHM', 'IPhotometry', 'ISourceId', 'ISourceMeta', 'Mag',
+    'PhotSettings', 'PhotometryData', 'SourceExtractionData',
+    'SourceExtractionSettings', 'sigma_to_fwhm',
 ]
 
 
@@ -175,3 +178,66 @@ class CatalogSource(ICatalogSource, IAstrometry, IPhotometry):
     Catalog source definition for field calibration
     """
     pass
+
+
+class FieldCal(AfterglowSchema):
+    """
+    Field calibration prescription
+    """
+    uri = String(attribute='_uri')  # type: str
+    name = String()  # type: str
+    catalog_sources = List(Nested(CatalogSource))  # type: list
+    catalogs = List(String())  # type: list
+    custom_filter_lookup = Dict(
+        keys=String, values=Dict(keys=String, values=String),
+        default=None)  # type: dict
+    source_inclusion_percent = Float(default=0)  # type: float
+    min_snr = Float(default=0)  # type: float
+    max_snr = Float(default=0)  # type: float
+    source_match_tol = Float()  # type: float
+
+    @property
+    def _uri(self):
+        if getattr(self, 'name', None) is not None:
+            return url_for('field_cals', _external=True) + '/' + self.name
+        raise AttributeError('_uri')
+
+    @classmethod
+    def from_db(cls, _obj=None, **kwargs):
+        """
+        Create field cal resource instance from database object
+
+        :param afterglow_server.resources.field_cals.SqlaFieldCal _obj: field
+            cal object returned by database query
+        :param kwargs: if `_obj` is not set, initialize from the given
+            keyword=value pairs or override `_obj` fields
+
+        :return: serialized field cal resource object
+        :rtype: FieldCal
+        """
+        # Extract fields from SQLA object
+        if _obj is None:
+            kw = {}
+        else:
+            # noinspection PyProtectedMember
+            kw = {name: getattr(_obj, name) for name in cls._declared_fields
+                  if name not in AfterglowSchema._declared_fields}
+        kw.update(kwargs)
+
+        # Convert fields stored as strings in the db to their proper schema
+        # types
+        for name in ('catalog_sources', 'catalogs', 'custom_filter_lookup'):
+            if kw.get(name) is not None:
+                kw[name] = json.loads(kw[name])
+
+        return cls(**kw)
+
+
+class FieldCalResult(AfterglowSchema):
+    """
+    Result of field calibration for a data file
+    """
+    file_id = Integer()  # type: int
+    phot_results = List(Nested(PhotometryData), default=[])  # type: list
+    zero_point = Float()  # type: float
+    zero_point_error = Float()  # type: float
