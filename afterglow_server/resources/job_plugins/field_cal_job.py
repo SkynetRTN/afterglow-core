@@ -6,33 +6,21 @@ from __future__ import absolute_import, division, print_function
 
 from datetime import datetime
 
-from marshmallow.fields import Dict, Integer, List, Nested, String
+from marshmallow.fields import Integer, List, Nested
 import numpy
 from astropy.wcs import WCS
 
-from . import Job, JobResult
-from .data_structures import (
-    CatalogSource, PhotSettings, PhotometryData, SourceExtractionSettings)
+from ...data_structures import (
+    PhotSettings, PhotometryData, SourceExtractionSettings)
+from ... import AfterglowSchema, Float
+from ..data_files import get_data_file_fits, get_image_time
+from ..field_cals import FieldCal, get_field_cal
 from .source_extraction_job import run_source_extraction_job
 from .photometry_job import get_source_xy, run_photometry_job
-from ..data_files import get_data_file_fits, get_image_time
-from ... import AfterglowSchema, Float
+from . import Job, JobResult
 
 
 __all__ = ['FieldCalJob']
-
-
-class FieldCal(AfterglowSchema):
-    """
-    Field calibration prescription
-    """
-    name = String()  # type: str
-    catalog_sources = List(Nested(CatalogSource), default=[])  # type: list
-    custom_filter_lookup = Dict(default=None)  # type: dict
-    source_inclusion_percent = Float(default=0)  # type: float
-    min_snr = Float(default=0)  # type: float
-    max_snr = Float(default=0)  # type: float
-    source_match_tol = Float()  # type: float
 
 
 class FieldCalResult(AfterglowSchema):
@@ -63,8 +51,15 @@ class FieldCalJob(Job):
         PhotSettings, default=None)  # type: PhotSettings
 
     def run(self):
-        if not self.field_cal.catalog_sources:
-            raise ValueError('Missing catalog sources')
+        if not getattr(self.field_cal, 'catalog_sources', None):
+            # Possibly a reference to a stored field cal
+            name = getattr(self.field_cal, 'name', None)
+            if name is not None:
+                self.field_cal = get_field_cal(self.user_id, name)
+        if not getattr(self.field_cal, 'catalog_sources', None):
+            raise ValueError('Missing catalog sources in field cal{}'.format(
+                ' "{}"'.format(self.field_cal.name)
+                if getattr(self.field_cal, 'name', None) else ''))
 
         # Make sure that each input catalog source has a unique ID; it will
         # be used later to match photometry results to catalog sources
@@ -356,12 +351,14 @@ class FieldCalJob(Job):
 
             # Update photometric calibration info in data file header
             try:
-                with get_data_file_fits(self.user.id, file_id, 'update') as f:
+                with get_data_file_fits(self.user_id, file_id, 'update') as f:
                     hdr = f[0].header
                     hdr['PHOT_M0'] = m0, 'Photometric zero point'
                     if m0_error:
                         hdr['PHOT_M0E'] = (
                             m0_error, 'Photometric zero point error')
+                    if getattr(self.field_cal, 'name', None):
+                        hdr['PHOT_CAL'] = self.field_cal.name, 'Field cal name'
             except Exception as e:
                 self.add_warning(
                     'Data file ID {}: Error saving photometric calibration '

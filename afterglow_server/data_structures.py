@@ -9,18 +9,22 @@ import datetime
 from marshmallow.fields import Dict, Integer, String
 from numpy import log, rad2deg, sqrt
 
-from ... import AfterglowSchema, Boolean, DateTime, Float
+from . import AfterglowSchema, Boolean, DateTime, Float
 
 
 __all__ = [
-    'IAstrometry', 'IPhotometry', 'ISourceId', 'ISourceMeta', 'ICatalogSource',
-    'SourceExtractionSettings', 'SourceExtractionData', 'PhotSettings',
-    'PhotometryData', 'CatalogSource',
-    'sigma_to_fwhm',
+    'CatalogSource', 'IAstrometry', 'ICatalogSource', 'IFWHM', 'IPhotometry',
+    'ISourceId', 'ISourceMeta', 'Mag', 'PhotSettings', 'PhotometryData',
+    'SourceExtractionData', 'SourceExtractionSettings', 'sigma_to_fwhm',
 ]
 
 
 sigma_to_fwhm = 2.0*sqrt(2*log(2))
+
+
+class Mag(AfterglowSchema):
+    value = Float()
+    error = Float()
 
 
 class ISourceMeta(AfterglowSchema):
@@ -41,6 +45,9 @@ class IAstrometry(AfterglowSchema):
     pm_pixel = Float()  # type: float
     pm_pos_angle_pixel = Float()  # type: float
     pm_epoch = DateTime()  # type: datetime.datetime
+
+
+class IFWHM(AfterglowSchema):
     fwhm_x = Float()  # type: float
     fwhm_y = Float()  # type: float
     theta = Float()  # type: float
@@ -63,7 +70,7 @@ class ICatalogSource(AfterglowSchema):
     file_id = Integer()  # type: int
     label = String()  # type: str
     catalog_name = String()  # type: str
-    mags = Dict()  # type: dict
+    mags = Dict(keys=String, values=Mag)  # type: dict
 
 
 class SourceExtractionSettings(AfterglowSchema):
@@ -87,7 +94,7 @@ class SourceExtractionSettings(AfterglowSchema):
     limit = Integer(default=None)  # type: int
 
 
-class SourceExtractionData(ISourceMeta, IAstrometry, ISourceId):
+class SourceExtractionData(ISourceMeta, IAstrometry, IFWHM, ISourceId):
     """
     Description of object returned by source extraction
     """

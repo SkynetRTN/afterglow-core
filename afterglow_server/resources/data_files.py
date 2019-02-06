@@ -233,10 +233,7 @@ data_files_engine_lock = Lock()
 def get_data_file_db(user_id):
     """
     Initialize the given user's data file storage directory and database as
-    needed and return the database object
-
-    This function should be used instead of directly accessing the global
-    `adb` variable to ensure thread safety
+    needed and return the database object; thread-safe
 
     :param int | None user_id: current user ID (None if user auth is disabled)
 
@@ -1073,6 +1070,7 @@ def data_files(id=None):
         GET: JSON response containing either the list of serialized data file
             objects when no id supplied or a single data file otherwise
         POST: JSON-serialized list of the new data files
+        PUT: JSON-serialized updated data file
         DELETE: empty response
     :rtype: flask.Response | str
     """

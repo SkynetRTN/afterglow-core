@@ -9,12 +9,12 @@ from astropy.wcs import WCS
 
 from skylib.extraction import extract_sources
 
-from . import Job, JobResult
-from .data_structures import SourceExtractionData, SourceExtractionSettings
-from .source_merge_job import SourceMergeSettings, merge_sources
+from ... import Boolean
+from ...data_structures import SourceExtractionData, SourceExtractionSettings
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time, get_subframe)
-from ... import Boolean
+from .source_merge_job import SourceMergeSettings, merge_sources
+from . import Job, JobResult
 
 
 __all__ = ['SourceExtractionJob', 'run_source_extraction_job']
@@ -29,8 +29,8 @@ def run_source_extraction_job(job, settings, job_file_ids):
     Batch photometry job body; also used during photometric calibration
 
     :param Job job: job class instance
-    :param .data_structures.SourceExtractionSettings settings: soruce
-        extraction settings
+    :param afterglow_server.data_structures.SourceExtractionSettings settings:
+        soruce extraction settings
     :param list job_file_ids: data file IDs to process
 
     :return: list of source extraction results

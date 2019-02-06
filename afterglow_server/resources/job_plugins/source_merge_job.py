@@ -10,9 +10,9 @@ from marshmallow.fields import List, Nested, String
 from numpy import asarray, cos, deg2rad, pi, sin, sqrt, transpose, zeros
 from scipy.spatial import cKDTree
 
-from . import Job, JobResult
-from .data_structures import SourceExtractionData
+from ...data_structures import SourceExtractionData
 from ... import AfterglowSchema, Float
+from . import Job, JobResult
 
 
 __all__ = ['SourceMergeJob', 'SourceMergeSettings', 'merge_sources']

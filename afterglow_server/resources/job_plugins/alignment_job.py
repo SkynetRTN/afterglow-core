@@ -9,12 +9,12 @@ from astropy.wcs import WCS
 
 from skylib.combine.alignment import apply_transform_stars, apply_transform_wcs
 
-from . import Job, JobResult
-from .data_structures import SourceExtractionData
+from ...data_structures import SourceExtractionData
+from ... import AfterglowSchema, Boolean, errors
 from ..data_files import (
     SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,
     save_data_file)
-from ... import AfterglowSchema, Boolean, errors
+from . import Job, JobResult
 
 
 __all__ = ['AlignmentJob']
