@@ -40,22 +40,31 @@ class FieldCalJob(Job):
         PhotSettings, default=None)  # type: PhotSettings
 
     def run(self):
-        if not getattr(self.field_cal, 'catalog_sources', None):
-            # Possibly a reference to a stored field cal
-            name = getattr(self.field_cal, 'name', None)
-            if name is not None:
-                self.field_cal = get_field_cal(self.user_id, name)
-        if not getattr(self.field_cal, 'catalog_sources', None):
+        # If only ID or name is supplied for the field cal,
+        # this is a reference to a stored field cal; dynamically update
+        # from the user's field cal table
+        field_cal = self.field_cal
+        # noinspection PyProtectedMember
+        if all(getattr(field_cal, name, None) is None
+               for name in FieldCal._declared_fields
+               if name not in ('id', 'name')):
+            id_or_name = getattr(field_cal, 'id', None)
+            if id_or_name is None:
+                id_or_name = getattr(field_cal, 'name', None)
+            if id_or_name is not None:
+                field_cal = get_field_cal(self.user_id, id_or_name)
+
+        if not getattr(field_cal, 'catalog_sources', None):
             raise ValueError('Missing catalog sources in field cal{}'.format(
-                ' "{}"'.format(self.field_cal.name)
-                if getattr(self.field_cal, 'name', None) else ''))
+                ' "{}"'.format(field_cal.name)
+                if getattr(field_cal, 'name', None) else ''))
 
         # Make sure that each input catalog source has a unique ID; it will
         # be used later to match photometry results to catalog sources
         prefix = '{}_{}_'.format(
             datetime.utcnow().strftime('%Y%m%d%H%M%S'), self.id)
         source_ids = set()
-        for i, source in enumerate(self.field_cal.catalog_sources):
+        for i, source in enumerate(field_cal.catalog_sources):
             id = getattr(source, 'id', None)
             if id is None:
                 # Auto-assign source ID
@@ -74,7 +83,7 @@ class FieldCalJob(Job):
         if getattr(self, 'source_extraction_settings', None) is not None:
             # Detect sources using settings provided and match them to input
             # catalog sources by XY position in each image
-            tol = getattr(self.field_cal, 'source_match_tol', None)
+            tol = getattr(field_cal, 'source_match_tol', None)
             if tol is None:
                 raise ValueError('Missing catalog source match tolerance')
             if tol <= 0:
@@ -89,7 +98,7 @@ class FieldCalJob(Job):
             for source in detected_sources:
                 file_id = source.file_id
                 catalog_source, match_found = None, False
-                for catalog_source in self.field_cal.catalog_sources:
+                for catalog_source in field_cal.catalog_sources:
                     if getattr(catalog_source, 'file_id', None) is None or \
                             catalog_source.file_id == file_id:
                         try:
@@ -145,7 +154,7 @@ class FieldCalJob(Job):
                     'Could not match any detected sources to the catalog '
                     'sources provided')
         else:
-            catalog_sources = self.field_cal.catalog_sources
+            catalog_sources = field_cal.catalog_sources
 
         if getattr(self, 'photometry_settings', None) is not None:
             # Do batch photometry using refstar positions
@@ -193,7 +202,8 @@ class FieldCalJob(Job):
                         source.filter = None
                     filters[file_id] = source.filter
 
-        min_snr, max_snr = self.field_cal.min_snr, self.field_cal.max_snr
+        min_snr = getattr(field_cal, 'min_snr', None)
+        max_snr = getattr(field_cal, 'max_snr', None)
         if min_snr or max_snr:
             # Exclude sources based on SNR
             if not min_snr:
@@ -210,9 +220,9 @@ class FieldCalJob(Job):
             if not phot_data:
                 raise RuntimeError('All sources violate SNR constraints')
 
-        if self.field_cal.source_inclusion_percent:
+        if getattr(field_cal, 'source_inclusion_percent', None):
             # Keep only sources that are present in the given fraction of images
-            nmin = max(int(self.field_cal.source_inclusion_percent/100 *
+            nmin = max(int(field_cal.source_inclusion_percent/100 *
                            len(self.file_ids) + 0.5), 1)
             source_ids_to_keep, source_ids_to_remove = [], []
             for source in phot_data:
@@ -237,7 +247,7 @@ class FieldCalJob(Job):
         # For each data file ID, match photometry results to catalog sources
         # and use (mag, ref_mag) pairs to obtain zero point
         result_data = []
-        if getattr(self.field_cal, 'custom_filter_lookup', None):
+        if getattr(field_cal, 'custom_filter_lookup', None):
             context = dict(numpy.__dict__)
         else:
             context = {}
@@ -246,7 +256,7 @@ class FieldCalJob(Job):
             sources = []
             for source in phot_data:
                 if source.file_id == file_id:
-                    for catalog_source in self.field_cal.catalog_sources:
+                    for catalog_source in field_cal.catalog_sources:
                         if catalog_source.id == source.id:
                             # Get reference magnitude for the current filter
                             flt = getattr(source, 'filter', None)
@@ -254,7 +264,7 @@ class FieldCalJob(Job):
                             try:
                                 source.catalog_name = \
                                     catalog_source.catalog_name
-                                expr = self.field_cal.custom_filter_lookup[flt][
+                                expr = field_cal.custom_filter_lookup[flt][
                                     source.catalog_name
                                 ]
                                 # Evaluate magnitude expression in the
@@ -346,8 +356,10 @@ class FieldCalJob(Job):
                     if m0_error:
                         hdr['PHOT_M0E'] = (
                             m0_error, 'Photometric zero point error')
-                    if getattr(self.field_cal, 'name', None):
-                        hdr['PHOT_CAL'] = self.field_cal.name, 'Field cal name'
+                    if getattr(field_cal, 'name', None):
+                        hdr['PHOT_CAL'] = field_cal.name, 'Field cal name'
+                    elif getattr(field_cal, 'id', None):
+                        hdr['PHOT_CAL'] = field_cal.id, 'Field cal ID'
             except Exception as e:
                 self.add_warning(
                     'Data file ID {}: Error saving photometric calibration '

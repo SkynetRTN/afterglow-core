@@ -13,7 +13,8 @@ depends_on = None
 def upgrade():
     op.create_table(
         'field_cals',
-        sa.Column('name', sa.String(), primary_key=True, nullable=False),
+        sa.Column('id', sa.Integer(), primary_key=True, nullable=False),
+        sa.Column('name', sa.String(), unique=True, nullable=False, index=True),
         sa.Column('catalog_sources', sa.String()),
         sa.Column('catalogs', sa.String()),
         sa.Column('custom_filter_lookup', sa.String()),

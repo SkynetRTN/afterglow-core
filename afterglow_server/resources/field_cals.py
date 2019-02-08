@@ -8,7 +8,7 @@ import os
 import sqlite3
 from threading import Lock
 
-from sqlalchemy import Column, Float, String, create_engine, event
+from sqlalchemy import Column, Float, Integer, String, create_engine, event
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 # noinspection PyProtectedMember
@@ -41,7 +41,7 @@ class UnknownFieldCalError(errors.AfterglowError):
     Unknown field calibration
 
     Extra attributes::
-        name: requested field cal name
+        id: requested field cal ID
     """
     code = 404
     subcode = 4000
@@ -64,8 +64,10 @@ Base = declarative_base()
 
 class SqlaFieldCal(Base):
     __tablename__ = 'field_cals'
+    __table_args__ = dict(sqlite_autoincrement=True)
 
-    name = Column(String, primary_key=True, nullable=False)
+    id = Column(Integer, primary_key=True, nullable=False)
+    name = Column(String, unique=True, nullable=False, index=True)
     catalog_sources = Column(String)
     catalogs = Column(String)
     custom_filter_lookup = Column(String)
@@ -155,20 +157,27 @@ def get_field_cal_db(user_id):
             else ', '.join(str(arg) for arg in e.args) if e.args else str(e))
 
 
-def get_field_cal(user_id, name):
+def get_field_cal(user_id, id_or_name):
     """
-    Return field cal with the given name
+    Return field cal with the given ID or name
 
     :param int | None user_id: current user ID (None if user auth is disabled)
-    :param str name: field cal name
+    :param int | str id_or_name: field cal ID (integer) or name
 
     :return: serialized field cal object
     :rtype: FieldCal
     """
     adb = get_field_cal_db(user_id)
-    field_cal = adb.query(SqlaFieldCal).get(name)
+    try:
+        field_cal = adb.query(SqlaFieldCal).get(int(id_or_name))
+    except ValueError:
+        field_cal = None
     if field_cal is None:
-        raise UnknownFieldCalError(name=name)
+        # Try getting by name
+        field_cal = adb.query(SqlaFieldCal).filter(
+            SqlaFieldCal.name == id_or_name).one_or_none()
+    if field_cal is None:
+        raise UnknownFieldCalError(id=id_or_name)
     return FieldCal.from_db(field_cal)
 
 
@@ -176,48 +185,55 @@ resource_prefix = url_prefix + 'field-cals/'
 
 
 @app.route(resource_prefix[:-1], methods=['GET', 'POST'])
-@app.route(resource_prefix + '<name>', methods=['GET', 'PUT', 'DELETE'])
+@app.route(resource_prefix + '<id_or_name>', methods=['GET', 'PUT', 'DELETE'])
 @auth_required('user')
-def field_cals(name=None):
+def field_cals(id_or_name=None):
     """
     Return, create, update, or delete field cal(s)
 
     GET /field-cals
         - return a list of all user's field cals
 
-    GET /field-cals/[name]
-        - return a single field cal with the given name
+    GET /field-cals/[id or name]
+        - return a single field cal with the given ID or name
 
     POST /field-cals?name=...
         - create field cal with the given name and parameters
 
-    PUT /field-cals/[name]?...
+    PUT /field-cals/[id or name]?...
         - update field cal parameters
 
-    DELETE /field-cals/[name]
+    DELETE /field-cals/[id or name]
         - delete the given field cal
 
-    :param str name: field cal name
+    :param str id_or_name: field cal ID (integer) or name
 
     :return:
         GET: JSON response containing either a list of serialized field cals
-            when no name supplied or a single field cal otherwise
+            when no ID/name supplied or a single field cal otherwise
         POST, PUT: JSON-serialized field cal
         DELETE: empty response
     :rtype: flask.Response | str
     """
     adb = get_field_cal_db(current_user.id)
-    if name is not None:
+    if id_or_name is not None:
         # When getting, updating, or deleting a field cal, check that it
         # exists
-        field_cal = adb.query(SqlaFieldCal).get(name)
+        try:
+            field_cal = adb.query(SqlaFieldCal).get(int(id_or_name))
+        except ValueError:
+            field_cal = None
         if field_cal is None:
-            raise UnknownFieldCalError(name=name)
+            # Try getting by name
+            field_cal = adb.query(SqlaFieldCal).filter(
+                SqlaFieldCal.name == id_or_name).one_or_none()
+        if field_cal is None:
+            raise UnknownFieldCalError(id=id_or_name)
     else:
         field_cal = None
 
     if request.method == 'GET':
-        if name is None:
+        if id_or_name is None:
             # List all field cals
             return json_response(
                 [FieldCal.from_db(field_cal)
@@ -230,11 +246,13 @@ def field_cals(name=None):
         # Create field cal
         if not request.args.get('name'):
             raise errors.MissingFieldError(field='name')
-        if adb.query(SqlaFieldCal).get(request.args['name']) is not None:
+        if adb.query(SqlaFieldCal).filter(
+                SqlaFieldCal.name == request.args['name']).count():
             raise DuplicateFieldCalError(name=request.args['name'])
         try:
             field_cal = SqlaFieldCal(**request.args.to_dict())
             adb.add(field_cal)
+            adb.flush()
             res = FieldCal.from_db(field_cal)
             adb.commit()
         except Exception:
@@ -246,8 +264,11 @@ def field_cals(name=None):
     if request.method == 'PUT':
         # Update field cal
         for key, val in request.args.items():
+            if key == 'id':
+                # Don't allow changing field cal ID
+                continue
             if key == 'name' and val != field_cal.name and adb.query(
-                    SqlaFieldCal).get(val) is not None:
+                    SqlaFieldCal).filter(SqlaFieldCal.name == val).count():
                 raise DuplicateFieldCalError(name=val)
             setattr(field_cal, key, val)
         try:
@@ -262,7 +283,8 @@ def field_cals(name=None):
     if request.method == 'DELETE':
         # Delete field cal
         try:
-            adb.query(SqlaFieldCal).filter(SqlaFieldCal.name == name).delete()
+            adb.query(SqlaFieldCal).filter(
+                SqlaFieldCal.id == field_cal.id).delete()
             adb.commit()
         except Exception:
             adb.rollback()

@@ -184,16 +184,16 @@ class FieldCal(AfterglowSchema):
     """
     Field calibration prescription
     """
+    id = Integer()  # type: int
     uri = String(attribute='_uri')  # type: str
     name = String()  # type: str
     catalog_sources = List(Nested(CatalogSource))  # type: list
     catalogs = List(String())  # type: list
     custom_filter_lookup = Dict(
-        keys=String, values=Dict(keys=String, values=String),
-        default=None)  # type: dict
-    source_inclusion_percent = Float(default=0)  # type: float
-    min_snr = Float(default=0)  # type: float
-    max_snr = Float(default=0)  # type: float
+        keys=String, values=Dict(keys=String, values=String))  # type: dict
+    source_inclusion_percent = Float()  # type: float
+    min_snr = Float()  # type: float
+    max_snr = Float()  # type: float
     source_match_tol = Float()  # type: float
 
     @property
@@ -221,7 +221,7 @@ class FieldCal(AfterglowSchema):
         else:
             # noinspection PyProtectedMember
             kw = {name: getattr(_obj, name) for name in cls._declared_fields
-                  if name not in AfterglowSchema._declared_fields}
+                  if hasattr(_obj, name)}
         kw.update(kwargs)
 
         # Convert fields stored as strings in the db to their proper schema

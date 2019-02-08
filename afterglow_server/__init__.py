@@ -240,16 +240,16 @@ class Resource(AfterglowSchema):
     uri = fields.String(attribute='_uri')
 
 
-class ResourceEncoder(json.JSONEncoder):
+class AfterglowSchemaEncoder(json.JSONEncoder):
     """
-    JSON encoder that can serialize Resource class instances
+    JSON encoder that can serialize AfterglowSchema class instances
     """
     def default(self, obj):
-        if isinstance(obj, Resource):
+        if isinstance(obj, AfterglowSchema):
             return obj.dump(obj)[0]
         if isinstance(obj, datetime.datetime):
             return obj.isoformat(' ')
-        return super(ResourceEncoder, self).default(obj)
+        return super(AfterglowSchemaEncoder, self).default(obj)
 
 
 def json_response(obj='', status_code=None, headers=None):
@@ -272,7 +272,7 @@ def json_response(obj='', status_code=None, headers=None):
     if status_code is None:
         status_code = 200
     return Response(
-        json.dumps(obj, cls=ResourceEncoder), status_code,
+        json.dumps(obj, cls=AfterglowSchemaEncoder), status_code,
         mimetype='application/json', headers=headers)
 
 
