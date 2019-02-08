@@ -76,12 +76,13 @@ def run_photometry_job(job, settings, job_file_ids, job_sources,
         settings
     :param list job_file_ids: data file IDs to process
     :param list job_sources: list of SourceExtractionData-compatible source defs
-    :param list field_cal_results: optional list of
+    :param list | bool | None field_cal_results: optional list of
         :class:`afterglow_server.data_structures.FieldCalResult` instances
-        having `zero_point` and optionaly `zero_point_error` that will be used
+        having `zero_point` and optionally `zero_point_error` that will be used
         for photometric calibration; if none provided for the given data file,
         its existing photometric calibration info will be used if present
-        in the header
+        in the header unless photometric calibration was explicitly disabled
+        by setting `field_cal_results` to False
 
     :return: list of photometry results
     :rtype: list[PhotometryData]
@@ -225,7 +226,8 @@ def run_photometry_job(job, settings, job_file_ids, job_sources,
                 data, source_table, **phot_kw)
 
             # Apply photometric calibration if supplied by the user or present
-            # in data file
+            # in data file (in the latter case, unless calibration was
+            # explicitly disabled by setting field_cal_results to False)
             m0 = m0_err = None
             try:
                 m0 = field_cal[file_id].zero_point
@@ -236,7 +238,7 @@ def run_photometry_job(job, settings, job_file_ids, job_sources,
                     m0_err = field_cal[file_id].zero_point_error
                 except AttributeError:
                     pass
-            if m0 is None and phot_cal:
+            if m0 is None and phot_cal and field_cal_results is not False:
                 try:
                     m0 = phot_cal['m0']
                 except (KeyError, TypeError):

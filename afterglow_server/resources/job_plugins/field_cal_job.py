@@ -157,10 +157,13 @@ class FieldCalJob(Job):
             catalog_sources = field_cal.catalog_sources
 
         if getattr(self, 'photometry_settings', None) is not None:
-            # Do batch photometry using refstar positions
+            # Do batch photometry using refstar positions; explicitly disable
+            # photometric calibration even if present in data file headers
+            # by setting field_cal_results to False since we need raw
+            # (uncalibrated) mags here
             phot_data = [source for source in run_photometry_job(
-                self, self.photometry_settings, self.file_ids, catalog_sources)
-                if source.mag]
+                self, self.photometry_settings, self.file_ids, catalog_sources,
+                False) if source.mag]
             if not phot_data:
                 raise RuntimeError('No catalog sources could be photometered')
         else:
