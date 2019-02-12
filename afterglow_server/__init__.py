@@ -3,13 +3,24 @@ Afterglow Access Server: main app package
 """
 
 from __future__ import absolute_import, division, print_function
+
+import sys
 import datetime
 import json
 from math import isinf, isnan
+
 from marshmallow import Schema, fields, post_dump
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
 from flask import Flask, Response, request, url_for
+
 from .__version__ import __version__, url_prefix
+
+if sys.version_info.major < 3:
+    # noinspection PyCompatibility,PyUnresolvedReferences
+    from urllib import quote
+else:
+    # noinspection PyCompatibility,PyUnresolvedReferences
+    from urllib.parse import quote
 
 
 __all__ = [
@@ -232,9 +243,11 @@ class Resource(AfterglowSchema):
 
     @property
     def _uri(self):
-        if hasattr(self, 'id') and self.id is not None and \
-                hasattr(self, '__get_view__') and self.__get_view__:
-            return url_for(self.__get_view__, id=self.id, _external=True)
+        if hasattr(self, '__get_view__') and self.__get_view__:
+            for attr in ('id', 'name'):
+                if getattr(self, attr, None) is not None:
+                    return url_for(self.__get_view__, _external=True) + '/' + \
+                        quote(getattr(self, attr))
         raise AttributeError('_uri')
 
     uri = fields.String(attribute='_uri')

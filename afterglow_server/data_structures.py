@@ -8,10 +8,9 @@ import datetime
 import json
 
 from marshmallow.fields import Dict, Integer, List, Nested, String
-from flask import url_for
 from numpy import log, rad2deg, sqrt
 
-from . import AfterglowSchema, Boolean, DateTime, Float
+from . import AfterglowSchema, Boolean, DateTime, Float, Resource
 
 
 __all__ = [
@@ -180,12 +179,11 @@ class CatalogSource(ICatalogSource, IAstrometry, IPhotometry):
     pass
 
 
-class FieldCal(AfterglowSchema):
+class FieldCal(Resource):
     """
     Field calibration prescription
     """
     id = Integer()  # type: int
-    uri = String(attribute='_uri')  # type: str
     name = String()  # type: str
     catalog_sources = List(Nested(CatalogSource))  # type: list
     catalogs = List(String())  # type: list
@@ -195,12 +193,6 @@ class FieldCal(AfterglowSchema):
     min_snr = Float()  # type: float
     max_snr = Float()  # type: float
     source_match_tol = Float()  # type: float
-
-    @property
-    def _uri(self):
-        if getattr(self, 'name', None) is not None:
-            return url_for('field_cals', _external=True) + '/' + self.name
-        raise AttributeError('_uri')
 
     @classmethod
     def from_db(cls, _obj=None, **kwargs):
