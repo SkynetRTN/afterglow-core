@@ -97,6 +97,35 @@ HISTOGRAM_BINS = 1024
 
 
 ################################################################################
+# Catalog options
+################################################################################
+
+# Default VizieR server address for all catalogs; no protocol and path
+VIZIER_SERVER = 'vizier.cfa.harvard.edu'
+
+# Catalog-specific options:
+# CATALOG_OPTIONS = {
+#   'APASS': {'vizier_server': 'vizier.u-strasbg.fr',
+#             'filter_lookup': {'Open': '0.8*V + 0.2*R'}},
+# }
+CATALOG_OPTIONS = {}
+
+# Custom VizieR catalog defs:
+# CUSTOM_VIZIER_CATALOGS = [
+#     {'name': 'NOMAD', 'display_name': 'NOMAD-1', 'num_sources': 1117612732,
+#      'vizier_catalog': 'I/297', 'row_limit': 5000,
+#      'col_mapping': {
+#          'id': 'NOMAD1', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
+#      },
+#      'mag_mapping': {'B': 'Bmag', 'V': 'Vmag', 'R': 'Rmag', 'J': 'Jmag',
+#                      'H': 'Hmag', 'K': 'Kmag'},
+#     },
+#     ...
+# ]
+CUSTOM_VIZIER_CATALOGS = []
+
+
+################################################################################
 # Job server options
 ################################################################################
 
