@@ -29,7 +29,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.types import TypeDecorator
 from flask import Response, request
 
-from .. import app, errors, json_response, plugins, url_prefix
+from .. import (
+    AfterglowSchemaEncoder, app, errors, json_response, plugins, url_prefix)
 from ..auth import auth_required, current_user
 from . import job_plugins
 
@@ -287,7 +288,7 @@ class JSONType(TypeDecorator):
 
     def process_bind_param(self, value, dialect):
         if value is not None:
-            value = unicode(json.dumps(value))
+            value = unicode(json.dumps(value, cls=AfterglowSchemaEncoder))
         return value
 
     def process_result_value(self, value, dialect):
@@ -396,8 +397,8 @@ WINDOWS = sys.platform.startswith('win')
 
 # Message encryption
 job_server_port = None
-job_server_key = None
-job_server_iv = None
+job_server_key = None  # type: str
+job_server_iv = None  # type: str
 
 
 def encrypt(msg):
