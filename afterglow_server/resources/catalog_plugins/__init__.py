@@ -52,11 +52,10 @@ class Catalog(Resource):
 
     Methods::
         query_objects: return a list of catalog objects with the specified names
-        query_rect: return catalog objects within the specified rectangular
-            region; if not defined, emulated with query_circ(); either of
-            query_rect() or query_circ() should be defined by the subclass
-        query_circ: return catalog objects within the specified rectangular
-            region; if not defined, emulated with query_rect()
+        query_box: return catalog objects within the specified rectangular
+            region
+        query_circ: return catalog objects within the specified circular
+            region
     """
     __get_view__ = 'get_catalogs'
 
@@ -64,7 +63,7 @@ class Catalog(Resource):
     display_name = String(default=None)
     num_sources = Integer()
     mags = List(String(), default=[])
-    filter_lookup = Dict(keys=String(), values=String())
+    filter_lookup = Dict(keys=String, values=String)
 
     def __init__(self, *args, **kwargs):
         """
@@ -94,8 +93,8 @@ class Catalog(Resource):
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='query_objects')
 
-    def query_rect(self, ra_hours, dec_degs, width_arcmins, height_arcmins,
-                   constraints=None):
+    def query_box(self, ra_hours, dec_degs, width_arcmins, height_arcmins,
+                  constraints=None):
         """
         Return catalog objects within the specified rectangular region
 

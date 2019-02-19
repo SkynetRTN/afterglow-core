@@ -72,7 +72,7 @@ class ICatalogSource(AfterglowSchema):
     file_id = Integer()  # type: int
     label = String()  # type: str
     catalog_name = String()  # type: str
-    mags = Dict(keys=String, values=Mag)  # type: dict
+    mags = Dict(keys=String, values=Nested(Mag))  # type: dict
 
 
 class SourceExtractionSettings(AfterglowSchema):

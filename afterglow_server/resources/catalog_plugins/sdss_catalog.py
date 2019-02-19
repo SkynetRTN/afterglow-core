@@ -5,7 +5,7 @@ Afterglow Access Server: SDSS catalog
 from __future__ import absolute_import, division, print_function
 
 from astropy.coordinates import SkyCoord
-from astropy.units import deg
+from astropy.units import deg, hour
 from astroquery.sdss import SDSS
 
 from .vizier_catalogs import VizierCatalog
@@ -75,7 +75,7 @@ class SDSSCatalog(VizierCatalog):
         """
         sdss = SDSS()
         return self.table_to_sources(sdss.query_region(
-            SkyCoord(ra=ra_hours*15, dec=dec_degs, unit=(deg, deg),
+            SkyCoord(ra=ra_hours, dec=dec_degs, unit=(hour, deg),
                      frame='icrs'),
             data_release=15, photoobj_fields=self._columns, cache=False,
             **region))

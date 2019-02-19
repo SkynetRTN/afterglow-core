@@ -8,7 +8,7 @@ import re
 
 import numpy
 from astropy.coordinates import SkyCoord
-from astropy.units import arcmin, deg
+from astropy.units import arcmin, deg, hour
 from astroquery.vizier import Vizier
 
 from ... import app
@@ -183,7 +183,7 @@ class VizierCatalog(Catalog):
     def query_region(self, ra_hours, dec_degs, constraints=None, limit=None,
                      **region):
         """
-        Return VizieR catalog objects within the specified rectangular region
+        Return VizieR catalog objects within the specified region
 
         :param float ra_hours: right ascension of region center in hours
         :param float dec_degs: declination of region center in degrees
@@ -202,15 +202,15 @@ class VizierCatalog(Catalog):
             keywords=[name for name, val in constraints.items() if val is None]
             if constraints else None)
         resp = viz.query_region(
-            SkyCoord(ra=ra_hours*15, dec=dec_degs, unit=(deg, deg),
+            SkyCoord(ra=ra_hours, dec=dec_degs, unit=(hour, deg),
                      frame='fk5'),
             catalog=viz.catalog, cache=False, **region)
         if resp:
             return self.table_to_sources(resp[0])
         return []
 
-    def query_rect(self, ra_hours, dec_degs, width_arcmins, height_arcmins=None,
-                   constraints=None, limit=None):
+    def query_box(self, ra_hours, dec_degs, width_arcmins, height_arcmins=None,
+                  constraints=None, limit=None):
         """
         Return VizieR catalog objects within the specified rectangular region
 

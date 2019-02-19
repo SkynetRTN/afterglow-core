@@ -9,7 +9,7 @@ from ..auth import auth_required
 from . import catalog_plugins
 
 
-__all__ = []
+__all__ = ['catalogs']
 
 
 class UnknownCatalogError(errors.AfterglowError):
@@ -51,6 +51,7 @@ def get_catalogs(name=None):
         return json_response(catalogs)
 
     try:
+        from numpy import array
         return json_response(catalogs[name])
     except KeyError:
         raise UnknownCatalogError(name=name)
