@@ -11,9 +11,11 @@ import numpy
 from astropy.wcs import WCS
 
 from ...data_structures import (
-    FieldCal, FieldCalResult, PhotSettings, SourceExtractionSettings)
+    FieldCal, FieldCalResult, Mag, PhotSettings, SourceExtractionSettings)
 from ..data_files import get_data_file_fits, get_image_time
 from ..field_cals import get_field_cal
+from ..catalogs import catalogs as known_catalogs
+from .catalog_query_job import run_catalog_query_job
 from .source_extraction_job import run_source_extraction_job
 from .photometry_job import get_source_xy, run_photometry_job
 from . import Job, JobResult
@@ -40,6 +42,9 @@ class FieldCalJob(Job):
         PhotSettings, default=None)  # type: PhotSettings
 
     def run(self):
+        if not getattr(self, 'file_ids', None):
+            return
+
         # If only ID or name is supplied for the field cal,
         # this is a reference to a stored field cal; dynamically update
         # from the user's field cal table
@@ -54,17 +59,32 @@ class FieldCalJob(Job):
             if id_or_name is not None:
                 field_cal = get_field_cal(self.user_id, id_or_name)
 
-        if not getattr(field_cal, 'catalog_sources', None):
-            raise ValueError('Missing catalog sources in field cal{}'.format(
-                ' "{}"'.format(field_cal.name)
-                if getattr(field_cal, 'name', None) else ''))
+        catalog_sources = getattr(field_cal, 'catalog_sources', None)
+        if not catalog_sources and not getattr(field_cal, 'catalogs', None):
+            raise ValueError(
+                'Missing either catalog sources or catalog list in field '
+                'cal{}'.format(
+                    ' "{}"'.format(field_cal.name)
+                    if getattr(field_cal, 'name', None) else ''))
+
+        if catalog_sources:
+            # Convert catalog magnitudes to Mag instances (not deserialized
+            # automatically)
+            for source in catalog_sources:
+                for name, val in getattr(source, 'mags', {}).items():
+                    if isinstance(val, dict):
+                        source.mags[name] = Mag(**val)
+        else:
+            # No input catalog sources, query the specified catalogs
+            catalog_sources = run_catalog_query_job(
+                self, field_cal.catalogs, file_ids=self.file_ids)
 
         # Make sure that each input catalog source has a unique ID; it will
         # be used later to match photometry results to catalog sources
         prefix = '{}_{}_'.format(
             datetime.utcnow().strftime('%Y%m%d%H%M%S'), self.id)
         source_ids = set()
-        for i, source in enumerate(field_cal.catalog_sources):
+        for i, source in enumerate(catalog_sources):
             id = getattr(source, 'id', None)
             if id is None:
                 # Auto-assign source ID
@@ -90,7 +110,7 @@ class FieldCalJob(Job):
                 raise ValueError(
                     'Positive catalog source match tolerance expected')
             epochs, wcss = {}, {}
-            catalog_sources = []
+            matching_catalog_sources = []
             detected_sources = run_source_extraction_job(
                 self, self.source_extraction_settings, self.file_ids)
             if not detected_sources:
@@ -98,7 +118,7 @@ class FieldCalJob(Job):
             for source in detected_sources:
                 file_id = source.file_id
                 catalog_source, match_found = None, False
-                for catalog_source in field_cal.catalog_sources:
+                for catalog_source in catalog_sources:
                     if getattr(catalog_source, 'file_id', None) is None or \
                             catalog_source.file_id == file_id:
                         try:
@@ -127,10 +147,10 @@ class FieldCalJob(Job):
                             wcss[file_id] = wcs
                         x, y = get_source_xy(catalog_source, epoch, wcs)
                         if numpy.hypot(x - source.x, y - source.y) < tol:
-                            if any(other_source.id == catalog_source.id and
-                                   (getattr(other_source, 'file_id', None) is
-                                    None or other_source.file_id == file_id)
-                                   for other_source in catalog_sources):
+                            if any(source1.id == catalog_source.id and
+                                   (getattr(source1, 'file_id', None) is
+                                    None or source1.file_id == file_id)
+                                   for source1 in matching_catalog_sources):
                                 self.add_warning(
                                     'Data file ID {}: Multiple matches for '
                                     'catalog source "{}" within {} '
@@ -148,13 +168,12 @@ class FieldCalJob(Job):
                         val = getattr(catalog_source, attr, None)
                         if val is not None:
                             setattr(source, attr, val)
-                    catalog_sources.append(source)
-            if not catalog_sources:
+                    matching_catalog_sources.append(source)
+            if not matching_catalog_sources:
                 raise RuntimeError(
                     'Could not match any detected sources to the catalog '
                     'sources provided')
-        else:
-            catalog_sources = field_cal.catalog_sources
+            catalog_sources = matching_catalog_sources
 
         if getattr(self, 'photometry_settings', None) is not None:
             # Do batch photometry using refstar positions; explicitly disable
@@ -247,19 +266,29 @@ class FieldCalJob(Job):
                         'at least one image' if nmin == 1 else
                         'at least {:d} images'.format(nmin))
 
+        # Initialize custom filter mapping
+        filter_lookup = {
+            catalog_name: known_catalogs[catalog_name].filter_lookup
+            for catalog_name in {catalog_source.catalog_name
+                                 for catalog_source in catalog_sources
+                                 if getattr(catalog_source, 'catalog_name', '')}
+            if catalog_name in known_catalogs and
+            getattr(known_catalogs[catalog_name], 'filter_lookup', None)
+        }
+        for catalog_name, lookup in getattr(
+                field_cal, 'custom_filter_lookup', {}).items():
+            filter_lookup.setdefault(catalog_name, {}).update(lookup)
+
         # For each data file ID, match photometry results to catalog sources
         # and use (mag, ref_mag) pairs to obtain zero point
         result_data = []
-        if getattr(field_cal, 'custom_filter_lookup', None):
-            context = dict(numpy.__dict__)
-        else:
-            context = {}
+        context = dict(numpy.__dict__)
         eps = 1e-7
         for file_id in self.file_ids:
             sources = []
             for source in phot_data:
                 if source.file_id == file_id:
-                    for catalog_source in field_cal.catalog_sources:
+                    for catalog_source in catalog_sources:
                         if catalog_source.id == source.id:
                             # Get reference magnitude for the current filter
                             flt = getattr(source, 'filter', None)
@@ -267,18 +296,16 @@ class FieldCalJob(Job):
                             try:
                                 source.catalog_name = \
                                     catalog_source.catalog_name
-                                expr = field_cal.custom_filter_lookup[flt][
-                                    source.catalog_name
-                                ]
+                                expr = filter_lookup[source.catalog_name][flt]
                                 # Evaluate magnitude expression in the
                                 # NumPy-enabled context extended with mags
                                 # available for the current catalog source
                                 ctx = dict(context)
                                 ctx.update(
-                                    {f: m['value']
+                                    {f: m.value
                                      for f, m in catalog_source.mags.items()})
                                 try:
-                                    mag = dict(value=eval(expr, ctx, {}))
+                                    mag = Mag(value=eval(expr, ctx, {}))
                                 except Exception:
                                     # Could not compute reference magnitude
                                     # (e.g. missing the given filter); retry
@@ -290,7 +317,8 @@ class FieldCalJob(Job):
                                     # by coadding contributions from each filter
                                     err = 0
                                     for f, m in catalog_source.mags.items():
-                                        if m.get('error') is not None:
+                                        e = getattr(m, 'error', None)
+                                        if e:
                                             # Partial derivative of final mag
                                             # with resp. to the current filter
                                             ctx[f] += eps
@@ -298,14 +326,13 @@ class FieldCalJob(Job):
                                             try:
                                                 err += ((
                                                     eval(expr, ctx, {}) -
-                                                    mag['value'])/eps *
-                                                    m['error'])**2
+                                                    mag.value)/eps*e)**2
                                             except Exception:
                                                 pass
                                             finally:
-                                                ctx[f] = m['value']
+                                                ctx[f] = m.value
                                     if err:
-                                        mag['error'] = numpy.sqrt(err)
+                                        mag.error = numpy.sqrt(err)
                             except Exception:
                                 # No custom filter expression for the current
                                 # filter+catalog combination; try filter name
@@ -317,12 +344,14 @@ class FieldCalJob(Job):
                                     # filter+catalog; skip this source
                                     continue
 
-                            if mag.get('value') is None:
+                            m = getattr(mag, 'value', None)
+                            if m is None:
                                 # Missing catalog magnitude value
                                 continue
-                            source.ref_mag = mag['value']
-                            if mag.get('error') is not None:
-                                source.ref_mag_error = mag['error']
+                            source.ref_mag = m
+                            e = getattr(mag, 'error', None)
+                            if e:
+                                source.ref_mag_error = e
                             sources.append(source)
                             break
             if not sources:

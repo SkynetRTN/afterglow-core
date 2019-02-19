@@ -211,7 +211,7 @@ def run_catalog_query_job(job, catalogs, ra_hours=None, dec_degs=None,
         catalog_sources = []
         for ra, dec, width, height in boxes:
             catalog_sources += known_catalogs[catalog].query_box(
-                ra*15, dec, width*60, height*60, constraints)
+                ra/15, dec, width*60, height*60, constraints)
 
         if len(boxes) > 1 and catalog_sources:
             # Remove duplicates from overlapping fields
