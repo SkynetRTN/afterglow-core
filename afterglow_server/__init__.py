@@ -9,7 +9,7 @@ import datetime
 import json
 from math import isinf, isnan
 
-from marshmallow import Schema, fields, post_dump
+from marshmallow import Schema, fields, missing, post_dump
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
 from flask import Flask, Response, request, url_for
 
@@ -258,6 +258,8 @@ class AfterglowSchemaEncoder(json.JSONEncoder):
     JSON encoder that can serialize AfterglowSchema class instances
     """
     def default(self, obj):
+        if isinstance(obj, type(missing)):
+            return None
         if isinstance(obj, AfterglowSchema):
             return obj.dump(obj)[0]
         if isinstance(obj, datetime.datetime):
