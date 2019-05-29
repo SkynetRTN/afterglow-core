@@ -65,7 +65,11 @@ class PixelOpsJob(Job):
     to PixelOpsJob.result.data. Whether a new data file(s) are created or the
     input ones are replaced by the output 2D image is controlled by the
     `inplace` job parameter; this does not apply to the third case above and if
-    F() yields a scalar value.
+    F() yields a scalar value. The expression may also include the variables
+    "aux_imgs" and "aux_hdrs", which are set to the lists of image data and
+    headers for data files listed in the `aux_file_ids` job parameter; the first
+    auxiliary image/header is also available via "aux_img" and "aux_hdr"
+    variables.
     """
     name = 'pixel_ops'
     description = 'Pixel Operations'
@@ -73,6 +77,7 @@ class PixelOpsJob(Job):
     file_ids = List(Integer(), default=[])  # type: list
     op = String(default=None)  # type: str
     inplace = Boolean(default=False)  # type: bool
+    aux_file_ids = List(Integer(), default=[])  # type: list
 
     def run(self):
         # Deduce the type of result by analyzing the user-supplied expression
@@ -87,6 +92,16 @@ class PixelOpsJob(Job):
                       for file_id in self.file_ids]
 
         local_vars = {}
+
+        # Load optional auxiliary data files
+        if getattr(self, 'aux_file_ids', None):
+            local_vars['aux_imgs'], local_vars['aux_hdrs'] = zip(*[
+                get_data_file(self.user_id, file_id)
+                for file_id in self.aux_file_ids])
+            local_vars['aux_img'] = local_vars['aux_imgs'][0]
+            local_vars['aux_hdr'] = local_vars['aux_hdrs'][0]
+        else:
+            local_vars['aux_imgs'], local_vars['aux_hdrs'] = [], []
 
         if {'imgs', 'hdrs'} & set(co.co_names):
             # Cases 2 and 3; each output must have access to all input images
