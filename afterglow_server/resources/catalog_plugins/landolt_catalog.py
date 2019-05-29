@@ -23,7 +23,7 @@ class LandoltCatalog(VizierCatalog):
     num_sources = 526
     vizier_catalog = 'II/183A'
     mags = {
-        'U': None, 'B': None, 'V': ('Vmag', 'e_Vmag'), 'R': None, 'I': None,
+        'U': (), 'B': (), 'V': ('Vmag', 'e_Vmag'), 'R': (), 'I': (),
         'B_V': ('B-V', 'e_B-V'), 'U_B': ('U-B', 'e_U-B'),
         'V_R': ('V-R', 'e_V-R'), 'R_I': ('R-I', 'e_R-I'),
         'V_I': ('V-I', 'e_V-I'),

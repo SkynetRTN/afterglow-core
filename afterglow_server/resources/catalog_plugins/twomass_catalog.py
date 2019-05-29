@@ -21,7 +21,7 @@ class TwoMASSCatalog(VizierCatalog):
     row_limit = 5000
     mags = {
         'J': ('Jmag', 'e_Jmag'), 'H': ('Hmag', 'e_Hmag'),
-        'K': ('Kmag', 'e_Kmag'), 'B': 'Bmag', 'R': 'Rmag',
+        'K': ('Kmag', 'e_Kmag'), 'B': ('Bmag',), 'R': ('Rmag',),
     }
     col_mapping = {
         'id': '_2MASS', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',

@@ -78,12 +78,17 @@ class VizierCatalog(Catalog):
 
         if getattr(self, 'mags', None):
             for item in self.mags.values():
-                if isinstance(item, str) or isinstance(item, type(u'')):
-                    self._columns.append(item)
-                elif item is not None:
-                    self._columns.append(item[0])
-                    if len(item) > 1 and item[1]:
-                        self._columns.append(item[1])
+                try:
+                    mag_col, mag_err_col = item[:2]
+                except ValueError:
+                    try:
+                        mag_col, mag_err_col = item[0], None
+                    except (IndexError, TypeError, ValueError):
+                        continue
+                if mag_col:
+                    self._columns.append(mag_col)
+                    if mag_err_col:
+                        self._columns.append(mag_err_col)
 
     def table_to_sources(self, table):
         """
@@ -122,15 +127,13 @@ class VizierCatalog(Catalog):
             # Initialize magnitudes and errors
             if getattr(self, 'mags', None):
                 for mag, item in self.mags.items():
-                    if item is None:
-                        continue
-                    if isinstance(item, str) or isinstance(item, type(u'')):
-                        mag_col, mag_err_col = item, None
-                    else:
+                    try:
+                        mag_col, mag_err_col = item[:2]
+                    except ValueError:
                         try:
-                            mag_col, mag_err_col = item
-                        except ValueError:
                             mag_col, mag_err_col = item[0], None
+                        except (IndexError, TypeError, ValueError):
+                            continue
                     # noinspection PyBroadException
                     try:
                         val = row[mag_col.replace("'", '_')]

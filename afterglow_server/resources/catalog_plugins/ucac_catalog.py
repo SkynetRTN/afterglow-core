@@ -20,8 +20,8 @@ class UCAC5Catalog(VizierCatalog):
     vizier_catalog = 'I/340'
     row_limit = 5000
     mags = {
-        'Open': 'f.mag', 'G': 'Gmag', 'R': 'Rmag', 'J': 'Jmag', 'H': 'Hmag',
-        'K': 'Kmag',
+        'Open': ('f.mag',), 'G': ('Gmag',), 'R': ('Rmag',), 'J': ('Jmag',),
+        'H': ('Hmag',), 'K': ('Kmag',),
     }
     col_mapping = {
         'id': 'SrcIDgaia', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
