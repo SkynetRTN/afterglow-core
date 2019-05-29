@@ -22,6 +22,12 @@ class LandoltCatalog(VizierCatalog):
     display_name = 'Landolt Catalog of UBVRI Photometric Standards'
     num_sources = 526
     vizier_catalog = 'II/183A'
+    mags = {
+        'U': None, 'B': None, 'V': ('Vmag', 'e_Vmag'), 'R': None, 'I': None,
+        'B_V': ('B-V', 'e_B-V'), 'U_B': ('U-B', 'e_U-B'),
+        'V_R': ('V-R', 'e_V-R'), 'R_I': ('R-I', 'e_R-I'),
+        'V_I': ('V-I', 'e_V-I'),
+    }
     col_mapping = {
         'id': 'Star',
         'ra_hours': 'int(RAJ2000.split()[0]) + int(RAJ2000.split()[1])/60 + '
@@ -30,12 +36,6 @@ class LandoltCatalog(VizierCatalog):
         'int(DEJ2000.split()[1])/60 + float(DEJ2000.split()[2])/3600)*'
         '(1 - 2*(DEJ2000.strip().startswith("-")))',
     }
-    mag_mapping = {
-        'V': ('Vmag', 'e_Vmag'), 'B_V': ('B-V', 'e_B-V'),
-        'U_B': ('U-B', 'e_U-B'), 'V_R': ('V-R', 'e_V-R'),
-        'R_I': ('R-I', 'e_R-I'), 'V_I': ('V-I', 'e_V-I'),
-    }
-    mags = ['U', 'B', 'V', 'R', 'I', 'B_V', 'U_B', 'V_R', 'R_I', 'V_I']
 
     def table_to_sources(self, table):
         """

@@ -35,24 +35,14 @@ class VizierCatalog(Catalog):
             and possibly any NumPy exports, e.g. {'some_attr': 'sqrt(some_col)'}
         extra_cols: optional extra column names that should be added to query
             arguments but don't map to any :class:`CatalogObject` attributes
-        mag_mapping: mapping between standard magnitude names like 'B', 'V', 'R'
-            and catalog-specific column names; the values are either
-            the corresponding VizieR column names or pairs of magnitude and its
-            error column names
     """
     vizier_server = None
     vizier_catalog = None
     row_limit = None
     col_mapping = {'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000'}
     extra_cols = []
-    mag_mapping = None  # {'mag': ('col', 'err_col')...} or {'mag': 'col'...}
 
     _columns = None
-
-    @property
-    def mags(self):
-        """List of catalog magnitudes"""
-        return list(self.mag_mapping.keys())
 
     def __init__(self, *args, **kwargs):
         """
@@ -86,11 +76,11 @@ class VizierCatalog(Catalog):
         if self.extra_cols:
             self._columns += self.extra_cols
 
-        if self.mag_mapping:
-            for item in self.mag_mapping.values():
+        if getattr(self, 'mags', None):
+            for item in self.mags.values():
                 if isinstance(item, str) or isinstance(item, type(u'')):
                     self._columns.append(item)
-                else:
+                elif item is not None:
                     self._columns.append(item[0])
                     if len(item) > 1 and item[1]:
                         self._columns.append(item[1])
@@ -130,8 +120,10 @@ class VizierCatalog(Catalog):
                         setattr(source, attr, val)
 
             # Initialize magnitudes and errors
-            if self.mag_mapping:
-                for mag, item in self.mag_mapping.items():
+            if getattr(self, 'mags', None):
+                for mag, item in self.mags.items():
+                    if item is None:
+                        continue
                     if isinstance(item, str) or isinstance(item, type(u'')):
                         mag_col, mag_err_col = item, None
                     else:
@@ -202,8 +194,7 @@ class VizierCatalog(Catalog):
             keywords=[name for name, val in constraints.items() if val is None]
             if constraints else None)
         resp = viz.query_region(
-            SkyCoord(ra=ra_hours, dec=dec_degs, unit=(hour, deg),
-                     frame='fk5'),
+            SkyCoord(ra=ra_hours, dec=dec_degs, unit=(hour, deg), frame='fk5'),
             catalog=viz.catalog, cache=False, **region)
         if resp:
             return self.table_to_sources(resp[0])

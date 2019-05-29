@@ -49,6 +49,13 @@ class Catalog(Resource):
             present in the catalog and catalog magnitudes (in particular,
             aliases for non-standard catalog magnitude names), e.g. {'Open':
             '(3*B + 5*R)/8', "r'": 'rprime'}; used by field cal job
+        mags: mapping between standard magnitude names like 'B', 'V', 'R' for
+            magnitudes present in the catalog and catalog-specific magnitude
+            names or pairs of magnitude and its error; the value can be null
+            if there is no direct correspondence to a catalog magnitude (e.g.
+            if standard magnitudes are derived from catalog magnitudes using
+            certain expressions); the mapping can be used to create
+            catalog-specific constraint expressions
 
     Methods::
         query_objects: return a list of catalog objects with the specified names
@@ -62,7 +69,7 @@ class Catalog(Resource):
     name = String(default=None)
     display_name = String(default=None)
     num_sources = Integer()
-    mags = List(String(), default=[])
+    mags = Dict(keys=String, default={})
     filter_lookup = Dict(keys=String, values=String)
 
     def __init__(self, *args, **kwargs):

@@ -19,10 +19,10 @@ class UCAC5Catalog(VizierCatalog):
     num_sources = 107758513
     vizier_catalog = 'I/340'
     row_limit = 5000
-    col_mapping = {
-        'id': 'SrcIDgaia', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
-    }
-    mag_mapping = {
+    mags = {
         'Open': 'f.mag', 'G': 'Gmag', 'R': 'Rmag', 'J': 'Jmag', 'H': 'Hmag',
         'K': 'Kmag',
+    }
+    col_mapping = {
+        'id': 'SrcIDgaia', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
     }

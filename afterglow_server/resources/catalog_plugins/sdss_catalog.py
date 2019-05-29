@@ -25,7 +25,7 @@ class SDSSCatalog(VizierCatalog):
     col_mapping = {
         'id': 'objID', 'ra_hours': 'ra/15', 'dec_degs': 'dec',
     }
-    mag_mapping = {
+    mags = {
         'u': ('u', 'err_u'), 'g': ('g', 'err_g'), 'r': ('r', 'err_r'),
         'i': ('i', 'err_i'), 'z': ('z', 'err_z'),
     }

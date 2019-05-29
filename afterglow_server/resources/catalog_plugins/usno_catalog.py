@@ -21,11 +21,13 @@ class USNOB1Catalog(VizierCatalog):
     num_sources = 1045175762
     vizier_catalog = 'I/284'
     row_limit = 5000
+    mags = {
+        'B': None, 'R': None, 'B1': 'B1mag', 'B2': 'B2mag', 'R1': 'R1mag',
+        'R2': 'R2mag',
+    }
     col_mapping = {
         'id': 'USNO-B1.0', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
     }
-    mag_mapping = {'B1': 'B1mag', 'B2': 'B2mag', 'R1': 'R1mag', 'R2': 'R2mag'}
-    mags = ['B', 'R', 'B1', 'R1', 'B2', 'R2']
 
     def table_to_sources(self, table):
         """

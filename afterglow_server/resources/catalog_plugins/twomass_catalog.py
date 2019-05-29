@@ -19,14 +19,14 @@ class TwoMASSCatalog(VizierCatalog):
     num_sources = 470992970
     vizier_catalog = 'II/246'
     row_limit = 5000
+    mags = {
+        'J': ('Jmag', 'e_Jmag'), 'H': ('Hmag', 'e_Hmag'),
+        'K': ('Kmag', 'e_Kmag'), 'B': 'Bmag', 'R': 'Rmag',
+    }
     col_mapping = {
         'id': '_2MASS', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
     }
     extra_cols = ['2MASS']  # VizieR returns "2MASS" as "_2MASS"
-    mag_mapping = {
-        'J': ('Jmag', 'e_Jmag'), 'H': ('Hmag', 'e_Hmag'),
-        'K': ('Kmag', 'e_Kmag'), 'B': 'Bmag', 'R': 'Rmag',
-    }
     filter_lookup = {
         'B': '0.1980 + J + (5.2150 + (-2.7785 + '
         '1.7495*(J - K))*(J - K))*(J - K)',

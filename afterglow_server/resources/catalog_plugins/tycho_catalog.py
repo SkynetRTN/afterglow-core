@@ -19,8 +19,8 @@ class Tycho2Catalog(VizierCatalog):
     num_sources = 2539913
     vizier_catalog = 'I/259'
     row_limit = 1000
+    mags = {'B': ('BTmag', 'e_BTmag'), 'V': ('VTmag', 'e_VTmag')}
     col_mapping = {
         'id': '"{:04d}-{:05d}-{}".format(TYC1,TYC2,TYC3)',
         'ra_hours': 'RAmdeg/15', 'dec_degs': 'DEmdeg',
     }
-    mag_mapping = {'B': ('BTmag', 'e_BTmag'), 'V': ('VTmag', 'e_VTmag')}

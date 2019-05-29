@@ -117,8 +117,8 @@ CATALOG_OPTIONS = {}
 #      'col_mapping': {
 #          'id': 'NOMAD1', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
 #      },
-#      'mag_mapping': {'B': 'Bmag', 'V': 'Vmag', 'R': 'Rmag', 'J': 'Jmag',
-#                      'H': 'Hmag', 'K': 'Kmag'},
+#      'mags': {'B': 'Bmag', 'V': 'Vmag', 'R': 'Rmag', 'J': 'Jmag', 'H': 'Hmag',
+#               'K': 'Kmag'},
 #     },
 #     ...
 # ]
