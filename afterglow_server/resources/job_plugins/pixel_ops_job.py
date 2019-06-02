@@ -118,9 +118,7 @@ class PixelOpsJob(Job):
                 for i in range(len(data_files)):
                     local_vars['i'] = i
                     try:
-                        self.handle_expr(
-                            expr, local_vars,
-                            self.file_ids[i] if self.file_ids else None)
+                        self.handle_expr(expr, local_vars, self.file_ids[i])
                     except IndexError:
                         pass
                     except Exception as e:
@@ -140,9 +138,7 @@ class PixelOpsJob(Job):
                 local_vars['img'], local_vars['hdr'] = data_files[i]
 
                 try:
-                    self.handle_expr(
-                        expr, local_vars,
-                        self.file_ids[i] if self.file_ids else None)
+                    self.handle_expr(expr, local_vars, self.file_ids[i])
                 except Exception as e:
                     self.add_error(
                         'Data file ID {}: {}'.format(self.file_ids[i], e))
@@ -201,9 +197,14 @@ class PixelOpsJob(Job):
                         '"{}"'.format(file_id, expr))
 
                 try:
+                    # Create data file in the same session as input data file
+                    # or, if created from expression not involving
                     file_id = create_data_file(
                         adb, None, get_root(self.user_id), res, hdr,
-                        duplicates='append').id
+                        duplicates='append',
+                        session_id=adb.query(SqlaDataFile).get(
+                            file_id).session_id if file_id is not None
+                        else None).id
                     adb.commit()
                 except Exception:
                     adb.rollback()

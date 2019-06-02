@@ -18,8 +18,8 @@ from io import BytesIO
 
 from marshmallow import fields
 from sqlalchemy import (
-    Column, DateTime, Integer, String, create_engine, event, func)
-from sqlalchemy.orm import scoped_session, sessionmaker
+    Column, DateTime, ForeignKey, Integer, String, create_engine, event, func)
+from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 # noinspection PyProtectedMember
 from sqlalchemy.engine import Engine
@@ -62,7 +62,7 @@ except ImportError:
 __all__ = [
     'UnknownDataFileError', 'CannotCreateDataFileDirError',
     'CannotImportFromCollectionAssetError', 'UnrecognizedDataFileError',
-    'MissingWCSError', 'DataFile', 'SqlaDataFile',
+    'MissingWCSError', 'DataFile', 'Session', 'SqlaDataFile', 'SqlaSession',
     'data_files_engine', 'data_files_engine_lock', 'create_data_file',
     'save_data_file', 'get_data_file', 'get_data_file_data',
     'get_data_file_db', 'get_data_file_fits', 'get_data_file_path',
@@ -140,7 +140,7 @@ class DataFile(Resource):
 
     Attributes::
         id: unique integer data file ID; assigned automatically when creating
-            or importing the data file
+            or importing data file into session
         name: data file name; on import, set to the data provider asset name
         width: image width
         height: image height
@@ -156,20 +156,22 @@ class DataFile(Resource):
     """
     __get_view__ = 'data_files'
 
-    id = fields.Integer(default=None)
-    type = fields.String(default=None)
-    name = fields.String(default=None)
-    width = fields.Integer(default=None)
-    height = fields.Integer(default=None)
-    data_provider = fields.String(default=None)
-    asset_path = fields.String(default=None)
-    asset_metadata = fields.Dict(default={})
-    layer = fields.String(default=None)
-    created_on = fields.DateTime(default=None, format='%Y-%m-%d %H:%M:%S')
+    id = fields.Integer(default=None)  # type: int
+    type = fields.String(default=None)  # type: str
+    name = fields.String(default=None)  # type: str
+    width = fields.Integer(default=None)  # type: int
+    height = fields.Integer(default=None)  # type: int
+    data_provider = fields.String(default=None)  # type: str
+    asset_path = fields.String(default=None)  # type: str
+    asset_metadata = fields.Dict(default={})  # type: dict
+    layer = fields.String(default=None)  # type: str
+    created_on = fields.DateTime(
+        default=None, format='%Y-%m-%d %H:%M:%S')  # type: datetime
+    session_id = fields.Integer(default=None)  # type: int
 
     def __init__(self, _obj=None, **kwargs):
         """
-        Create a new data file
+        Create a new data file schema
 
         :param :class:`SqlaDataFile` _obj: SQLA data file returned by database
             query
@@ -177,7 +179,8 @@ class DataFile(Resource):
             from the given keyword=value pairs
         """
         # Extract fields from SQLA object
-        kw = {name: getattr(_obj, name) for name in self._declared_fields
+        kw = {name: getattr(_obj, name, None)
+              for name in self._declared_fields
               if name not in getattr(Resource, '_declared_fields')}
         kw.update(kwargs)
 
@@ -189,6 +192,53 @@ class DataFile(Resource):
         super(DataFile, self).__init__(**kw)
 
 
+class Session(Resource):
+    """
+    JSON-serializable Afterglow session class
+
+    A session is a collection of user's data files. When creating or importing
+    a data file, it is associated with a certain session (by default, if no
+    session ID provided, with the anonymous session that always exists).
+    Sessions are created by the user via the /sessions endpoint. Their main
+    purpose is to provide independent Afterglow UI workspaces; in addition,
+    they may serve as a means to group data files by the client API scripts.
+
+    Attributes::
+        id: unique integer session ID; assigned automatically when creating
+            the session
+        name: unique session name
+        data: arbitrary user data associated with the session
+        data_file_ids: list of data file IDs associated with the session
+    """
+    __get_view__ = 'sessions'
+
+    id = fields.Integer(default=None)  # type: int
+    name = fields.String(default=None)  # type: str
+    data = fields.String()  # type: str
+    data_file_ids = fields.List(
+        fields.Integer(), default=[], dump_only=True)  # type: list
+
+    def __init__(self, _obj=None, **kwargs):
+        """
+        Create a new session schema
+
+        :param :class:`SqlaSession` _obj: SQLA session returned by database
+            query
+        :param kwargs: if `_obj` is not set, initialize the data file fields
+            from the given keyword=value pairs
+        """
+        # Extract fields from SQLA object
+        kw = {name: getattr(_obj, name, None)
+              for name in self._declared_fields
+              if name not in getattr(Resource, '_declared_fields')}
+        kw.update(kwargs)
+
+        # Extract data file IDs
+        kw['data_file_ids'] = [data_file.id for data_file in _obj.data_files]
+
+        super(Session, self).__init__(**kw)
+
+
 Base = declarative_base()
 
 
@@ -197,16 +247,32 @@ class SqlaDataFile(Base):
     __tablename__ = 'data_files'
     __table_args__ = dict(sqlite_autoincrement=True)
 
-    id = Column(Integer, primary_key=True, nullable=False)
-    type = Column(String)
-    name = Column(String)
-    width = Column(Integer)
-    height = Column(Integer)
-    data_provider = Column(String)
-    asset_path = Column(String)
-    asset_metadata = Column(String)
-    layer = Column(String)
-    created_on = Column(DateTime, default=func.now())
+    id = Column(Integer, primary_key=True, nullable=False)  # type: int
+    type = Column(String)  # type: str
+    name = Column(String)  # type: str
+    width = Column(Integer)  # type: int
+    height = Column(Integer)  # type: int
+    data_provider = Column(String)  # type: str
+    asset_path = Column(String)  # type: str
+    asset_metadata = Column(String)  # type: str
+    layer = Column(String)  # type: str
+    created_on = Column(DateTime, default=func.now())  # type: datetime
+    session_id = Column(
+        Integer,
+        ForeignKey('sessions.id', name='fk_sessions_id', ondelete='cascade'),
+        nullable=True, index=True)  # type: int
+
+
+# noinspection PyClassHasNoInit
+class SqlaSession(Base):
+    __tablename__ = 'sessions'
+    __table_args__ = dict(sqlite_autoincrement=True)
+
+    id = Column(Integer, primary_key=True, nullable=False)  # type: int
+    name = Column(String, unique=True, nullable=False)  # type: str
+    data = Column(String, nullable=True, server_default='')  # type: str
+
+    data_files = relationship('SqlaDataFile', backref='session')  # type: list
 
 
 def get_root(user_id):
@@ -259,6 +325,7 @@ def get_data_file_db(user_id):
                 def set_sqlite_pragma(dbapi_connection, _rec):
                     if isinstance(dbapi_connection, sqlite3.Connection):
                         cursor = dbapi_connection.cursor()
+                        cursor.execute('PRAGMA foreign_keys=ON')
                         cursor.execute('PRAGMA journal_mode=WAL')
                         cursor.close()
                 engine = data_files_engine[root] = create_engine(
@@ -281,18 +348,12 @@ def get_data_file_db(user_id):
                     )
                     script = ScriptDirectory.from_config(cfg)
 
-                    def upgrade(rev, _):
-                        # noinspection PyProtectedMember
-                        return script._upgrade_revs('head', rev)
-
+                    # noinspection PyProtectedMember
                     with EnvironmentContext(
-                                cfg,
-                                script,
-                                fn=upgrade,
-                                as_sql=False,
-                                starting_rev=None,
-                                destination_rev='head',
-                                tag=None,
+                                cfg, script, fn=lambda rev, _:
+                                script._upgrade_revs('head', rev),
+                                as_sql=False, starting_rev=None,
+                                destination_rev='head', tag=None,
                             ), engine.connect() as connection:
                         alembic_context.configure(connection=connection)
 
@@ -309,7 +370,7 @@ def get_data_file_db(user_id):
 
 def save_data_file(root, file_id, data, hdr):
     """
-    Save data file to the user's data file directory as an single (image) or
+    Save data file to the user's data file directory as a single (image) or
     double (image + mask) HDU FITS or a primary + table HDU FITS, depending on
     whether the input HDU contains an image or a table
 
@@ -353,7 +414,8 @@ def save_data_file(root, file_id, data, hdr):
 
 
 def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
-                     metadata=None, layer=None, duplicates='ignore'):
+                     metadata=None, layer=None, duplicates='ignore',
+                     session_id=None):
     """
     Create a database entry for a new data file and save it to data file
     directory as an single (image) or double (image + mask) HDU FITS or
@@ -376,6 +438,8 @@ def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
         before: "ignore" (default) = don't re-import the existing data file,
         "overwrite" = re-import the file and replace the existing data file,
         "append" = always import as a new data file
+    :param int | None session_id: optional user session ID; defaults to
+        anonymous session
 
     :return: data file instance
     :rtype: DataFile
@@ -406,6 +470,7 @@ def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
         asset_path=path,
         asset_metadata=json.dumps(metadata) if metadata is not None else None,
         layer=layer,
+        session_id=session_id,
     )
 
     if duplicates in ('ignore', 'overwrite'):
@@ -436,8 +501,32 @@ def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
     return DataFile(sqla_data_file)
 
 
+def remove_data_file(adb, root, id):
+    """
+    Remove the given data file from database and delete all associated disk
+    files
+
+    :param sqlalchemy.orm.session.Session adb: SQLA database session
+    :param str root: user's data file storage root directory
+    :param int id: data file ID
+
+    :return: None
+    """
+    adb.query(SqlaDataFile).filter(SqlaDataFile.id == id).delete()
+    for filename in glob(os.path.join(root, '{}.*'.format(id))):
+        try:
+            os.remove(filename)
+        except Exception as e:
+            app.logger.warn(
+                'Error removing data file "%s" (ID %d) [%s]',
+                filename, id,
+                e.message if hasattr(e, 'message') and e.message
+                else ', '.join(str(arg) for arg in e.args) if e.args
+                else e)
+
+
 def import_data_file(adb, root, provider_id, asset_path, asset_metadata, fp,
-                     name, duplicates='ignore'):
+                     name, duplicates='ignore', session_id=None):
     """
     Create data file(s) from a (possibly multi-layer) non-collection data
     provider asset or from an uploaded file
@@ -455,6 +544,8 @@ def import_data_file(adb, root, provider_id, asset_path, asset_metadata, fp,
         before: "ignore" (default) = don't re-import the existing data file,
         "overwrite" = re-import the file and replace the existing data file,
         "append" = always import as a new data file
+    :param int | None session_id: optional user session ID; defaults to
+        anonymous session
 
     :return: list of DataFile instances created/updated
     :rtype: list[DataFile]
@@ -524,7 +615,7 @@ def import_data_file(adb, root, provider_id, asset_path, asset_metadata, fp,
 
                 all_data_files.append(create_data_file(
                     adb, fullname, root, hdu.data, hdu.header, provider_id,
-                    asset_path, asset_metadata, layer, duplicates))
+                    asset_path, asset_metadata, layer, duplicates, session_id))
 
     except errors.AfterglowError:
         raise
@@ -655,7 +746,7 @@ def import_data_file(adb, root, provider_id, asset_path, asset_metadata, fp,
             # Store FITS image bottom to top
             all_data_files.append(create_data_file(
                 adb, fullname, root, data[::-1], hdr, provider_id, asset_path,
-                asset_metadata, layer, duplicates))
+                asset_metadata, layer, duplicates, session_id))
 
     return all_data_files
 
@@ -1025,6 +1116,31 @@ def make_data_response(data, status_code=200):
     raise errors.NotAcceptedError(accepted_mimetypes=accepted_mimetypes)
 
 
+def _get_session_id(adb):
+    """
+    Helper function used by resource handlers to retrieve session ID from
+    request arguments and check that the session (if any) exists
+
+    :param sqlalchemy.orm.session.Session adb: SQLA database session
+
+    :return: session ID or None if none supplied
+    :rtype: int | None
+    """
+    session_id = request.args.get('session_id')
+    if session_id is None:
+        return
+
+    session = adb.query(SqlaSession).get(session_id)
+    if session is None:
+        session = adb.query(SqlaSession).filter(
+            SqlaSession.name == session_id).one_or_none()
+    if session is None:
+        raise errors.ValidationError(
+            'session_id', 'Unknown session "{}"'.format(session_id),
+            404)
+    return session.id
+
+
 resource_prefix = url_prefix + 'data-files/'
 
 
@@ -1035,31 +1151,35 @@ def data_files(id=None):
     """
     Return, create, update, or delete data file(s)
 
-    GET /data-files
-        - return a list of all user's data files
+    GET /data-files?session_id=...
+        - return a list of all user's data files associated with the given
+          session or with the default anonymous session if unspecified
 
     GET /data-files/[id]
         - return a single data file with the given ID
 
-    POST /data-files?name=...&width=...&height=...&pixel_value=...
+    POST /data-files?name=...&width=...&height=...&pixel_value=...session_id=...
         - create a single data file of the given width and height, with data
-          values set to pixel_value (0 by default)
+          values set to pixel_value (0 by default); associate with the given
+          session (anonymous if not set)
 
-    POST /data-files?name=...
-        - import data file from the request body
+    POST /data-files?name=...&session_id=...
+        - import data file from the request body to the given session
 
     POST /data-files?provider_id=...&path=...&duplicates=...&recurse=...
-        - import file(s) from a data provider asset at the given path; if the
-          path identifies a collection asset of a browseable data provider,
-          import all non-collection child assets (and, optionally, all
-          collection assets too if recurse=1); the `duplicates` argument defines
-          the import behavior in the case when a certain non-collection asset
-          was already imported: "ignore" (default) = skip already imported
-          assets, "overwrite" = re-import, "append" = always create a new data
-          file; multiple asset paths can be passed as a JSON list
+                     session_id=...
+        - import file(s) to the given session (anonymous by default) from a data
+          provider asset at the given path; if the path identifies a collection
+          asset of a browseable data provider, import all non-collection child
+          assets (and, optionally, all collection assets too if recurse=1);
+          the `duplicates` argument defines the import behavior in the case when
+          a certain non-collection asset was already imported: "ignore"
+          (default) = skip already imported assets, "overwrite" = re-import,
+          "append" = always create a new data file; multiple asset paths can
+          be passed as a JSON list
 
-    PUT /data-files/[id]?name=...
-        - rename data file
+    PUT /data-files/[id]?name=...&session_id=...
+        - rename data file or reassign to different session
 
     DELETE /data-files/[id]
         - delete the given data file
@@ -1088,9 +1208,11 @@ def data_files(id=None):
 
     if request.method == 'GET':
         if id is None:
-            # List all data files
+            # List all data files for the given session
             return json_response(
-                [DataFile(data_file) for data_file in adb.query(SqlaDataFile)])
+                [DataFile(data_file)
+                 for data_file in adb.query(SqlaDataFile).filter(
+                    SqlaDataFile.session_id == _get_session_id(adb))])
 
         # Return specific data file resource
         return json_response(DataFile(data_file))
@@ -1100,6 +1222,8 @@ def data_files(id=None):
         all_data_files = []
 
         try:
+            session_id = _get_session_id(adb)
+
             if request.args.get('provider_id') is None and \
                     request.args.get('width') is not None and \
                     request.args.get('height') is not None:
@@ -1134,7 +1258,8 @@ def data_files(id=None):
                         data += pixel_value
 
                 all_data_files.append(create_data_file(
-                    adb, name, root, data, duplicates='append'))
+                    adb, name, root, data, duplicates='append',
+                    session_id=session_id))
             else:
                 # Import data file from the specified provider
                 import_params = request.args.to_dict()
@@ -1145,7 +1270,7 @@ def data_files(id=None):
                     all_data_files += import_data_file(
                         adb, root, None, None, import_params,
                         BytesIO(request.data), import_params.get('name'),
-                        duplicates)
+                        duplicates, session_id=session_id)
                 else:
                     # Import data from the given data provider
                     try:
@@ -1177,7 +1302,7 @@ def data_files(id=None):
                         return import_data_file(
                             adb, root, provider_id, asset.path, asset.metadata,
                             BytesIO(provider.get_asset_data(asset.path)),
-                            asset.name, duplicates)
+                            asset.name, duplicates, session_id=session_id)
 
                     if not isinstance(asset_path, list):
                         try:
@@ -1200,30 +1325,22 @@ def data_files(id=None):
     if request.method == 'PUT':
         # Update data file
         name = request.args.get('name')
-        if name:
-            try:
+        session_id = _get_session_id(adb)
+        try:
+            if name:
                 data_file.name = name
-                adb.commit()
-            except Exception:
-                adb.rollback()
-                raise
+            data_file.session_id = session_id
+            adb.commit()
+        except Exception:
+            adb.rollback()
+            raise
 
         return json_response(DataFile(data_file))
 
     if request.method == 'DELETE':
         # Delete data file
         try:
-            adb.query(SqlaDataFile).filter(SqlaDataFile.id == id).delete()
-            for filename in glob(os.path.join(root, '{}.*'.format(id))):
-                try:
-                    os.remove(filename)
-                except Exception as e:
-                    app.logger.warn(
-                        'Error removing data file "%s" (ID %d) [%s]',
-                        filename, id,
-                        e.message if hasattr(e, 'message') and e.message
-                        else ', '.join(str(arg) for arg in e.args) if e.args
-                        else e)
+            remove_data_file(adb, root, id)
             adb.commit()
         except Exception:
             adb.rollback()
@@ -1543,3 +1660,98 @@ def data_files_sonification(id):
 
     # Could not send sonification in any of the formats supported by the client
     raise errors.NotAcceptedError(accepted_mimetypes=accepted_mimetypes)
+
+
+@app.route(url_prefix + 'sessions', methods=['GET', 'POST'])
+@app.route(url_prefix + 'sessions/<id>', methods=['GET', 'PUT', 'DELETE'])
+@auth_required('user')
+def sessions(id=None):
+    """
+    Return, create, update, or delete session(s)
+
+    GET /sessions
+        - return all user's sessions
+
+    GET /sessions/[id]
+        - return the given session info by ID or name
+
+    POST /sessions?name=...&data=...
+        - create a new session with the given name and optional user data
+
+    PUT /sessions/[id]?name=...&data=...
+        - rename session with the given ID or name or change session data
+
+    DELETE /sessions/[id]
+        - delete the given session
+
+    :param int | str id: session ID or name
+
+    :return:
+        GET: JSON response containing the list of serialized session objects
+            when no id/name supplied or a single session otherwise
+        POST: JSON-serialized new session object
+        PUT: JSON-serialized updated session object
+        DELETE: empty response
+    :rtype: flask.Response | str
+    """
+    adb = get_data_file_db(current_user.id)
+
+    if id is not None:
+        # When getting, updating, or deleting specific session, check that it
+        # exists
+        session = adb.query(SqlaSession).get(id)
+        if session is None:
+            session = adb.query(SqlaSession).filter(
+                SqlaSession.name == id).one_or_none()
+        if session is None:
+            raise errors.ValidationError(
+                'id', 'Unknown session "{}"'.format(id), 404)
+    else:
+        session = None
+
+    if request.method == 'GET':
+        if session is None:
+            # List all sessions
+            return json_response(
+                [Session(session) for session in adb.query(SqlaSession)])
+
+        # Return specific session resource
+        return json_response(Session(session))
+
+    if request.method == 'POST':
+        # Create session
+        if not request.args.get('name'):
+            raise errors.MissingFieldError('name')
+        try:
+            session = SqlaSession(**request.args.to_dict())
+            adb.add(session)
+            adb.commit()
+        except Exception:
+            adb.rollback()
+            raise
+        return json_response(Session(session), 201)
+
+    if request.method == 'PUT':
+        # Rename session
+        try:
+            for name, val in request.args.items():
+                setattr(session, name, val)
+            adb.commit()
+        except Exception:
+            adb.rollback()
+            raise
+        return json_response(Session(session))
+
+    if request.method == 'DELETE':
+        # Delete session and all its data files
+        root = get_root(current_user.id)
+        try:
+            for file_id in [data_file.id for data_file in session.data_files]:
+                remove_data_file(adb, root, file_id)
+            adb.query(SqlaSession).filter(
+                SqlaSession.id == session.id).delete()
+            adb.commit()
+        except Exception:
+            adb.rollback()
+            raise
+        return json_response()
