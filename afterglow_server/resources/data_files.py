@@ -477,6 +477,7 @@ def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
         # Look for an existing data file with the same import parameters
         sqla_data_file = adb.query(SqlaDataFile).filter_by(
             data_provider=provider, asset_path=path, layer=layer,
+            session_id=session_id,
         ).one_or_none()
 
         if sqla_data_file is not None:
