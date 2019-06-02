@@ -19,7 +19,9 @@ def upgrade():
         sqlite_autoincrement=True,
     )
 
-    with op.batch_alter_table('data_files') as batch_op:
+    with op.batch_alter_table(
+            'data_files',
+            table_kwargs=dict(sqlite_autoincrement=True)) as batch_op:
         batch_op.add_column(sa.Column(
             'session_id', sa.Integer(),
             sa.ForeignKey('sessions.id', name='fk_sessions_id',
@@ -27,6 +29,9 @@ def upgrade():
 
 
 def downgrade():
-    op.drop_column('data_files', 'session_id')
+    with op.batch_alter_table(
+            'data_files',
+            table_kwargs=dict(sqlite_autoincrement=True)) as batch_op:
+        batch_op.drop_column('session_id')
 
     op.drop_table('sessions')
