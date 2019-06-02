@@ -387,8 +387,8 @@ def save_data_file(root, file_id, data, hdr):
         hdr = pyfits.Header()
     hdr['FILE_ID'] = (file_id, 'Afterglow Access data file ID')
 
-    # Convert image data to float32
     if data.dtype.fields is None:
+        # Convert image data to float32
         data = data.astype(numpy.float32)
         if isinstance(data, numpy.ma.MaskedArray) and data.mask.any():
             # Store masked array in two HDUs
@@ -396,16 +396,16 @@ def save_data_file(root, file_id, data, hdr):
                 [pyfits.PrimaryHDU(data.data, hdr),
                  pyfits.ImageHDU(data.mask.astype(numpy.uint8), name='MASK')])
         else:
-            fits = pyfits.PrimaryHDU(data, hdr)
+            # Treat normal arrays with NaN's as masked arrays
+            mask = numpy.isnan(data)
+            if mask.any():
+                fits = pyfits.HDUList(
+                    [pyfits.PrimaryHDU(data, hdr),
+                     pyfits.ImageHDU(mask, name='MASK')])
+            else:
+                fits = pyfits.PrimaryHDU(data, hdr)
     else:
-        # Treat normal arrays with NaN's as masked arrays
-        mask = numpy.isnan(data)
-        if mask.any():
-            fits = pyfits.HDUList(
-                [pyfits.PrimaryHDU(data, hdr),
-                 pyfits.ImageHDU(mask, name='MASK')])
-        else:
-            fits = pyfits.BinTableHDU(data, hdr)
+        fits = pyfits.BinTableHDU(data, hdr)
 
     # Save FITS to data file directory
     fits.writeto(
