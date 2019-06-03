@@ -171,6 +171,18 @@ class UnknownAuthMethodError(AuthError):
     message = 'Unknown authentication method'
 
 
+class CannotSetProtectedUserDataError(errors.AfterglowError):
+    """
+    The user is trying to update protected info
+
+    Extra attributes::
+        attr: read-only user attribute
+    """
+    code = 403
+    subcode = 110
+    message = 'Cannot modify protected user info'
+
+
 # Read/create secret key
 keyfile = os.path.join(
     os.path.abspath(app.config['DATA_ROOT']), 'AFTERGLOW_SERVER_KEY')
@@ -686,14 +698,20 @@ def init_auth():
                     role_objs.append(r)
 
             if request.method == 'POST':
-                if not username:
+                if username is None:
                     raise errors.MissingFieldError(field='username')
+                if not username:
+                    raise errors.ValidationError(
+                        'username', 'Username cannot be empty')
+                if password is None:
+                    raise errors.MissingFieldError(field='password')
+                if not password:
+                    raise errors.ValidationError(
+                        'password', 'Password cannot be empty')
                 if User.query.filter(
                         db.func.lower(User.username) ==
                         username.lower()).count():
                     raise DuplicateUsernameError(username=username)
-                if not password:
-                    raise errors.MissingFieldError(field='password')
                 if not active_admins and active is not None and not active:
                     # The first admin being added must not be inactive
                     raise CannotDeactivateTheOnlyAdminError()
@@ -711,13 +729,15 @@ def init_auth():
 
                 if username is not None:
                     if not username:
-                        raise errors.MissingFieldError(field='username')
+                        raise errors.ValidationError(
+                            'username', 'Username cannot be empty')
                     if User.query.filter(
                             db.func.lower(User.username) ==
                             username.lower(), User.id != id).count():
                         raise DuplicateUsernameError(username=username)
                 if password is not None and not password:
-                    raise errors.MissingFieldError(field='password')
+                    raise errors.ValidationError(
+                        'password', 'Password cannot be empty')
 
                 # At least one active admin must remain when deactivating
                 # admin account or removing admin role from account
@@ -974,17 +994,49 @@ def logout():
 #     )))
 
 
-@app.route(url_prefix + 'auth/user')
+@app.route(url_prefix + 'auth/user', methods=['GET', 'PUT'])
 @auth_required
 def auth_user():
     """
-    Get the currently logged in user info
+    Get the currently logged in user info or update user settings
+
+    GET auth/user
+
+    POST auth/user
+    settings=[user settings string]
+    password=[password string]
 
     :return: currently logged in user info; if auth is disabled, returns empty
         structure; if the user is not logged in, returns HTTP 401
     :rtype: flask.Response
     """
-    return json_response(UserSchema().dump(current_user)[0])
+    if not app.config.get('USER_AUTH'):
+        return json_response(UserSchema().dump(anonymous_user)[0])
+
+    if request.method == 'GET':
+        return json_response(UserSchema().dump(current_user)[0])
+
+    user = User.query.filter_by(username=current_user.username).one_or_none()
+    if user is None:
+        raise NotAuthenticatedError(error_msg='User never logged in')
+    for name, val in request.args.items():
+        if name == 'settings':
+            user.settings = val
+        elif name == 'password':
+            password = request.args['password']
+            if not password:
+                raise errors.ValidationError(
+                    'password', 'Password cannot be empty')
+            from flask_security.utils import hash_password
+            user.password = hash_password(password)
+        else:
+            raise CannotSetProtectedUserDataError(attr=name)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return json_response(UserSchema().dump(user)[0])
 
 
 @app.route(url_prefix + 'auth/user/auth_methods', methods=['POST'])
@@ -1007,5 +1059,9 @@ def auth_user_auth_methods():
         raise errors.ValidationError(
             'method', 'Unknown auth method "{}"'.format(method))
     user.auth_methods = ','.join(set(user.auth_methods.split(',') + [method]))
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
     return json_response()

@@ -247,20 +247,20 @@ class SqlaDataFile(Base):
     __tablename__ = 'data_files'
     __table_args__ = dict(sqlite_autoincrement=True)
 
-    id = Column(Integer, primary_key=True, nullable=False)  # type: int
-    type = Column(String)  # type: str
-    name = Column(String)  # type: str
-    width = Column(Integer)  # type: int
-    height = Column(Integer)  # type: int
-    data_provider = Column(String)  # type: str
-    asset_path = Column(String)  # type: str
-    asset_metadata = Column(String)  # type: str
-    layer = Column(String)  # type: str
-    created_on = Column(DateTime, default=func.now())  # type: datetime
+    id = Column(Integer, primary_key=True, nullable=False)
+    type = Column(String)
+    name = Column(String)
+    width = Column(Integer)
+    height = Column(Integer)
+    data_provider = Column(String)
+    asset_path = Column(String)
+    asset_metadata = Column(String)
+    layer = Column(String)
+    created_on = Column(DateTime, default=func.now())
     session_id = Column(
         Integer,
         ForeignKey('sessions.id', name='fk_sessions_id', ondelete='cascade'),
-        nullable=True, index=True)  # type: int
+        nullable=True, index=True)
 
 
 # noinspection PyClassHasNoInit
@@ -268,9 +268,9 @@ class SqlaSession(Base):
     __tablename__ = 'sessions'
     __table_args__ = dict(sqlite_autoincrement=True)
 
-    id = Column(Integer, primary_key=True, nullable=False)  # type: int
-    name = Column(String, unique=True, nullable=False)  # type: str
-    data = Column(String, nullable=True, server_default='')  # type: str
+    id = Column(Integer, primary_key=True, nullable=False)
+    name = Column(String, unique=True, nullable=False)
+    data = Column(String, nullable=True, server_default='')
 
     data_files = relationship('SqlaDataFile', backref='session')  # type: list
 

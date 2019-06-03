@@ -5,11 +5,21 @@ Afterglow Access Server: user management
 from __future__ import absolute_import, division, print_function
 
 import os
+from datetime import datetime
 from marshmallow import Schema, fields
 from flask_sqlalchemy import SQLAlchemy
 from flask_security import SQLAlchemyUserDatastore, UserMixin, RoleMixin
 
 from . import app
+
+try:
+    # noinspection PyUnresolvedReferences
+    from alembic import config as alembic_config, context as alembic_context
+    from alembic.script import ScriptDirectory
+    from alembic.runtime.environment import EnvironmentContext
+except ImportError:
+    ScriptDirectory = EnvironmentContext = None
+    alembic_config = alembic_context = None
 
 
 __all__ = [
@@ -40,13 +50,14 @@ class Role(db.Model, RoleMixin):
 
 # noinspection PyClassHasNoInit
 class RoleSchema(Schema):
-    id = fields.Integer()
-    name = fields.String()
-    description = fields.String()
+    id = fields.Integer()  # type: int
+    name = fields.String()  # type: str
+    description = fields.String()  # type: str
 
 
 class User(db.Model, UserMixin):
     __tablename__ = 'users'
+    __table_args__ = dict(sqlite_autoincrement=True)
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(255), unique=True)
@@ -61,6 +72,7 @@ class User(db.Model, UserMixin):
         'Role', secondary=user_roles,
         backref=db.backref('users', lazy='dynamic'))
     auth_methods = db.Column(db.String(255), default='')
+    settings = db.Column(db.String(1 << 20), default='')
 
     @property
     def is_admin(self):
@@ -70,18 +82,42 @@ class User(db.Model, UserMixin):
 
 # noinspection PyClassHasNoInit
 class UserSchema(Schema):
-    id = fields.Integer()
-    username = fields.String()
-    email = fields.String()
-    active = fields.Boolean()
-    created_at = fields.DateTime()
-    modified_at = fields.DateTime()
-    roles = fields.List(fields.Nested(RoleSchema, only=['name']))
+    id = fields.Integer()  # type: int
+    username = fields.String()  # type: str
+    email = fields.String()  # type: str
+    active = fields.Boolean()  # type: bool
+    created_at = fields.DateTime()  # type: datetime
+    modified_at = fields.DateTime()  # type: datetime
+    roles = fields.List(fields.Nested(RoleSchema, only=['name']))  # type: list
+    settings = fields.String()  # type: str
 
 
 user_datastore = SQLAlchemyUserDatastore(db, User, Role)
 
-db.create_all()
+# Create data_files table
+if alembic_config is None:
+    # Alembic not available, create table from SQLA metadata
+    db.create_all()
+else:
+    # Create/upgrade tables via Alembic
+    cfg = alembic_config.Config()
+    cfg.set_main_option(
+        'script_location',
+        os.path.abspath(os.path.join(__file__, '..', 'db_migration', 'users'))
+    )
+    script = ScriptDirectory.from_config(cfg)
+
+    # noinspection PyProtectedMember
+    with EnvironmentContext(
+            cfg, script, fn=lambda rev, _:
+            script._upgrade_revs('head', rev),
+            as_sql=False, starting_rev=None,
+            destination_rev='head', tag=None,
+    ), db.engine.connect() as connection:
+        alembic_context.configure(connection=connection)
+
+        with alembic_context.begin_transaction():
+            alembic_context.run_migrations()
 
 # Initialize user roles if missing
 try:
