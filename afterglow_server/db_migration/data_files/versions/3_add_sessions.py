@@ -14,13 +14,16 @@ def upgrade():
     op.create_table(
         'sessions',
         sa.Column('id', sa.Integer(), primary_key=True, nullable=False),
-        sa.Column('name', sa.String(), unique=True, nullable=False),
-        sa.Column('data', sa.String(), nullable=True, server_default=''),
+        sa.Column('name', sa.String, unique=True, nullable=False),
+        sa.Column('data', sa.String, nullable=True, server_default=''),
+        sa.CheckConstraint('length(name) <= 80'),
+        sa.CheckConstraint('data is null or length(data) <= 1048576'),
         sqlite_autoincrement=True,
     )
 
     with op.batch_alter_table(
             'data_files',
+            table_args=(sa.CheckConstraint('length(name) <= 1024'),),
             table_kwargs=dict(sqlite_autoincrement=True)) as batch_op:
         batch_op.add_column(sa.Column(
             'session_id', sa.Integer(),

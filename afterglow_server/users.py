@@ -44,8 +44,12 @@ class Role(db.Model, RoleMixin):
     __tablename__ = 'roles'
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), unique=True)
-    description = db.Column(db.String(255))
+    name = db.Column(
+        db.String, db.CheckConstraint('length(name) <= 80'), nullable=False,
+        unique=True)
+    description = db.Column(
+        db.String,
+        db.CheckConstraint('description is null or length(description) <= 255'))
 
 
 # noinspection PyClassHasNoInit
@@ -60,9 +64,16 @@ class User(db.Model, UserMixin):
     __table_args__ = dict(sqlite_autoincrement=True)
 
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(255), unique=True)
-    email = db.Column(db.String(255))
-    password = db.Column(db.String(255))
+    username = db.Column(
+        db.String,
+        db.CheckConstraint('username is null or length(username) <= 255'),
+        unique=True)
+    email = db.Column(
+        db.String,
+        db.CheckConstraint('email is null or length(email) <= 255'))
+    password = db.Column(
+        db.String,
+        db.CheckConstraint('password is null or length(password) <= 255'))
     active = db.Column(db.Boolean, server_default='1')
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     modified_at = db.Column(
@@ -71,8 +82,15 @@ class User(db.Model, UserMixin):
     roles = db.relationship(
         'Role', secondary=user_roles,
         backref=db.backref('users', lazy='dynamic'))
-    auth_methods = db.Column(db.String(255), default='')
-    settings = db.Column(db.String(1 << 20), default='')
+    auth_methods = db.Column(
+        db.String,
+        db.CheckConstraint(
+            'auth_methods is null or length(auth_methods) <= 255'),
+        default='')
+    settings = db.Column(
+        db.String,
+        db.CheckConstraint('settings is null or length(settings) <= 1048576'),
+        default='')
 
     @property
     def is_admin(self):

@@ -1,5 +1,5 @@
 """Initial revision"""
-from alembic import context, op
+from alembic import op
 import sqlalchemy as sa
 
 
@@ -18,24 +18,24 @@ def upgrade():
         op.create_table(
             'roles',
             sa.Column('id', sa.Integer, primary_key=True),
-            sa.Column('name', sa.String(80), unique=True),
-            sa.Column('description', sa.String(255)),
+            sa.Column('name', sa.String, unique=True),
+            sa.Column('description', sa.String),
         )
 
     if not engine.dialect.has_table(engine, 'users'):
         op.create_table(
             'users',
             sa.Column('id', sa.Integer(), primary_key=True),
-            sa.Column('username', sa.String(255), unique=True),
-            sa.Column('email', sa.String(255)),
-            sa.Column('password', sa.String(255)),
+            sa.Column('username', sa.String, unique=True),
+            sa.Column('email', sa.String),
+            sa.Column('password', sa.String),
             sa.Column('active', sa.Boolean, server_default='1'),
             sa.Column(
                 'created_at', sa.DateTime, default=sa.func.current_timestamp()),
             sa.Column(
                 'modified_at', sa.DateTime, default=sa.func.current_timestamp(),
                 onupdate=sa.func.current_timestamp()),
-            sa.Column('auth_methods', sa.String(255), server_default=''),
+            sa.Column('auth_methods', sa.String, server_default=''),
         )
 
 

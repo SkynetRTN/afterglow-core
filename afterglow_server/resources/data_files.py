@@ -18,7 +18,8 @@ from io import BytesIO
 
 from marshmallow import fields
 from sqlalchemy import (
-    Column, DateTime, ForeignKey, Integer, String, create_engine, event, func)
+    CheckConstraint, Column, DateTime, ForeignKey, Integer, String,
+    create_engine, event, func)
 from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 # noinspection PyProtectedMember
@@ -249,7 +250,7 @@ class SqlaDataFile(Base):
 
     id = Column(Integer, primary_key=True, nullable=False)
     type = Column(String)
-    name = Column(String)
+    name = Column(String, CheckConstraint('length(name) <= 1024'))
     width = Column(Integer)
     height = Column(Integer)
     data_provider = Column(String)
@@ -269,8 +270,12 @@ class SqlaSession(Base):
     __table_args__ = dict(sqlite_autoincrement=True)
 
     id = Column(Integer, primary_key=True, nullable=False)
-    name = Column(String, unique=True, nullable=False)
-    data = Column(String, nullable=True, server_default='')
+    name = Column(
+        String, CheckConstraint('length(name) <= 80'), unique=True,
+        nullable=False)
+    data = Column(
+        String, CheckConstraint('data is null or length(data) <= 1048576'),
+        nullable=True, server_default='')
 
     data_files = relationship('SqlaDataFile', backref='session')  # type: list
 
