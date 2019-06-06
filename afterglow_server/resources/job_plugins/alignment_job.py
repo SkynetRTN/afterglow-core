@@ -190,8 +190,7 @@ class AlignmentJob(Job):
                             file_id = create_data_file(
                                 adb, None, get_root(self.user_id), data, hdr,
                                 duplicates='append',
-                                session_id=adb.query(SqlaDataFile).get(
-                                    file_id).session_id).id
+                                session_id=self.session_id).id
                             adb.commit()
                         except Exception:
                             adb.rollback()

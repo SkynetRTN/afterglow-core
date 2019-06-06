@@ -89,6 +89,8 @@ class Job(AfterglowSchema):
             POST /jobs?type=`name`
         id: unique integer job ID assigned automatically on job creation
         user_id: ID of the user who submitted the job
+        session_id: ID of the client session (None = default anonymous session);
+            new data files will be created with this session ID
         state: current job state, an instance of DbJobState
         result: job result structure, an instance of DbJobResult or its subclass
 
@@ -201,7 +203,7 @@ class Job(AfterglowSchema):
             adb = get_data_file_db(self.user_id)
             self.result.file_id = create_data_file(
                 adb, None, get_root(self.user_id), data, hdr,
-                duplicates='append',
+                duplicates='append', session_id=self.session_id,
             ).id
 
     In addition to the regular data files, a job may create extra "job files"
@@ -235,6 +237,7 @@ class Job(AfterglowSchema):
     id = fields.Integer(default=None)  # type: int
     type = fields.String()  # type: str
     user_id = fields.Integer(default=None)  # type: int
+    session_id = fields.Integer(default=None)  # type: int
     state = fields.Nested(JobState)  # type: JobState
     result = fields.Nested(JobResult)  # type: JobResult
 

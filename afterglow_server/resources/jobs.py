@@ -32,6 +32,7 @@ from flask import Response, request
 from .. import (
     AfterglowSchemaEncoder, app, errors, json_response, plugins, url_prefix)
 from ..auth import auth_required, current_user
+from .data_files import SqlaSession, get_data_file_db
 from . import job_plugins
 
 if sys.version_info.major < 3:
@@ -381,6 +382,7 @@ class DbJob(Base):
     id = Column(Integer, primary_key=True, nullable=False)
     type = Column(String(40), nullable=False, index=True)
     user_id = Column(Integer, index=True)
+    session_id = Column(Integer, nullable=True, index=True)
 
     state = relationship(
         DbJobState, backref='job', uselist=False)
@@ -397,8 +399,8 @@ WINDOWS = sys.platform.startswith('win')
 
 # Message encryption
 job_server_port = None
-job_server_key = None  # type: str
-job_server_iv = None  # type: str
+job_server_key = ''  # type: str
+job_server_iv = ''  # type: str
 
 
 def encrypt(msg):
@@ -768,12 +770,14 @@ class JobRequestHandler(BaseRequestHandler):
                 if method == 'get':
                     job_id = msg.get('id')
                     if job_id is None:
-                        # Return all user's jobs; hide user_id and result
+                        # Return all user's jobs for the given client session;
+                        # hide user_id and result
                         result = [
                             job_types[job.type].__class__(
                                 exclude=['user_id', 'result']).dump(job)[0]
                             for job in session.query(DbJob).filter(
-                                DbJob.user_id == user_id)
+                                DbJob.user_id == user_id,
+                                DbJob.session_id == msg.get('session_id'))
                         ]
                     else:
                         # Return the given job
@@ -791,6 +795,13 @@ class JobRequestHandler(BaseRequestHandler):
                         raise errors.MissingFieldError(field='type')
                     if job_type not in server.db_job_types:
                         raise UnknownJobTypeError(type=msg['type'])
+
+                    session_id = msg.get('session_id')
+                    if session_id is not None and get_data_file_db(user_id).\
+                            query(SqlaSession).get(session_id) is None:
+                        raise errors.ValidationError(
+                            'session_id',
+                            'Unknown session "{}"'.format(session_id), 404)
 
                     # Need an extra worker?
                     with server.pool_lock.acquire_read():
@@ -1366,15 +1377,17 @@ def jobs(id=None):
     """
     Return user's job(s), submit or delete a job
 
-    GET /jobs -> [Job, Job...]
-        - return a list of all user's jobs
+    GET /jobs?session_id=... -> [Job, Job...]
+        - return a list of all user's jobs submitted from the given session
+          (anonymous session by default)
 
     GET /jobs/[id] -> Job
         - return job with the given ID
 
-    POST /jobs?type=...&... -> Job
+    POST /jobs?type=...&session_id=...&... -> Job
         - submit a new job of the given type with the given job-specific
-          parameters
+          parameters; if session_id is provided, the job is associated with
+          the given client session
 
     DELETE /jobs/[id]
         - delete job with the given ID

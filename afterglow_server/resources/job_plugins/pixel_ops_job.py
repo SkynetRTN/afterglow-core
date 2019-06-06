@@ -201,10 +201,7 @@ class PixelOpsJob(Job):
                     # or, if created from expression not involving
                     file_id = create_data_file(
                         adb, None, get_root(self.user_id), res, hdr,
-                        duplicates='append',
-                        session_id=adb.query(SqlaDataFile).get(
-                            file_id).session_id if file_id is not None
-                        else None).id
+                        duplicates='append', session_id=self.session_id).id
                     adb.commit()
                 except Exception:
                     adb.rollback()

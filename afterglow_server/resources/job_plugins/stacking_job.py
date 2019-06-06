@@ -10,7 +10,7 @@ from skylib.combine.stacking import combine
 
 from . import Job, JobResult
 from ..data_files import (
-    SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root)
+    create_data_file, get_data_file, get_data_file_db, get_root)
 from ... import AfterglowSchema, Float
 
 
@@ -112,8 +112,7 @@ class StackingJob(Job):
         try:
             self.result.file_id = create_data_file(
                 adb, None, get_root(self.user_id), fits[0].data, fits[0].header,
-                duplicates='append', session_id=adb.query(SqlaDataFile).get(
-                    self.file_ids[0]).session_id).id
+                duplicates='append', session_id=self.session_id).id
             adb.commit()
         except Exception:
             adb.rollback()
