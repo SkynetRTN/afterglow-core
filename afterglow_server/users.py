@@ -23,7 +23,7 @@ except ImportError:
 
 
 __all__ = [
-    'AnonymousUser', 'Role', 'RoleSchema', 'User', 'UserSchema',
+    'AnonymousUser', 'Role', 'RoleSchema', 'User', 'UserSchema', 'UserClient',
     'db', 'user_datastore',
 ]
 
@@ -108,6 +108,24 @@ class UserSchema(Schema):
     modified_at = fields.DateTime()  # type: datetime
     roles = fields.List(fields.Nested(RoleSchema, only=['name']))  # type: list
     settings = fields.String()  # type: str
+
+
+# Need to place this here because OAuth2 clients are stored in the user database
+# and initialized/migrated by Alembic along with the other user-related tables
+class UserClient(db.Model):
+    """
+    List of clients allowed for the user; stored in the main Afterglow database
+    """
+    __tablename__ = 'user_oauth_clients'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False, index=True)
+    user = db.relationship('User')
+    client_id = db.Column(
+        db.String, db.CheckConstraint('length(client_id) <= 40'),
+        nullable=False, index=True)
 
 
 user_datastore = SQLAlchemyUserDatastore(db, User, Role)

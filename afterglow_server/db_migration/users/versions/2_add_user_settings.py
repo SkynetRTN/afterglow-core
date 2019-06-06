@@ -36,8 +36,18 @@ def upgrade():
             )):
         pass
 
+    with op.batch_alter_table(
+            'user_oauth_clients', recreate='always',
+            table_args=(
+                sa.CheckConstraint('length(client_id) <= 40'),
+            )):
+        pass
+
 
 def downgrade():
+    with op.batch_alter_table('user_oauth_clients', recreate='always'):
+        pass
+
     with op.batch_alter_table('roles', recreate='always'):
         pass
 

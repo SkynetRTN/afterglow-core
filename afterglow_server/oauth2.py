@@ -38,7 +38,7 @@ from flask import redirect, request
 from flask_oauthlib.provider import OAuth2Provider
 
 from . import app, errors, json_response, url_prefix
-from .users import User, db
+from .users import User, UserClient, db
 from .auth import auth_required, authenticate, create_token, current_user
 
 if sys.version_info.major < 3:
@@ -131,20 +131,6 @@ class Client(object):
 
         if self.description is None:
             self.description = self.name
-
-
-class UserClient(db.Model):
-    """
-    List of clients allowed for the user; stored in the main Afterglow database
-    """
-    __tablename__ = 'user_oauth_clients'
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(
-        db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
-        nullable=False, index=True)
-    user = db.relationship('User')
-    client_id = db.Column(db.String(40), nullable=False, index=True)
 
 
 Base = declarative_base()
@@ -242,8 +228,6 @@ def init_oauth():
 
     for client_def in app.config['OAUTH_CLIENTS']:
         oauth_clients[client_def.get('client_id')] = Client(**client_def)
-
-    UserClient.metadata.create_all(bind=db.engine)
 
     memory_engine = create_engine(
         'sqlite://', connect_args=dict(check_same_thread=False),
