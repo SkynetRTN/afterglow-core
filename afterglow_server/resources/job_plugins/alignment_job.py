@@ -174,8 +174,15 @@ class AlignmentJob(Job):
 
                     # Copy WCS from reference image if any
                     if ref_wcs is not None:
+                        # Preserve epoch of observation
+                        orig_kw = {
+                            name: (hdr[name], hdr.comments[name])
+                            if hdr.comments[name] else hdr[name]
+                            for name in ('DATE-OBS', 'MJD-OBS') if name in hdr
+                        }
                         hdr.update(ref_wcs.to_header())
-
+                        for name, val in orig_kw.items():
+                            hdr[name] = val
                 else:
                     data, hdr = ref_data, ref_hdr
 
