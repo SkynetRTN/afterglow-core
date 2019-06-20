@@ -56,6 +56,8 @@ class IFWHM(AfterglowSchema):
 
 
 class IPhotometry(AfterglowSchema):
+    flux = Float()  # type: float
+    flux_error_error = Float()  # type: float
     mag = Float()  # type: float
     mag_error = Float()  # type: float
 
@@ -166,6 +168,8 @@ class PhotometryData(SourceExtractionData, IPhotometry):
 
         data.x = row['x']
         data.y = row['y']
+        data.flux = row['flux']
+        data.flux_error = row['flux_err']
         data.mag = row['mag']
         data.mag_error = row['mag_err']
 
