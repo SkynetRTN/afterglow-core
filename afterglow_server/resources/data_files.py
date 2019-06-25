@@ -26,6 +26,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import Engine
 import numpy
 import astropy.io.fits as pyfits
+from astropy.wcs import WCS
 from flask import Response, request
 
 from skylib.calibration.background import estimate_background
@@ -1371,9 +1372,8 @@ def data_files_header(id):
         [{"key": key, "value": value, "comment": comment}, ...]
         containing the data file header cards in the order they appear in the
         underlying FITS file header
-    :rtype: flask.Response | str
+    :rtype: flask.Response
     """
-
     if request.method == 'GET':
         hdr = get_data_file(current_user.id, id)[1]
     else:
@@ -1386,6 +1386,60 @@ def data_files_header(id):
     return json_response([
         dict(key=key, value=value, comment=hdr.comments[i])
         for i, (key, value) in enumerate(hdr.items())])
+
+
+@app.route(resource_prefix + '<int:id>/wcs', methods=['GET', 'PUT'])
+@auth_required('user')
+def data_files_wcs(id):
+    """
+    Return or update data file WCS
+
+    GET /data-files/[id]/wcs
+
+    PUT /data-files/[id]/wcs?keyword=value...
+        - must contain all relevant WCS info; the previous WCS (CDn_m, PCn_m,
+          CDELTn, and CROTAn) is removed
+
+    :param int id: data file ID
+
+    :return: JSON-serialized structure
+        [{"key": key, "value": value, "comment": comment}, ...]
+        containing the data file header cards pertaining to the WCS in the order
+        they are returned by WCSLib; empty if the existing or updated FITS
+        header has no valid WCS info
+    :rtype: flask.Response
+    """
+    if request.method == 'GET':
+        hdr = get_data_file(current_user.id, id)[1]
+    else:
+        with pyfits.open(get_data_file_path(current_user.id, id),
+                         'update') as fits:
+            hdr = fits[0].header
+            for name in (
+                    'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+                    'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2',
+                    'CDELT1', 'CDELT2', 'CROTA1', 'CROTA2'):
+                try:
+                    del hdr[name]
+                except KeyError:
+                    pass
+            for name, val in request.args.items():
+                hdr[name] = val
+
+    wcs_hdr = None
+    # noinspection PyBroadException
+    try:
+        wcs = WCS(hdr)
+        if wcs.has_celestial:
+            wcs_hdr = wcs.to_header()
+    except Exception:
+        pass
+
+    if wcs_hdr:
+        return json_response([
+            dict(key=key, value=value, comment=wcs_hdr.comments[i])
+            for i, (key, value) in enumerate(wcs_hdr.items())])
+    return json_response([])
 
 
 @app.route(resource_prefix + '<int:id>/hist')
