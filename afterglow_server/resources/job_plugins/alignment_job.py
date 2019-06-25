@@ -180,6 +180,19 @@ class AlignmentJob(Job):
                             if hdr.comments[name] else hdr[name]
                             for name in ('DATE-OBS', 'MJD-OBS') if name in hdr
                         }
+
+                        # Remove the possible alternative WCS representations
+                        # to avoid WCS compatibility issues and make the WCS
+                        # consistent
+                        for name in (
+                                'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+                                'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2',
+                                'CDELT1', 'CDELT2', 'CROTA1', 'CROTA2'):
+                            try:
+                                del hdr[name]
+                            except KeyError:
+                                pass
+
                         hdr.update(ref_wcs.to_header())
                         for name, val in orig_kw.items():
                             hdr[name] = val
