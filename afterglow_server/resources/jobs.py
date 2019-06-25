@@ -412,7 +412,7 @@ def encrypt(msg):
     :return: encrypted message or original message if encryption is not enabled
     :rtype: bytes
     """
-    if job_server_key is None:
+    if not job_server_key:
         return msg
     return AES.new(job_server_key, AES.MODE_CFB, job_server_iv).encrypt(msg)
 
@@ -426,7 +426,7 @@ def decrypt(msg):
     :return: decrypted message or original message if encryption is not enabled
     :rtype: bytes
     """
-    if job_server_key is None:
+    if not job_server_key:
         return msg
     return AES.new(job_server_key, AES.MODE_CFB, job_server_iv).decrypt(msg)
 
