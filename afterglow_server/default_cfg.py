@@ -77,6 +77,7 @@ DEFAULT_DATA_PROVIDER_AUTH = None
 DATA_PROVIDERS = [
     {'name': 'local_disk', 'display_name': 'Workspace', 'root': DATA_ROOT,
      'readonly': False, 'peruser': True, 'quota': 10 << 30},
+    {'name': 'imaging_surveys'},
 ]
 
 

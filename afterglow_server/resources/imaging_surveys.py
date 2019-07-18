@@ -16,7 +16,7 @@ from .. import app, errors, json_response, url_prefix
 from ..auth import auth_required
 
 
-__all__ = []
+__all__ = ['default_size', 'survey_scales']
 
 
 class UnknownSurveyError(errors.AfterglowError):
@@ -271,8 +271,6 @@ def get_imaging_surveys(name=None):
                                        pad=2))
 
     # Query SkyView; a single FITS expected on output
-    for s in ('position', 'survey', 'cache', 'show_progress'):
-        kwargs.pop(s, None)
     try:
         res = SkyView.get_images(
             position, name, cache=False, show_progress=False, **kwargs)
