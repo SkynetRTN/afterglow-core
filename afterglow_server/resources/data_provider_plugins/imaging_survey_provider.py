@@ -62,8 +62,11 @@ class ImagingSurveyDataProvider(DataProvider):
         """
         try:
             survey, position, size = path.split('\\')
-            width, height = size.split(',')
-            width, height = float(width), float(height)
+            if ',' in size:
+                width, height = size.split(',')
+                width, height = float(width), float(height)
+            else:
+                width = height = float(size)
         except (TypeError, ValueError):
             raise AssetNotFoundError(path=path)
         return survey, position, width, height
@@ -81,10 +84,14 @@ class ImagingSurveyDataProvider(DataProvider):
         :return: asset object
         :rtype: DataProviderAsset
         """
+        if width == height:
+            size = str(width)
+        else:
+            size = '{},{}'.format(width, height)
         return DataProviderAsset(
             name='{}_{}'.format(survey, position.replace(' ', '_')),
             collection=False,
-            path='{}\\{}\\{},{}'.format(survey, position, width, height),
+            path='{}\\{}\\{}'.format(survey, position, size),
             metadata={
                 'type': 'FITS', 'survey': survey, 'position': position,
                 'fov_ra': width, 'fov_dec': height,
@@ -132,7 +139,7 @@ class ImagingSurveyDataProvider(DataProvider):
         return kwargs
 
     # noinspection PyShadowingBuiltins
-    def find_assets(self, survey='DSS', ra_hours=None, dec_degs=None,
+    def find_assets(self, path=None, survey='DSS', ra_hours=None, dec_degs=None,
                     object=None, width=None, height=None):
         """
         Return a list of assets matching the given parameters
@@ -140,6 +147,7 @@ class ImagingSurveyDataProvider(DataProvider):
         Returns an empty list if survey is unknown or no imaging data at the
         given FOV; otherwise, returns a single asset
 
+        :param str path: path to the collection asset to search in; ignored
         :param str survey: survey name; should be one of those returned by
             the /imaging-surveys resource; default: DSS
         :param float ra_hours: RA of image center in hours; used in conjunction
@@ -165,10 +173,8 @@ class ImagingSurveyDataProvider(DataProvider):
                 '"ra_hours"/"dec_degs" are mutually exclusive with "object"')
         if object is None and (ra_hours is None or dec_degs is None):
             raise errors.MissingFieldError('ra_hours,dec_degs')
-        if width is None:
-            raise errors.MissingFieldError('width')
-        if height is None:
-            raise errors.MissingFieldError('height')
+        if width is None and height is None:
+            raise errors.MissingFieldError('width,height')
         if ra_hours is not None:
             try:
                 ra_hours = float(ra_hours)
@@ -185,19 +191,26 @@ class ImagingSurveyDataProvider(DataProvider):
             except ValueError:
                 raise errors.ValidationError(
                     'dec_degs', 'Expected -90 <= dec_degs <= 90')
-        try:
-            width = float(width)
-            if width <= 0:
-                raise ValueError()
-        except ValueError:
-            raise errors.ValidationError('width', 'Positive FOV width expected')
-        try:
-            height = float(height)
-            if height <= 0:
-                raise ValueError()
-        except ValueError:
-            raise errors.ValidationError(
-                'height', 'Positive FOV height expected')
+        if width is not None:
+            try:
+                width = float(width)
+                if width <= 0:
+                    raise ValueError()
+            except ValueError:
+                raise errors.ValidationError(
+                    'width', 'Positive FOV width expected')
+        if height is not None:
+            try:
+                height = float(height)
+                if height <= 0:
+                    raise ValueError()
+            except ValueError:
+                raise errors.ValidationError(
+                    'height', 'Positive FOV height expected')
+        if width is None:
+            width = height
+        elif height is None:
+            height = width
 
         # noinspection PyProtectedMember
         if survey not in SkyView._valid_surveys:
@@ -215,8 +228,9 @@ class ImagingSurveyDataProvider(DataProvider):
         # Query SkyView; zero or one result is expected
         # noinspection PyBroadException
         try:
-            res = SkyView.get_image_list(
-                object, **self._get_query_args(survey, width, height))
+            kwargs = self._get_query_args(survey, width, height)
+            kwargs.pop('show_progress')
+            res = SkyView.get_image_list(object, **kwargs)
         except Exception:
             return []
         if not res:
