@@ -396,7 +396,10 @@ def save_data_file(root, file_id, data, hdr):
     if data.dtype.fields is None:
         # Convert image data to float32
         data = data.astype(numpy.float32)
-        if isinstance(data, numpy.ma.MaskedArray) and data.mask.any():
+        if isinstance(data, numpy.ma.MaskedArray) and not data.mask.any():
+            # Empty mask, save as normal array
+            data = data.data
+        if isinstance(data, numpy.ma.MaskedArray):
             # Store masked array in two HDUs
             fits = pyfits.HDUList(
                 [pyfits.PrimaryHDU(data.data, hdr),
