@@ -201,14 +201,13 @@ def get_imaging_surveys(name=None):
         when no name supplied or a single catalog otherwise
     :rtype: flask.Response
     """
-    # noinspection PyProtectedMember
-    valid_surveys = SkyView._valid_surveys
     if name is None:
         # List all surveys
-        return json_response(valid_surveys)
+        return json_response(SkyView.survey_dict)
 
     # Query specific survey: get RA/Dec FOV size
-    if name not in valid_surveys:
+    # noinspection PyProtectedMember
+    if name not in SkyView._valid_surveys:
         raise UnknownSurveyError(survey=name)
     args = request.args.to_dict()
     size = args.pop('size', None)
