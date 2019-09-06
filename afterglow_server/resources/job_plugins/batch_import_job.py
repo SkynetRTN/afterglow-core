@@ -25,7 +25,7 @@ class BatchImportSettings(AfterglowSchema):
     duplicates = String(default='ignore')  # type: str
     name = String(default=None)  # type: str
     path = String()  # type: str
-    recurse = Boolean(default=False)  # type: str
+    recurse = Boolean(default=False)  # type: bool
 
 
 class BatchImportJobResult(JobResult):
