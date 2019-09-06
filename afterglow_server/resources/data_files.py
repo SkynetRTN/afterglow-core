@@ -69,7 +69,7 @@ __all__ = [
     'save_data_file', 'get_data_file', 'get_data_file_data',
     'get_data_file_db', 'get_data_file_fits', 'get_data_file_path',
     'get_exp_length', 'get_gain', 'get_image_time', 'get_phot_cal',
-    'get_root', 'get_subframe',
+    'get_root', 'get_subframe', 'import_data_file',
     'convert_exif_field',
 ]
 
