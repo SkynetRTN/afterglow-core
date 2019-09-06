@@ -22,9 +22,8 @@ __all__ = ['BatchImportJob']
 
 class BatchImportSettings(AfterglowSchema):
     provider_id = String()  # type: str
-    duplicates = String(default='ignore')  # type: str
-    name = String(default=None)  # type: str
     path = String()  # type: str
+    duplicates = String(default='ignore')  # type: str
     recurse = Boolean(default=False)  # type: bool
 
 
