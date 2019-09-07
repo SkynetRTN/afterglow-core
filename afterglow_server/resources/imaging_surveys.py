@@ -9,6 +9,7 @@ from astropy import units as u
 from astropy.coordinates import Angle
 from astroquery.skyview import SkyView
 from flask import Response, request
+from io import BytesIO
 
 from skylib.io.conversion import get_image
 
@@ -184,21 +185,22 @@ def get_imaging_surveys(name=None):
         - return image centered at the given object; name is resolved by SIMBAD
           and NED
 
-    - size: either rectangular image size in arcmins or comma-separated with
+    - size: either rectangular image size in arcmins or comma-separated width
       and height in arcminutes
     - fmt: format of the data returned; default: "raw" - array of raw 32-bit
-      floating-point pixel values, same as /data-files/[id]/pixels; otherwise,
-      should be a format name (case-insensitive) of a particular image format
-      supported by PIL/Pillow or matplotlib (if non-grayscale colormap), e.g.
-      "jpeg" or "png"
+      floating-point pixel values, same as /data-files/[id]/pixels; "fits" -
+      original FITS file as returned by SkyView; otherwise, `fmt`should be
+      a format name (case-insensitive) of a particular image format supported
+      by PIL/Pillow or matplotlib (if non-grayscale colormap), e.g. "jpeg" or
+      "png"
 
-    Other arguments define the visualization parameters for fmt="raw"; see
-    :func:`skylib.io.conversion.get_image`.
+    Other arguments define the visualization parameters for formats other than
+    raw and fits; see :func:`skylib.io.conversion.get_image`.
 
     :param str name: survey name
 
-    :return: JSON response containing the list of serialized catalog objects
-        when no name supplied or a single catalog otherwise
+    :return: binary or JSON response, depending on `fmt`, containing the image
+        retrieved from the given survey
     :rtype: flask.Response
     """
     if name is None:
@@ -278,10 +280,16 @@ def get_imaging_surveys(name=None):
 
     if not res:
         raise NoSurveyDataError(survey=name, position=position)
-    data = res[0][0].data
 
     # Return image data in the requested format
     fmt = args.pop('fmt', 'raw').lower()
+    if fmt == 'fits':
+        buf = BytesIO()
+        res[0].writeto(buf, output_verify='silentfix')
+        return Response(buf.getvalue(), 200, None, 'image/fits')
+
+    data = res[0][0].data
+
     if fmt == 'raw':
         # Return as array of pixels
         accepted_mimetypes = request.headers['Accept']
