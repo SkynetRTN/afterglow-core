@@ -6,13 +6,15 @@ A job plugin must subclass :class:`Job` and implement its run() method.
 
 from __future__ import absolute_import, division, print_function
 
+import sys
 import os
 import errno
+import traceback
 from datetime import datetime
 
 from marshmallow import fields
 
-from ... import AfterglowSchema, DateTime, Float, errors
+from ... import AfterglowSchema, DateTime, Float, app, errors
 
 
 __all__ = ['Job', 'JobResult', 'JobState']
@@ -50,6 +52,12 @@ class JobState(AfterglowSchema):
     progress = Float(default=0)  # type: float
 
     def __init__(self, *args, **kwargs):
+        """
+        Create job state structure
+
+        :param args: see :class:`afterglow_server.AfterglowSchema`
+        :param kwargs: --//--
+        """
         super(JobState, self).__init__(*args, **kwargs)
 
         self.created_on = datetime.utcnow()
@@ -256,7 +264,9 @@ class Job(AfterglowSchema):
         self.type = self.name
 
         # Initialize to default state and result
+        # noinspection PyTypeChecker
         self.state = {}
+        # noinspection PyTypeChecker
         self.result = {}
 
     def run(self):
@@ -291,6 +301,9 @@ class Job(AfterglowSchema):
 
         :return: None
         """
+        if app.config.get('DEBUG'):
+            msg = '{}\nTraceback (most recent call last):\n{}'.format(
+                msg, traceback.format_tb(sys.exc_info()[2]))
         self.result.errors.append(msg)
         self._queue.put(dict(
             id=self.id,
