@@ -68,11 +68,11 @@ class BatchImportJob(Job):
                             [recursive_import(child_asset.path, depth + 1)
                              for child_asset in provider.get_child_assets(
                                 asset.path)], [])
-                    return import_data_file(
+                    return [import_data_file(
                         adb, root, provider.id, asset.path, asset.metadata,
                         BytesIO(provider.get_asset_data(asset.path)),
                         asset.name, settings.duplicates,
-                        session_id=self.session_id)
+                        session_id=self.session_id)]
 
                 if not isinstance(asset_path, list):
                     try:
