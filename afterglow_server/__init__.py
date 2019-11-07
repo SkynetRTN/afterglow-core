@@ -137,7 +137,7 @@ class AfterglowSchema(Schema):
                     setattr(self, name, val)
 
         for name, val in kwargs.items():
-            if val is not None:
+            if name in self._declared_fields and val is not None:
                 setattr(self, name, val)
 
         # Initialize the missing fields with their defaults
