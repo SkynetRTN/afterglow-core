@@ -7,6 +7,7 @@ Job types are defined in afterglow_server.job_plugins.
 from __future__ import absolute_import, division, print_function
 import sys
 import os
+import traceback
 import shutil
 import errno
 import ctypes
@@ -1003,6 +1004,8 @@ class JobRequestHandler(BaseRequestHandler):
                 result.update(e.payload)
             if hasattr(e, 'subcode') and e.subcode:
                 result['subcode'] = int(e.subcode)
+            if getattr(e, 'code', 400) == 500:
+                result['traceback'] = traceback.format_tb(sys.exc_traceback)
             http_status = int(e.code) if hasattr(e, 'code') and e.code else 400
 
         except Exception as e:
@@ -1014,6 +1017,7 @@ class JobRequestHandler(BaseRequestHandler):
                 else ', '.join(str(arg) for arg in e.args) if e.args
                 else str(e),
                 'subcode': JobServerError.subcode,
+                'traceback': traceback.format_tb(sys.exc_traceback),
             }
             http_status = JobServerError.code
 

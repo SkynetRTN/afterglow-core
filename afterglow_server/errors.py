@@ -35,6 +35,9 @@ def afterglow_error_handler(e):
     if hasattr(e, 'subcode') and e.subcode:
         payload['subcode'] = int(e.subcode)
 
+    if getattr(e, 'code', 400) == 500:
+        payload['traceback'] = traceback.format_tb(sys.exc_traceback),
+
     response = json_response(
         payload, int(e.code) if hasattr(e, 'code') and e.code else 400)
     response.mimetype = 'application/json'
