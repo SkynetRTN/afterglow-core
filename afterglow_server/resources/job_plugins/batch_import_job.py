@@ -39,7 +39,8 @@ class BatchImportJob(Job):
     description = 'Batch Data File Import'
     result = Nested(
         BatchImportJobResult, default={})  # type: BatchImportJobResult
-    settings = List(Nested(BatchImportSettings), default={})  # type: list
+    settings = List(
+        Nested(BatchImportSettings, default={}), default=[])  # type: list
     session_id = Integer(default=None)  # type: int
 
     def run(self):
@@ -68,7 +69,7 @@ class BatchImportJob(Job):
                             [recursive_import(child_asset.path, depth + 1)
                              for child_asset in provider.get_child_assets(
                                 asset.path)], [])
-                    return [import_data_file(
+                    return [f.id for f in import_data_file(
                         adb, root, provider.id, asset.path, asset.metadata,
                         BytesIO(provider.get_asset_data(asset.path)),
                         asset.name, settings.duplicates,
