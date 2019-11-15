@@ -12,7 +12,7 @@ import base64
 import json
 
 from flask import abort, redirect, request, session, url_for
-from flask_oauthlib.client import OAuth
+from authlib.integrations.flask_client import OAuth
 
 from .. import app, auth, errors, url_prefix
 from . import AuthPlugin
@@ -52,12 +52,16 @@ class ClientOAuthPlugin(AuthPlugin):
         :param bool register_users: automatically register authenticated users
             if missing from the local user database; overrides
             REGISTER_AUTHENTICATED_USERS
-        :param kwargs: extra keyword arguments to :func:`OAuth.remote_app`
+        :param kwargs: extra keyword arguments to :func:`OAuth.register`
         """
         super(ClientOAuthPlugin, self).__init__(
             id=id, description=description, register_users=register_users)
 
-        self.remote_app = OAuth().remote_app(id, **kwargs)
+        self.remote_app = OAuth(app).register(
+            id,
+            fetch_token=lambda *_, **__:
+            session.get('{}_token'.format(self.id)),
+            **kwargs)
 
         # Register callback handler
         @app.route(url_prefix + 'auth/{}/authorize'.format(self.id),
@@ -65,7 +69,7 @@ class ClientOAuthPlugin(AuthPlugin):
         def authorized():
             orig_url = request.args.get('state', url_for('login'))
 
-            resp = self.remote_app.authorized_response()
+            resp = self.remote_app.authorize_access_token()
             if resp is None:
                 # Access denied by user, return to the original url
                 return redirect(orig_url)
@@ -87,11 +91,6 @@ class ClientOAuthPlugin(AuthPlugin):
 
             # Redirect to the original request URL
             return redirect(orig_url)
-
-        # Register token getter for remote API communication
-        @self.remote_app.tokengetter
-        def get_token(*_, **__):
-            return session.get('{}_token'.format(self.id))
 
     def get_user(self):
         """
@@ -127,8 +126,8 @@ class ClientOAuthPlugin(AuthPlugin):
 
         # Tell the caller to redirect to the authorization URL immediately;
         # pass the target redirect URL as state
-        abort(self.remote_app.authorize(
-            callback=url_for('{}_authorized'.format(self.id), _external=True),
+        abort(self.remote_app.authorize_redirect(
+            url_for('{}_authorized'.format(self.id), _external=True),
             state=target_url))
 
     def callback(self, resp):
@@ -138,7 +137,7 @@ class ClientOAuthPlugin(AuthPlugin):
         must return None
 
         :param dict resp: result of calling
-            :func:`flask_oauthlib.client.OAuthRemoteApp.authorized_response`
+            :func:`authlib.client.OAuthRemoteApp.authorized_response`
 
         :return: username of the authorized user
         :rtype: str
@@ -197,7 +196,7 @@ class GoogleClientOAuthPlugin(ClientOAuthPlugin):
         Afterglow username
 
         :param dict resp: result of calling
-            :func:`flask_oauthlib.client.OAuthRemoteApp.authorized_response`
+            :func:`authlib.client.OAuthRemoteApp.authorized_response`
 
         :return: username of the authorized user
         :rtype: str

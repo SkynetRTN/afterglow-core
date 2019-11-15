@@ -29,13 +29,17 @@ time.
 from __future__ import absolute_import, division, print_function
 
 import sys
-from datetime import datetime, timedelta
-from sqlalchemy import Column, DateTime, Integer, String, Text, create_engine
+import time
+from sqlalchemy import Column, Integer, create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import StaticPool
 from flask import redirect, request
-from flask_oauthlib.provider import OAuth2Provider
+from authlib.oauth2.rfc6749 import ClientMixin
+from authlib.oauth2.rfc6749 import grants
+from authlib.integrations.sqla_oauth2 import (
+    OAuth2AuthorizationCodeMixin, OAuth2TokenMixin, create_save_token_func)
+from authlib.integrations.flask_oauth2 import AuthorizationServer
 
 from . import app, errors, json_response, url_prefix
 from .users import User, UserClient, db
@@ -50,7 +54,7 @@ else:
 
 
 __all__ = [
-    'init_oauth', 'oauth', 'oauth_clients', 'create_access_token',
+    'init_oauth', 'oauth_clients', 'create_access_token',
     'create_refresh_token',
 ]
 
@@ -79,7 +83,7 @@ class MissingClientIdError(errors.AfterglowError):
     message = 'Missing client ID'
 
 
-class Client(object):
+class OAuth2Client(ClientMixin):
     """
     OAuth2 client definition class
     """
@@ -87,15 +91,11 @@ class Client(object):
     description = None
     client_id = None
     client_secret = None
-    is_confidential = True
     redirect_uris = None
     consent_uri = None
     default_scopes = ('email',)
+    token_endpoint_auth_method = 'client_secret_basic'
     allowed_grant_types = ('authorization_code', 'refresh_token',)
-
-    @property
-    def default_redirect_uri(self):
-        return self.redirect_uris[0]
 
     def __init__(self, **kwargs):
         """
@@ -111,9 +111,14 @@ class Client(object):
 
             Optional attributes::
                 - description: client description
-                - is_confidential: True for confidential (default), False for
-                    public clients
                 - default_scopes: list of default scopes of the client
+                - token_endpoint_auth_method: RFC7591 token endpoint
+                    authentication method: "none" (public client),
+                    "client_secret_post" (client uses the HTTP POST parameters),
+                    or "client_secret_basic" (client uses basic HTTP auth)
+                - allowed_grant_types: list of allowed grant types, including
+                    "authorization_code", "implicit", "client_credentials", and
+                    "password"
         """
         for name, val in kwargs.items():
             setattr(self, name, val)
@@ -129,8 +134,94 @@ class Client(object):
         if not self.consent_uri:
             raise ValueError('Missing OAuth consent URI')
 
+        if self.token_endpoint_auth_method not in (
+                'none', 'client_secret_post', 'client_secret_basic'):
+            raise ValueError('Invalid token endpoint auth method')
+
         if self.description is None:
             self.description = self.name
+
+    def get_client_id(self):
+        """Return ID of the client
+
+        :rtype: str
+        """
+        return self.client_id
+
+    def get_default_redirect_uri(self):
+        """Return client default redirect_uri
+
+        :rtype: str
+        """
+        return self.redirect_uris[0]
+
+    def get_allowed_scope(self, scope):
+        """Return requested scopes which are supported by this client
+
+        :param str scope: requested scope(s), multiple scopes are separated
+            by spaces
+
+        :rtype: str
+        """
+        return ' '.join({s for s in scope.split() if s in self.default_scopes})
+
+    def check_redirect_uri(self, redirect_uri):
+        """Validate redirect_uri parameter in authorization endpoints
+
+        :param str redirect_uri: URL string for redirecting.
+
+        :return: True if valid redirect URI
+        :rtype: bool
+        """
+        return redirect_uri in self.redirect_uris
+
+    def has_client_secret(self):
+        """Does the client has a secret?
+
+        :rtype: bool
+        """
+        return bool(self.client_secret)
+
+    def check_client_secret(self, client_secret):
+        """Validate client_secret
+
+        :param str client_secret: client secret
+
+        :return: True if client secret matches the stored value
+        :rtype: bool
+        """
+        return client_secret == self.client_secret
+
+    def check_token_endpoint_auth_method(self, method):
+        """Validate token endpoint auth method
+
+        :param str method: token endpoint auth method
+
+        :return: True if the given token endpoint auth method matches the one
+            for the server
+        :rtype: bool
+        """
+        return method == self.token_endpoint_auth_method
+
+    def check_response_type(self, response_type):
+        """Check that the client can handle the given response_type
+
+        :param str response_type: requested response_type
+
+        :return: True if a valid response type
+        :rtype: bool
+        """
+        return response_type in ('code', 'token')
+
+    def check_grant_type(self, grant_type):
+        """Check that the client can handle the given grant_type
+
+        :param str grant_type: requested grant type
+
+        :return: True if grant type is supported by client
+        :rtype: bool
+        """
+        return grant_type in self.allowed_grant_types
 
 
 Base = declarative_base()
@@ -138,77 +229,93 @@ memory_engine = None
 memory_session = None
 
 
-class Grant(Base):
-    """
-    Grant object; stored in the memory database
-    """
-    __tablename__ = 'oauth_grants'
+class OAuth2AuthorizationCode(Base, OAuth2AuthorizationCodeMixin):
+    __tablename__ = 'oauth_codes'
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, nullable=False)
-    client_id = Column(String(40), nullable=False)
-    code = Column(String(255), index=True, nullable=False)
-    redirect_uri = Column(Text)
-    expires = Column(DateTime)
-    _scopes = Column('scopes', Text)
-
-    def delete(self):
-        try:
-            memory_session.delete(self)
-            memory_session.commit()
-        except Exception:
-            memory_session.rollback()
-            raise
-        return self
 
     @property
     def user(self):
         return User.query.get(self.user_id)
 
-    @property
-    def scopes(self):
-        if self._scopes:
-            return self._scopes.split()
-        return []
 
-
-class Token(Base):
+class OAuth2Token(Base, OAuth2TokenMixin):
     """
     Token object; stored in the memory database
     """
     __tablename__ = 'oauth_tokens'
 
     id = Column(Integer, primary_key=True)
-    client_id = Column(String(40), nullable=False)
     user_id = Column(Integer, nullable=False)
-    token_type = Column(Text)
-    access_token = Column(Text, unique=True)
-    refresh_token = Column(Text, unique=True)
-    expires = Column(DateTime)
-    _scopes = Column('scopes', Text)
-
-    def delete(self):
-        try:
-            memory_session.delete(self)
-            memory_session.commit()
-        except Exception:
-            memory_session.rollback()
-            raise
-        return self
 
     @property
     def user(self):
         return User.query.get(self.user_id)
 
-    @property
-    def scopes(self):
-        if self._scopes:
-            return self._scopes.split()
-        return []
+    def is_refresh_token_active(self):
+        if self.revoked:
+            return False
+        expires_at = self.issued_at + app.config.get('REFRESH_TOKEN_EXPIRES')
+        return expires_at >= time.time()
 
 
-oauth = None
+class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
+    def save_authorization_code(self, code, req):
+        """Save authorization_code for later use"""
+        try:
+            memory_session.add(OAuth2AuthorizationCode(
+                code=code,
+                client_id=req.client.client_id,
+                redirect_uri=req.redirect_uri,
+                scope=req.scope,
+                user_id=req.user.id,
+            ))
+            memory_session.commit()
+        except Exception:
+            memory_session.rollback()
+            raise
+
+    def query_authorization_code(self, code, client):
+        item = memory_session.query(OAuth2AuthorizationCode).filter_by(
+            code=code, client_id=client.client_id).first()
+        if item and not item.is_expired():
+            return item
+
+    def delete_authorization_code(self, authorization_code):
+        try:
+            memory_session.delete(authorization_code)
+            memory_session.commit()
+        except Exception:
+            memory_session.rollback()
+            raise
+
+    def authenticate_user(self, authorization_code):
+        return User.query.get(authorization_code.user_id)
+
+
+class RefreshTokenGrant(grants.RefreshTokenGrant):
+    def authenticate_refresh_token(self, refresh_token):
+        token = memory_session.query(OAuth2Token).filter_by(
+            refresh_token=refresh_token).first()
+        if token and token.is_refresh_token_active():
+            return token
+
+    def authenticate_user(self, credential):
+        return User.query.get(credential.user_id)
+
+    def revoke_old_credential(self, credential):
+        credential.revoked = True
+        try:
+            memory_session.add(credential)
+            memory_session.commit()
+        except Exception:
+            memory_session.rollback()
+            raise
+
+
 oauth_clients = {}
+oauth_server = None
 
 
 def create_access_token(req):
@@ -224,10 +331,15 @@ def create_refresh_token(req):
 
 
 def init_oauth():
-    global memory_engine, memory_session, oauth
+    """
+    Initialize Afterglow OAuth2 server
+
+    :return: None
+    """
+    global memory_engine, memory_session, oauth_server
 
     for client_def in app.config['OAUTH_CLIENTS']:
-        oauth_clients[client_def.get('client_id')] = Client(**client_def)
+        oauth_clients[client_def.get('client_id')] = OAuth2Client(**client_def)
 
     memory_engine = create_engine(
         'sqlite://', connect_args=dict(check_same_thread=False),
@@ -235,84 +347,39 @@ def init_oauth():
     Base.metadata.create_all(bind=memory_engine)
     memory_session = scoped_session(sessionmaker(bind=memory_engine))()
 
-    # Make sure Afterglow OAuth2 returns the same tokens as the normal auth
-    app.config['OAUTH2_PROVIDER_TOKEN_GENERATOR'] = create_access_token
-    app.config['OAUTH2_PROVIDER_REFRESH_TOKEN_GENERATOR'] = create_refresh_token
+    # Configure Afterglow OAuth2 tokens
+    app.config['OAUTH2_ACCESS_TOKEN_GENERATOR'] = create_access_token
+    app.config['OAUTH2_REFRESH_TOKEN_GENERATOR'] = create_refresh_token
+    # app.config['OAUTH2_JWT_ENABLED'] = True
+    # app.config['OAUTH2_JWT_ISS'] = 'Afterglow'
+    # app.config['OAUTH2_JWT_KEY'] = app.config['SECRET_KEY']
+    # app.config['OAUTH2_JWT_ALG'] = 'HS256'
+    # app.config['OAUTH2_JWT_EXP'] = app.config.get(
+    #     'ACCESS_TOKEN_EXPIRES', 3600)
 
-    oauth = OAuth2Provider(app)
-
-    @oauth.clientgetter
-    def load_client(client_id):
-        return oauth_clients.get(client_id)
-
-    @oauth.grantgetter
-    def load_grant(client_id, code):
-        return memory_session.query(Grant).filter_by(
-            client_id=client_id, code=code).first()
-
-    # noinspection PyUnusedLocal
-    @oauth.grantsetter
-    def save_grant(client_id, code, req, *args, **kwargs):
-        grant = Grant(
-            client_id=client_id,
-            code=code['code'],
-            redirect_uri=req.redirect_uri,
-            _scopes=' '.join(req.scopes),
-            user_id=current_user.id,
-            expires=datetime.utcnow() + timedelta(seconds=100),
-        )
-        try:
-            memory_session.add(grant)
-            memory_session.commit()
-        except Exception:
-            memory_session.rollback()
-            raise
-        return grant
-
-    @oauth.tokengetter
-    def load_token(access_token=None, refresh_token=None):
-        if access_token:
-            return memory_session.query(Token).filter_by(
-                access_token=access_token).first()
-        if refresh_token:
-            return memory_session.query(Token).filter_by(
-                refresh_token=refresh_token).first()
-
-    # noinspection PyUnusedLocal
-    @oauth.tokensetter
-    def save_token(tok, req, *args, **kwargs):
-        toks = memory_session.query(Token).filter_by(
-            client_id=req.client.client_id, user_id=req.user.id)
-        for t in toks:
-            memory_session.delete(t)
-
-        expires_in = tok.get('expires_in')
-        if expires_in:
-            expires = datetime.utcnow() + timedelta(seconds=expires_in)
-        else:
-            expires = None
-
-        t = Token(
-            access_token=tok.get('access_token'),
-            refresh_token=tok.get('refresh_token'),
-            token_type=tok['token_type'],
-            _scopes=tok['scope'],
-            expires=expires,
-            client_id=req.client.client_id,
-            user_id=req.user.id,
-        )
-        try:
-            memory_session.add(t)
-            memory_session.commit()
-        except Exception:
-            memory_session.rollback()
-            raise
-        return t
+    oauth_server = AuthorizationServer(
+        app,
+        query_client=lambda client_id: oauth_clients.get(client_id),
+        save_token=create_save_token_func(memory_session, OAuth2Token),
+    )
+    oauth_server.register_grant(grants.ImplicitGrant)
+    oauth_server.register_grant(grants.ClientCredentialsGrant)
+    oauth_server.register_grant(AuthorizationCodeGrant)
+    oauth_server.register_grant(RefreshTokenGrant)
 
     # noinspection PyUnusedLocal
     @app.route(url_prefix + 'oauth2/authorize')
-    @oauth.authorize_handler
-    def oauth2_authorize(*args, **kwargs):
+    def oauth2_authorize():
+        try:
+            client_id = request.args['client_id']
+        except KeyError:
+            return json_response(dict(
+                exception=errors.MissingFieldError.__name__,
+                subcode=errors.MissingFieldError.subcode,
+                message=errors.MissingFieldError.message,
+                field='client_id',
+            ), errors.MissingFieldError.code)
+
         # noinspection PyBroadException
         try:
             user = authenticate('user')
@@ -320,43 +387,41 @@ def init_oauth():
             # Redirect unauthenticated users to consent page
             try:
                 return redirect(
-                    oauth_clients[kwargs['client_id']].consent_uri + '?' +
-                    urlencode(dict(client_id=kwargs['client_id'],
-                                   next=request.url)))
+                    oauth_clients[client_id].consent_uri + '?' +
+                    urlencode(dict(client_id=client_id, next=request.url)))
             except KeyError:
                 # Unknown client ID
                 return json_response(dict(
                     exception=UnknownClientError.__name__,
                     subcode=UnknownClientError.subcode,
                     message=UnknownClientError.message,
-                    id=kwargs['client_id'],
+                    id=client_id,
                 ), UnknownClientError.code)
 
         # Check that the user allowed the client
         if not UserClient.query.filter_by(
-                user_id=user.id, client_id=kwargs['client_id']).count():
+                user_id=user.id, client_id=client_id).count():
             # Redirect users to consent page if the client was not confirmed yet
             try:
                 return redirect(
-                    oauth_clients[kwargs['client_id']].consent_uri + '?' +
+                    oauth_clients[client_id].consent_uri + '?' +
                     urlencode(dict(
-                        client_id=kwargs['client_id'], user_id=user.id,
+                        client_id=client_id, user_id=user.id,
                         next=request.url)))
             except KeyError:
                 return json_response(dict(
                     exception=UnknownClientError.__name__,
                     subcode=UnknownClientError.subcode,
                     message=UnknownClientError.message,
-                    id=kwargs['client_id'],
+                    id=client_id,
                 ), UnknownClientError.code)
 
-        return True
+        return oauth_server.create_authorization_response(grant_user=user)
 
     # noinspection PyUnusedLocal
     @app.route(url_prefix + 'oauth2/token', methods=['POST'])
-    @oauth.token_handler
-    def oauth2_token(*args, **kwargs):
-        return None
+    def oauth2_token():
+        return oauth_server.create_token_response()
 
     @app.route(url_prefix + 'oauth2/clients')
     @auth_required('user')

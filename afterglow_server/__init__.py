@@ -297,7 +297,7 @@ app.config.from_envvar('AFTERGLOW_SERVER_CONFIG', silent=True)
 
 if app.config.get('PROFILE'):
     # Enable profiling
-    from werkzeug.contrib.profiler import ProfilerMiddleware
+    from werkzeug.middleware.profiler import ProfilerMiddleware
     app.config['DEBUG'] = True
     app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[10])
 

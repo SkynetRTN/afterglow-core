@@ -97,6 +97,10 @@ class User(db.Model, UserMixin):
         """Does the user have admin role?"""
         return Role.query.filter_by(name='admin').one() in self.roles
 
+    def get_user_id(self):
+        """Return user ID; required by authlib"""
+        return self.id
+
 
 # noinspection PyClassHasNoInit
 class UserSchema(Schema):
