@@ -4,12 +4,22 @@ Afterglow Access Server: plugin support
 
 from __future__ import absolute_import, division, print_function
 
-import imp
 import os
 import zipfile
 import zipimport
 
 from . import app
+
+# List of valid Python module suffixes
+try:
+    # noinspection PyCompatibility
+    from importlib.machinery import all_suffixes
+    PY_SUFFIXES = all_suffixes()
+except ImportError:
+    # noinspection PyDeprecation
+    from imp import get_suffixes
+    PY_SUFFIXES = [item[0] for item in get_suffixes()]
+    all_suffixes = None
 
 
 __all__ = ['load_plugins']
@@ -82,9 +92,6 @@ def load_plugins(descr, package, plugin_class, specs=None):
         os.path.dirname(__file__), package.replace('.', os.path.sep)))
     app.logger.debug('Looking for %s plugins in %s', descr, directory)
 
-    # Obtain the list of valid Python module suffixes
-    py_suffixes = [item[0] for item in imp.get_suffixes()]
-
     # Search for modules within the specified directory
     # noinspection PyBroadException
     try:
@@ -109,7 +116,7 @@ def load_plugins(descr, package, plugin_class, specs=None):
 
     plugin_classes = {}
     for name in {os.path.splitext(f)[0] for f in dirlist
-                 if os.path.splitext(f)[1] in py_suffixes and
+                 if os.path.splitext(f)[1] in PY_SUFFIXES and
                  os.path.splitext(f)[0] != '__init__'}:
         # noinspection PyBroadException
         try:
