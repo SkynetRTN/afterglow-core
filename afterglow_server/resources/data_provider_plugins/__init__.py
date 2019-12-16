@@ -112,6 +112,7 @@ class DataProvider(Resource):
     quota = Integer(default=None)
     usage = Integer(default=None)
 
+    # noinspection PyUnresolvedReferences
     def __init__(self, *args, **kwargs):
         """
         Create a DataProvider instance
@@ -122,20 +123,31 @@ class DataProvider(Resource):
         super(DataProvider, self).__init__(*args, **kwargs)
 
         # Automatically set browseable, searchable, and readonly flags depending
-        # on what methods are reimplemented by provider
+        # on what methods are reimplemented by provider; method attr of a class
+        # is an unbound method instance in Python 2 and a function in Python 3
         if 'browseable' not in kwargs:
             self.browseable = self.get_child_assets.__func__ is not \
-                DataProvider.get_child_assets.__func__
+                (DataProvider.get_child_assets.__func__
+                 if hasattr(DataProvider.get_child_assets, '__func__')
+                 else DataProvider.get_child_assets)
         if 'searchable' not in kwargs:
             self.searchable = self.find_assets.__func__ is not \
-                DataProvider.find_assets.__func__
+                (DataProvider.find_assets.__func__
+                 if hasattr(DataProvider.find_assets, '__func__')
+                 else DataProvider.find_assets)
         if 'readonly' not in kwargs:
             self.readonly = self.create_asset.__func__ is \
-                DataProvider.create_asset.__func__ and \
+                (DataProvider.create_asset.__func__
+                 if hasattr(DataProvider.create_asset, '__func__')
+                 else DataProvider.create_asset) and \
                 self.update_asset.__func__ is \
-                DataProvider.update_asset.__func__ and \
+                (DataProvider.update_asset.__func__
+                 if hasattr(DataProvider.update_asset, '__func__')
+                 else DataProvider.update_asset) and \
                 self.delete_asset.__func__ is \
-                DataProvider.delete_asset.__func__
+                (DataProvider.delete_asset.__func__
+                 if hasattr(DataProvider.delete_asset, '__func__')
+                 else DataProvider.delete_asset)
 
         if self.auth_methods is None:
             # Use default data provider authentication

@@ -49,7 +49,7 @@ class DateTime(fields.DateTime):
     Use this instead of :class:`marshmallow.fields.DateTime` to make sure that
     the data stored in JSONType database columns is deserialized properly
     """
-    def _serialize(self, value, attr, obj):
+    def _serialize(self, value, attr, obj, **__):
         if value is None or isinstance(value, str) or \
                 isinstance(value, type(u'')):
             return value
@@ -61,7 +61,7 @@ class Date(fields.Date):
     Use this instead of :class:`marshmallow.fields.Date` to make sure that
     the data stored in JSONType database columns is deserialized properly
     """
-    def _serialize(self, value, attr, obj):
+    def _serialize(self, value, attr, obj, **__):
         if isinstance(value, str) or isinstance(value, type(u'')):
             return value
         return super(Date, self)._serialize(value, attr, obj)
@@ -72,7 +72,7 @@ class Time(fields.Time):
     Use this instead of :class:`marshmallow.fields.Time` to make sure that
     the data stored in JSONType database columns is deserialized properly
     """
-    def _serialize(self, value, attr, obj):
+    def _serialize(self, value, attr, obj, **__):
         if isinstance(value, str) or isinstance(value, type(u'')):
             return value
         return super(Time, self)._serialize(value, attr, obj)
@@ -83,7 +83,7 @@ class Float(fields.Float):
     Floating-point :class:`marshmallow.Schema` field that serializes NaNs and
     Infs to None
     """
-    def _serialize(self, value, attr, obj):
+    def _serialize(self, value, attr, obj, **__):
         """
         Serializer for float fields
 
@@ -168,10 +168,14 @@ class AfterglowSchema(Schema):
                 if hasattr(field, 'nested') and \
                         issubclass(field.nested, AfterglowSchema):
                     value = field.nested(value)
-                elif isinstance(field, fields.List) and \
-                        hasattr(field.container, 'nested') and \
-                        issubclass(field.container.nested, AfterglowSchema):
-                    klass = field.container.nested
+                elif isinstance(field, fields.List) and (
+                        (hasattr(field.container, 'nested') and
+                         issubclass(field.container.nested, AfterglowSchema))
+                        if hasattr(field, 'container')
+                        else hasattr(field.inner, 'nested') and
+                        issubclass(field.inner.nested, AfterglowSchema)):
+                    klass = field.container.nested \
+                        if hasattr(field, 'container') else field.inner
                     value = [klass(item) for item in value]
                 elif value is not None:
                     # noinspection PyBroadException

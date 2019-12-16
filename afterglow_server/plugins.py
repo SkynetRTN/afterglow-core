@@ -116,7 +116,8 @@ def load_plugins(descr, package, plugin_class, specs=None):
             app.logger.debug('Checking module "%s"', name)
             # A potential plugin module is found; load it
             m = __import__(
-                package + '.' + name, globals(), locals(), ['__dict__'])
+                'afterglow_server.' + package + '.' + name, globals(), locals(),
+                ['__dict__'])
 
             try:
                 # Check only names listed in __all__
