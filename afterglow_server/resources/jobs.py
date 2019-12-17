@@ -609,7 +609,14 @@ class JobWorkerProcessWrapper(object):
         if WINDOWS:
             self.process.abort_event.set()
         else:
-            os.kill(self.ident, signal.SIGINT)
+            s = signal.SIGINT
+            try:
+                # In Python 3, SIGINT is a Signals enum instance
+                s = s.value
+            except AttributeError:
+                pass
+            # noinspection PyTypeChecker
+            os.kill(self.ident, s)
 
 
 db_field_type_mapping = {
@@ -622,7 +629,6 @@ db_field_type_mapping = {
     fields.Float: Float,
     fields.Integer: Integer,
     fields.List: JSONType,
-    fields.LocalDateTime: Text,
     fields.Nested: JSONType,
     fields.String: Text,
     fields.Time: Time,
@@ -630,6 +636,13 @@ db_field_type_mapping = {
     fields.UUID: Text,
     fields.Url: Text,
 }
+
+try:
+    # noinspection PyUnresolvedReferences
+    db_field_type_mapping[fields.LocalDateTime] = Text
+except AttributeError:
+    # Newer marshmallow does not have LocalDateTime
+    pass
 
 
 def subclass_from_schema(base_class, schema, plugin_name=None):
@@ -1005,11 +1018,12 @@ class JobRequestHandler(BaseRequestHandler):
             if hasattr(e, 'subcode') and e.subcode:
                 result['subcode'] = int(e.subcode)
             if getattr(e, 'code', 400) == 500:
-                result['traceback'] = traceback.format_tb(sys.exc_traceback)
+                result['traceback'] = traceback.format_tb(sys.exc_info()[-1])
             http_status = int(e.code) if hasattr(e, 'code') and e.code else 400
 
         except Exception as e:
             # Wrap other exceptions in JobServerError
+            # noinspection PyUnresolvedReferences
             result = {
                 'exception': JobServerError.__name__,
                 'message': JobServerError.message,
@@ -1017,7 +1031,7 @@ class JobRequestHandler(BaseRequestHandler):
                 else ', '.join(str(arg) for arg in e.args) if e.args
                 else str(e),
                 'subcode': JobServerError.subcode,
-                'traceback': traceback.format_tb(sys.exc_traceback),
+                'traceback': traceback.format_tb(sys.exc_info()[-1]),
             }
             http_status = JobServerError.code
 
@@ -1342,6 +1356,7 @@ def job_server_request(resource, **args):
     except errors.AfterglowError:
         raise
     except Exception as e:
+        # noinspection PyUnresolvedReferences
         raise JobServerError(
             reason=e.message if hasattr(e, 'message') and e.message
             else ', '.join(str(arg) for arg in e.args) if e.args else str(e))

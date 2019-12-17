@@ -125,7 +125,14 @@ class AfterglowSchema(Schema):
         super(AfterglowSchema, self).__init__()
 
         if _obj is not None:
-            for name, val in self.dump(_obj).data.items():
+            data = self.dump(_obj)
+            try:
+                # In Python 2, dump() returns MarshalResult instead of dict
+                # noinspection PyUnresolvedReferences
+                data = data.data
+            except AttributeError:
+                pass
+            for name, val in data.items():
                 try:
                     if isinf(val) or isnan(val):
                         # Convert floating-point NaNs/Infs to string
@@ -196,7 +203,7 @@ class AfterglowSchema(Schema):
         super(AfterglowSchema, self).__setattr__(name, value)
 
     @post_dump
-    def remove_nones(self, data):
+    def remove_nones(self, data, **__):
         """
         Don't dump fields containing None
 
