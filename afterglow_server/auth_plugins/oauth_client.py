@@ -21,10 +21,16 @@ from . import AuthPlugin
 __all__ = ['ClientOAuthPlugin', 'GoogleClientOAuthPlugin']
 
 
+if sys.version_info < (3, 1):
+    # noinspection PyDeprecation
+    base64_decode = base64.decodestring
+else:
+    base64_decode = base64.decodebytes
+
 if app.config.get('DEBUG'):
     # Skip SSL certificate validation in debug mode
     if sys.version_info[0] < 3:
-        # noinspection PyCompatibility
+        # noinspection PyCompatibility,PyUnresolvedReferences
         from urllib2 import HTTPSHandler, build_opener, install_opener
     else:
         # noinspection PyCompatibility,PyUnresolvedReferences
@@ -69,7 +75,10 @@ class ClientOAuthPlugin(AuthPlugin):
         def authorized():
             orig_url = request.args.get('state', url_for('login'))
 
-            resp = self.remote_app.authorize_access_token()
+            # Disable server certificate validation in debug mode
+            resp = self.remote_app.authorize_access_token(
+                verify=False if app.config.get('DEBUG') else None,
+            )
             if resp is None:
                 # Access denied by user, return to the original url
                 return redirect(orig_url)
@@ -163,7 +172,7 @@ class GoogleClientOAuthPlugin(ClientOAuthPlugin):
     type = 'oauth2client'
 
     def __init__(self, id=None, description='Login via Google (client-side)',
-                 register_users=False, consumer_key=None, consumer_secret=None,
+                 register_users=False, client_id=None, client_secret=None,
                  request_token_params=None):
         """
         Initialize Google OAuth2 plugin
@@ -173,8 +182,8 @@ class GoogleClientOAuthPlugin(ClientOAuthPlugin):
         :param bool register_users: automatically register authenticated users
             if missing from the local user database; overrides
             REGISTER_AUTHENTICATED_USERS
-        :param str consumer_key: client ID
-        :param str consumer_secret: client secret
+        :param str client_id: client ID
+        :param str client_secret: client secret
         :param dict request_token_params: additional token exchange parameters;
             Google requires at least scope="email", access_type="offline",
             response_type="code", which is the default
@@ -184,7 +193,7 @@ class GoogleClientOAuthPlugin(ClientOAuthPlugin):
             base_url='https://www.googleapis.com/oauth2/v1/',
             access_token_url='https://accounts.google.com/o/oauth2/token',
             authorize_url='https://accounts.google.com/o/oauth2/auth',
-            consumer_key=consumer_key, consumer_secret=consumer_secret,
+            client_id=client_id, client_secret=client_secret,
             request_token_params=request_token_params if request_token_params
             else {
                 'scope': 'email', 'access_type': 'offline',
@@ -204,7 +213,7 @@ class GoogleClientOAuthPlugin(ClientOAuthPlugin):
         # Decode the access token (which is a JWT) and extract the email
         s = resp['access_token']
         s = s[:s.rfind('.')]
-        s = base64.decodestring(s + '='*((4 - len(s) % 4) % 4))
+        s = base64_decode(s + '='*((4 - len(s) % 4) % 4))
 
         # Decode header
         i = 1
