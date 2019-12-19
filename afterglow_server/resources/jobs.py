@@ -670,7 +670,7 @@ def subclass_from_schema(base_class, schema, plugin_name=None):
     # Get job-specific fields that are missing from the base schema and map them
     # to SQLAlchemy column types; skip fields that have no db counterpart
     base_fields = sum(
-        [c().fields.keys() for c in schema.__class__.__bases__
+        [list(c().fields.keys()) for c in schema.__class__.__bases__
          if issubclass(c, Schema)], [])
     new_fields = [(name, Column(db_field_type_mapping[type(field)],
                                 default=field.default

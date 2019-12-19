@@ -25,10 +25,16 @@ from . import AuthPlugin
 __all__ = ['OAuthPlugin', 'GoogleOAuthPlugin']
 
 
+if sys.version_info < (3, 1):
+    # noinspection PyDeprecation
+    base64_decode = base64.decodestring
+else:
+    base64_decode = base64.decodebytes
+
 if app.config.get('DEBUG'):
     # Skip SSL certificate validation in debug mode
     if sys.version_info[0] < 3:
-        # noinspection PyCompatibility
+        # noinspection PyCompatibility,PyUnresolvedReferences
         from urllib2 import HTTPSHandler, build_opener, install_opener
     else:
         # noinspection PyCompatibility,PyUnresolvedReferences
@@ -158,7 +164,8 @@ class OAuthPlugin(AuthPlugin):
         try:
             resp = requests.request(
                 self.access_token_method, self.access_token_url,
-                params=args, data=data, headers=self.access_token_headers)
+                params=args, data=data, headers=self.access_token_headers,
+                verify=False if app.config.get('DEBUG') else None)
             if resp.status_code not in (200, 201):
                 raise Exception(
                     'OAuth server returned HTTP status {}, message: {}'.format(
@@ -176,7 +183,7 @@ class OAuthPlugin(AuthPlugin):
             if not username:
                 raise auth.NotAuthenticatedError()
         except Exception as e:
-            raise auth.NotAuthenticatedError(error_msg=e.message)
+            raise auth.NotAuthenticatedError(error_msg=str(e))
 
         # Authenticated successfully
         return username
@@ -247,7 +254,7 @@ class GoogleOAuthPlugin(OAuthPlugin):
         """
         # Decode the access token (which is a JWT) and extract the email
         s = access_token[:access_token.rfind('.')]
-        s = base64.decodestring(s + '='*((4 - len(s) % 4) % 4))
+        s = base64_decode(s + '='*((4 - len(s) % 4) % 4))
 
         # Decode header
         i = 1

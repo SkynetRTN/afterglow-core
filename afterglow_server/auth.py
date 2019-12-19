@@ -845,7 +845,7 @@ def login(method=None):
     """
     if method is None:
         # Authenticate using any of the registered methods
-        methods = auth_plugins.keys()
+        methods = list(auth_plugins.keys())
     else:
         # Authenticate using the given method
         methods = [method]
