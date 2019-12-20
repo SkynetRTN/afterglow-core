@@ -369,6 +369,7 @@ def get_data_file_db(user_id):
             return scoped_session(sessionmaker(bind=engine))()
 
     except Exception as e:
+        # noinspection PyUnresolvedReferences
         raise CannotCreateDataFileDirError(
             reason=e.message if hasattr(e, 'message') and e.message
             else ', '.join(str(arg) for arg in e.args) if e.args else str(e))
@@ -527,6 +528,7 @@ def remove_data_file(adb, root, id):
         try:
             os.remove(filename)
         except Exception as e:
+            # noinspection PyUnresolvedReferences
             app.logger.warn(
                 'Error removing data file "%s" (ID %d) [%s]',
                 filename, id,
@@ -773,7 +775,7 @@ def convert_exif_field(val):
         # Multiple-item ExifRead value
         val = val.values
         if val and hasattr(val, '__getitem__') and \
-                not isinstance(val, str) and not isinstance(val, unicode):
+                not isinstance(val, str) and not isinstance(val, type(u'')):
             val = val[0]
 
     if isinstance(val, tuple) and len(val) == 2:
@@ -1279,7 +1281,8 @@ def data_files(id=None):
                     # Data file upload: get data from request body
                     all_data_files += import_data_file(
                         adb, root, None, None, import_params,
-                        BytesIO(request.data), import_params.get('name'),
+                        BytesIO(request.data.encode('utf-8')),
+                        import_params.get('name'),
                         duplicates, session_id=session_id)
                 else:
                     # Import data from the given data provider
