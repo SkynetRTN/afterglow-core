@@ -29,6 +29,7 @@ def afterglow_error_handler(e):
     else:
         payload = {}
     payload['exception'] = e.__class__.__name__
+    # noinspection PyUnresolvedReferences
     payload['message'] = e.message if hasattr(e, 'message') and e.message \
         else ', '.join(str(arg) for arg in e.args) if e.args else str(e)
 
@@ -36,7 +37,7 @@ def afterglow_error_handler(e):
         payload['subcode'] = int(e.subcode)
 
     if getattr(e, 'code', 400) == 500:
-        payload['traceback'] = traceback.format_tb(sys.exc_traceback),
+        payload['traceback'] = traceback.format_tb(sys.exc_info()[-1]),
 
     response = json_response(
         payload, int(e.code) if hasattr(e, 'code') and e.code else 400)
@@ -59,6 +60,7 @@ def unauthorized_error_handler(e):
     :return: JSON response object
     :rtype: :class:`flask.Response`
     """
+    # noinspection PyUnresolvedReferences
     return json_response(
         {
             'exception': e.__class__.__name__,
@@ -77,6 +79,7 @@ def forbidden_error_handler(e):
     :return: JSON response object
     :rtype: :class:`flask.Response`
     """
+    # noinspection PyUnresolvedReferences
     return json_response(
         {
             'exception': e.__class__.__name__,
@@ -96,6 +99,7 @@ def not_found_error_handler(e):
     :return: JSON response object
     :rtype: :class:`flask.Response`
     """
+    # noinspection PyUnresolvedReferences
     return json_response(
         {
             'exception': e.__class__.__name__,
@@ -114,12 +118,13 @@ def internal_server_error_handler(e):
     :return: JSON response object
     :rtype: :class:`flask.Response`
     """
+    # noinspection PyUnresolvedReferences
     return json_response(
         {
             'exception': e.__class__.__name__,
             'message': e.message if hasattr(e, 'message') and e.message
             else ', '.join(str(arg) for arg in e.args) if e.args else str(e),
-            'traceback': traceback.format_tb(sys.exc_traceback),
+            'traceback': traceback.format_tb(sys.exc_info()[-1]),
         }, 500)
 
 

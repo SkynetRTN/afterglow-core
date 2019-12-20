@@ -303,7 +303,7 @@ class Job(AfterglowSchema):
         """
         if app.config.get('DEBUG'):
             msg = '{}\nTraceback (most recent call last):\n{}'.format(
-                msg, traceback.format_tb(sys.exc_traceback))
+                msg, traceback.format_tb(sys.exc_info()[-1]))
         self.result.errors.append(msg)
         self._queue.put(dict(
             id=self.id,
