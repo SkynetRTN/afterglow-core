@@ -11,7 +11,10 @@ import bz2
 from errno import EEXIST
 from datetime import datetime
 from glob import glob
+
+from marshmallow.fields import Boolean, String
 import astropy.io.fits as pyfits
+
 from . import DataProvider, DataProviderAsset
 from ..data_providers import (
     AssetAlreadyExistsError, AssetNotFoundError,
@@ -87,8 +90,8 @@ class LocalDiskDataProvider(DataProvider):
     if rawpy is not None:
         search_fields['type']['enum'].append('RAW')
 
-    peruser = False
-    root = '.'
+    peruser = Boolean(default=False)
+    root = String(default='.')
 
     @property
     def usage(self):
@@ -128,6 +131,7 @@ class LocalDiskDataProvider(DataProvider):
                             if e.errno != EEXIST:
                                 raise
                     except Exception as e:
+                        # noinspection PyUnresolvedReferences
                         raise FilesystemError(
                             reason=e.message
                             if hasattr(e, 'message') and e.message
@@ -516,6 +520,7 @@ class LocalDiskDataProvider(DataProvider):
             with open(filename, 'rb') as f:
                 return f.read()
         except Exception as e:
+            # noinspection PyUnresolvedReferences
             raise FilesystemError(
                 reason=e.message if hasattr(e, 'message') and e.message
                 else ', '.join(str(arg) for arg in e.args) if e.args
@@ -559,6 +564,7 @@ class LocalDiskDataProvider(DataProvider):
                     f.write(data)
 
         except Exception as e:
+            # noinspection PyUnresolvedReferences
             raise FilesystemError(
                 reason=e.message if hasattr(e, 'message') and e.message
                 else ', '.join(str(arg) for arg in e.args) if e.args
@@ -590,6 +596,7 @@ class LocalDiskDataProvider(DataProvider):
             with open(filename, 'wb') as f:
                 f.write(data)
         except Exception as e:
+            # noinspection PyUnresolvedReferences
             raise FilesystemError(
                 reason=e.message if hasattr(e, 'message') and e.message
                 else ', '.join(str(arg) for arg in e.args) if e.args
@@ -615,6 +622,7 @@ class LocalDiskDataProvider(DataProvider):
             try:
                 shutil.rmtree(filename)
             except Exception as e:
+                # noinspection PyUnresolvedReferences
                 raise FilesystemError(
                     reason=e.message if hasattr(e, 'message') and e.message
                     else ', '.join(str(arg) for arg in e.args) if e.args
@@ -623,6 +631,7 @@ class LocalDiskDataProvider(DataProvider):
             try:
                 os.remove(filename)
             except Exception as e:
+                # noinspection PyUnresolvedReferences
                 raise FilesystemError(
                     reason=e.message if hasattr(e, 'message') and e.message
                     else ', '.join(str(arg) for arg in e.args) if e.args
