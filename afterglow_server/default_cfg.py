@@ -23,10 +23,10 @@ DATA_ROOT = '.'
 # OAuth2 (client-side flow):
 #     USER_AUTH = [
 #         {'name': 'twitter_client_oauth', 'remote_app': 'app',
-#          'base_url': 'https://api.twitter.com/1/',
+#          'api_base_url': 'https://api.twitter.com/1/',
 #          'access_token_url': 'https://api.twitter.com/oauth/access_token',
 #          'authorize_url': 'https://api.twitter.com/oauth/authenticate',
-#          'consumer_key': '<client id>', 'consumer_secret': '<client secret'}
+#          'client_id': '<client id>', 'client_secret': '<client secret'}
 #     ]
 # OAuth1 (client-side flow):
 #   same, add 'request_token_url': ...
