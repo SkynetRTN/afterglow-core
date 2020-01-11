@@ -62,6 +62,18 @@ class IPhotometry(AfterglowSchema):
     mag_error = Float()  # type: float
 
 
+class IAperture(AfterglowSchema):
+    aper_a = Float()  # type: float
+    aper_b = Float()  # type: float
+    aper_theta = Float()  # type: float
+    annulus_a_in = Float()  # type: float
+    annulus_b_in = Float()  # type: float
+    annulus_theta_in = Float()  # type: float
+    annulus_a_out = Float()  # type: float
+    annulus_b_out = Float()  # type: float
+    annulus_theta_out = Float()  # type: float
+
+
 class ISourceId(AfterglowSchema):
     id = String()  # type: str
 
@@ -172,6 +184,18 @@ class PhotometryData(SourceExtractionData, IPhotometry):
         data.flux_error = row['flux_err']
         data.mag = row['mag']
         data.mag_error = row['mag_err']
+
+        if row['aper_a']:
+            data.aper_a = row['aper_a']
+            data.aper_b = row['aper_b']
+            data.aper_theta = row['aper_theta']
+            data.annulus_a_in = row['aper_a_in']
+            data.annulus_b_in = \
+                row['aper_a_in']*row['aper_b_out']/row['aper_a_out']
+            data.annulus_theta_in = data.annulus_theta_out = \
+                row['aper_theta_out']
+            data.annulus_a_out = row['aper_a_out']
+            data.annulus_b_out = row['aper_b_out']
 
         return data
 

@@ -45,9 +45,9 @@ def get_source_xy(source, epoch, wcs):
                     getattr(source, 'dec_degs', None), wcs):
         # Prefer RA/Dec if WCS is present
         ra, dec = source.ra_hours*15, source.dec_degs
-        if epoch is not None and None not in [getattr(source, name, None)
-                        for name in ('pm_sky', 'pm_pos_angle_sky',
-                                     'pm_epoch')]:
+        if epoch is not None and None not in [
+                getattr(source, name, None)
+                for name in ('pm_sky', 'pm_pos_angle_sky', 'pm_epoch')]:
             mu = source.pm_sky*(epoch - source.pm_epoch).total_seconds()
             theta = deg2rad(source.pm_pos_angle_sky)
             cd = cos(deg2rad(dec))
