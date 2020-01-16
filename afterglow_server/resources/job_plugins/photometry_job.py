@@ -203,8 +203,14 @@ def run_photometry_job(job, settings, job_file_ids, job_sources,
                 else:
                     # Source outside image boundaries, skip
                     del sources[file_id][i]
-                    source_table = vstack([source_table[:i],
-                                           source_table[i + 1:]])
+                    if i:
+                        if i < len(source_table) - 1:
+                            source_table = vstack([source_table[:i],
+                                                   source_table[i + 1:]])
+                        else:
+                            source_table = source_table[:i]
+                    else:
+                        source_table = source_table[1:]
             if not sources[file_id]:
                 raise ValueError('All sources are outside image boundaries')
 
