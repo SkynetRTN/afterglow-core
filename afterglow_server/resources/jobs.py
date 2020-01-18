@@ -19,7 +19,8 @@ import cProfile
 from datetime import datetime
 from multiprocessing import Event, Process, Queue
 import threading
-from marshmallow import Schema, fields, missing
+from marshmallow import (
+    Schema, fields, missing, __version_info__ as marshmallow_version)
 from sqlalchemy import (
     Boolean, Column, Float, ForeignKey, Integer, String, Text, create_engine,
     event, text, types)
@@ -519,7 +520,8 @@ class JobWorkerProcess(Process):
                         '%s Could not create job', prefix, exc_info=True)
                     result_queue.put(dict(
                         id=job_descr['id'],
-                        result=dict(errors=str(e)),
+                        state=dict(progress=100, status='complete'),
+                        result=dict(errors=[str(e)]),
                     ))
                     continue
 
@@ -744,7 +746,7 @@ class JobRequestHandler(BaseRequestHandler):
             msg_len = struct.unpack(msg_hdr, msg_len)[0]
 
             nbytes = msg_len
-            msg = ''
+            msg = b''
             while nbytes:
                 s = self.request.recv(nbytes)
                 if not s:
@@ -786,20 +788,24 @@ class JobRequestHandler(BaseRequestHandler):
                     if job_id is None:
                         # Return all user's jobs for the given client session;
                         # hide user_id and result
-                        result = [
-                            job_types[job.type].__class__(
-                                exclude=['user_id', 'result']).dump(job)[0]
-                            for job in session.query(DbJob).filter(
-                                DbJob.user_id == user_id,
-                                DbJob.session_id == msg.get('session_id'))
-                        ]
+                        result = []
+                        for job in session.query(DbJob).filter(
+                            DbJob.user_id == user_id,
+                            DbJob.session_id == msg.get('session_id')):
+                            res = job_types[job.type].__class__(
+                                exclude=['user_id', 'result']).dump(job)
+                            if marshmallow_version < (3, 0):
+                                res = res[0]
+                            result.append(res)
                     else:
                         # Return the given job
                         job = session.query(DbJob).get(job_id)
                         if job is None or job.user_id != user_id:
                             raise UnknownJobError(id=job_id)
                         result = job_types[job.type].__class__(
-                            exclude=['user_id', 'result']).dump(job)[0]
+                            exclude=['user_id', 'result']).dump(job)
+                        if marshmallow_version < (3, 0):
+                            result = result[0]
 
                 elif method == 'post':
                     # Submit a job
@@ -857,7 +863,9 @@ class JobRequestHandler(BaseRequestHandler):
                             setattr(job, name, val)
                         session.add(job)
                         session.flush()
-                        result = job_types[job_type].dump(job)[0]
+                        result = job_types[job_type].dump(job)
+                        if marshmallow_version < (3, 0):
+                            result = result[0]
                         server.job_queue.put(result)
                         result = dict(result)
                         del result['user_id']
@@ -917,7 +925,9 @@ class JobRequestHandler(BaseRequestHandler):
 
                 if method == 'get':
                     # Return job state
-                    result = job_plugins.JobState().dump(job.state)[0]
+                    result = job_plugins.JobState().dump(job.state)
+                    if marshmallow_version < (3, 0):
+                        result = result[0]
 
                 elif method == 'put':
                     # Cancel job
@@ -942,7 +952,9 @@ class JobRequestHandler(BaseRequestHandler):
                                 break
 
                     # Return the current job state
-                    result = job_plugins.JobState().dump(job.state)[0]
+                    result = job_plugins.JobState().dump(job.state)
+                    if marshmallow_version < (3, 0):
+                        result = result[0]
 
                 else:
                     raise InvalidMethodError(
@@ -961,7 +973,9 @@ class JobRequestHandler(BaseRequestHandler):
                         raise UnknownJobError(id=job_id)
 
                     result = job_types[job.type].fields['result'].schema.dump(
-                        job.result)[0]
+                        job.result)
+                    if marshmallow_version < (3, 0):
+                        result = result[0]
 
                 else:
                     raise InvalidMethodError(
@@ -1057,7 +1071,7 @@ class JobRequestHandler(BaseRequestHandler):
 
         # noinspection PyBroadException
         try:
-            msg = encrypt(json.dumps(msg))
+            msg = encrypt(json.dumps(msg).encode('utf8'))
             self.request.sendall(struct.pack(msg_hdr, len(msg)) + msg)
         except Exception:
             # noinspection PyBroadException
@@ -1328,7 +1342,7 @@ def job_server_request(resource, **args):
             method=request.method,
             user_id=current_user.id,
         ))
-        msg = encrypt(json.dumps(msg))
+        msg = encrypt(json.dumps(msg).encode('utf8'))
 
         # Send message
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1343,7 +1357,7 @@ def job_server_request(resource, **args):
             msg_len = struct.unpack(msg_hdr, msg_len)[0]
 
             nbytes = msg_len
-            msg = ''
+            msg = b''
             while nbytes:
                 s = sock.recv(nbytes)
                 if not s:
