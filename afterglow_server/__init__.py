@@ -272,7 +272,7 @@ class AfterglowSchemaEncoder(json.JSONEncoder):
         if isinstance(obj, type(missing)):
             return None
         if isinstance(obj, AfterglowSchema):
-            res = obj.dump()
+            res = obj.dump(obj)
             if marshmallow_version < (3, 0):
                 res = res[0]
             return res
