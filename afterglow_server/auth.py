@@ -23,9 +23,12 @@ import shutil
 import uuid
 from datetime import datetime, timedelta
 from functools import wraps
+
+import marshmallow
 import jwt
 from flask import request
 from werkzeug.exceptions import HTTPException
+
 from . import app, errors, json_response, url_prefix
 from .users import AnonymousUser, Role, User, UserSchema, db, user_datastore
 
@@ -668,7 +671,10 @@ def init_auth():
                 # Special case: get the authenticated user info without
                 # knowing the ID
                 u = user
-            return json_response(UserSchema().dump(u)[0])
+            res = UserSchema().dump(u)
+            if marshmallow.__version_info__ < (3, 0):
+                res = res[0]
+            return json_response(res)
 
         if request.method in ('POST', 'PUT'):
             username = request.args.get('username')
@@ -765,9 +771,11 @@ def init_auth():
                 db.session.rollback()
                 raise
             else:
+                res = UserSchema().dump(u)
+                if marshmallow.__version_info__ < (3, 0):
+                    res = res[0]
                 return json_response(
-                    UserSchema().dump(u)[0],
-                    201 if request.method == 'POST' else 200)
+                    res, 201 if request.method == 'POST' else 200)
 
         if request.method == 'DELETE':
             u = User.query.get(id)
@@ -1011,10 +1019,16 @@ def auth_user():
     :rtype: flask.Response
     """
     if not app.config.get('USER_AUTH'):
-        return json_response(UserSchema().dump(anonymous_user)[0])
+        res = UserSchema().dump(anonymous_user)
+        if marshmallow.__version_info__ < (3, 0):
+            res = res[0]
+        return json_response(res)
 
     if request.method == 'GET':
-        return json_response(UserSchema().dump(current_user)[0])
+        res = UserSchema().dump(current_user)
+        if marshmallow.__version_info__ < (3, 0):
+            res = res[0]
+        return json_response(res)
 
     user = User.query.filter_by(username=current_user.username).one_or_none()
     if user is None:
@@ -1036,7 +1050,10 @@ def auth_user():
     except Exception:
         db.session.rollback()
         raise
-    return json_response(UserSchema().dump(user)[0])
+    res = UserSchema().dump(user)
+    if marshmallow.__version_info__ < (3, 0):
+        res = res[0]
+    return json_response(res)
 
 
 @app.route(url_prefix + 'auth/user/auth_methods', methods=['POST'])

@@ -9,7 +9,8 @@ import datetime
 import json
 from math import isinf, isnan
 
-from marshmallow import Schema, fields, missing, post_dump
+from marshmallow import (
+    Schema, fields, missing, post_dump, __version_info__ as marshmallow_version)
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
 from flask import Flask, Response, request, url_for
 
@@ -126,12 +127,8 @@ class AfterglowSchema(Schema):
 
         if _obj is not None:
             data = self.dump(_obj)
-            try:
-                # In Python 2, dump() returns MarshalResult instead of dict
-                # noinspection PyUnresolvedReferences
-                data = data.data
-            except AttributeError:
-                pass
+            if marshmallow_version < (3, 0):
+                data = data[0]
             for name, val in data.items():
                 try:
                     if isinf(val) or isnan(val):
@@ -222,7 +219,10 @@ class AfterglowSchema(Schema):
             the resource has ID
         :rtype: str
         """
-        return self.dumps(self)[0]
+        res = self.dumps(self)
+        if marshmallow_version < (3, 0):
+            res = res[0]
+        return res
 
 
 class Resource(AfterglowSchema):
@@ -272,7 +272,10 @@ class AfterglowSchemaEncoder(json.JSONEncoder):
         if isinstance(obj, type(missing)):
             return None
         if isinstance(obj, AfterglowSchema):
-            return obj.dump(obj)[0]
+            res = obj.dump()
+            if marshmallow_version < (3, 0):
+                res = res[0]
+            return res
         if isinstance(obj, datetime.datetime):
             return obj.isoformat(' ')
         return super(AfterglowSchemaEncoder, self).default(obj)

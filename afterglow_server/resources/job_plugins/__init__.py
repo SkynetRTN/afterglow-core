@@ -12,7 +12,8 @@ import errno
 import traceback
 from datetime import datetime
 
-from marshmallow import fields
+# noinspection PyProtectedMember
+from marshmallow import fields, __version_info__ as marshmallow_version
 
 from ... import AfterglowSchema, DateTime, Float, app, errors
 
@@ -287,11 +288,12 @@ class Job(AfterglowSchema):
         :return: None
         """
         # Serialize and enqueue the job state and result along with the job ID
-        self._queue.put(dict(
-            id=self.id,
-            state=self.state.dump(self.state)[0],
-            result=self.result.dump(self.result)[0],
-        ))
+        state_dump = self.state.dump(self.state)
+        result_dump = self.result.dump(self.result)
+        if marshmallow_version < (3, 0):
+            state_dump = state_dump[0]
+            result_dump = result_dump[0]
+        self._queue.put(dict(id=self.id, state=state_dump, result=result_dump))
 
     def add_error(self, msg):
         """
