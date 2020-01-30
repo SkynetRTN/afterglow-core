@@ -533,7 +533,7 @@ class JobWorkerProcess(Process):
                 # that need them; within a worker process, auth.current_user
                 # is an AnonymousUser object with settable "id" and "username"
                 # attrs
-                if auth.current_user is None:
+                if not hasattr(auth.current_user, 'id'):
                     from ..users import AnonymousUser
                     auth.current_user = AnonymousUser()
                 auth.current_user.id = job.user_id
