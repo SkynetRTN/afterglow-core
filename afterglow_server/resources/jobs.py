@@ -36,7 +36,7 @@ from flask import Response, request
 
 from .. import (
     AfterglowSchemaEncoder, app, errors, json_response, plugins, url_prefix)
-from ..auth import auth_required, current_user
+from .. import auth
 from .data_files import SqlaSession, get_data_file_db
 from . import job_plugins
 
@@ -533,8 +533,11 @@ class JobWorkerProcess(Process):
                 # that need them; within a worker process, auth.current_user
                 # is an AnonymousUser object with settable "id" and "username"
                 # attrs
-                current_user.id = job.user_id
-                current_user.username = job.username
+                if auth.current_user is None:
+                    from ..users import AnonymousUser
+                    auth.current_user = AnonymousUser()
+                auth.current_user.id = job.user_id
+                auth.current_user.username = job.username
 
                 # Clear the possible cancel request
                 if WINDOWS:
@@ -1353,8 +1356,8 @@ def job_server_request(resource, **args):
         msg.update(dict(
             resource=resource,
             method=request.method,
-            user_id=current_user.id,
-            username=current_user.username,
+            user_id=auth.current_user.id,
+            username=auth.current_user.username,
         ))
         msg = encrypt(json.dumps(msg).encode('utf8'))
 
@@ -1419,7 +1422,7 @@ resource_prefix = url_prefix + 'jobs/'
 
 @app.route(resource_prefix[:-1], methods=('GET', 'POST'))
 @app.route(resource_prefix + '<int:id>', methods=('GET', 'DELETE'))
-@auth_required('user')
+@auth.auth_required('user')
 def jobs(id=None):
     """
     Return user's job(s), submit or delete a job
@@ -1451,7 +1454,7 @@ def jobs(id=None):
 
 
 @app.route(resource_prefix + '<int:id>/state', methods=['GET', 'PUT'])
-@auth_required('user')
+@auth.auth_required('user')
 def jobs_state(id):
     """
     Return or modify job state
@@ -1471,7 +1474,7 @@ def jobs_state(id):
 
 
 @app.route(resource_prefix + '<int:id>/result')
-@auth_required('user')
+@auth.auth_required('user')
 def jobs_result(id):
     """
     Return job result
@@ -1487,7 +1490,7 @@ def jobs_result(id):
 
 
 @app.route(resource_prefix + '<int:id>/result/files/<file_id>')
-@auth_required('user')
+@auth.auth_required('user')
 def jobs_result_files(id, file_id):
     """
     Return extra job result file
