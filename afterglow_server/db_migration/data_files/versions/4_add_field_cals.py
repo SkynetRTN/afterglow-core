@@ -1,11 +1,11 @@
-"""Initial revision"""
+"""Add field cals"""
 from alembic import op
 import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '1'
-down_revision = None
+revision = '4'
+down_revision = '3'
 branch_labels = None
 depends_on = None
 
@@ -22,8 +22,15 @@ def upgrade():
         sa.Column('min_snr', sa.Float(), server_default='0'),
         sa.Column('max_snr', sa.Float(), server_default='0'),
         sa.Column('source_match_tol', sa.Float()),
+        sqlite_autoincrement=True,
     )
+
+    with op.batch_alter_table(
+            'field_cals',
+            table_args=(sa.CheckConstraint('length(name) <= 1024'),),
+            table_kwargs=dict(sqlite_autoincrement=True)):
+        pass
 
 
 def downgrade():
-    op.drop_table('data_files')
+    op.drop_table('field_cals')

@@ -4,21 +4,13 @@ Afterglow Access Server: field-cals resource
 
 from __future__ import absolute_import, division, print_function
 
-import os
-import sqlite3
-from threading import Lock
-
-from sqlalchemy import Column, Float, Integer, String, create_engine, event
-from sqlalchemy.orm import scoped_session, sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
-# noinspection PyProtectedMember
-from sqlalchemy.engine import Engine
+from sqlalchemy import Column, Float, Integer, String
 from flask import request
 
 from ..data_structures import FieldCal
 from ..auth import auth_required, current_user
 from .. import app, errors, json_response, url_prefix
-from .data_files import CannotCreateDataFileDirError, get_root
+from .data_files import Base, get_data_file_db
 
 try:
     # noinspection PyUnresolvedReferences
@@ -30,10 +22,7 @@ except ImportError:
     alembic_config = alembic_context = None
 
 
-__all__ = [
-    'DuplicateFieldCalError', 'UnknownFieldCalError',
-    'get_field_cal', 'get_field_cal_db',
-]
+__all__ = ['DuplicateFieldCalError', 'UnknownFieldCalError', 'get_field_cal']
 
 
 class UnknownFieldCalError(errors.AfterglowError):
@@ -59,15 +48,12 @@ class DuplicateFieldCalError(errors.AfterglowError):
     message = 'Duplicate field cal name'
 
 
-Base = declarative_base()
-
-
 class SqlaFieldCal(Base):
     __tablename__ = 'field_cals'
     __table_args__ = dict(sqlite_autoincrement=True)
 
     id = Column(Integer, primary_key=True, nullable=False)
-    name = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String(1024), unique=True, nullable=False, index=True)
     catalog_sources = Column(String)
     catalogs = Column(String)
     custom_filter_lookup = Column(String)
@@ -75,86 +61,6 @@ class SqlaFieldCal(Base):
     min_snr = Column(Float, server_default='0')
     max_snr = Column(Float, server_default='0')
     source_match_tol = Column(Float)
-
-
-# SQLA database engine
-field_cals_engine = {}
-field_cals_engine_lock = Lock()
-
-
-def get_field_cal_db(user_id):
-    """
-    Initialize the given user's data file storage directory and field cal
-    database as needed and return the database object; thread-safe
-
-    :return: SQLAlchemy session object
-    :rtype: sqlalchemy.orm.session.Session
-    """
-    try:
-        root = get_root(user_id)
-
-        # Make sure the user's data directory exists
-        if os.path.isfile(root):
-            os.remove(root)
-        if not os.path.isdir(root):
-            os.makedirs(root)
-
-        with field_cals_engine_lock:
-            try:
-                # Get engine from cache
-                engine = field_cals_engine[root]
-            except KeyError:
-                # Engine does not exist, create it
-                @event.listens_for(Engine, 'connect')
-                def set_sqlite_pragma(dbapi_connection, _rec):
-                    if isinstance(dbapi_connection, sqlite3.Connection):
-                        cursor = dbapi_connection.cursor()
-                        cursor.execute('PRAGMA journal_mode=WAL')
-                        cursor.close()
-                engine = field_cals_engine[root] = create_engine(
-                    'sqlite:///{}'.format(os.path.join(root, 'field_cals.db')),
-                    connect_args={'check_same_thread': False,
-                                  'isolation_level': None},
-                )
-
-                # Create field_cals table
-                if alembic_config is None:
-                    # Alembic not available, create table from SQLA metadata
-                    Base.metadata.create_all(bind=engine)
-                else:
-                    # Create/upgrade table via Alembic
-                    cfg = alembic_config.Config()
-                    cfg.set_main_option(
-                        'script_location',
-                        os.path.abspath(os.path.join(
-                            __file__, '..', '..', 'db_migration', 'field_cals'))
-                    )
-                    script = ScriptDirectory.from_config(cfg)
-
-                    def upgrade(rev, _):
-                        # noinspection PyProtectedMember
-                        return script._upgrade_revs('head', rev)
-
-                    with EnvironmentContext(
-                                cfg,
-                                script,
-                                fn=upgrade,
-                                as_sql=False,
-                                starting_rev=None,
-                                destination_rev='head',
-                                tag=None,
-                            ), engine.connect() as connection:
-                        alembic_context.configure(connection=connection)
-
-                        with alembic_context.begin_transaction():
-                            alembic_context.run_migrations()
-
-            return scoped_session(sessionmaker(bind=engine))()
-
-    except Exception as e:
-        raise CannotCreateDataFileDirError(
-            reason=e.message if hasattr(e, 'message') and e.message
-            else ', '.join(str(arg) for arg in e.args) if e.args else str(e))
 
 
 def get_field_cal(user_id, id_or_name):
@@ -167,7 +73,8 @@ def get_field_cal(user_id, id_or_name):
     :return: serialized field cal object
     :rtype: FieldCal
     """
-    adb = get_field_cal_db(user_id)
+    adb = get_data_file_db(user_id)
+
     try:
         field_cal = adb.query(SqlaFieldCal).get(int(id_or_name))
     except ValueError:
@@ -215,7 +122,8 @@ def field_cals(id_or_name=None):
         DELETE: empty response
     :rtype: flask.Response | str
     """
-    adb = get_field_cal_db(current_user.id)
+    adb = get_data_file_db(current_user.id)
+
     if id_or_name is not None:
         # When getting, updating, or deleting a field cal, check that it
         # exists
