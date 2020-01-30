@@ -64,7 +64,8 @@ except ImportError:
 __all__ = [
     'UnknownDataFileError', 'CannotCreateDataFileDirError',
     'CannotImportFromCollectionAssetError', 'UnrecognizedDataFileError',
-    'MissingWCSError', 'DataFile', 'Session', 'SqlaDataFile', 'SqlaSession',
+    'MissingWCSError',
+    'Base', 'DataFile', 'Session', 'SqlaDataFile', 'SqlaSession',
     'data_files_engine', 'data_files_engine_lock', 'create_data_file',
     'save_data_file', 'get_data_file', 'get_data_file_data',
     'get_data_file_db', 'get_data_file_fits', 'get_data_file_path',
@@ -244,7 +245,6 @@ class Session(Resource):
 Base = declarative_base()
 
 
-# noinspection PyClassHasNoInit
 class SqlaDataFile(Base):
     __tablename__ = 'data_files'
     __table_args__ = dict(sqlite_autoincrement=True)
@@ -265,7 +265,6 @@ class SqlaDataFile(Base):
         nullable=True, index=True)
 
 
-# noinspection PyClassHasNoInit
 class SqlaSession(Base):
     __tablename__ = 'sessions'
     __table_args__ = dict(sqlite_autoincrement=True)
@@ -310,7 +309,6 @@ def get_data_file_db(user_id):
     :param int | None user_id: current user ID (None if user auth is disabled)
 
     :return: SQLAlchemy session object
-    :rtype: sqlalchemy.orm.session.Session
     """
     try:
         root = get_root(user_id)
@@ -324,7 +322,7 @@ def get_data_file_db(user_id):
         with data_files_engine_lock:
             try:
                 # Get engine from cache
-                engine = data_files_engine[root]
+                return data_files_engine[root][1]
             except KeyError:
                 # Engine does not exist, create it
                 @event.listens_for(Engine, 'connect')
@@ -334,7 +332,7 @@ def get_data_file_db(user_id):
                         cursor.execute('PRAGMA foreign_keys=ON')
                         cursor.execute('PRAGMA journal_mode=WAL')
                         cursor.close()
-                engine = data_files_engine[root] = create_engine(
+                engine = create_engine(
                     'sqlite:///{}'.format(os.path.join(root, 'data_files.db')),
                     connect_args={'check_same_thread': False,
                                   'isolation_level': None},
@@ -366,7 +364,10 @@ def get_data_file_db(user_id):
                         with alembic_context.begin_transaction():
                             alembic_context.run_migrations()
 
-            return scoped_session(sessionmaker(bind=engine))()
+                session = scoped_session(sessionmaker(bind=engine))()
+                data_files_engine[root] = engine, session
+
+                return session
 
     except Exception as e:
         # noinspection PyUnresolvedReferences
