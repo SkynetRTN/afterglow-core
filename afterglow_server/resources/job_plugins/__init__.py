@@ -98,6 +98,7 @@ class Job(AfterglowSchema):
             POST /jobs?type=`name`
         id: unique integer job ID assigned automatically on job creation
         user_id: ID of the user who submitted the job
+        username: username of the job owner
         session_id: ID of the client session (None = default anonymous session);
             new data files will be created with this session ID
         state: current job state, an instance of DbJobState
@@ -246,6 +247,7 @@ class Job(AfterglowSchema):
     id = fields.Integer(default=None)  # type: int
     type = fields.String()  # type: str
     user_id = fields.Integer(default=None)  # type: int
+    username = fields.String(default=None)  # type: str
     session_id = fields.Integer(default=None)  # type: int
     state = fields.Nested(JobState)  # type: JobState
     result = fields.Nested(JobResult)  # type: JobResult

@@ -175,11 +175,28 @@ except Exception:
     raise
 
 
-class AnonymousUser(User):
+class AnonymousUserRole(object):
+    id = None
+    name = 'user'
+    description = 'Anonymous Afterglow Access User'
+
+
+class AnonymousUser(object):
     id = None
     username = '<Anonymous>'
+    email = ''
     password = ''
     active = True
     created_at = None
     modified_at = None
-    roles = (Role.query.filter_by(name='user').one(),)
+    roles = None
+    auth_methods = None
+    settings = ''
+    is_admin = False
+
+    def __init__(self):
+        self.roles = (AnonymousUserRole(),)
+
+    def get_user_id(self):
+        """Return user ID; required by authlib"""
+        return self.id
