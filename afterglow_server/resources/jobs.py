@@ -19,6 +19,9 @@ import cProfile
 from datetime import datetime
 from multiprocessing import Event, Process, Queue
 import threading
+import sqlite3
+
+# noinspection PyProtectedMember
 from marshmallow import (
     Schema, fields, missing, __version_info__ as marshmallow_version)
 from sqlalchemy import (
@@ -384,10 +387,10 @@ class DbJob(Base):
     id = Column(Integer, primary_key=True, nullable=False)
     type = Column(String(40), nullable=False, index=True)
     user_id = Column(Integer, index=True)
+    username = Column(String, index=True)
     session_id = Column(Integer, nullable=True, index=True)
 
-    state = relationship(
-        DbJobState, backref='job', uselist=False)
+    state = relationship(DbJobState, backref='job', uselist=False)
     result = relationship(
         DbJobResult, backref='job', uselist=False,
         foreign_keys=DbJobResult.id)
@@ -524,6 +527,14 @@ class JobWorkerProcess(Process):
                         result=dict(errors=[str(e)]),
                     ))
                     continue
+
+                # Replace auth.current_user with a fake user db object
+                # with the current user id and username for those modules
+                # that need them; within a worker process, auth.current_user
+                # is an AnonymousUser object with settable "id" and "username"
+                # attrs
+                current_user.id = job.user_id
+                current_user.username = job.username
 
                 # Clear the possible cancel request
                 if WINDOWS:
@@ -787,13 +798,14 @@ class JobRequestHandler(BaseRequestHandler):
                     job_id = msg.get('id')
                     if job_id is None:
                         # Return all user's jobs for the given client session;
-                        # hide user_id and result
+                        # hide user id/name and result
                         result = []
                         for job in session.query(DbJob).filter(
-                            DbJob.user_id == user_id,
-                            DbJob.session_id == msg.get('session_id')):
+                                DbJob.user_id == user_id,
+                                DbJob.session_id == msg.get('session_id')):
                             res = job_types[job.type].__class__(
-                                exclude=['user_id', 'result']).dump(job)
+                                exclude=['user_id', 'username', 'result']
+                            ).dump(job)
                             if marshmallow_version < (3, 0):
                                 res = res[0]
                             result.append(res)
@@ -868,7 +880,7 @@ class JobRequestHandler(BaseRequestHandler):
                             result = result[0]
                         server.job_queue.put(result)
                         result = dict(result)
-                        del result['user_id']
+                        del result['user_id'], result['username']
                         session.commit()
                     except Exception:
                         session.rollback()
@@ -1117,10 +1129,11 @@ def job_server(notify_queue, key, iv):
         # from multiple Apache processes
         @event.listens_for(Engine, 'connect')
         def set_sqlite_pragma(dbapi_connection, _):
-            cursor = dbapi_connection.cursor()
-            cursor.execute('PRAGMA foreign_keys=ON')
-            cursor.execute('PRAGMA journal_mode=WAL')
-            cursor.close()
+            if isinstance(dbapi_connection, sqlite3.Connection):
+                cursor = dbapi_connection.cursor()
+                cursor.execute('PRAGMA foreign_keys=ON')
+                cursor.execute('PRAGMA journal_mode=WAL')
+                cursor.close()
 
         # Recreate all tables on startup
         db_path = os.path.join(
@@ -1341,6 +1354,7 @@ def job_server_request(resource, **args):
             resource=resource,
             method=request.method,
             user_id=current_user.id,
+            username=current_user.username,
         ))
         msg = encrypt(json.dumps(msg).encode('utf8'))
 
