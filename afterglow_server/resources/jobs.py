@@ -571,6 +571,16 @@ class JobWorkerProcess(Process):
                     job.update()
                     result_queue.put(dict(id=None, pid=self.ident))
 
+                    # Close the possible data file db session
+                    # noinspection PyBroadException
+                    try:
+                        with data_files.data_files_engine_lock:
+                            data_files.data_files_engine[
+                                data_files.get_root(job.user_id)
+                            ].remove()
+                    except Exception:
+                        pass
+
             except KeyboardInterrupt:
                 # Ignore interrupt signals occasionally sent before the job has
                 # started
@@ -1066,7 +1076,7 @@ class JobRequestHandler(BaseRequestHandler):
 
         # noinspection PyBroadException
         try:
-            session.close()
+            session.remove()
         except Exception:
             pass
 

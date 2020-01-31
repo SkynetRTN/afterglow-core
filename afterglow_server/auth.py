@@ -280,16 +280,30 @@ def auth_required(fn, *roles, **kwargs):
     @wraps(fn)
     def wrapper(*args, **kw):
         authenticate(roles, **kwargs)
-        result = fn(*args, **kw)
 
-        # Update access cookie if present in request
-        token_sig = request.cookies.get('access_token_sig')
-        token_hdr_payload = request.cookies.get('access_token')
-        if token_sig and token_hdr_payload:
-            result = _set_access_cookies(
-                result, token_hdr_payload + '.' + token_sig)
+        try:
+            result = fn(*args, **kw)
 
-        return result
+            # Update access cookie if present in request
+            token_sig = request.cookies.get('access_token_sig')
+            token_hdr_payload = request.cookies.get('access_token')
+            if token_sig and token_hdr_payload:
+                result = _set_access_cookies(
+                    result, token_hdr_payload + '.' + token_sig)
+
+            return result
+        finally:
+            # Close the possible data file db session; don't import at module
+            # level because of a circular dependency
+            from .resources import data_files
+            # noinspection PyBroadException
+            try:
+                with data_files.data_files_engine_lock:
+                    data_files.data_files_engine[
+                        data_files.get_root(current_user.id)
+                    ].remove()
+            except Exception:
+                pass
 
     return wrapper
 
