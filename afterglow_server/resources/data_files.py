@@ -322,7 +322,7 @@ def get_data_file_db(user_id):
         with data_files_engine_lock:
             try:
                 # Get engine from cache
-                return data_files_engine[root][1]
+                session = data_files_engine[root][1]
             except KeyError:
                 # Engine does not exist, create it
                 @event.listens_for(Engine, 'connect')
@@ -364,10 +364,11 @@ def get_data_file_db(user_id):
                         with alembic_context.begin_transaction():
                             alembic_context.run_migrations()
 
-                session = scoped_session(sessionmaker(bind=engine))()
+                session = scoped_session(sessionmaker(bind=engine))
                 data_files_engine[root] = engine, session
 
-                return session
+        session()
+        return session
 
     except Exception as e:
         # noinspection PyUnresolvedReferences
