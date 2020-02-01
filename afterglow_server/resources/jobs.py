@@ -5,6 +5,7 @@ Job types are defined in afterglow_server.job_plugins.
 """
 
 from __future__ import absolute_import, division, print_function
+
 import sys
 import os
 import traceback
@@ -17,6 +18,7 @@ import struct
 import socket
 import cProfile
 from datetime import datetime
+from glob import glob
 from multiprocessing import Event, Process, Queue
 import threading
 import sqlite3
@@ -1148,13 +1150,15 @@ def job_server(notify_queue, key, iv):
                 cursor.execute('PRAGMA journal_mode=WAL')
                 cursor.close()
 
-        # Recreate all tables on startup
+        # Recreate the job db on startup; also erase shared memory and journal
+        # files
         db_path = os.path.join(
             os.path.abspath(app.config['DATA_ROOT']), 'jobs.db')
-        try:
-            os.remove(db_path)
-        except OSError:
-            pass
+        for fp in glob(db_path + '*'):
+            try:
+                os.remove(fp)
+            except OSError:
+                pass
         engine = create_engine(
             'sqlite:///{}'.format(db_path),
             connect_args={'check_same_thread': False, 'isolation_level': None},
