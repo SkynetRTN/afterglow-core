@@ -8,8 +8,7 @@ from sqlalchemy import Column, Float, Integer, String
 from flask import request
 
 from ..data_structures import FieldCal
-from ..auth import auth_required, current_user
-from .. import app, errors, json_response, url_prefix
+from .. import app, auth, errors, json_response, url_prefix
 from .data_files import Base, get_data_file_db
 
 try:
@@ -93,7 +92,7 @@ resource_prefix = url_prefix + 'field-cals/'
 
 @app.route(resource_prefix[:-1], methods=['GET', 'POST'])
 @app.route(resource_prefix + '<id_or_name>', methods=['GET', 'PUT', 'DELETE'])
-@auth_required('user')
+@auth.auth_required('user')
 def field_cals(id_or_name=None):
     """
     Return, create, update, or delete field cal(s)
@@ -122,7 +121,7 @@ def field_cals(id_or_name=None):
         DELETE: empty response
     :rtype: flask.Response | str
     """
-    adb = get_data_file_db(current_user.id)
+    adb = get_data_file_db(auth.current_user.id)
 
     if id_or_name is not None:
         # When getting, updating, or deleting a field cal, check that it

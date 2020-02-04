@@ -33,8 +33,7 @@ from skylib.calibration.background import estimate_background
 from skylib.sonification import sonify_image
 
 from . import data_providers
-from .. import Resource, app, errors, json_response, url_prefix
-from ..auth import auth_required, current_user
+from .. import Resource, app, auth, errors, json_response, url_prefix
 
 try:
     from PIL import Image as PILImage, ExifTags
@@ -1160,7 +1159,7 @@ resource_prefix = url_prefix + 'data-files/'
 
 @app.route(resource_prefix[:-1], methods=['GET', 'POST'])
 @app.route(resource_prefix + '<int:id>', methods=['GET', 'PUT', 'DELETE'])
-@auth_required('user')
+@auth.auth_required('user')
 def data_files(id=None):
     """
     Return, create, update, or delete data file(s)
@@ -1208,8 +1207,8 @@ def data_files(id=None):
         DELETE: empty response
     :rtype: flask.Response | str
     """
-    root = get_root(current_user.id)
-    adb = get_data_file_db(current_user.id)
+    root = get_root(auth.current_user.id)
+    adb = get_data_file_db(auth.current_user.id)
 
     if id is not None:
         # When getting, updating, or deleting a data file, check that it
@@ -1365,7 +1364,7 @@ def data_files(id=None):
 
 
 @app.route(resource_prefix + '<int:id>/header', methods=['GET', 'PUT'])
-@auth_required('user')
+@auth.auth_required('user')
 def data_files_header(id):
     """
     Return or update data file header
@@ -1383,9 +1382,9 @@ def data_files_header(id):
     :rtype: flask.Response
     """
     if request.method == 'GET':
-        hdr = get_data_file(current_user.id, id)[1]
+        hdr = get_data_file(auth.current_user.id, id)[1]
     else:
-        with pyfits.open(get_data_file_path(current_user.id, id),
+        with pyfits.open(get_data_file_path(auth.current_user.id, id),
                          'update') as fits:
             hdr = fits[0].header
             for name, val in request.args.items():
@@ -1397,7 +1396,7 @@ def data_files_header(id):
 
 
 @app.route(resource_prefix + '<int:id>/wcs', methods=['GET', 'PUT'])
-@auth_required('user')
+@auth.auth_required('user')
 def data_files_wcs(id):
     """
     Return or update data file WCS
@@ -1418,9 +1417,9 @@ def data_files_wcs(id):
     :rtype: flask.Response
     """
     if request.method == 'GET':
-        hdr = get_data_file(current_user.id, id)[1]
+        hdr = get_data_file(auth.current_user.id, id)[1]
     else:
-        with pyfits.open(get_data_file_path(current_user.id, id),
+        with pyfits.open(get_data_file_path(auth.current_user.id, id),
                          'update') as fits:
             hdr = fits[0].header
             for name in (
@@ -1451,7 +1450,7 @@ def data_files_wcs(id):
 
 
 @app.route(resource_prefix + '<int:id>/hist')
-@auth_required('user')
+@auth.auth_required('user')
 def data_files_hist(id):
     """
     Return the data file histogram
@@ -1472,7 +1471,7 @@ def data_files_hist(id):
         floating-point left and right histogram limits set from the data
     :rtype: flask.Response
     """
-    root = get_root(current_user.id)
+    root = get_root(auth.current_user.id)
 
     # noinspection PyBroadException
     try:
@@ -1486,7 +1485,7 @@ def data_files_hist(id):
     except Exception:
         # Cached histogram not found, calculate and return
         try:
-            data = get_data_file(current_user.id, id)[0]
+            data = get_data_file(auth.current_user.id, id)[0]
             min_bin, max_bin = float(data.min()), float(data.max())
             bins = app.config['HISTOGRAM_BINS']
             if isinstance(bins, int) and not (data % 1).any():
@@ -1523,7 +1522,7 @@ def data_files_hist(id):
 
 
 @app.route(resource_prefix + '<int:id>/pixels')
-@auth_required('user')
+@auth.auth_required('user')
 def data_files_pixels(id):
     """
     Return image data within the given rectangle or the whole image
@@ -1570,7 +1569,7 @@ def data_files_pixels(id):
     :rtype: flask.Response
     """
     try:
-        return make_data_response(get_subframe(current_user.id, id))
+        return make_data_response(get_subframe(auth.current_user.id, id))
     except errors.AfterglowError:
         raise
     except Exception:
@@ -1578,7 +1577,7 @@ def data_files_pixels(id):
 
 
 @app.route(resource_prefix + '<int:id>/fits')
-@auth_required('user')
+@auth.auth_required('user')
 def data_files_fits(id):
     """
     Return the whole data file as a FITS file
@@ -1604,11 +1603,11 @@ def data_files_fits(id):
         above), either the gzipped or uncompressed FITS file data
     :rtype: flask.Response
     """
-    return make_data_response(get_data_file_data(current_user.id, id))
+    return make_data_response(get_data_file_data(auth.current_user.id, id))
 
 
 @app.route(resource_prefix + '<int:id>/sonification')
-@auth_required('user')
+@auth.auth_required('user')
 def data_files_sonification(id):
     """
     Sonify the image or its part and return the waveform data
@@ -1648,7 +1647,7 @@ def data_files_sonification(id):
     :rtype: flask.Response
     """
     try:
-        pixels = get_subframe(current_user.id, id)
+        pixels = get_subframe(auth.current_user.id, id)
     except errors.AfterglowError:
         raise
     except Exception:
@@ -1666,7 +1665,7 @@ def data_files_sonification(id):
     for arg in ('width', 'height', 'bkg', 'rms', 'bkg_scale'):
         args.pop(arg, None)
 
-    adb = get_data_file_db(current_user.id)
+    adb = get_data_file_db(auth.current_user.id)
     df = adb.query(SqlaDataFile).get(id)
     height, width = pixels.shape
     if width != df.width or height != df.height:
@@ -1676,7 +1675,7 @@ def data_files_sonification(id):
             bkg_scale = float(args.pop('bkg_scale', 1/64))
         except ValueError:
             bkg_scale = 1/64
-        full_img = get_data_file(current_user.id, id)[0]
+        full_img = get_data_file(auth.current_user.id, id)[0]
         bkg, rms = estimate_background(full_img, size=bkg_scale)
         bkg = bkg[y0:y0+height, x0:x0+width]
         rms = rms[y0:y0+height, x0:x0+width]
@@ -1732,7 +1731,7 @@ def data_files_sonification(id):
 
 @app.route(url_prefix + 'sessions', methods=['GET', 'POST'])
 @app.route(url_prefix + 'sessions/<id>', methods=['GET', 'PUT', 'DELETE'])
-@auth_required('user')
+@auth.auth_required('user')
 def sessions(id=None):
     """
     Return, create, update, or delete session(s)
@@ -1762,7 +1761,7 @@ def sessions(id=None):
         DELETE: empty response
     :rtype: flask.Response | str
     """
-    adb = get_data_file_db(current_user.id)
+    adb = get_data_file_db(auth.current_user.id)
 
     if id is not None:
         # When getting, updating, or deleting specific session, check that it
@@ -1812,7 +1811,7 @@ def sessions(id=None):
 
     if request.method == 'DELETE':
         # Delete session and all its data files
-        root = get_root(current_user.id)
+        root = get_root(auth.current_user.id)
         try:
             for file_id in [data_file.id for data_file in session.data_files]:
                 remove_data_file(adb, root, file_id)

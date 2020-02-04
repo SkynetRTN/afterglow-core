@@ -19,8 +19,7 @@ from . import DataProvider, DataProviderAsset
 from ..data_providers import (
     AssetAlreadyExistsError, AssetNotFoundError,
     CannotUpdateCollectionAssetError)
-from ... import errors
-from ...auth import current_user
+from ... import auth, errors
 
 try:
     from PIL import Image as PILImage, ExifTags
@@ -117,7 +116,7 @@ class LocalDiskDataProvider(DataProvider):
         """
         p = os.path.abspath(os.path.expanduser(self.root))
         if self.peruser:
-            user_id = current_user.id
+            user_id = auth.current_user.id
             if user_id:
                 p = os.path.join(p, str(user_id))
 

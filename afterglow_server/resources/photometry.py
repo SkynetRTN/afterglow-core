@@ -10,8 +10,7 @@ from astropy.wcs import WCS
 from skylib.photometry.aperture import aperture_photometry
 from skylib.extraction.centroiding import centroid_iraf
 
-from .. import Float, Resource, app, errors, json_response, url_prefix
-from ..auth import auth_required, current_user
+from .. import Float, Resource, app, auth, errors, json_response, url_prefix
 from .data_files import (
     MissingWCSError, get_exp_length, get_gain, get_data_file, get_phot_cal)
 
@@ -166,7 +165,7 @@ def get_photometry(data, texp, gain, phot_cal, x, y, a, b=None, theta=0,
 
 
 @app.route(url_prefix + 'data-files/<int:id>/photometry')
-@auth_required('user')
+@auth.auth_required('user')
 def data_file_photometry(id):
     """
     Photometer the given aperture, with optional local background subtraction
@@ -375,7 +374,7 @@ def data_file_photometry(id):
         centroid_radius = None
 
     # Get image data
-    data, hdr = get_data_file(current_user.id, id)
+    data, hdr = get_data_file(auth.current_user.id, id)
 
     if ra is not None and dec is not None:
         # Convert RA/Dec to XY if we have astrometric calibration

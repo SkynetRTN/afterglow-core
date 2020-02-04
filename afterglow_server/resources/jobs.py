@@ -37,8 +37,8 @@ from sqlalchemy.types import TypeDecorator
 from flask import Response, request
 
 from .. import (
-    AfterglowSchemaEncoder, app, errors, json_response, plugins, url_prefix)
-from .. import auth
+    AfterglowSchemaEncoder, app, auth, errors, json_response, plugins,
+    url_prefix)
 from .data_files import SqlaSession, get_data_file_db
 from . import job_plugins
 
