@@ -98,9 +98,9 @@ class PixelOpsJob(Job):
 
         # Load optional auxiliary data files
         if getattr(self, 'aux_file_ids', None):
-            local_vars['aux_imgs'], local_vars['aux_hdrs'] = zip(*[
+            local_vars['aux_imgs'], local_vars['aux_hdrs'] = tuple(zip(*[
                 get_data_file(self.user_id, file_id)
-                for file_id in self.aux_file_ids])
+                for file_id in self.aux_file_ids]))
             local_vars['aux_img'] = local_vars['aux_imgs'][0]
             local_vars['aux_hdr'] = local_vars['aux_hdrs'][0]
         else:
@@ -110,7 +110,7 @@ class PixelOpsJob(Job):
             # Cases 2 and 3; each output must have access to all input images
             if {'img', 'hdr'} & set(co.co_names):
                 raise ValueError('Cannot mix "imgs"/"hdrs" with "img"/"hdr"')
-            local_vars['imgs'], local_vars['hdrs'] = zip(*data_files)
+            local_vars['imgs'], local_vars['hdrs'] = tuple(zip(*data_files))
 
             if 'i' in co.co_names:
                 # Case 3: mixed input images; evaluate expression and create
