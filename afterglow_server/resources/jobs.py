@@ -525,7 +525,7 @@ class JobWorkerProcess(Process):
                         '%s Could not create job', prefix, exc_info=True)
                     result_queue.put(dict(
                         id=job_descr['id'],
-                        state=dict(progress=100, status='complete'),
+                        state=dict(progress=100, status='completed'),
                         result=dict(errors=[str(e)]),
                     ))
                     continue
