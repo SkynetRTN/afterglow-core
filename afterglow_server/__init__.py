@@ -179,7 +179,7 @@ class AfterglowSchema(Schema):
                         else hasattr(field.inner, 'nested') and
                         issubclass(field.inner.nested, AfterglowSchema)):
                     klass = field.container.nested \
-                        if hasattr(field, 'container') else field.inner
+                        if hasattr(field, 'container') else field.inner.nested
                     value = [klass(item) for item in value]
                 elif value is not None:
                     # noinspection PyBroadException
