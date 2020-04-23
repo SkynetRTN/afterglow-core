@@ -160,6 +160,7 @@ class AfterglowError(exceptions.HTTPException):
     code = 400  # HTTP status code
     subcode = None  # Afterglow-specific error code
     payload = None  # additional error data
+    message = None  # error message
 
     def __init__(self, **kwargs):
         """

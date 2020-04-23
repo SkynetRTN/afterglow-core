@@ -94,9 +94,9 @@ class Job(AfterglowSchema):
     Base class for JSON-serializable job plugins
 
     Attributes::
-        name: job type name; used when submitting a job via
-            POST /jobs?type=`name`
         id: unique integer job ID assigned automatically on job creation
+        type: job type name; used when submitting a job via
+            POST /jobs?type=`name`
         user_id: ID of the user who submitted the job
         username: username of the job owner
         session_id: ID of the client session (None = default anonymous session);

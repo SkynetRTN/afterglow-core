@@ -30,8 +30,10 @@ from __future__ import absolute_import, division, print_function
 
 import sys
 import time
+from typing import Optional
+
 from sqlalchemy import Column, Integer, create_engine
-from sqlalchemy.orm import scoped_session, sessionmaker
+import sqlalchemy.orm.session
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import StaticPool
 from flask import redirect, request
@@ -226,7 +228,7 @@ class OAuth2Client(ClientMixin):
 
 Base = declarative_base()
 memory_engine = None
-memory_session = None
+memory_session = None  # type: Optional[sqlalchemy.orm.session.Session]
 
 
 class OAuth2AuthorizationCode(Base, OAuth2AuthorizationCodeMixin):
@@ -345,7 +347,8 @@ def init_oauth():
         'sqlite://', connect_args=dict(check_same_thread=False),
         poolclass=StaticPool)
     Base.metadata.create_all(bind=memory_engine)
-    memory_session = scoped_session(sessionmaker(bind=memory_engine))()
+    memory_session = sqlalchemy.orm.scoped_session(
+        sqlalchemy.orm.session.sessionmaker(bind=memory_engine))()
 
     # Configure Afterglow OAuth2 tokens
     app.config['OAUTH2_ACCESS_TOKEN_GENERATOR'] = create_access_token

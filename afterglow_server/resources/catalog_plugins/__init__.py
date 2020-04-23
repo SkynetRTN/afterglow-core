@@ -27,7 +27,9 @@ class Catalog(Resource):
     class MyCatalog(Catalog):
         name = 'my_catalog'
         num_sources = 1000000
-        mags = ['B', 'V', 'R', 'I']
+        mags = {'B': ('Bmag', 'eBmag'), 'V': ('Vmag', 'eVmag'),
+                'R': ('Rmag', 'eRmag'), 'I': ('Imag', 'eImag')}
+        filter_lookup = {'Open': '(3*B + 5*R)/8'}
 
         def query_objects(self, names):  # optional
             ...
@@ -44,11 +46,6 @@ class Catalog(Resource):
         name: unique catalog name
         display_name: more verbose catalog description; defaults to name
         num_sources: number of sources in the catalog
-        mags: list of catalog magnitude names
-        filter_lookup: default custom mapping between certain bandpasses not
-            present in the catalog and catalog magnitudes (in particular,
-            aliases for non-standard catalog magnitude names), e.g. {'Open':
-            '(3*B + 5*R)/8', "r'": 'rprime'}; used by field cal job
         mags: mapping between standard magnitude names like 'B', 'V', 'R' for
             magnitudes present in the catalog and catalog-specific magnitude
             names and errors; the value is a 0 to 2-element list: the first item
@@ -58,6 +55,10 @@ class Catalog(Resource):
             are derived from catalog magnitudes using certain expressions);
             the mapping can be used to create catalog-specific constraint
             expressions
+        filter_lookup: default custom mapping between certain bandpasses not
+            present in the catalog and catalog magnitudes (in particular,
+            aliases for non-standard catalog magnitude names), e.g. {'Open':
+            '(3*B + 5*R)/8', "r'": 'rprime'}; used by field cal job
 
     Methods::
         query_objects: return a list of catalog objects with the specified names

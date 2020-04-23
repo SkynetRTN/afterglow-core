@@ -8,7 +8,8 @@ DATA_PROVIDERS configuration variable.
 from __future__ import absolute_import, division, print_function
 from flask import request
 from .. import app, errors, json_response, plugins, url_prefix
-from ..auth import NotAuthenticatedError, auth_plugins, auth_required
+from ..auth import (
+    NotAuthenticatedError, auth_plugins, auth_required, current_user)
 from . import data_provider_plugins
 
 
@@ -317,7 +318,7 @@ def data_providers_assets(id):
         data_file_id = params.pop('data_file_id', None)
         if data_file_id is not None:
             from .data_files import get_data_file_data
-            data = get_data_file_data(data_file_id)
+            data = get_data_file_data(current_user.id, data_file_id)
         elif request.method == 'PUT':
             raise errors.MissingFieldError(field='data_file_id')
 

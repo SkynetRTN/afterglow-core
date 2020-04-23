@@ -606,7 +606,7 @@ def init_auth():
               "admin" and "user" (separated by comma if both)
 
         PUT /admin/users/[id]?username=...&password=...&active=...
-            - update user account; must admin or same user
+            - update user account; must be admin or same user
 
         DELETE /admin/users/[id]
             - delete the given user account; must be admin
@@ -813,8 +813,7 @@ def init_auth():
                 except Exception as exc:
                     app.logger.warn(
                         'Error removing user\'s data file directory "%s" '
-                        '[%s]', data_file_dir, id,
-                        exc.message if exc.message else exc)
+                        '[%s]', data_file_dir, id, exc)
                 return json_response()
 
 
@@ -836,8 +835,8 @@ def auth_plugins_view(id=None):
     """
     if id is None:
         return json_response(
-            [auth_plugins[id] for id in sorted(
-                {str(id) for id in auth_plugins.keys()})])
+            [auth_plugins[id]
+             for id in sorted({str(id) for id in auth_plugins})])
 
     try:
         plugin = auth_plugins[id]
@@ -892,8 +891,7 @@ def login(method=None):
             except HTTPException as e:
                 if hasattr(e.response, 'status_code') and \
                         e.response.status_code == 302:
-                    # Allow redirects from multi-stage auth plugins like
-                    # OAuth
+                    # Allow redirects from multi-stage auth plugins like OAuth
                     raise
                 error_msgs[method] = str(e)
             except Exception as e:
@@ -1088,7 +1086,7 @@ def auth_user_auth_methods():
     method = request.args.get('method')
     if method not in auth_plugins:
         raise errors.ValidationError(
-            'method', 'Unknown auth method "{}"'.format(method))
+            'method', 'Unknown auth method "{}"'.format(method), 404)
     user.auth_methods = ','.join(set(user.auth_methods.split(',') + [method]))
     try:
         db.session.commit()

@@ -1274,7 +1274,7 @@ def data_files(id=None):
                     adb, name, root, data, duplicates='append',
                     session_id=session_id))
             else:
-                # Import data file from the specified provider
+                # Import data file
                 import_params = request.args.to_dict()
                 provider_id = import_params.pop('provider_id', None)
                 duplicates = import_params.pop('duplicates', 'ignore')
@@ -1282,7 +1282,7 @@ def data_files(id=None):
                     # Data file upload: get data from request body
                     all_data_files += import_data_file(
                         adb, root, None, None, import_params,
-                        BytesIO(request.data.encode('utf-8')),
+                        BytesIO(request.data),
                         import_params.get('name'),
                         duplicates, session_id=session_id)
                 else:

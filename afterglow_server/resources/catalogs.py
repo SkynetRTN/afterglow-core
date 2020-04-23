@@ -51,7 +51,6 @@ def get_catalogs(name=None):
         return json_response(catalogs)
 
     try:
-        from numpy import array
         return json_response(catalogs[name])
     except KeyError:
         raise UnknownCatalogError(name=name)

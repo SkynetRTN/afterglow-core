@@ -57,7 +57,7 @@ class IFWHM(AfterglowSchema):
 
 class IPhotometry(AfterglowSchema):
     flux = Float()  # type: float
-    flux_error_error = Float()  # type: float
+    flux_error = Float()  # type: float
     mag = Float()  # type: float
     mag_error = Float()  # type: float
 
