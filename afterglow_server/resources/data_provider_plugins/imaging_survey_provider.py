@@ -47,6 +47,7 @@ class ImagingSurveyDataProvider(DataProvider):
     )
     readonly = True
     quota = usage = None
+    allow_multiple_instances = False
 
     @staticmethod
     def _get_asset_params(path):

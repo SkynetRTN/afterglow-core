@@ -28,7 +28,8 @@ __all__ = ['load_plugins']
 def add_plugin(plugins, descr, instance, default_id=None):
     """
     Add a plugin instance to the plugin dictionary, with the possible alias for
-    integer plugin IDs; adjust plugin ID and display name
+    integer plugin IDs; adjust plugin ID and display name; check that there are
+    no more plugins with the same name if allow_multiple_instances is False
 
     :param dict plugins: dictionary {str(id): instance, int(id): instance}
     :param str descr: plugin description
@@ -37,6 +38,13 @@ def add_plugin(plugins, descr, instance, default_id=None):
 
     :return: None
     """
+    if getattr(instance, 'name', None) and \
+            not getattr(instance, 'allow_multiple_instances', True) and \
+            not any(getattr(other_instance, 'name', None) == instance.name
+                    for other_instance in plugins.values()):
+        raise RuntimeError('Multiple instances of plugin "{}" are not allowed'
+                           .format(instance.name))
+
     if not hasattr(instance, 'display_name') or \
             not instance.display_name:
         instance.display_name = instance.name
