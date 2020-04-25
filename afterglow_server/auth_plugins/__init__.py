@@ -32,6 +32,7 @@ class AuthPlugin(Resource):
             like GET /auth/[id]/...
         type: auth type (e.g. "http" or "oauth2")
         description: description of the auth method
+        logo: optional UI-specific logo ID
         register_users: automatically register authenticated users if missing
             from the local user database; defaults to
             REGISTER_AUTHENTICATED_USERS conf option
@@ -46,14 +47,17 @@ class AuthPlugin(Resource):
     name = String(default=None)
     type = String(default=None)
     description = String(default=None)
+    logo = String(default=None)
     register_users = String(default=None)
 
-    def __init__(self, id=None, description=None, register_users=None):
+    def __init__(self, id=None, description=None, logo=None,
+                 register_users=None):
         """
         Initialize OAuth plugin
 
         :param str id: plugin ID
         :param str description: plugin description
+        :param str logo: plugin logo ID used by the client UI
         :param bool register_users: automatically register authenticated users
             if missing from the local user database; overrides
             REGISTER_AUTHENTICATED_USERS
@@ -70,6 +74,11 @@ class AuthPlugin(Resource):
                 self.description = self.name
         else:
             self.description = description
+
+        if logo is not None:
+            self.logo = logo
+        if self.logo is None:
+            self.logo = self.name
 
         if self.register_users is None:
             self.register_users = register_users
