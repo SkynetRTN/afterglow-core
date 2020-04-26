@@ -29,7 +29,7 @@ def run_source_extraction_job(job, settings, job_file_ids):
     Batch photometry job body; also used during photometric calibration
 
     :param Job job: job class instance
-    :param afterglow_server.data_structures.SourceExtractionSettings settings:
+    :param afterglow_1_0.data_structures.SourceExtractionSettings settings:
         soruce extraction settings
     :param list job_file_ids: data file IDs to process
 

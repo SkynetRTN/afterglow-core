@@ -72,12 +72,12 @@ def run_photometry_job(job, settings, job_file_ids, job_sources,
     Batch photometry job body; also used during photometric calibration
 
     :param Job job: job class instance
-    :param afterglow_server.data_structures.PhotSettings settings: photometry
+    :param afterglow_1_0.data_structures.PhotSettings settings: photometry
         settings
     :param list job_file_ids: data file IDs to process
     :param list job_sources: list of SourceExtractionData-compatible source defs
     :param list | bool | None field_cal_results: optional list of
-        :class:`afterglow_server.data_structures.FieldCalResult` instances
+        :class:`afterglow_1_0.data_structures.FieldCalResult` instances
         having `zero_point` and optionally `zero_point_error` that will be used
         for photometric calibration; if none provided for the given data file,
         its existing photometric calibration info will be used if present

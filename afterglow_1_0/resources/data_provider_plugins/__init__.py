@@ -117,8 +117,8 @@ class DataProvider(Resource):
         """
         Create a DataProvider instance
 
-        :param args: see :class:`afterglow_server.Resource`
-        :param kwargs: see :class:`afterglow_server.Resource`
+        :param args: see :class:`afterglow_1_0.Resource`
+        :param kwargs: see :class:`afterglow_1_0.Resource`
         """
         super(DataProvider, self).__init__(*args, **kwargs)
 

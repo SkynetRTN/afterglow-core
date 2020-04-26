@@ -39,7 +39,7 @@ class USNOB1Catalog(VizierCatalog):
             by astroquery
 
         :return: list of catalog objects
-        :rtype: list[afterglow_server.data_structures.CatalogSource]
+        :rtype: list[afterglow_1_0.data_structures.CatalogSource]
         """
         sources = super(USNOB1Catalog, self).table_to_sources(table)
 

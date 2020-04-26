@@ -86,7 +86,7 @@ class AuthPlugin(Resource):
     def get_user(self):
         """
         Return the username of the authenticated user; raise some
-        :class:`afterglow_server.errors.AfterglowError` if the user is not
+        :class:`afterglow_1_0.errors.AfterglowError` if the user is not
         authenticated
 
         :return: authenticated user's username

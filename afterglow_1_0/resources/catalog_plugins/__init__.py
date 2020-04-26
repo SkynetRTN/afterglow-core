@@ -79,8 +79,8 @@ class Catalog(Resource):
         """
         Create a Catalog instance
 
-        :param args: see :class:`afterglow_server.Resource`
-        :param kwargs: see :class:`afterglow_server.Resource`
+        :param args: see :class:`afterglow_1_0.Resource`
+        :param kwargs: see :class:`afterglow_1_0.Resource`
         """
         # Override catalog option defaults with CATALOG_OPTIONS config var
         # for the current catalog

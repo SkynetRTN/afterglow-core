@@ -78,7 +78,7 @@ def load_plugins(descr, package, plugin_class, specs=None):
     Load and initialize plugins from the given directory
 
     :param str descr: plugin description
-    :param str package: plugin package name relative to afterglow_server, e.g.
+    :param str package: plugin package name relative to afterglow_1_0, e.g.
         "resources.data_provider_plugins"
     :param plugin_class: base plugin class
     :param list specs: list of plugin specifications: [{"name": "plugin_name",
@@ -131,7 +131,7 @@ def load_plugins(descr, package, plugin_class, specs=None):
             app.logger.debug('Checking module "%s"', name)
             # A potential plugin module is found; load it
             m = __import__(
-                'afterglow_server.' + package + '.' + name, globals(), locals(),
+                'afterglow_1_0.' + package + '.' + name, globals(), locals(),
                 ['__dict__'])
 
             try:

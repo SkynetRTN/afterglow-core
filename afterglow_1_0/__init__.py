@@ -239,7 +239,7 @@ class Resource(AfterglowSchema):
     __get_view__ defines the name of the view that is used to retrieve the
     resource by ID, e.g.
 
-    from afterglow_server import Resource, url_prefix
+    from afterglow_1_0 import Resource, url_prefix
 
     class MyResource(Resource):
         __get_view__ = 'my_resource'
@@ -306,8 +306,8 @@ def json_response(obj='', status_code=None, headers=None):
 
 
 app = Flask(__name__)
-app.config.from_object('afterglow_server.default_cfg')
-app.config.from_envvar('AFTERGLOW_SERVER_CONFIG', silent=True)
+app.config.from_object('afterglow_1_0.default_cfg')
+app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=True)
 
 if app.config.get('PROFILE'):
     # Enable profiling
