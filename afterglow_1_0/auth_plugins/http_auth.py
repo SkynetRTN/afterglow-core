@@ -37,6 +37,7 @@ class HttpAuthPlugin(AuthPlugin):
     name = 'http'
     type = 'http'
     description = 'Simple HTTP Authentication'
+    icon = 'http'
     register_users = False
 
     allow_multiple_instances = False
