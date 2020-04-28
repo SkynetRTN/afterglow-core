@@ -1,0 +1,56 @@
+{% extends "base.html.j2" %} {% block content %}
+<div class="column has-text-centered">
+  <div class="content">
+    <a href="/">
+      <img src="{{url_for('static', filename='img/logo-full.png')}}" alt="Afterglow Logo">
+    </a>
+  </div>
+
+  <div class="columns is-multiline is-centered">
+    {% for auth_plugin in http_auth_plugins %}
+    <div class="column is-5-tablet is-4-desktop is-3-widescreen ">
+      <div class="panel has-text-left has-background-white">
+        <p class="panel-heading">{{auth_plugin.description}}</p>
+        <div class="panel-block">
+          <div class="container">
+            <login-form next-url=""></login-form>
+          </div>
+
+        </div>
+        {#
+        <div class="panel-block">
+          <hr class="hr has-background-grey-lighter has-margin-sm">
+          <div class="content has-text-centered">
+            <p>Forgot
+              <a class="" href="">username</a> or
+              <a class="" href="">password</a>?</p>
+          </div>
+        </div> #}
+      </div>
+    </div>
+    {% endfor %}
+    {%if oauth_server_plugins | length > 0 %}
+    <div class="column is-5-tablet is-4-desktop is-3-widescreen ">
+      <div class="panel has-text-left has-background-white">
+        <p class="panel-heading">Additional Login Services</p>
+        {% for auth_plugin in oauth_server_plugins %}
+        <div class="panel-block">
+          <div class="container">
+           
+            <button class="button is-normal is-fullwidth">
+              <span class="icon is-small" style="margin-right: 0.75em;">
+                <img src="{{url_for('static', filename='img/google.png')}}">
+              </span>
+              <span>{{auth_plugin.description}}</span>
+            </button>
+            
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock content %}

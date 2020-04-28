@@ -1,0 +1,6 @@
+{
+    "python.pythonPath": "C:\\Envs\\afterglow\\Scripts\\python.exe",
+    "files.associations": {
+        "*.html.j2": "html"
+    }
+}

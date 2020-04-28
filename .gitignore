@@ -1,3 +1,6 @@
+#static
+afterglow_server/static
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -5,6 +8,10 @@ __pycache__/
 
 # C extensions
 *.so
+
+# Node
+node_modules/
+package-lock.json
 
 # Distribution / packaging
 .Python

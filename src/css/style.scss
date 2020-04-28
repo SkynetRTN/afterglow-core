@@ -1,0 +1,33 @@
+$family-sans-serif: "Lato",
+sans-serif;
+$primary: #0a121f;
+
+@import "./themes/light";
+
+html,
+body {
+    height: 100%;
+    position: relative;
+}
+
+
+
+#app {
+    min-height: 100vh;
+    /* will cover the 100% of viewport */
+    overflow: hidden;
+    display: block;
+    position: relative;
+}
+
+#content-wrap {
+    padding-bottom: 300px;
+}
+
+footer {
+    padding-bottom: 0px !important;
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    height: 300px;
+}

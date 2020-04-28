@@ -26,7 +26,7 @@ from functools import wraps
 
 import marshmallow
 import jwt
-from flask import request
+from flask import request, render_template
 from werkzeug.exceptions import HTTPException
 
 from . import app, errors, json_response, url_prefix
@@ -864,95 +864,100 @@ def login(method=None):
     :return: JSON {"access_token": "token", "refresh_token": token}
     :rtype: flask.Response
     """
-    if method is None:
-        # Authenticate using any of the registered methods
-        methods = list(auth_plugins.keys())
-    else:
-        # Authenticate using the given method
-        methods = [method]
+    http_auth_plugins = [p for p in auth_plugins.values() if p.type=='http']
+    oauth_server_plugins = [p for p in auth_plugins.values() if p.type=='oauth2server']
 
-    if not methods:
-        # Auth disabled
-        return json_response(dict(access_token='', refresh_token=''))
+    return render_template('auth/login.html.j2', http_auth_plugins=http_auth_plugins, oauth_server_plugins=oauth_server_plugins)
 
-    # Try all requested auth methods
-    username = None
-    plugin = None
-    error_msgs = {}
-    for method in methods:
-        try:
-            plugin = auth_plugins[method]
-        except KeyError:
-            raise UnknownAuthMethodError(method=method)
-        else:
-            # noinspection PyBroadException,PyShadowingNames
-            try:
-                username = plugin.get_user()
-            except HTTPException as e:
-                if hasattr(e.response, 'status_code') and \
-                        e.response.status_code == 302:
-                    # Allow redirects from multi-stage auth plugins like OAuth
-                    raise
-                error_msgs[method] = str(e)
-            except Exception as e:
-                # Auth failed, try other methods if any
-                error_msgs[method] = str(e)
-            else:
-                # Auth succeeded
-                break
-    if username is None:
-        raise NotAuthenticatedError(
-            error_msg='; '.join('{}: {}'.format(method, msg)
-                                for method, msg in error_msgs.items()))
+    # if method is None:
+    #     # Authenticate using any of the registered methods
+    #     methods = list(auth_plugins.keys())
+    # else:
+    #     # Authenticate using the given method
+    #     methods = [method]
 
-    # Get the user from db
-    need_commit = False
-    user = User.query.filter_by(username=username).one_or_none()
-    if user is None:
-        # Authenticated but not in the db; register a new Afterglow user if
-        # allowed by plugin or the global config option
-        register_users = plugin.register_users
-        if register_users is None:
-            register_users = app.config.get(
-                'REGISTER_AUTHENTICATED_USERS', True)
-        if not register_users:
-            raise NotAuthenticatedError(
-                error_msg='Automatic user registration disabled')
+    # if not methods:
+    #     # Auth disabled
+    #     return json_response(dict(access_token='', refresh_token=''))
 
-        user = User()
-        user.username = username
-        user.password = ''
-        user.roles = [Role.query.filter_by(name='user').one()]
-        db.session.add(user)
-        need_commit = True
+    # # Try all requested auth methods
+    # username = None
+    # plugin = None
+    # error_msgs = {}
+    # for method in methods:
+    #     try:
+    #         plugin = auth_plugins[method]
+    #     except KeyError:
+    #         raise UnknownAuthMethodError(method=method)
+    #     else:
+    #         # noinspection PyBroadException,PyShadowingNames
+    #         try:
+    #             username = plugin.get_user()
+    #         except HTTPException as e:
+    #             if hasattr(e.response, 'status_code') and \
+    #                     e.response.status_code == 302:
+    #                 # Allow redirects from multi-stage auth plugins like OAuth
+    #                 raise
+    #             error_msgs[method] = str(e)
+    #         except Exception as e:
+    #             # Auth failed, try other methods if any
+    #             error_msgs[method] = str(e)
+    #         else:
+    #             # Auth succeeded
+    #             break
+    # if username is None:
+    #     raise NotAuthenticatedError(
+    #         error_msg='; '.join('{}: {}'.format(method, msg)
+    #                             for method, msg in error_msgs.items()))
 
-    if not user.auth_methods:
-        # This is the first user's login; allow the current auth method
-        user.auth_methods = method
-        need_commit = True
-    elif method not in user.auth_methods.split(','):
-        # Deny login via any new method until explicitly allowed by POSTing to
-        # auth/user/auth_methods
-        raise NotAuthenticatedError(
-            error_msg='Authentication method not allowed')
+    # # Get the user from db
+    # need_commit = False
+    # user = User.query.filter_by(username=username).one_or_none()
+    # if user is None:
+    #     # Authenticated but not in the db; register a new Afterglow user if
+    #     # allowed by plugin or the global config option
+    #     register_users = plugin.register_users
+    #     if register_users is None:
+    #         register_users = app.config.get(
+    #             'REGISTER_AUTHENTICATED_USERS', True)
+    #     if not register_users:
+    #         raise NotAuthenticatedError(
+    #             error_msg='Automatic user registration disabled')
 
-    if need_commit:
-        db.session.commit()
+    #     user = User()
+    #     user.username = username
+    #     user.password = ''
+    #     user.roles = [Role.query.filter_by(name='user').one()]
+    #     db.session.add(user)
+    #     need_commit = True
 
-    if not user.active:
-        raise InactiveUserError()
+    # if not user.auth_methods:
+    #     # This is the first user's login; allow the current auth method
+    #     user.auth_methods = method
+    #     need_commit = True
+    # elif method not in user.auth_methods.split(','):
+    #     # Deny login via any new method until explicitly allowed by POSTing to
+    #     # auth/user/auth_methods
+    #     raise NotAuthenticatedError(
+    #         error_msg='Authentication method not allowed')
 
-    # Return access and refresh tokens
-    expires_delta = app.config.get('ACCESS_TOKEN_EXPIRES')
-    access_token = create_token(
-        user.username, expires_delta, dict(method=method))
-    return _set_access_cookies(json_response(
-        dict(
-            access_token=access_token,
-            refresh_token=create_token(
-                user.username, app.config.get('REFRESH_TOKEN_EXPIRES'),
-                dict(method=method), 'refresh'),
-        )), access_token)
+    # if need_commit:
+    #     db.session.commit()
+
+    # if not user.active:
+    #     raise InactiveUserError()
+
+    # # Return access and refresh tokens
+    # expires_delta = app.config.get('ACCESS_TOKEN_EXPIRES')
+    # access_token = create_token(
+    #     user.username, expires_delta, dict(method=method))
+    # return _set_access_cookies(json_response(
+    #     dict(
+    #         access_token=access_token,
+    #         refresh_token=create_token(
+    #             user.username, app.config.get('REFRESH_TOKEN_EXPIRES'),
+    #             dict(method=method), 'refresh'),
+    #     )), access_token)
 
 
 @app.route(url_prefix + 'auth/logout', methods=['GET', 'POST'])
