@@ -227,7 +227,7 @@ class FieldCal(Resource):
         """
         Create field cal resource instance from database object
 
-        :param afterglow_server.resources.field_cals.SqlaFieldCal _obj: field
+        :param afterglow_1_0.resources.field_cals.SqlaFieldCal _obj: field
             cal object returned by database query
         :param kwargs: if `_obj` is not set, initialize from the given
             keyword=value pairs or override `_obj` fields

@@ -4,8 +4,10 @@ Afterglow Access Server: catalog query job plugin
 
 from __future__ import absolute_import, division, print_function
 
-from marshmallow.fields import Dict, Integer, List, Nested, String
+from numpy import argmax, array, cos, deg2rad, r_, rad2deg, unwrap
+from numpy.ma import masked_array
 from astropy.wcs import WCS
+from marshmallow.fields import Dict, Integer, List, Nested, String
 
 from ...data_structures import CatalogSource
 from ... import Float
@@ -137,7 +139,7 @@ def run_catalog_query_job(job, catalogs, ra_hours=None, dec_degs=None,
     for wcs in wcs_list:
         # noinspection PyProtectedMember
         width, height = wcs._naxis1, wcs._naxis2
-        center = wcs.all_pix2world(width/2, height/2, 0)
+        center = wcs.all_pix2world((width - 1)/2, (height - 1)/2, 0)
 
         # Move center to RA = Dec = 0 so that we get a proper box size in terms
         # of catalog query, i.e. RA size multiplied by cos(dec); the box is
@@ -155,6 +157,50 @@ def run_catalog_query_job(job, catalogs, ra_hours=None, dec_degs=None,
         boxes.append((center[0], center[1],
                       ras[ras < 180].max() - ras[ras >= 180].min() + 360,
                       decs.max() - decs.min()))
+
+    if False:  # len(boxes) > 1:
+        # A catalog query region represented by its center and width/height is
+        # indeed a spherical rectangle bounded by two pairs of parallel great
+        # circles; to find the combined region, we first represent them by
+        # Lambert rectangles bounded by parallels and meridians, then find their
+        # bounding box using algorithm known from GIS, and finally enclose the
+        # combined Lambert rectangle in a true spherical rectangle
+        lats, lons = [], []
+        for ra, dec, width, height in boxes:
+            hw, hh = width/2, height/2
+            min_dec, max_dec = dec - hh, dec + hh
+            if min_dec > 0 or max_dec < 0:
+                hw /= max(cos(deg2rad(min_dec)), cos(deg2rad(max_dec)))
+            lats += [min_dec, max_dec]
+            lons.append(((ra - hw) % 360, (ra + hw) % 360))
+
+        # Use the minimal bounding box algorithm
+        min_dec, max_dec = min(lats), max(lats)
+        height = max_dec - min_dec
+        dec = min_dec + height/2
+        xs = array(lons).ravel()
+        xs.sort()
+        xs = r_[xs, xs[0] + 360]
+        biggest_gap = argmax(masked_array(
+            xs[1:] - xs[:-1],
+            [any(bb[0] <= xs[i] and bb[1] >= xs[i + 1]
+                 for bb in rad2deg(unwrap(deg2rad(lons))))
+             for i in range(len(xs) - 1)]))
+        ra_right, ra_left = xs[biggest_gap:biggest_gap + 2] % 360
+        if (ra_left, ra_right) == (0, 360):
+            width = 360
+        else:
+            width = (ra_right - ra_left) % 360
+        ra = (ra_left + width/2) % 360
+        if min_dec > 0 or max_dec < 0:
+            width *= max(cos(deg2rad(min_dec)), cos(deg2rad(max_dec)))
+
+        if width*height > sum(w*h for _, _, w, h in boxes):
+            # Individual FOVs are possibly too sparse for a combined FOV to be
+            # smaller; fall back to querying them one by one
+            ra = dec = width = height = None
+    else:
+        ra = dec = width = height = None
 
     # TODO: Query a single enclosing region if data file FOVs overlap
     # # To obtain the combined FOV, start with the first field
@@ -206,33 +252,52 @@ def run_catalog_query_job(job, catalogs, ra_hours=None, dec_degs=None,
     #                         # combined FOV
     #                         pass
 
-    # Query all data file FOVs
-    for catalog in catalogs:
-        catalog_sources = []
-        for ra, dec, width, height in boxes:
-            catalog_sources += known_catalogs[catalog].query_box(
+    if width is None:
+        # Query all data file FOVs
+        for catalog in catalogs:
+            catalog_sources = []
+            for ra, dec, width, height in boxes:
+                catalog_sources += known_catalogs[catalog].query_box(
+                    ra/15, dec, width*60, height*60, constraints)
+
+            if len(boxes) > 1 and catalog_sources:
+                # Remove duplicates from overlapping fields
+                i = 0
+                while i < len(catalog_sources):
+                    s = catalog_sources[i]
+                    id = [getattr(s, name, None)
+                          for name in ('id', 'ra_hours', 'dec_degs')]
+                    j = i + 1
+                    while j < len(catalog_sources):
+                        s1 = catalog_sources[j]
+                        if [getattr(s1, name, None) for name in (
+                                'id', 'ra_hours', 'dec_degs')] == id:
+                            del catalog_sources[j]
+                        else:
+                            j += 1
+                    i += 1
+
+            sources += catalog_sources
+    else:
+        # Query combined FOV
+        for catalog in catalogs:
+            sources += known_catalogs[catalog].query_box(
                 ra/15, dec, width*60, height*60, constraints)
 
-        if len(boxes) > 1 and catalog_sources:
-            # Remove duplicates from overlapping fields
-            i = 0
-            while i < len(catalog_sources):
-                s = catalog_sources[i]
-                id = [getattr(s, name, None)
-                      for name in ('id', 'ra_hours', 'dec_degs')]
-                j = i + 1
-                while j < len(catalog_sources):
-                    s1 = catalog_sources[j]
-                    if [getattr(s1, name, None)
-                            for name in ('id', 'ra_hours', 'dec_degs')] == id:
-                        del catalog_sources[j]
-                    else:
-                        j += 1
-                i += 1
+    # Keep only sources that are within any of the FOVs
+    final_sources = []
+    for s in sources:
+        good = False
+        for wcs in wcs_list:
+            x, y = wcs.all_world2pix(s.ra_hours*15, s.dec_degs, 0)
+            # noinspection PyProtectedMember
+            if 0 <= x < wcs._naxis1 and 0 <= y < wcs._naxis2:
+                good = True
+                break
+        if good:
+            final_sources.append(s)
 
-        sources += catalog_sources
-
-    return sources
+    return final_sources
 
 
 class CatalogQueryJobResult(JobResult):

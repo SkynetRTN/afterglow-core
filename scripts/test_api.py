@@ -73,8 +73,7 @@ if __name__ == '__main__':
                 import base64
                 import json
                 s = args.token[:args.token.rfind('.')]
-                s = base64.decodestring(
-                    s + '='*((4 - len(s) % 4) % 4))
+                s = base64.decodebytes(s + '='*((4 - len(s) % 4) % 4))
                 i = 1
                 while i <= len(s):
                     try:

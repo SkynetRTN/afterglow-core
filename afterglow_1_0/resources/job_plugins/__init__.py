@@ -56,7 +56,7 @@ class JobState(AfterglowSchema):
         """
         Create job state structure
 
-        :param args: see :class:`afterglow_server.AfterglowSchema`
+        :param args: see :class:`afterglow_1_0.AfterglowSchema`
         :param kwargs: --//--
         """
         super(JobState, self).__init__(*args, **kwargs)
@@ -192,7 +192,7 @@ class Job(AfterglowSchema):
                     self.update()
 
     :meth:`run` may read and create the regular user data files by calling
-    functions from :mod:`afterglow_server.resources.data_files` using
+    functions from :mod:`afterglow_1_0.resources.data_files` using
     self.user_id as the current user ID (works also for installations with no
     user authentication enabled):
 

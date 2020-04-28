@@ -1,7 +1,7 @@
 """
 Afterglow Access Server: job resources
 
-Job types are defined in afterglow_server.job_plugins.
+Job types are defined in afterglow_1_0.job_plugins.
 """
 
 from __future__ import absolute_import, division, print_function

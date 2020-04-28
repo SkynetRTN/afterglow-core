@@ -28,7 +28,8 @@ __all__ = ['load_plugins']
 def add_plugin(plugins, descr, instance, default_id=None):
     """
     Add a plugin instance to the plugin dictionary, with the possible alias for
-    integer plugin IDs; adjust plugin ID and display name
+    integer plugin IDs; adjust plugin ID and display name; check that there are
+    no more plugins with the same name if allow_multiple_instances is False
 
     :param dict plugins: dictionary {str(id): instance, int(id): instance}
     :param str descr: plugin description
@@ -37,6 +38,14 @@ def add_plugin(plugins, descr, instance, default_id=None):
 
     :return: None
     """
+    if getattr(instance, 'name', None) and \
+            not getattr(instance, 'allow_multiple_instances', True) and \
+            not any(getattr(other_instance, 'name', None) == instance.name and
+                    other_instance is not instance
+                    for other_instance in plugins.values()):
+        raise RuntimeError('Multiple instances of plugin "{}" are not allowed'
+                           .format(instance.name))
+
     if not hasattr(instance, 'display_name') or \
             not instance.display_name:
         instance.display_name = instance.name
@@ -70,7 +79,7 @@ def load_plugins(descr, package, plugin_class, specs=None):
     Load and initialize plugins from the given directory
 
     :param str descr: plugin description
-    :param str package: plugin package name relative to afterglow_server, e.g.
+    :param str package: plugin package name relative to afterglow_1_0, e.g.
         "resources.data_provider_plugins"
     :param plugin_class: base plugin class
     :param list specs: list of plugin specifications: [{"name": "plugin_name",
@@ -123,7 +132,7 @@ def load_plugins(descr, package, plugin_class, specs=None):
             app.logger.debug('Checking module "%s"', name)
             # A potential plugin module is found; load it
             m = __import__(
-                'afterglow_server.' + package + '.' + name, globals(), locals(),
+                'afterglow_1_0.' + package + '.' + name, globals(), locals(),
                 ['__dict__'])
 
             try:

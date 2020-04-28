@@ -39,6 +39,8 @@ class HttpAuthPlugin(AuthPlugin):
     description = 'Simple HTTP Authentication'
     register_users = False
 
+    allow_multiple_instances = False
+
     def get_user(self):
         """
         Return the username of the authenticated user; raise

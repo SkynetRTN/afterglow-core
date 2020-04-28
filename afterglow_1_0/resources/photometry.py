@@ -76,7 +76,7 @@ def get_photometry(data, texp, gain, phot_cal, x, y, a, b=None, theta=0,
     :param float texp: exposure time in seconds
     :param float gain: CCD gain in e-/ADU
     :param phot_cal: optional photometric calibration as returned by
-        :func:`afterglow_server.data_files.get_phot_cal`
+        :func:`afterglow_1_0.data_files.get_phot_cal`
     :param float x: X position of aperture center (1-based)
     :param float y: Y position of aperture center (1-based)
     :param float a: aperture radius or semi-major axis (for elliptical

@@ -188,7 +188,7 @@ class CannotSetProtectedUserDataError(errors.AfterglowError):
 
 # Read/create secret key
 keyfile = os.path.join(
-    os.path.abspath(app.config['DATA_ROOT']), 'AFTERGLOW_SERVER_KEY')
+    os.path.abspath(app.config['DATA_ROOT']), 'AFTERGLOW_CORE_KEY')
 try:
     with open(keyfile, 'rb') as f:
         key = f.read()
@@ -229,7 +229,7 @@ def authenticate(roles=None, request_type='access'):
 
     :return: database object for the authenticated user; raises
         :class:`AuthError` on authentication error
-    :rtype: afterglow_server.users.User
+    :rtype: afterglow_1_0.users.User
     """
     return anonymous_user
 
@@ -497,7 +497,7 @@ def init_auth():
 
         :return: database object for the authenticated user; raises
             :class:`AuthError` on authentication error
-        :rtype: afterglow_server.users.User
+        :rtype: afterglow_1_0.users.User
         """
         # If access token in HTTP Authorization header, verify and authorize.
         # otherwise, attempt to reconstruct token from cookies

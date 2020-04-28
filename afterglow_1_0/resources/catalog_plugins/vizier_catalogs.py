@@ -48,8 +48,8 @@ class VizierCatalog(Catalog):
         """
         Create a Catalog instance
 
-        :param args: see :class:`afterglow_server.Resource`
-        :param kwargs: see :class:`afterglow_server.Resource`
+        :param args: see :class:`afterglow_1_0.Resource`
+        :param kwargs: see :class:`afterglow_1_0.Resource`
         """
         kwargs.setdefault('vizier_server', app.config.get(
             'VIZIER_SERVER', 'http://vizier.cfa.harvard.edu/viz-bin/VizieR-4'))
@@ -98,7 +98,7 @@ class VizierCatalog(Catalog):
             by astroquery
 
         :return: list of catalog objects
-        :rtype: list[afterglow_server.data_structures.CatalogSource]
+        :rtype: list[afterglow_1_0.data_structures.CatalogSource]
         """
         sources = []
 
@@ -163,7 +163,7 @@ class VizierCatalog(Catalog):
         :param list[str] names: object names
 
         :return: list of catalog objects
-        :rtype: list[afterglow_server.data_structures.CatalogSource]
+        :rtype: list[afterglow_1_0.data_structures.CatalogSource]
         """
         viz = Vizier(
             vizier_server=self.vizier_server, catalog=self.vizier_catalog,
@@ -187,7 +187,7 @@ class VizierCatalog(Catalog):
         :param dict region: keywords defining the query region
 
         :return: list of catalog objects
-        :rtype: list[afterglow_server.data_structures.CatalogSource]
+        :rtype: list[afterglow_1_0.data_structures.CatalogSource]
         """
         viz = Vizier(
             vizier_server=self.vizier_server, catalog=self.vizier_catalog,
@@ -217,7 +217,7 @@ class VizierCatalog(Catalog):
         :param int limit: maximum number of rows to return
 
         :return: list of catalog objects
-        :rtype: list[afterglow_server.data_structures.CatalogSource]
+        :rtype: list[afterglow_1_0.data_structures.CatalogSource]
         """
         return self.query_region(
             ra_hours, dec_degs, constraints, limit,
@@ -236,7 +236,7 @@ class VizierCatalog(Catalog):
         :param int limit: maximum number of rows to return
 
         :return: list of catalog objects
-        :rtype: list[afterglow_server.data_structures.CatalogSource]
+        :rtype: list[afterglow_1_0.data_structures.CatalogSource]
         """
         return self.query_region(
             ra_hours, dec_degs, constraints, limit,

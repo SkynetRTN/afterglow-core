@@ -47,7 +47,7 @@ class LandoltCatalog(VizierCatalog):
             by astroquery
 
         :return: list of catalog objects
-        :rtype: list[afterglow_server.data_structures.CatalogSource]
+        :rtype: list[afterglow_1_0.data_structures.CatalogSource]
         """
         sources = super(LandoltCatalog, self).table_to_sources(table)
 
