@@ -1122,6 +1122,12 @@ def job_server(notify_queue, key, iv):
     """
     global job_server_key, job_server_iv
 
+    # Create sync structures
+    job_queue = Queue()
+    result_queue = Queue()
+    terminate_listener_event = threading.Event()
+    state_update_listener = None
+
     try:
         app.logger.info('Starting Afterglow job server (pid %d)', os.getpid())
 
@@ -1176,8 +1182,6 @@ def job_server(notify_queue, key, iv):
         # Initialize pool of worker processes
         min_pool_size = app.config.get('JOB_POOL_MIN', 1)
         max_pool_size = app.config.get('JOB_POOL_MAX', 16)
-        job_queue = Queue()
-        result_queue = Queue()
         if min_pool_size > 0:
             app.logger.info(
                 'Starting %d job worker process%s', min_pool_size,
@@ -1189,8 +1193,6 @@ def job_server(notify_queue, key, iv):
         pool_lock = RWLock()
 
         # Listen for job state updates in a separate thread
-        terminate_listener_event = threading.Event()
-
         def state_update_listener_body():
             """
             Thread that listens for job state/result updates from worker
@@ -1302,16 +1304,19 @@ def job_server(notify_queue, key, iv):
         # Serve job resource requests until requested to terminate
         tcp_server.serve_forever()
 
-        # Shut down state update listener
-        result_queue.put(None)
-        terminate_listener_event.set()
-        state_update_listener.join()
-
+    except (KeyboardInterrupt, SystemExit):
+        app.logger.info('Job server terminated')
     except Exception as e:
         # Make sure the main process receives at least an error message if job
         # server process initialization failed
         notify_queue.put(('exception', e))
         app.logger.warn('Error in job server process', exc_info=True)
+    finally:
+        # Shut down state update listener
+        result_queue.put(None)
+        terminate_listener_event.set()
+        if state_update_listener is not None:
+            state_update_listener.join()
 
 
 @app.before_first_request
