@@ -70,7 +70,7 @@ class ClientOAuthPlugin(AuthPlugin):
             **kwargs)
 
         # Register callback handler
-        @app.route(url_prefix + 'auth/{}/authorize'.format(self.id),
+        @app.route(url_prefix + 'auth/{}/authorized'.format(self.id),
                    endpoint='{}_authorized'.format(self.id))
         def authorized():
             orig_url = request.args.get('state', url_for('login'))
