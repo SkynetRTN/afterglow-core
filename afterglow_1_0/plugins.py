@@ -40,7 +40,8 @@ def add_plugin(plugins, descr, instance, default_id=None):
     """
     if getattr(instance, 'name', None) and \
             not getattr(instance, 'allow_multiple_instances', True) and \
-            not any(getattr(other_instance, 'name', None) == instance.name
+            not any(getattr(other_instance, 'name', None) == instance.name and
+                    other_instance is not instance
                     for other_instance in plugins.values()):
         raise RuntimeError('Multiple instances of plugin "{}" are not allowed'
                            .format(instance.name))
