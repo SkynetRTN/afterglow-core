@@ -48,20 +48,22 @@ class ClientOAuthPlugin(AuthPlugin):
     """
     remote_app = None  # OAuth remote app
 
-    def __init__(self, id=None, description=None, register_users=None,
-                 **kwargs):
+    def __init__(self, id=None, description=None, icon=None,
+                 register_users=None, **kwargs):
         """
         Initialize OAuth plugin
 
         :param str id: plugin ID
         :param str description: plugin description
+        :param str icon: plugin icon ID used by the client UI
         :param bool register_users: automatically register authenticated users
             if missing from the local user database; overrides
             REGISTER_AUTHENTICATED_USERS
         :param kwargs: extra keyword arguments to :func:`OAuth.register`
         """
         super(ClientOAuthPlugin, self).__init__(
-            id=id, description=description, register_users=register_users)
+            id=id, description=description, icon=icon,
+            register_users=register_users)
 
         self.remote_app = OAuth(app).register(
             id,
@@ -172,13 +174,14 @@ class GoogleClientOAuthPlugin(ClientOAuthPlugin):
     type = 'oauth2client'
 
     def __init__(self, id=None, description='Login via Google (client-side)',
-                 register_users=False, client_id=None, client_secret=None,
-                 request_token_params=None):
+                 icon='google', register_users=False, client_id=None,
+                 client_secret=None, request_token_params=None):
         """
         Initialize Google OAuth2 plugin
 
         :param str id: plugin ID
         :param str description: plugin description
+        :param str icon: plugin icon ID used by the client UI
         :param bool register_users: automatically register authenticated users
             if missing from the local user database; overrides
             REGISTER_AUTHENTICATED_USERS
@@ -189,7 +192,8 @@ class GoogleClientOAuthPlugin(ClientOAuthPlugin):
             response_type="code", which is the default
         """
         super(GoogleClientOAuthPlugin, self).__init__(
-            id, description=description, register_users=register_users,
+            id, description=description, icon=icon,
+            register_users=register_users,
             base_url='https://www.googleapis.com/oauth2/v1/',
             access_token_url='https://accounts.google.com/o/oauth2/token',
             authorize_url='https://accounts.google.com/o/oauth2/auth',

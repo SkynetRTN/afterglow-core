@@ -62,8 +62,9 @@ class OAuthPlugin(AuthPlugin):
     access_token_headers = None
     access_token_params = None
 
-    def __init__(self, id=None, description=None, register_users=None,
-                 authorize_url=None, request_token_params=None, client_id=None,
+    def __init__(self, id=None, description=None, icon=None,
+                 register_users=None, authorize_url=None,
+                 request_token_params=None, client_id=None,
                  client_secret=None, access_token_url=None,
                  access_token_method='POST', access_token_headers=None,
                  access_token_params=None):
@@ -72,6 +73,7 @@ class OAuthPlugin(AuthPlugin):
 
         :param str id: plugin ID
         :param str description: plugin description
+        :param str icon: plugin icon ID used by the client UI
         :param bool register_users: automatically register authenticated users
             if missing from the local user database; overrides
             REGISTER_AUTHENTICATED_USERS
@@ -88,7 +90,8 @@ class OAuthPlugin(AuthPlugin):
             exchange
         """
         super(OAuthPlugin, self).__init__(
-            id=id, description=description, register_users=register_users)
+            id=id, description=description, icon=icon,
+            register_users=register_users)
 
         self.authorize_url = authorize_url
         if request_token_params:
@@ -212,7 +215,7 @@ class GoogleOAuthPlugin(OAuthPlugin):
     name = 'google_oauth'
     type = 'oauth2server'
 
-    def __init__(self, id=None, description='Login via Google',
+    def __init__(self, id=None, description='Login via Google', icon='google',
                  register_users=False, client_id=None, client_secret=None,
                  request_token_params=None):
         """
@@ -220,6 +223,7 @@ class GoogleOAuthPlugin(OAuthPlugin):
 
         :param str id: plugin ID
         :param str description: plugin description
+        :param str icon: plugin icon ID used by the client UI
         :param bool register_users: automatically register authenticated users
             if missing from the local user database; overrides
             REGISTER_AUTHENTICATED_USERS
@@ -230,7 +234,8 @@ class GoogleOAuthPlugin(OAuthPlugin):
             response_type="code", which is the default
         """
         super(GoogleOAuthPlugin, self).__init__(
-            id, description=description, register_users=register_users,
+            id, description=description, icon=icon,
+            register_users=register_users,
             access_token_url='https://accounts.google.com/o/oauth2/token',
             authorize_url='https://accounts.google.com/o/oauth2/auth',
             request_token_params=request_token_params if request_token_params
