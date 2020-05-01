@@ -14,7 +14,7 @@ __all__ = ['AfterglowError', 'MethodNotImplementedError', 'ValidationError']
 
 def afterglow_error_handler(e):
     """
-    Error handling function for all Afterglow Access Server errors
+    Error handling function for all Afterglow Core errors
 
     Automatically installed for all `AfterglowError` subclasses via
     `AfterglowErrorMeta`
@@ -140,7 +140,7 @@ class AfterglowErrorMeta(type):
         return c
 
 
-class AfterglowError(exceptions.HTTPException):
+class AfterglowError(exceptions.HTTPException, metaclass=AfterglowErrorMeta):
     """
     Base class for all Afterglow Access Server exceptions
 
@@ -155,8 +155,6 @@ class AfterglowError(exceptions.HTTPException):
             client in JSON
         headers: any additional HTTP headers to send
     """
-    __metaclass__ = AfterglowErrorMeta
-
     code = 400  # HTTP status code
     subcode = None  # Afterglow-specific error code
     payload = None  # additional error data
