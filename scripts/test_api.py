@@ -56,6 +56,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    method = args.method.upper()
+
     headers = {}
     if args.accept is not None:
         headers['Accept'] = args.accept
@@ -66,7 +68,7 @@ if __name__ == '__main__':
     if args.token:
         headers['Authorization'] = 'Bearer {}'.format(args.token)
 
-        if args.method != 'GET':
+        if method != 'GET':
             # Extract CSRF token from access/refresh token
             # noinspection PyBroadException
             try:
@@ -100,7 +102,7 @@ if __name__ == '__main__':
     data = args.body
     if data is not None:
         if data == '-':
-            data = sys.stdin.read()
+            data = sys.stdin.buffer.read()
 
         try:
             json.loads(data)
@@ -118,18 +120,29 @@ if __name__ == '__main__':
     url = 'http{}://{}:{:d}/api/v{}/{}'.format(
         's' if args.https else '', args.host, args.port, args.api_version,
         args.resource)
-    print('\n{} {}'.format(args.method, url), file=sys.stderr)
+    print('\n{} {}'.format(method, url), file=sys.stderr)
     if headers:
         print('\n'.join('{}: {}'.format(h, v) for h, v in headers.items()),
               file=sys.stderr)
     if data and headers.get('Content-Type') == 'application/json':
         print(data, file=sys.stderr)
 
+    params = dict(item.split('=', 1) for item in args.params)
+    files = None
+    if method not in ('GET', 'HEAD', 'OPTIONS') and params:
+        # For requests other than GET, we must pass parameters form-encoded
+        # in request body
+        if data:
+            # Also passing raw data; use multipart/form-data, guess filename
+            # from args
+            files = {'data': (params.get('name', 'data'), data,
+                              'application/octet-stream')}
+        params, data = None, params
+
     warnings.filterwarnings('ignore', 'Unverified HTTPS request is being made')
     r = requests.request(
-        args.method, url, verify=False,
-        params=dict([item.split('=', 1) for item in args.params]),
-        headers=headers, data=data, auth=auth)
+        method, url, verify=False, params=params, headers=headers, data=data,
+        files=files, auth=auth)
 
     print('\nHTTP {:d} - {}'.format(
         r.status_code,

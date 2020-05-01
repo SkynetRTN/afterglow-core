@@ -1237,32 +1237,38 @@ def data_files(id=None):
         try:
             session_id = _get_session_id(adb)
 
-            if request.args.get('provider_id') is None and \
-                    request.args.get('width') is not None and \
-                    request.args.get('height') is not None:
+            import_params = request.args.to_dict()
+            provider_id = import_params.pop('provider_id', None)
+            duplicates = import_params.pop('duplicates', 'ignore')
+            files = request.files
+
+            if provider_id is None and not files:
                 # Create an empty image data file
-                name = request.args.get('name')
                 try:
-                    width = int(request.args['width'])
+                    width = int(import_params['width'])
                     if width < 1:
                         raise errors.ValidationError(
                             'width', 'Width must be positive', 422)
+                except KeyError:
+                    raise errors.MissingFieldError('width')
                 except ValueError:
                     raise errors.ValidationError(
                         'width', 'Width must be a positive integer')
                 try:
-                    height = int(request.args['height'])
+                    height = int(import_params['height'])
                     if height < 1:
                         raise errors.ValidationError(
                             'height', 'Height must be positive', 422)
+                except KeyError:
+                    raise errors.MissingFieldError('height')
                 except ValueError:
                     raise errors.ValidationError(
                         'width', 'Width must be a positive integer')
 
                 data = numpy.zeros([height, width], dtype=numpy.float32)
-                if request.args.get('pixel_value') is not None:
+                if import_params.get('pixel_value') is not None:
                     try:
-                        pixel_value = float(request.args['pixel_value'])
+                        pixel_value = float(import_params['pixel_value'])
                     except ValueError:
                         raise errors.ValidationError(
                             'pixel_value', 'Pixel value must be a number')
@@ -1271,62 +1277,60 @@ def data_files(id=None):
                         data += pixel_value
 
                 all_data_files.append(create_data_file(
-                    adb, name, root, data, duplicates='append',
-                    session_id=session_id))
-            else:
-                # Import data file
-                import_params = request.args.to_dict()
-                provider_id = import_params.pop('provider_id', None)
-                duplicates = import_params.pop('duplicates', 'ignore')
-                if provider_id is None:
-                    # Data file upload: get data from request body
+                    adb, import_params.get('name'), root, data,
+                    duplicates='append', session_id=session_id))
+            elif provider_id is None:
+                # Data file upload: get from multipart/form-data; use filename
+                # for the 2nd and subsequent files or if the "name" parameter
+                # is not provided
+                for i, (name, file) in enumerate(files.items()):
                     all_data_files += import_data_file(
                         adb, root, None, None, import_params,
-                        BytesIO(request.data),
-                        import_params.get('name'),
-                        duplicates, session_id=session_id)
-                else:
-                    # Import data from the given data provider
+                        BytesIO(file.read()),
+                        name if i else import_params.get('name') or name,
+                        duplicates='append', session_id=session_id)
+            else:
+                # Import data from the given data provider
+                try:
+                    asset_path = import_params.pop('path')
+                except KeyError:
+                    raise errors.MissingFieldError('path')
+
+                try:
+                    provider = data_providers.providers[provider_id]
+                except KeyError:
+                    raise data_providers.UnknownDataProviderError(
+                        id=provider_id)
+                provider_id = provider.id
+
+                recurse = import_params.pop('recurse', False)
+
+                def recursive_import(path, depth=0):
+                    asset = provider.get_asset(path)
+                    if asset.collection:
+                        if not provider.browseable:
+                            raise CannotImportFromCollectionAssetError(
+                                provider_id=provider_id, path=path)
+                        if not recurse and depth:
+                            return []
+                        return sum(
+                            [recursive_import(child_asset.path, depth + 1)
+                             for child_asset in provider.get_child_assets(
+                                asset.path)], [])
+                    return import_data_file(
+                        adb, root, provider_id, asset.path, asset.metadata,
+                        BytesIO(provider.get_asset_data(asset.path)),
+                        asset.name, duplicates, session_id=session_id)
+
+                if not isinstance(asset_path, list):
                     try:
-                        asset_path = import_params.pop('path')
-                    except KeyError:
-                        raise errors.MissingFieldError('path')
-
-                    try:
-                        provider = data_providers.providers[provider_id]
-                    except KeyError:
-                        raise data_providers.UnknownDataProviderError(
-                            id=provider_id)
-                    provider_id = provider.id
-
-                    recurse = import_params.pop('recurse', False)
-
-                    def recursive_import(path, depth=0):
-                        asset = provider.get_asset(path)
-                        if asset.collection:
-                            if not provider.browseable:
-                                raise CannotImportFromCollectionAssetError(
-                                    provider_id=provider_id, path=path)
-                            if not recurse and depth:
-                                return []
-                            return sum(
-                                [recursive_import(child_asset.path, depth + 1)
-                                 for child_asset in provider.get_child_assets(
-                                    asset.path)], [])
-                        return import_data_file(
-                            adb, root, provider_id, asset.path, asset.metadata,
-                            BytesIO(provider.get_asset_data(asset.path)),
-                            asset.name, duplicates, session_id=session_id)
-
+                        asset_path = json.loads(asset_path)
+                    except ValueError:
+                        pass
                     if not isinstance(asset_path, list):
-                        try:
-                            asset_path = json.loads(asset_path)
-                        except ValueError:
-                            pass
-                        if not isinstance(asset_path, list):
-                            asset_path = [asset_path]
-                    all_data_files += sum(
-                        [recursive_import(p) for p in asset_path], [])
+                        asset_path = [asset_path]
+                all_data_files += sum(
+                    [recursive_import(p) for p in asset_path], [])
 
             if all_data_files:
                 adb.commit()
