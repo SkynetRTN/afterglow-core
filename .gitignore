@@ -1,5 +1,6 @@
 #static
-afterglow_server/static
+afterglow_core/static
+plugins/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

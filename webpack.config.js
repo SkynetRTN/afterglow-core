@@ -1,14 +1,17 @@
 const path = require('path');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin')
 const VueLoaderPlugin = require('vue-loader/lib/plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
+
+
 
 module.exports = {
     entry: path.resolve('./src/js/index.js'),
     output: {
-        path: path.resolve(__dirname, 'afterglow_server/static'),
+        path: path.resolve(__dirname, 'afterglow_core/static'),
         filename: 'js/afterglow-core.js',
         libraryTarget: 'var',
-        library: 'SkynetWeb'
+        library: 'AfterglowCore'
     },
     resolve: {
         alias: {
@@ -81,5 +84,8 @@ module.exports = {
             filename: 'css/style.css'
         }),
         new VueLoaderPlugin(),
+        new CopyWebpackPlugin([
+            { from: 'plugin_assets', to: 'plugins' }
+        ])
     ]
 };

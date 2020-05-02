@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en" class="has-aside-left has-aside-mobile-transition has-navbar-fixed-top has-aside-expanded">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Afterglow Core Dashboard</title>
+  <link rel="stylesheet" href="{{url_for('static', filename='css/style.css')}}">
+  <script src="{{url_for('static', filename='js/afterglow-core.js')}}"></script>
+
+  <!-- Fonts -->
+  <link rel="dns-prefetch" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css?family=Nunito" rel="stylesheet" type="text/css">
+
+  {% block scripts %}
+  
+  {% endblock %}
+</head>
+<body>
+<div id="app">
+  <nav id="navbar-main" class="navbar is-fixed-top">
+    <div class="navbar-brand">
+      <a class="navbar-item is-hidden-desktop jb-aside-mobile-toggle">
+        <span class="icon"><i class="fa fa-bars"></i></span>
+      </a>
+    </div>
+    <div class="navbar-brand is-right">
+      <a class="navbar-item is-hidden-desktop jb-navbar-menu-toggle" data-target="navbar-menu">
+        <span class="icon"><i class="fa fa-ellipsis-v"></i></span>
+      </a>
+    </div>
+    <div class="navbar-menu fadeIn animated faster" id="navbar-menu">
+      <div class="navbar-end">
+        <div class="navbar-item has-dropdown has-dropdown-with-icons has-divider is-hoverable">
+          <a class="navbar-link is-arrowless">
+            <span class="icon"><i class="fa fa-bars"></i></span>
+            <span>Menu</span>
+            <span class="icon">
+            <i class="fa fa-chevron-down"></i>
+          </span>
+          </a>
+          <div class="navbar-dropdown">
+            <a class="navbar-item">
+              <span class="icon"><i class="fa fa-tachometer-alt"></i></span>
+              <span>Dashboard</span>
+            </a>
+          </div>
+        </div>
+        <div class="navbar-item has-dropdown has-dropdown-with-icons has-divider has-user-avatar is-hoverable">
+          <a class="navbar-link is-arrowless">
+            <div class="is-user-avatar">
+              <img src="https://avatars.dicebear.com/v2/initials/{{current_user.display_name}}.svg" alt="{{current_user.display_name}}">
+            </div>
+            <div class="is-user-name"><span>{{current_user.display_name}}</span></div>
+            <span class="icon"><i class="fa fa-chevron-down"></i></span>
+          </a>
+          <div class="navbar-dropdown">
+            <a class="navbar-item">
+              <span class="icon"><i class="fa fa-user"></i></span>
+              <span>My Profile</span>
+            </a>
+          </div>
+        </div>
+        <a href="" title="Documentation" class="navbar-item has-divider is-desktop-icon-only">
+          <span class="icon"><i class="fa fa-question"></i></span>
+          <span>Documentation</span>
+        </a>
+        <a title="Log out" href="{{url_for('logout')}}" class="navbar-item is-desktop-icon-only">
+          <span class="icon"><i class="fa fa-sign-out-alt"></i></span>
+          <span>Log out</span>
+        </a>
+      </div>
+    </div>
+  </nav>
+  <aside class="aside is-placed-left is-expanded">
+    <div class="aside-tools">
+      <div class="aside-tools-label">
+        <img src="{{url_for('static', filename='img/logo-full.png')}}" alt="Afterglow Logo" style="max-width: 200px; padding: 15px;">
+      </div>
+    </div>
+    <div class="menu is-menu-main">
+      <p class="menu-label">General</p>
+      <ul class="menu-list">
+        <li>
+          <a href="/" class="is-active router-link-active has-icon">
+            <span class="icon"><i class="mdi mdi-desktop-mac"></i></span>
+            <span class="menu-item-label">Dashboard</span>
+          </a>
+        </li>
+
+      </ul>
+      <!-- <p class="menu-label">Examples</p>
+      <ul class="menu-list">
+        <li>
+          <a href="tables.html" class="has-icon">
+            <span class="icon has-update-mark"><i class="mdi mdi-table"></i></span>
+            <span class="menu-item-label">Tables</span>
+          </a>
+        </li>
+        <li>
+          <a href="forms.html" class="has-icon">
+            <span class="icon"><i class="mdi mdi-square-edit-outline"></i></span>
+            <span class="menu-item-label">Forms</span>
+          </a>
+        </li>
+        <li>
+          <a href="profile.html" class="has-icon">
+            <span class="icon"><i class="mdi mdi-account-circle"></i></span>
+            <span class="menu-item-label">Profile</span>
+          </a>
+        </li>
+        <li>
+          <a class="has-icon has-dropdown-icon">
+            <span class="icon"><i class="mdi mdi-view-list"></i></span>
+            <span class="menu-item-label">Submenus</span>
+            <div class="dropdown-icon">
+              <span class="icon"><i class="mdi mdi-plus"></i></span>
+            </div>
+          </a>
+          <ul>
+            <li>
+              <a href="#void">
+                <span>Sub-item One</span>
+              </a>
+            </li>
+            <li>
+              <a href="#void">
+                <span>Sub-item Two</span>
+              </a>
+            </li>
+          </ul>
+        </li>
+      </ul>
+      <p class="menu-label">About</p>
+      <ul class="menu-list">
+        <li>
+          <a href="https://admin-one-html.justboil.me/" target="_blank" class="has-icon">
+            <span class="icon"><i class="mdi mdi-credit-card-outline"></i></span>
+            <span class="menu-item-label">Premium Demo</span>
+          </a>
+        </li>
+        <li>
+          <a href="https://justboil.me/bulma-admin-template/one" class="has-icon">
+            <span class="icon"><i class="mdi mdi-help-circle"></i></span>
+            <span class="menu-item-label">About</span>
+          </a>
+        </li>
+      </ul> -->
+    </div>
+  </aside>
+  <section class="section is-title-bar">
+    <div class="level">
+      <div class="level-left">
+        <div class="level-item">
+          <ul>
+            <li>{%block title%}{%endblock%}</li>
+          </ul>
+        </div>
+      </div>
+      <div class="level-right">
+        <div class="level-item">
+          <div class="buttons is-right">
+            
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <section class="section is-main-section">
+    {% block content %} {% endblock %}
+  </section>
+
+</div>
+
+<!-- Stuff below is for demo-only -->
+
+</body>
+</html>

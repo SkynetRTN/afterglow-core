@@ -1,55 +1,51 @@
-
-
-
-
 <template>
-    <form id="login-form" method="post" @submit="formSubmit">
+  <form id="login-form" method="post" @submit="formSubmit">
     <div class="notification is-danger" v-if="errors.length">
-        <ul>
+      <ul>
         <li v-for="error in errors" v-bind:key="error">{{ error }}</li>
-        </ul>
+      </ul>
     </div>
-    
+
     <div class="field">
-        <label for="username" class="label">Username</label>
-        <div class="control has-icons-left">
-        <input id="username" name="username" v-model="username" type="text" value="" class="input">
+      <label for="username" class="label">Username</label>
+      <div class="control has-icons-left">
+        <input id="username" name="username" v-model="username" type="text" value class="input" />
         <span class="icon is-small is-left">
-            <i class="fas fa-user"></i>
+          <i class="fas fa-user"></i>
         </span>
-        </div>
+      </div>
     </div>
     <div class="field">
-        <label for="password" class="label">Password</label>
-        <div class="control has-icons-left">
-        <input id="password" name="password" v-model="password" type="password" value="" class="input">
+      <label for="password" class="label">Password</label>
+      <div class="control has-icons-left">
+        <input id="password" name="password" v-model="password" type="password" value class="input" />
         <span class="icon is-small is-left">
-            <i class="fas fa-lock"></i>
+          <i class="fas fa-lock"></i>
         </span>
-        </div>
+      </div>
     </div>
     <div class="field">
-        <label for="rememberMe" class="checkbox">
-        <input id="rememberMe" class="checkbox" v-model="rememberMe" type="checkbox"> Remember me
-        </label>
+      <label for="rememberMe" class="checkbox">
+        <input id="rememberMe" class="checkbox" v-model="rememberMe" type="checkbox" /> Remember me
+      </label>
     </div>
     <div class="field is-grouped is-grouped-right">
-        <div class="control">
+      <div class="control">
         <a class="button is-link is-light" href="/">Cancel</a>
-        </div>
-        <div class="control">
-        <button class="button is-link" :disabled="submitDisabled" v-bind:class="{ 'is-loading': loading }">Submit</button>
-        </div>
+      </div>
+      <div class="control">
+        <button
+          class="button is-link"
+          :disabled="submitDisabled"
+          v-bind:class="{ 'is-loading': loading }"
+        >Submit</button>
+      </div>
     </div>
-
-</form>
-  
+  </form>
 </template>
 
 <script>
-import axios from "axios";
-import {userService} from '../services';
-
+import { userService } from "../services/user.service";
 
 export default {
   data: function() {
@@ -77,9 +73,10 @@ export default {
 
       if (this.errors.length == 0) {
         this.loading = true;
-        userService.login(this.username, this.password)
-          .then( () => {
-            if(this.nextUrl) window.location = this.nextUrl;
+        userService
+          .login(this.username, this.password)
+          .then(() => {
+            if (this.nextUrl) window.location = this.nextUrl;
           })
           .catch(error => {
             this.errors = [];

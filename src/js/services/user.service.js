@@ -1,40 +1,32 @@
+import { config } from '../config';
+import { handleApiResponse } from '../util';
+
+import axios from "axios";
+
 export const userService = {
-    login
+    login,
+    getUser,
+    getAuthorizedApps,
+    removeAuthorizedApp
 };
 
 
 function login(username, password) {
-    const requestOptions = {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            username: username,
-            password: password
-        })
-    };
-
-    return fetch(`/login`, requestOptions)
-        .then(handleResponse)
-        .then(resp => {
-            return resp;
-        });
+    return axios.post("/users/login", {
+        username: username,
+        password: password
+    })
+    // .then(handleApiResponse)
 }
 
+function getUser(userId) {
+    return axios.get(`/api/v1.0/users/${userId}`)
+}
 
-function handleResponse(response) {
-    return response.text().then(text => {
-        const data = text && JSON.parse(text);
-        if (!response.ok) {
-            if (response.status === 401) {
-                // auto logout if 401 response returned from api
-                // logout();
-                location.reload(true);
-            }
+function getAuthorizedApps(userId) {
+    return axios.get(`/api/v1.0/users/${userId}/authorized-apps`)
+}
 
-            const error = (data && data.message) || response.statusText;
-            return Promise.reject(error);
-        }
-
-        return data;
-    });
+function removeAuthorizedApp(userId, appId) {
+    return axios.delete(`/api/v1.0/users/${userId}/authorized-apps/${appId}`)
 }

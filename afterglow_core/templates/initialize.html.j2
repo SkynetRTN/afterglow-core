@@ -1,0 +1,25 @@
+{% extends "base-hero.html.j2" %}
+{% block content %}
+<div class="column has-text-centered">
+  <div class="content">
+    <a href="/">
+      <img src="{{url_for('static', filename='img/logo-full.png')}}" alt="Afterglow Logo" style="max-width: 450px;">
+    </a>
+  </div>
+
+  <div class="columns is-multiline is-centered">
+    
+    <div class="column is-7-tablet is-6-desktop is-5-widescreen ">
+      <div class="panel has-text-left has-background-white">
+        <p class="panel-heading">Admin Account Initialization</p>
+        <div class="panel-block">
+          <div class="container">
+            <init-form></init-form>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
