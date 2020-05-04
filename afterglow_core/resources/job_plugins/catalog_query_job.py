@@ -4,13 +4,15 @@ Afterglow Core: catalog query job plugin
 
 from __future__ import absolute_import, division, print_function
 
+from typing import Dict as DictType, List as ListType
+
 from numpy import argmax, array, cos, deg2rad, r_, rad2deg, unwrap
 from numpy.ma import masked_array
 from astropy.wcs import WCS
 from marshmallow.fields import Dict, Integer, List, Nested, String
 
-from ...data_structures import CatalogSource
-from ... import Float
+from ...models import Float
+from ...models.field_cal import CatalogSource
 from ..catalogs import catalogs as known_catalogs
 from ..data_files import get_data_file_fits
 from . import Job, JobResult
@@ -19,10 +21,14 @@ from . import Job, JobResult
 __all__ = ['CatalogQueryJob', 'run_catalog_query_job']
 
 
-def run_catalog_query_job(job, catalogs, ra_hours=None, dec_degs=None,
-                          radius_arcmins=None, width_arcmins=None,
-                          height_arcmins=None, file_ids=None, constraints=None,
-                          source_ids=None):
+def run_catalog_query_job(job: Job, catalogs: ListType[str],
+                          ra_hours: float = None, dec_degs: float = None,
+                          radius_arcmins: float = None,
+                          width_arcmins: float = None,
+                          height_arcmins: float = None,
+                          file_ids: ListType[int] = None,
+                          constraints: DictType = None,
+                          source_ids: ListType[str] = None):
     """
     Catalog query job body; also used during photometric calibration
 

@@ -7,6 +7,7 @@ from __future__ import absolute_import, division, print_function
 import os
 import zipfile
 import zipimport
+from typing import Any, Dict, List, Union
 
 from . import app
 
@@ -25,16 +26,17 @@ except ImportError:
 __all__ = ['load_plugins']
 
 
-def add_plugin(plugins, descr, instance, default_id=None):
+def add_plugin(plugins: Dict[Union[str, int], Any], descr: str, instance: Any,
+               default_id: int = None) -> None:
     """
     Add a plugin instance to the plugin dictionary, with the possible alias for
     integer plugin IDs; adjust plugin ID and display name; check that there are
     no more plugins with the same name if allow_multiple_instances is False
 
-    :param dict plugins: dictionary {str(id): instance, int(id): instance}
-    :param str descr: plugin description
+    :param plugins: dictionary {str(id): instance, int(id): instance}
+    :param descr: plugin description
     :param instance: plugin class instance
-    :param int default_id: numeric ID assigned to plugin by default
+    :param default_id: numeric ID assigned to plugin by default
 
     :return: None
     """
@@ -74,15 +76,17 @@ def add_plugin(plugins, descr, instance, default_id=None):
         ' (ID {})'.format(instance.id) if instance.id is not None else '')
 
 
-def load_plugins(descr, package, plugin_class, specs=None):
+def load_plugins(descr: str, package: str, plugin_class: Any,
+                 specs: List[Dict[str, Any]] = None) -> \
+        Dict[Union[str, int], Any]:
     """
     Load and initialize plugins from the given directory
 
-    :param str descr: plugin description
-    :param str package: plugin package name relative to afterglow_core, e.g.
+    :param descr: plugin description
+    :param package: plugin package name relative to afterglow_core, e.g.
         "resources.data_provider_plugins"
     :param plugin_class: base plugin class
-    :param list specs: list of plugin specifications: [{"name": "plugin_name",
+    :param specs: list of plugin specifications: [{"name": "plugin_name",
         "param": value, ...}, ...]; parameters are used to construct the plugin
         class; this can be the value of the corresponding option in app config,
         e.g. DATA_PROVIDERS; if omitted or None, load all available plugins
@@ -91,7 +95,6 @@ def load_plugins(descr, package, plugin_class, specs=None):
 
     :return: dictionary containing plugin class instances indexed by their
         unique IDs (both as integers and strings)
-    :rtype: dict
     """
     if not specs and specs is not None:
         # No plugins of this type are required

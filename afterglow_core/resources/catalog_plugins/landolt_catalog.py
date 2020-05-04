@@ -7,7 +7,7 @@ from __future__ import absolute_import, division, print_function
 
 from numpy import hypot, sqrt
 
-from ...data_structures import Mag
+from ...models.photometry import Mag
 from .vizier_catalogs import VizierCatalog
 
 
@@ -47,7 +47,7 @@ class LandoltCatalog(VizierCatalog):
             by astroquery
 
         :return: list of catalog objects
-        :rtype: list[afterglow_core.data_structures.CatalogSource]
+        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
         """
         sources = super(LandoltCatalog, self).table_to_sources(table)
 

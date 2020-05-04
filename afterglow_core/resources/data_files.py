@@ -33,7 +33,8 @@ from skylib.calibration.background import estimate_background
 from skylib.sonification import sonify_image
 
 from . import data_providers
-from .. import Resource, app, auth, errors, json_response, url_prefix
+from .. import app, auth, errors, json_response, url_prefix
+from ..models import Resource
 
 try:
     from PIL import Image as PILImage, ExifTags

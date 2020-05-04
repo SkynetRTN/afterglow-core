@@ -10,8 +10,9 @@ from marshmallow.fields import Integer, List, Nested
 import numpy
 from astropy.wcs import WCS
 
-from ...data_structures import (
-    FieldCal, FieldCalResult, Mag, PhotSettings, SourceExtractionSettings)
+from ...models.field_cal import FieldCal, FieldCalResult
+from ...models.photometry import Mag, PhotSettings
+from ...models.source_extraction import SourceExtractionSettings
 from ..data_files import get_data_file_fits, get_image_time
 from ..field_cals import get_field_cal
 from ..catalogs import catalogs as known_catalogs

@@ -16,10 +16,10 @@ from urllib.parse import urlencode
 
 from marshmallow.fields import Dict, String
 
-from flask import request, url_for
+from flask import url_for
 
-from .. import app, auth, errors, url_prefix, Resource
-
+from .. import app, auth, errors
+from ..models import Resource
 
 __all__ = ['OAuthPlugin', 'OAuthUserProfile', 'OAuthToken']
 
@@ -43,6 +43,7 @@ if app.config.get('DEBUG'):
     ctx.verify_mode = ssl.CERT_NONE
     install_opener(build_opener(HTTPSHandler(context=ctx)))
 
+
 class OAuthUserProfile:
     id = None
     username = None
@@ -50,6 +51,7 @@ class OAuthUserProfile:
     first_name = None
     last_name = None
     birth_date = None
+
 
 class OAuthToken:
     def __init__(self, access, refresh, expiration):
@@ -90,7 +92,6 @@ class OAuthPlugin(Resource):
         Initialize OAuth plugin
 
         :param str id: plugin ID
-        :param str name: plugin name
         :param str description: plugin description
         :param str icon: plugin icon ID used by the client UI
         :param bool register_users: automatically register authenticated users
@@ -173,21 +174,27 @@ class OAuthPlugin(Resource):
                         access_token_params))
         self.access_token_params = access_token_params
 
-    def construct_authorize_url(self, state={}):
+    def construct_authorize_url(self, state=None):
         """
-        Generic authorization url formatter; implemented by OAuth plugin base that
-        creates the OAuth server's authorization URL from state parameters
+        Generic authorization url formatter; implemented by OAuth plugin base
+        that creates the OAuth server's authorization URL from state parameters
 
-        :param dict state: additional application state to be added to OAuth state query parameter
+        :param dict state: additional application state to be added to OAuth
+        state query parameter
 
         :return: authorization URL
         :rtype: str
         """
-
+        if state is None:
+            state = {}
         state_json = json.dumps(state)
-        qs = urlencode(dict(state=state_json, redirect_uri=url_for('oauth2_authorized', _external=True, plugin_id=self.id), client_id=self.client_id, **self.request_token_params))
+        qs = urlencode(dict(
+            state=state_json,
+            redirect_uri=url_for(
+                'oauth2_authorized', _external=True, plugin_id=self.id),
+            client_id=self.client_id,
+            **self.request_token_params))
         return '{}?{}'.format(self.authorize_url, qs)
-
 
     def get_token(self, code):
         """
@@ -205,7 +212,8 @@ class OAuthPlugin(Resource):
             'code': code,
             'client_id': self.client_id,
             'client_secret': self.client_secret,
-            'redirect_uri': url_for('oauth2_authorized', _external=True, plugin_id=self.id),
+            'redirect_uri': url_for(
+                'oauth2_authorized', _external=True, plugin_id=self.id),
         }
         if self.access_token_params:
             args.update(self.access_token_params)
@@ -232,7 +240,8 @@ class OAuthPlugin(Resource):
             if expires is not None:
                 expires = datetime.utcnow() + timedelta(seconds=expires)
 
-            return OAuthToken(access=data.get('access_token'),
+            return OAuthToken(
+                access=data.get('access_token'),
                 refresh=data.get('refresh_token'),
                 expiration=expires)
 
@@ -244,7 +253,8 @@ class OAuthPlugin(Resource):
         Provider-specific user profile getter; implemented by OAuth plugin that
         retrieves the user's profile using the provider API and token
 
-        :param OAuthToken token: provider API access, refresh, expiration token info
+        :param OAuthToken token: provider API access, refresh, expiration token
+            info
 
         :return: user profile
         :rtype: OAuthUserProfile

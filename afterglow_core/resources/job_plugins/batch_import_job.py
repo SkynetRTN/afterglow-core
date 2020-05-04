@@ -9,7 +9,8 @@ from io import BytesIO
 
 from marshmallow.fields import Integer, List, Nested, String
 
-from ... import AfterglowSchema, Boolean
+from ... import AfterglowSchema
+from ...models import Boolean
 from ..data_providers import UnknownDataProviderError, providers
 from ..data_files import (
     CannotImportFromCollectionAssetError, get_data_file_db, get_root,

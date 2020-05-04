@@ -4,13 +4,16 @@ Afterglow Core: source extraction job plugin
 
 from __future__ import absolute_import, division, print_function
 
+from typing import List as ListType
+
 from marshmallow.fields import Integer, List, Nested
 from astropy.wcs import WCS
 
 from skylib.extraction import extract_sources
 
-from ... import Boolean
-from ...data_structures import SourceExtractionData, SourceExtractionSettings
+from ...models import Boolean
+from ...models.source_extraction import (
+    SourceExtractionSettings, SourceExtractionData)
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time, get_subframe)
 from .source_merge_job import SourceMergeSettings, merge_sources
@@ -24,17 +27,17 @@ class SourceExtractionJobResult(JobResult):
     data = List(Nested(SourceExtractionData), default=[])  # type: list
 
 
-def run_source_extraction_job(job, settings, job_file_ids):
+def run_source_extraction_job(job: Job, settings: SourceExtractionSettings,
+                              job_file_ids: ListType[int]) -> \
+        ListType[SourceExtractionData]:
     """
     Batch photometry job body; also used during photometric calibration
 
-    :param Job job: job class instance
-    :param afterglow_core.data_structures.SourceExtractionSettings settings:
-        soruce extraction settings
-    :param list job_file_ids: data file IDs to process
+    :param job: job class instance
+    :param settings: source extraction settings
+    :param job_file_ids: data file IDs to process
 
     :return: list of source extraction results
-    :rtype: list[SourceExtractionData]
     """
     extraction_kw = dict(
         threshold=settings.threshold,

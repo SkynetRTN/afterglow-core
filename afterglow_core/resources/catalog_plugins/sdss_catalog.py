@@ -49,7 +49,7 @@ class SDSSCatalog(VizierCatalog):
         :param list[str] names: object names
 
         :return: list of catalog objects
-        :rtype: list[afterglow_core.data_structures.CatalogSource]
+        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
         """
         sdss = SDSS()
         rows = []
@@ -71,7 +71,7 @@ class SDSSCatalog(VizierCatalog):
         :param dict region: keywords defining the query region
 
         :return: list of catalog objects
-        :rtype: list[afterglow_core.data_structures.CatalogSource]
+        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
         """
         sdss = SDSS()
         return self.table_to_sources(sdss.query_region(

@@ -14,9 +14,9 @@ import sep
 from skylib.photometry import aperture_photometry
 from skylib.extraction.centroiding import centroid_sources
 
-from ...data_structures import (
-    FieldCalResult, PhotSettings, PhotometryData, SourceExtractionData,
-    sigma_to_fwhm)
+from ...models.field_cal import FieldCalResult
+from ...models.photometry import PhotSettings, PhotometryData
+from ...models.source_extraction import sigma_to_fwhm, SourceExtractionData
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time, get_phot_cal)
 from . import Job, JobResult
@@ -72,7 +72,7 @@ def run_photometry_job(job, settings, job_file_ids, job_sources,
     Batch photometry job body; also used during photometric calibration
 
     :param Job job: job class instance
-    :param afterglow_core.data_structures.PhotSettings settings: photometry
+    :param afterglow_core.models.photometry.PhotSettings settings: photometry
         settings
     :param list job_file_ids: data file IDs to process
     :param list job_sources: list of SourceExtractionData-compatible source defs

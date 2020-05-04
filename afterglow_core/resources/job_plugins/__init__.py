@@ -15,8 +15,8 @@ from datetime import datetime
 # noinspection PyProtectedMember
 from marshmallow import fields, __version_info__ as marshmallow_version
 
-from ... import AfterglowSchema, DateTime, Float, app, errors
-
+from ... import app, errors
+from ...models import DateTime, Float, AfterglowSchema
 
 __all__ = ['Job', 'JobResult', 'JobState']
 

@@ -9,8 +9,11 @@ create_asset(), update_asset(), and delete_asset().
 """
 
 from __future__ import absolute_import, division, print_function
+
 from marshmallow.fields import Boolean, Dict, Integer, List, String
-from ... import Resource, app, errors
+
+from ... import app, errors
+from ...models import Resource
 from ...auth import oauth_plugins
 
 

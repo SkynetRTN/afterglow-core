@@ -16,8 +16,7 @@ from . import Job, JobResult
 from ..data_files import (
     SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,
     save_data_file)
-from ... import Boolean
-
+from ...models import Boolean
 
 __all__ = ['PixelOpsJob']
 

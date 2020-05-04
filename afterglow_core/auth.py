@@ -17,25 +17,22 @@ retrieved via :func:`auth_plugins` associated with the "auth" endpoint.
 """
 
 from __future__ import absolute_import, division, print_function
+
 import os
 import errno
-import shutil
 import uuid
 from datetime import datetime, timedelta
 from functools import wraps
 
-import marshmallow
 import jwt
-import json
-from flask import request, render_template, make_response, redirect, url_for
-from werkzeug.exceptions import HTTPException
+from flask import request, make_response, redirect, url_for
 
-from . import app, errors, json_response, url_prefix
-from .users import AnonymousUser, Role, User, UserSchema, db, user_datastore
+from . import app, errors
+from .users import AnonymousUser, Role, User, user_datastore
 
 
 __all__ = [
-    'auth_plugins', 'auth_required', 'authenticate', 'security',
+    'oauth_plugins', 'auth_required', 'authenticate', 'security',
     'current_user', 'anonymous_user', 'jwt_manager', 'create_token',
     'AuthError', 'NotAuthenticatedError', 'NoAdminRegisteredError',
     'AdminRequiredError', 'AdminOrSameUserRequiredError', 'UnknownUserError',
@@ -186,6 +183,7 @@ class CannotSetProtectedUserDataError(errors.AfterglowError):
     subcode = 110
     message = 'Cannot modify protected user info'
 
+
 class HttpAuthFailedError(AuthError):
     """
     HTTP authentication data (username/password or Authentication-Token header)
@@ -201,6 +199,7 @@ class HttpAuthFailedError(AuthError):
         ('WWW-Authenticate',
          'Basic realm="{}"'.format('Local Afterglow Users Only'))]
 
+
 class CannotDeleteCurrentUserError(AuthError):
     """
     Deleting currently authenticated user
@@ -211,6 +210,7 @@ class CannotDeleteCurrentUserError(AuthError):
     code = 403
     subcode = 111
     message = 'Cannot delete the currently authenticated user'
+
 
 class LocalAccessRequiredError(AuthError):
     """
@@ -223,6 +223,7 @@ class LocalAccessRequiredError(AuthError):
     subcode = 112
     message = 'Must be local to do that'
 
+
 class InitPageNotAvailableError(AuthError):
     """
     Afterglow Core has already been initialized
@@ -234,6 +235,7 @@ class InitPageNotAvailableError(AuthError):
     subcode = 113
     message = 'Afterglow Core has already been initialized'
 
+
 class NotInitializedError(AuthError):
     """
     Afterglow core has not yet been initialized
@@ -244,8 +246,6 @@ class NotInitializedError(AuthError):
     code = 403
     subcode = 113
     message = 'Afterglow Core has not yet been initialized'
-
-
 
 
 # Read/create secret key
@@ -343,17 +343,15 @@ def auth_required(fn, *roles, **kwargs):
     def wrapper(*args, **kw):
         try:
             authenticate(roles, **kwargs)
-        except NotAuthenticatedError as e:
+        except NotAuthenticatedError:
             if kwargs.get('allow_redirect'):
                 return redirect(url_for('login', next=request.url))
             raise
 
-
-
         try:
             result = fn(*args, **kw)
 
-            #handle rendered responses which are strings
+            # handle rendered responses which are strings
             if isinstance(result, str):
                 result = make_response(result)
 
@@ -495,7 +493,6 @@ def init_auth():
     # noinspection PyProtectedMember
     from flask import _request_ctx_stack
     from flask_security import Security, current_user as _current_user
-    from flask_security.utils import hash_password
     from .plugins import load_plugins
     from .oauth_plugins import OAuthPlugin
 
@@ -561,11 +558,12 @@ def init_auth():
 
     _clear_access_cookies = __clear_access_cookies
 
-    def _authenticate(roles=None, request_type='access', allow_redirect=False):
+    def _authenticate(roles=None, request_type='access', **__):
         """
         Authenticate the user
 
-        :param roles: list of authenticated user role IDs or a single role ID
+        :param str | list[str] roles: list of authenticated user role IDs
+            or a single role ID
         :param str request_type: JWT type to expect: "access" (for most
             resources) or "refresh" (for auth/refresh)
 
@@ -630,7 +628,6 @@ def init_auth():
             else:
                 break
 
-
         if user is None:
             raise NotAuthenticatedError(error_msg='. '.join(error_msgs))
 
@@ -644,7 +641,8 @@ def init_auth():
 
     # Load auth plugins
     oauth_plugins = load_plugins(
-        'authentication', 'oauth_plugins', OAuthPlugin, app.config['OAUTH_PLUGINS'])
+        'authentication', 'oauth_plugins', OAuthPlugin,
+        app.config['OAUTH_PLUGINS'])
 
     # Initialize security subsystem
     app.config.setdefault('SECURITY_TOKEN_MAX_AGE', None)
@@ -655,6 +653,3 @@ def init_auth():
     app.config.setdefault('REFRESH_TOKEN_EXPIRES', None)
 
     security = Security(app, user_datastore, register_blueprint=False)
-
-
-

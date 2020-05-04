@@ -7,7 +7,8 @@ from __future__ import absolute_import, division, print_function
 from marshmallow.fields import Integer, List, Nested
 from numpy.ma import MaskedArray
 
-from ... import AfterglowSchema, Boolean, errors
+from ... import AfterglowSchema, errors
+from ...models import Boolean
 from ..data_files import (
     SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,
     save_data_file)

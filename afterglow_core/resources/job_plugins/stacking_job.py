@@ -11,8 +11,8 @@ from skylib.combine.stacking import combine
 from . import Job, JobResult
 from ..data_files import (
     create_data_file, get_data_file, get_data_file_db, get_root)
-from ... import AfterglowSchema, Float
-
+from ... import AfterglowSchema
+from ...models import Float
 
 __all__ = ['StackingJob']
 

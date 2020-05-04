@@ -12,7 +12,8 @@ from astropy.units import arcmin, deg, hour
 from astroquery.vizier import Vizier
 
 from ... import app
-from ...data_structures import CatalogSource, Mag
+from ...models.field_cal import CatalogSource
+from ...models.photometry import Mag
 from . import Catalog
 
 
@@ -98,7 +99,7 @@ class VizierCatalog(Catalog):
             by astroquery
 
         :return: list of catalog objects
-        :rtype: list[afterglow_core.data_structures.CatalogSource]
+        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
         """
         sources = []
 
@@ -163,7 +164,7 @@ class VizierCatalog(Catalog):
         :param list[str] names: object names
 
         :return: list of catalog objects
-        :rtype: list[afterglow_core.data_structures.CatalogSource]
+        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
         """
         viz = Vizier(
             vizier_server=self.vizier_server, catalog=self.vizier_catalog,
@@ -187,7 +188,7 @@ class VizierCatalog(Catalog):
         :param dict region: keywords defining the query region
 
         :return: list of catalog objects
-        :rtype: list[afterglow_core.data_structures.CatalogSource]
+        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
         """
         viz = Vizier(
             vizier_server=self.vizier_server, catalog=self.vizier_catalog,
@@ -217,7 +218,7 @@ class VizierCatalog(Catalog):
         :param int limit: maximum number of rows to return
 
         :return: list of catalog objects
-        :rtype: list[afterglow_core.data_structures.CatalogSource]
+        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
         """
         return self.query_region(
             ra_hours, dec_degs, constraints, limit,
@@ -236,7 +237,7 @@ class VizierCatalog(Catalog):
         :param int limit: maximum number of rows to return
 
         :return: list of catalog objects
-        :rtype: list[afterglow_core.data_structures.CatalogSource]
+        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
         """
         return self.query_region(
             ra_hours, dec_degs, constraints, limit,

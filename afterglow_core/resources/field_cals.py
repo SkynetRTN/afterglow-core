@@ -7,7 +7,7 @@ from __future__ import absolute_import, division, print_function
 from sqlalchemy import Column, Float, Integer, String
 from flask import request
 
-from ..data_structures import FieldCal
+from ..models.field_cal import FieldCal
 from .. import app, auth, errors, json_response, url_prefix
 from .data_files import Base, get_data_file_db
 

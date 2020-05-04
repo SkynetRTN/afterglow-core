@@ -10,8 +10,9 @@ from marshmallow.fields import List, Nested, String
 from numpy import asarray, cos, deg2rad, pi, sin, sqrt, transpose, zeros
 from scipy.spatial import cKDTree
 
-from ...data_structures import SourceExtractionData
-from ... import AfterglowSchema, Float
+from ... import AfterglowSchema
+from ...models import Float
+from ...models.source_extraction import SourceExtractionData
 from . import Job, JobResult
 
 

@@ -9,8 +9,9 @@ from astropy.wcs import WCS
 
 from skylib.combine.alignment import apply_transform_stars, apply_transform_wcs
 
-from ...data_structures import SourceExtractionData
-from ... import AfterglowSchema, Boolean, errors
+from ... import AfterglowSchema, errors
+from ...models import Boolean
+from ...models.source_extraction import SourceExtractionData
 from ..data_files import (
     SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,
     save_data_file)

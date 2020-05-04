@@ -10,7 +10,8 @@ from astropy.wcs import WCS
 from skylib.photometry.aperture import aperture_photometry
 from skylib.extraction.centroiding import centroid_iraf
 
-from .. import Float, Resource, app, auth, errors, json_response, url_prefix
+from .. import app, auth, errors, json_response, url_prefix
+from ..models import Float, Resource
 from .data_files import (
     MissingWCSError, get_exp_length, get_gain, get_data_file, get_phot_cal)
 
