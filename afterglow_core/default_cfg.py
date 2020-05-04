@@ -4,7 +4,7 @@
 # General
 ################################################################################
 
-# Location of the general Afterglow Server data files
+# Location of the general Afterglow Core data files
 DATA_ROOT = '.'
 
 

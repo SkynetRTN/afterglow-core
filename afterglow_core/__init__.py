@@ -12,11 +12,13 @@ import datetime
 import json
 import os
 from math import isinf, isnan
+from typing import Union
 
+# noinspection PyProtectedMember
 from marshmallow import (
     Schema, fields, missing, post_dump, __version_info__ as marshmallow_version)
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
-from flask import Flask, Response, request, url_for
+from flask import Flask, Response
 
 from .__version__ import __version__, url_prefix
 
@@ -54,7 +56,8 @@ class DateTime(fields.DateTime):
     Use this instead of :class:`marshmallow.fields.DateTime` to make sure that
     the data stored in JSONType database columns is deserialized properly
     """
-    def _serialize(self, value, attr, obj, **__):
+    def _serialize(self, value: Union[str, datetime.datetime, None], attr, obj,
+                   **__):
         if value is None or isinstance(value, str) or \
                 isinstance(value, type(u'')):
             return value
@@ -173,6 +176,7 @@ class AfterglowSchema(Schema):
             except (AttributeError, KeyError):
                 pass
             else:
+                # noinspection PyTypeChecker
                 if hasattr(field, 'nested') and \
                         issubclass(field.nested, AfterglowSchema):
                     value = field.nested(value)
@@ -231,7 +235,7 @@ class AfterglowSchema(Schema):
 
 class Resource(AfterglowSchema):
     """
-    Base class for Afterglow Server resources (data providers, data files, etc.)
+    Base class for Afterglow Core resources (data providers, data files, etc.)
 
     Provides JSON serialization of resource class fields based on marshmallow.
     Subclasses must define fields in the usual way:

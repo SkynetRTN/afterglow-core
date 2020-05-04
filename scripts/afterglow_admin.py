@@ -54,10 +54,10 @@ Examples:
 
     parser.add_argument(
         '--host', metavar='HOSTNAME', default='localhost',
-        help='Afterglow server hostname or IP address')
+        help='Afterglow API server hostname or IP address')
     parser.add_argument(
         '-o', '--port', metavar='PORT', type=int, default=5000,
-        help='Afterglow server port')
+        help='Afterglow API server port')
     parser.add_argument(
         '-n', '--no-https', action='store_true', help='disable HTTPS')
     parser.add_argument(

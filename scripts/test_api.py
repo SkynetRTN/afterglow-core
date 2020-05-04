@@ -21,11 +21,11 @@ if __name__ == '__main__':
 
     parser.add_argument(
         '--host', metavar='HOSTNAME', default='localhost',
-        help='Afterglow server hostname or IP address')
+        help='Afterglow API server hostname or IP address')
     # noinspection PyTypeChecker
     parser.add_argument(
         '-o', '--port', metavar='PORT', type=int, default=5000,
-        help='Afterglow server port')
+        help='Afterglow API server port')
     parser.add_argument(
         '-s', '--https', action='store_true', help='use HTTPS instead of HTTP')
     parser.add_argument(
