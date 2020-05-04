@@ -23,6 +23,7 @@ requires = [
     'scipy',
     'sep',
     'SQLAlchemy',
+    'werkzeug',
     # skynet dependencies
     'cryptography',
     'marshmallow_sqlalchemy',
