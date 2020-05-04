@@ -1,8 +1,8 @@
-#TODO Improve organization of views, errors, db, and other files
-#TODO Add database structure and management pages for API Token used in scripted access
+# TODO Improve organization of views, errors, db, and other files
+# TODO Add database structure and management pages for API Token used in scripted access
 
 """
-Afterglow Access Server: main app package
+Afterglow Core: main app package
 """
 
 from __future__ import absolute_import, division, print_function

@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: API version info
+Afterglow Core: API version info
 """
 
 __version__ = 1, 0, 1

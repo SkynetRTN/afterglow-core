@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: source extraction job plugin
+Afterglow Core: source extraction job plugin
 """
 
 from __future__ import absolute_import, division, print_function

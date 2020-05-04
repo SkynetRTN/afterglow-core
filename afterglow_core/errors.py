@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: error system
+Afterglow Core: error system
 """
 
 from __future__ import absolute_import, division, print_function
@@ -14,7 +14,7 @@ __all__ = ['AfterglowError', 'MethodNotImplementedError', 'ValidationError']
 
 def afterglow_error_handler(e):
     """
-    Error handling function for all Afterglow Access Server errors
+    Error handling function for all Afterglow Core errors
 
     Automatically installed for all `AfterglowError` subclasses via
     `AfterglowErrorMeta`
@@ -142,14 +142,14 @@ class AfterglowErrorMeta(type):
 
 class AfterglowError(exceptions.HTTPException):
     """
-    Base class for all Afterglow Access Server exceptions
+    Base class for all Afterglow Core exceptions
 
     :Attributes::
         code: HTTP status code for the exception, defaults to 400 (BAD REQUEST)
         subcode: exception-specific error code; by convention, has the form
             "nmm", where the most significant digits ("n") define the Afterglow
-            Access Server module and the two least significant digits ("mm")
-            define specific exception within that module, from 0 to 99
+            Core module and the two least significant digits ("mm") define
+            specific exception within that module, from 0 to 99
         payload: dictionary containing the optional exception attributes passed
             as keyword arguments when raising the exception and sent to the
             client in JSON
@@ -193,9 +193,9 @@ class AfterglowError(exceptions.HTTPException):
 
 class MethodNotImplementedError(AfterglowError):
     """
-    Resource method is not implemented by the Afterglow Access Server. Mainly
-    used by the data provider plugin system if the plugin class does not
-    override the required abstract base DataProvider class method.
+    Resource method is not implemented by the Afterglow Core. Mainly used
+    by the data provider plugin system if the plugin class does not override
+    the required abstract base DataProvider class method.
 
     Extra attributes::
         class_name: name of the class that must implement the method

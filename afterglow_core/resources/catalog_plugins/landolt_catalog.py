@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: Landolt catalog of UBVRI photometric standards accessed
+Afterglow Core: Landolt catalog of UBVRI photometric standards accessed
 via VizieR
 """
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Afterglow Access Server administration
+Afterglow Core administration
 """
 
 from __future__ import absolute_import, division, print_function

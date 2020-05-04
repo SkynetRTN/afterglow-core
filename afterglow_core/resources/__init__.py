@@ -1,6 +1,5 @@
 """
-Afterglow Access Server: package containing all resources provided by the
-server API
+Afterglow Core: package containing all resources provided by the server API
 """
 
 from . import (

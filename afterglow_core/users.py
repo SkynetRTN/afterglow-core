@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: user management
+Afterglow Core: user management
 """
 
 from __future__ import absolute_import, division, print_function
@@ -114,7 +114,7 @@ class User(db.Model, UserMixin):
         if self.alias: return self.alias
         if self.email: return self.email
         return "Anonymous"
-        
+
 
     @property
     def is_admin(self):
@@ -189,8 +189,8 @@ else:
 try:
     roles_created = False
     for name, descr in [
-            ('admin', 'Afterglow Access Server Administrator'),
-            ('user', 'Afterglow Access User')]:
+            ('admin', 'Afterglow Administrator'),
+            ('user', 'Afterglow User')]:
         if not user_datastore.find_role(name):
             user_datastore.create_role(name=name, description=descr)
             roles_created = True
@@ -204,7 +204,7 @@ except Exception:
 class AnonymousUserRole(object):
     id = None
     name = 'user'
-    description = 'Anonymous Afterglow Access User'
+    description = 'Anonymous Afterglow User'
 
 
 class AnonymousUser(object):

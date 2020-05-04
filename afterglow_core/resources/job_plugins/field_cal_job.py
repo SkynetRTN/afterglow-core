@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: photometric calibration job plugin
+Afterglow Core: photometric calibration job plugin
 """
 
 from __future__ import absolute_import, division, print_function

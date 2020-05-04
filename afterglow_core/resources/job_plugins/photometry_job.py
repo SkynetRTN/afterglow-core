@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: batch photometry job plugin
+Afterglow Core: batch photometry job plugin
 """
 
 from __future__ import absolute_import, division, print_function

@@ -1,7 +1,5 @@
 """
-Afterglow Access Server: OAuth2 server routes
-
-
+Afterglow Core: OAuth2 server routes
 """
 
 from __future__ import absolute_import, division, print_function

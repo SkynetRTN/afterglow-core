@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: access to the various imaging surveys via SkyView
+Afterglow Core: access to the various imaging surveys via SkyView
 (skyview.gsfc.nasa.gov)
 """
 

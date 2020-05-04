@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: catalogs
+Afterglow Core: catalog endpoint
 """
 
 from __future__ import absolute_import, division, print_function

@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: UCAC5 catalog accessed via VizieR
+Afterglow Core: UCAC5 catalog accessed via VizieR
 """
 
 from __future__ import absolute_import, division, print_function

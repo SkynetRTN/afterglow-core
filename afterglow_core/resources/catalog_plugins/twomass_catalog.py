@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: 2MASS catalog accessed via VizieR
+Afterglow Core: 2MASS catalog accessed via VizieR
 """
 
 from __future__ import absolute_import, division, print_function

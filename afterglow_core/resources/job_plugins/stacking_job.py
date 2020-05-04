@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: image stacking job plugin
+Afterglow Core: image stacking job plugin
 """
 
 from __future__ import absolute_import, division, print_function

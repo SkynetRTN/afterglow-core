@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: APASS catalog accessed via VizieR
+Afterglow Core: APASS catalog accessed via VizieR
 """
 
 from __future__ import absolute_import, division, print_function

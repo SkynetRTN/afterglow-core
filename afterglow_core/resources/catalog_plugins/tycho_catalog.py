@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: Tycho-2 catalog accessed via VizieR
+Afterglow Core: Tycho-2 catalog accessed via VizieR
 """
 
 from __future__ import absolute_import, division, print_function

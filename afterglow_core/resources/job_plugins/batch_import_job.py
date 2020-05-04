@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: batch data file import job plugin
+Afterglow Core: batch data file import job plugin
 """
 
 from __future__ import absolute_import, division, print_function

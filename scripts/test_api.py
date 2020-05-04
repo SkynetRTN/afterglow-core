@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Run Afterglow Access API commands
+Run Afterglow Core API commands
 """
 
 from __future__ import absolute_import, division, print_function

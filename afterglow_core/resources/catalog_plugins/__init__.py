@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: catalog plugin package
+Afterglow Core: catalog plugin package
 
 A catalog plugin must subclass :class:`Catalog` and implement at
 least its get_asset() and get_asset_data() methods.

@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: catalog query job plugin
+Afterglow Core: catalog query job plugin
 """
 
 from __future__ import absolute_import, division, print_function

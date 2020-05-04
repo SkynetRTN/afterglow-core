@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: oauth plugin package
+Afterglow Core: oauth plugin package
 
 An OpenAuth2 plugin must subclass :class:`OAuthPlugin` and implement its
 methods.
@@ -128,7 +128,7 @@ class OAuthPlugin(Resource):
 
         if self.register_users is None:
             self.register_users = register_users
-            
+
         self.authorize_url = authorize_url
         if request_token_params:
             self.request_token_params = request_token_params

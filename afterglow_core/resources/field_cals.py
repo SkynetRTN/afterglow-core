@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: field-cals resource
+Afterglow Core: field-cals resource
 """
 
 from __future__ import absolute_import, division, print_function

@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: image alignment job plugin
+Afterglow Core: image alignment job plugin
 """
 
 from __future__ import absolute_import, division, print_function

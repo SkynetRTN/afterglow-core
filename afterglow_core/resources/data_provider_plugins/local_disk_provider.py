@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: local disk data provider plugin
+Afterglow Core: local disk data provider plugin
 """
 
 from __future__ import absolute_import, division, print_function

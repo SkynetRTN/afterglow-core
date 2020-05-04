@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: SDSS catalog
+Afterglow Core: SDSS catalog
 """
 
 from __future__ import absolute_import, division, print_function

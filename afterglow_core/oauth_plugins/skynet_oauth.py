@@ -1,6 +1,5 @@
 """
-Afterglow Access Server: Skynet OAuth authentication plugins (both client- and
-server-side flow)
+Afterglow Core: Skynet OAuth authentication plugin
 """
 
 from __future__ import absolute_import, division, print_function

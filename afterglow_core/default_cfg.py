@@ -1,4 +1,4 @@
-# Default Afterglow Access Server Configuration
+# Default Afterglow Core Configuration
 
 ################################################################################
 # General

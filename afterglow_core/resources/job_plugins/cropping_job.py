@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: image cropping job plugin
+Afterglow Core: image cropping job plugin
 """
 
 from __future__ import absolute_import, division, print_function

@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: data-providers resource
+Afterglow Core: data-providers resource
 
 The list of data provider plugins loaded at runtime is controlled by the
 DATA_PROVIDERS configuration variable.

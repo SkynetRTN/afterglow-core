@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: imaging survey data provider plugin
+Afterglow Core: imaging survey data provider plugin
 """
 
 from __future__ import absolute_import, division, print_function

@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: data-files resource
+Afterglow Core: data-files resource
 """
 
 from __future__ import absolute_import, division, print_function
@@ -393,7 +393,7 @@ def save_data_file(root, file_id, data, hdr):
     # Initialize header
     if hdr is None:
         hdr = pyfits.Header()
-    hdr['FILE_ID'] = (file_id, 'Afterglow Access data file ID')
+    hdr['FILE_ID'] = (file_id, 'Afterglow data file ID')
 
     if data.dtype.fields is None:
         # Convert image data to float32

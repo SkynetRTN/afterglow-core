@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: job resources
+Afterglow Core: job resources
 
 Job types are defined in afterglow_core.job_plugins.
 """

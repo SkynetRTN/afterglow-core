@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: data structures common to multiple job plugins
+Afterglow Core: data structures common to multiple job plugins
 """
 
 from __future__ import absolute_import, division, print_function

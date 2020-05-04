@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: job plugin package
+Afterglow Core: job plugin package
 
 A job plugin must subclass :class:`Job` and implement its run() method.
 """

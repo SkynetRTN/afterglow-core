@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: data provider plugin package
+Afterglow Core: data provider plugin package
 
 A data provider plugin must subclass :class:`DataProvider` and implement at
 least its get_asset() and get_asset_data() methods. Browseable data providers

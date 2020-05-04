@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: OAuth2 server
+Afterglow Core: OAuth2 server
 
 Afterglow OAuth2 server is enabled by defining at least one client in the
 OAUTH_CLIENTS config option:

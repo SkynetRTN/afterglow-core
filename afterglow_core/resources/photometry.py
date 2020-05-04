@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: image data file photometry
+Afterglow Core: image data file photometry
 """
 
 from __future__ import absolute_import, division, print_function

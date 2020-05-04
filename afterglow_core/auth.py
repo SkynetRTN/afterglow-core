@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: user authentication
+Afterglow Core: user authentication
 
 All endpoints that assume authorized access must be decorated with
 @auth_required; its explicit equivalent is :func:`authorize`.
@@ -348,7 +348,7 @@ def auth_required(fn, *roles, **kwargs):
                 return redirect(url_for('login', next=request.url))
             raise
 
-        
+
 
         try:
             result = fn(*args, **kw)
@@ -630,7 +630,7 @@ def init_auth():
             else:
                 break
 
-        
+
         if user is None:
             raise NotAuthenticatedError(error_msg='. '.join(error_msgs))
 

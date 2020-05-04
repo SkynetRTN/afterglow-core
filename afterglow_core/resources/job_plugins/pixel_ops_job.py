@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: pixel operations job plugin
+Afterglow Core: pixel operations job plugin
 """
 
 from __future__ import absolute_import, division, print_function

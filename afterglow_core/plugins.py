@@ -1,5 +1,5 @@
 """
-Afterglow Access Server: plugin support
+Afterglow Core: plugin support
 """
 
 from __future__ import absolute_import, division, print_function
