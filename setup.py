@@ -1,39 +1,45 @@
-import os
+"""
+Afterglow Core setuptools setup script
+"""
 
 from setuptools import setup, find_packages
 
 
 requires = [
-    'plaster_pastedeploy',
+    'authlib',
+    'astropy',
+    'astroquery',
+    'email_validator',
     'flask',
     'flask_sqlalchemy',
     'flask_security',
     'flask_cors',
-    'authlib',
-    'pyjwt',
-    'sep',
     'marshmallow',
     'numpy',
-    'scipy',
-    'astropy',
-    'astroquery',
-    'python-dateutil',
-    #skynet dependencies
+    'plaster_pastedeploy',
     'pyjwt',
-    'redis',  
-    'numpy',
+    'python-dateutil',
+    'requests',
     'scipy',
-    'sqlalchemy-utils',
+    'sep',
+    'SQLAlchemy',
+    # skynet dependencies
+    'cryptography',
+    'marshmallow_sqlalchemy',
     'pycryptodome',
     'PyMySQL',
-    'cryptography',
-    'marshmallow',
-    'marshmallow_sqlalchemy',
-    'astropy'
+    'redis',
+    'sqlalchemy-utils',
     'WTForms',
-    'email_validator'
-    #end skynet dependencies
-
+    #     'pyramid',
+    #     'pyramid_jinja2',
+    #     'pyramid_debugtoolbar',
+    #     'pyramid_mailer',
+    #     'pyramid_tm',
+    #     'pyramid_retry',
+    #     'waitress',
+    #     'bcrypt',
+    # end skynet dependencies
 ]
 
 tests_require = [
@@ -43,15 +49,15 @@ tests_require = [
 ]
 
 setup(
-    name='afterglow_server',
-    version='0.0',
-    description='Afterglow Server',
+    name='afterglow_core',
+    version='1.0.1',
+    description='Afterglow Core',
     long_description='',
     classifiers=[
     ],
     author='',
     author_email='',
-    url='',
+    url='afterglow.skynet.unc.edu',
     keywords='',
     packages=find_packages(),
     include_package_data=True,
@@ -62,34 +68,7 @@ setup(
     install_requires=requires,
     entry_points={
         'paste.app_factory': [
-            'main = afterglow_server:main',
+            'main = afterglow_core:main',
         ],
     },
 )
-
-
-
-
-#  'plaster_pastedeploy',
-#     'pyramid',
-#     'pyramid_jinja2',
-#     'pyramid_debugtoolbar',
-#     'pyramid_mailer',
-#     'pyramid_tm',
-#     'pyramid_retry',
-#     'waitress',
-#     'SQLAlchemy',
-#     'WTForms',
-#     'bcrypt',
-#     # skynet dependencies
-#     'pyjwt',
-#     'redis',  
-#     'numpy',
-#     'scipy',
-#     'sqlalchemy-utils',
-#     'pycryptodome',
-#     'PyMySQL',
-#     'cryptography',
-#     'marshmallow',
-#     'marshmallow_sqlalchemy',
-#     'astropy'
