@@ -113,3 +113,6 @@ MANIFEST
 
 # IntelliJ/PyCharm
 *.iml
+
+# Visual Studio
+/.vscode/
