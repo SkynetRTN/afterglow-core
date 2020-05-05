@@ -10,7 +10,8 @@ import marshmallow
 
 from .. import app, json_response
 from ..auth import auth_required
-from ..users import User, UserSchema, Role, db
+from ..users import User, Role, db
+from ..models.user import UserSchema
 from ..errors import MissingFieldError
 from ..errors.auth import LocalAccessRequiredError, InitPageNotAvailableError
 

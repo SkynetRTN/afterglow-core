@@ -5,8 +5,6 @@ Afterglow Core: user management
 from __future__ import absolute_import, division, print_function
 
 import os
-from datetime import datetime
-from marshmallow import Schema, fields
 from flask_sqlalchemy import SQLAlchemy
 from flask_security import SQLAlchemyUserDatastore, UserMixin, RoleMixin
 
@@ -23,7 +21,7 @@ except ImportError:
 
 
 __all__ = [
-    'AnonymousUser', 'Role', 'RoleSchema', 'User', 'UserSchema', 'UserClient',
+    'AnonymousUser', 'Role', 'User', 'UserClient',
     'db', 'user_datastore',
 ]
 
@@ -53,10 +51,6 @@ class Role(db.Model, RoleMixin):
 
 
 # noinspection PyClassHasNoInit
-class RoleSchema(Schema):
-    id = fields.Integer()  # type: int
-    name = fields.String()  # type: str
-    description = fields.String()  # type: str
 
 
 class User(db.Model, UserMixin):
@@ -131,20 +125,6 @@ class User(db.Model, UserMixin):
         return self.id
 
 
-# noinspection PyClassHasNoInit
-class UserSchema(Schema):
-    id = fields.Integer()  # type: int
-    username = fields.String()  # type: str
-    email = fields.String()  # type: str
-    first_name = fields.String()  # type: str
-    last_name = fields.String()  # type: str
-    active = fields.Boolean()  # type: bool
-    created_at = fields.DateTime()  # type: datetime
-    modified_at = fields.DateTime()  # type: datetime
-    roles = fields.List(fields.Nested(RoleSchema, only=['name']))  # type: list
-    settings = fields.String()  # type: str
-
-
 # Need to place this here because OAuth2 clients are stored in the user database
 # and initialized/migrated by Alembic along with the other user-related tables
 class UserClient(db.Model):
@@ -180,10 +160,8 @@ else:
 
     # noinspection PyProtectedMember
     with EnvironmentContext(
-            cfg, script, fn=lambda rev, _:
-            script._upgrade_revs('head', rev),
-            as_sql=False, starting_rev=None,
-            destination_rev='head', tag=None,
+            cfg, script, fn=lambda rev, _: script._upgrade_revs('head', rev),
+            as_sql=False, starting_rev=None, destination_rev='head', tag=None,
     ), db.engine.connect() as connection:
         alembic_context.configure(connection=connection)
 

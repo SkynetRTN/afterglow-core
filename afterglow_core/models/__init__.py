@@ -8,9 +8,7 @@ from typing import Union
 from urllib.parse import quote
 
 from flask import url_for
-# noinspection PyProtectedMember
-from marshmallow import (
-    fields, Schema, __version_info__ as marshmallow_version, post_dump)
+from marshmallow import Schema, fields, post_dump
 
 
 __all__ = [
@@ -114,10 +112,7 @@ class AfterglowSchema(Schema):
         super(AfterglowSchema, self).__init__()
 
         if _obj is not None:
-            data = self.dump(_obj)
-            if marshmallow_version < (3, 0):
-                data = data[0]
-            for name, val in data.items():
+            for name, val in self.dump(_obj).items():
                 try:
                     if isinf(val) or isnan(val):
                         # Convert floating-point NaNs/Infs to string
@@ -208,10 +203,7 @@ class AfterglowSchema(Schema):
             the resource has ID
         :rtype: str
         """
-        res = self.dumps(self)
-        if marshmallow_version < (3, 0):
-            res = res[0]
-        return res
+        return self.dumps(self)
 
 
 class Resource(AfterglowSchema):

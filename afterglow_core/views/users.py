@@ -14,7 +14,8 @@ from ..auth import (
     auth_required, create_token, clear_access_cookies, set_access_cookies,
     oauth_plugins)
 from ..oauth2 import oauth_clients
-from ..users import Role, User, UserSchema, UserClient, db
+from ..users import Role, User, UserClient, db
+from ..models.user import UserSchema
 from ..errors import MissingFieldError, ValidationError
 from ..errors.auth import (
     AdminRequiredError, UnknownUserError, CannotDeactivateTheOnlyAdminError,
@@ -320,7 +321,7 @@ def users(user_id: int = None):
             for role in request.args['roles'].split(','):
                 q = q.filter(User.roles.any(Role.name == role))
 
-        return json_response({'items': [u.id for u in q]})
+        return json_response({'items': UserSchema().dump(q.all(), many=True)})
 
     if request.method == 'POST':
         username, password, active, roles = parse_user_fields()
