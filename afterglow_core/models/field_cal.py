@@ -83,3 +83,7 @@ class FieldCalResult(AfterglowSchema):
     phot_results = List(Nested(PhotometryData), default=[])  # type: list
     zero_point = Float()  # type: float
     zero_point_error = Float()  # type: float
+
+
+__all__ = [name for name, value in __dict__.items()
+           if issubclass(value, AfterglowSchema)]
