@@ -11,60 +11,13 @@ from skylib.photometry.aperture import aperture_photometry
 from skylib.extraction.centroiding import centroid_iraf
 
 from .. import app, auth, errors, json_response, url_prefix
-from ..models import Float, Resource
+from ..models.photometry import Photometry
 from ..errors.data_file import MissingWCSError
 from .data_files import (
     get_exp_length, get_gain, get_data_file, get_phot_cal)
 
-__all__ = ['Photometry', 'get_photometry']
 
-
-class Photometry(Resource):
-    """
-    JSON-serializable photometry results
-
-    Attributes::
-        flux: flux within the aperture in ADUs; mean background within the
-            annulus is subtracted if annulus is enabled
-        flux_err: estimated 1-sigma error of flux
-        mag: magnitude computed as -2.5log10(flux/texp) + optional calibration
-            terms if calibration data are available
-        mag_err: estimated 1-sigma error of magnitude
-        x, y: pixel coordinates of the aperture center
-        a: aperture radius (or semi-major axis) in pixels
-        b: semi-minor axis of the aperture
-        theta: aperture position angle in degrees CCW if `a` != `b`
-        a_in: inner annulus radius (or semi-major axis) in pixels; not set if
-            local background subtraction was not used
-        a_out: outer annulus radius (or semi-major axis) in pixels
-        b_out: semi-minor outer axis of the annulus
-        theta_out: annulus position angle in degrees CCW if `a` != `b`
-        area: area within the aperture in square pixels
-        background_area: annulus area in pixels if local background subtraction
-            was enabled; not set otherwise
-        background: mean background within the aperture estimated from the
-            annulus if enabled; not set otherwise
-        background_rms: RMS of background within the annulus if local background
-            subtraction was enabled; not set otherwise
-
-    """
-    flux = Float()  # type: float
-    flux_err = Float()  # type: float
-    mag = Float()  # type: float
-    mag_err = Float()  # type: float
-    x = Float()  # type: float
-    y = Float()  # type: float
-    a = Float()  # type: float
-    b = Float()  # type: float
-    theta = Float()  # type: float
-    a_in = Float()  # type: float
-    a_out = Float()  # type: float
-    b_out = Float()  # type: float
-    theta_out = Float()  # type: float
-    area = Float()  # type: float
-    background_area = Float()  # type: float
-    background = Float()  # type: float
-    background_rms = Float()  # type: float
+__all__ = ['get_photometry']
 
 
 def get_photometry(data, texp, gain, phot_cal, x, y, a, b=None, theta=0,
