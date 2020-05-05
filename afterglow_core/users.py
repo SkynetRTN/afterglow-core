@@ -103,18 +103,23 @@ class User(db.Model, UserMixin):
     @property
     def full_name(self):
         full_name = []
-        if self.first_name: full_name.append(self.first_name)
-        if self.last_name: full_name.append(self.last_name)
+        if self.first_name:
+            full_name.append(self.first_name)
+        if self.last_name:
+            full_name.append(self.last_name)
         return ' '.join(full_name)
 
     @property
     def display_name(self):
-        if self.full_name: return self.full_name
-        if self.username: return self.username
-        if self.alias: return self.alias
-        if self.email: return self.email
+        if self.full_name:
+            return self.full_name
+        if self.username:
+            return self.username
+        if self.alias:
+            return self.alias
+        if self.email:
+            return self.email
         return "Anonymous"
-
 
     @property
     def is_admin(self):
@@ -209,7 +214,11 @@ class AnonymousUserRole(object):
 
 class AnonymousUser(object):
     id = None
-    username = '<Anonymous>'
+    username = display_name = '<Anonymous>'
+    alias = None
+    first_name = None
+    last_name = None
+    full_name = ''
     email = ''
     password = ''
     active = True
@@ -226,4 +235,3 @@ class AnonymousUser(object):
     def get_user_id(self):
         """Return user ID; required by authlib"""
         return self.id
-
