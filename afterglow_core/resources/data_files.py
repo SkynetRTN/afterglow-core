@@ -2,7 +2,6 @@
 Afterglow Core: data-files resource
 """
 
-from __future__ import absolute_import, division, print_function
 import sys
 import os
 from glob import glob
@@ -16,7 +15,6 @@ import sqlite3
 from threading import Lock
 from io import BytesIO
 
-from marshmallow import fields
 from sqlalchemy import (
     CheckConstraint, Column, DateTime, ForeignKey, Integer, String,
     create_engine, event, func)
@@ -34,7 +32,7 @@ from skylib.sonification import sonify_image
 
 from . import data_providers
 from .. import app, auth, errors, json_response, url_prefix
-from ..models import Resource
+from ..models.data_file import DataFile, Session
 from ..errors.data_provider import UnknownDataProviderError
 from ..errors.data_file import (
     UnknownDataFileError, CannotCreateDataFileDirError,
@@ -66,7 +64,7 @@ except ImportError:
 
 
 __all__ = [
-    'Base', 'DataFile', 'Session', 'SqlaDataFile', 'SqlaSession',
+    'Base', 'SqlaDataFile', 'SqlaSession',
     'data_files_engine', 'data_files_engine_lock', 'create_data_file',
     'save_data_file', 'get_data_file', 'get_data_file_data',
     'get_data_file_db', 'get_data_file_fits', 'get_data_file_path',
@@ -74,112 +72,6 @@ __all__ = [
     'get_root', 'get_subframe', 'import_data_file',
     'convert_exif_field',
 ]
-
-
-class DataFile(Resource):
-    """
-    JSON-serializable data file class
-
-    Attributes::
-        id: unique integer data file ID; assigned automatically when creating
-            or importing data file into session
-        name: data file name; on import, set to the data provider asset name
-        width: image width
-        height: image height
-        data_provider: for imported data files, name of the originating data
-            provider; not defined for data files created from scratch or
-            uploaded
-        asset_path: for imported data files, the original asset path
-        asset_metadata: dictionary of the originating data provider asset
-            metadata
-        layer: layer ID for data files imported from multi-layer data provider
-            assets
-        created_on: datetime.datetime of data file creation
-    """
-    __get_view__ = 'data_files'
-
-    id = fields.Integer(default=None)  # type: int
-    type = fields.String(default=None)  # type: str
-    name = fields.String(default=None)  # type: str
-    width = fields.Integer(default=None)  # type: int
-    height = fields.Integer(default=None)  # type: int
-    data_provider = fields.String(default=None)  # type: str
-    asset_path = fields.String(default=None)  # type: str
-    asset_metadata = fields.Dict(default={})  # type: dict
-    layer = fields.String(default=None)  # type: str
-    created_on = fields.DateTime(
-        default=None, format='%Y-%m-%d %H:%M:%S')  # type: datetime
-    session_id = fields.Integer(default=None)  # type: int
-
-    def __init__(self, _obj=None, **kwargs):
-        """
-        Create a new data file schema
-
-        :param :class:`SqlaDataFile` _obj: SQLA data file returned by database
-            query
-        :param kwargs: if `_obj` is not set, initialize the data file fields
-            from the given keyword=value pairs
-        """
-        # Extract fields from SQLA object
-        kw = {name: getattr(_obj, name, None)
-              for name in self._declared_fields
-              if name not in getattr(Resource, '_declared_fields')}
-        kw.update(kwargs)
-
-        # Convert fields stored as strings in the db to their proper schema
-        # types
-        if kw.get('asset_metadata') is not None:
-            kw['asset_metadata'] = json.loads(kw['asset_metadata'])
-
-        super(DataFile, self).__init__(**kw)
-
-
-class Session(Resource):
-    """
-    JSON-serializable Afterglow session class
-
-    A session is a collection of user's data files. When creating or importing
-    a data file, it is associated with a certain session (by default, if no
-    session ID provided, with the anonymous session that always exists).
-    Sessions are created by the user via the /sessions endpoint. Their main
-    purpose is to provide independent Afterglow UI workspaces; in addition,
-    they may serve as a means to group data files by the client API scripts.
-
-    Attributes::
-        id: unique integer session ID; assigned automatically when creating
-            the session
-        name: unique session name
-        data: arbitrary user data associated with the session
-        data_file_ids: list of data file IDs associated with the session
-    """
-    __get_view__ = 'sessions'
-
-    id = fields.Integer(default=None)  # type: int
-    name = fields.String(default=None)  # type: str
-    data = fields.String()  # type: str
-    data_file_ids = fields.List(
-        fields.Integer(), default=[], dump_only=True)  # type: list
-
-    def __init__(self, _obj=None, **kwargs):
-        """
-        Create a new session schema
-
-        :param :class:`SqlaSession` _obj: SQLA session returned by database
-            query
-        :param kwargs: if `_obj` is not set, initialize the data file fields
-            from the given keyword=value pairs
-        """
-        # Extract fields from SQLA object
-        kw = {name: getattr(_obj, name, None)
-              for name in self._declared_fields
-              if name not in getattr(Resource, '_declared_fields')}
-        kw.update(kwargs)
-
-        # Extract data file IDs
-        kw['data_file_ids'] = [data_file.id for data_file in _obj.data_files]
-
-        super(Session, self).__init__(**kw)
-
 
 Base = declarative_base()
 
@@ -393,7 +285,7 @@ def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
         anonymous session
 
     :return: data file instance
-    :rtype: DataFile
+    :rtype: afterglow_core.models.data_file.DataFile
     """
     if data.dtype.fields is None:
         # Image HDU; get image dimensions from array shape
