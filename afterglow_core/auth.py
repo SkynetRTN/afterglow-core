@@ -27,226 +27,16 @@ from functools import wraps
 import jwt
 from flask import request, make_response, redirect, url_for
 
-from . import app, errors
+from . import app
+from .errors.auth import NotAuthenticatedError
 from .users import AnonymousUser, Role, User, user_datastore
 
 
 __all__ = [
     'oauth_plugins', 'auth_required', 'authenticate', 'security',
     'current_user', 'anonymous_user', 'jwt_manager', 'create_token',
-    'AuthError', 'NotAuthenticatedError', 'NoAdminRegisteredError',
-    'AdminRequiredError', 'AdminOrSameUserRequiredError', 'UnknownUserError',
-    'InactiveUserError', 'RemoteAdminDisabledError',
-    'CannotDeactivateTheOnlyAdminError', 'DuplicateUsernameError',
-    'UnknownAuthMethodError',
+    'set_access_cookies', 'clear_access_cookies',
 ]
-
-
-class AuthError(errors.AfterglowError):
-    """
-    Base class for all Afterglow authentication errors
-    """
-    pass
-
-
-class NotAuthenticatedError(AuthError):
-    """
-    User authentication failed, access denied
-
-    Extra attributes::
-        error_msg: authentication error message
-    """
-    code = 401
-    subcode = 100
-    message = 'Not authenticated'
-
-
-class NoAdminRegisteredError(AuthError):
-    """
-    Attempt to manage users (except for adding admin during the initial setup)
-    with no admins registered in the system
-
-    Extra attributes::
-        None
-    """
-    code = 403
-    subcode = 101
-    message = 'No admins registered'
-
-
-class AdminRequiredError(AuthError):
-    """
-    Request needs authentication with admin role
-
-    Extra attributes::
-        None
-    """
-    code = 403
-    subcode = 102
-    message = 'Must be admin to do that'
-
-
-class AdminOrSameUserRequiredError(AuthError):
-    """
-    Request needs authentication with admin role or the same user it refers to
-
-    Extra attributes::
-        None
-    """
-    code = 403
-    subcode = 103
-    message = 'Must be admin or same user to do that'
-
-
-class UnknownUserError(AuthError):
-    """
-    User with the given ID is not registered
-
-    Extra attributes::
-        id: user ID
-    """
-    code = 404
-    subcode = 104
-    message = 'Unknown user'
-
-
-class InactiveUserError(errors.AfterglowError):
-    """
-    Attempting to access Afterglow using an inactive user account
-
-    Extra attributes::
-        None
-    """
-    code = 403
-    subcode = 105
-    message = 'The user is deactivated'
-
-
-class RemoteAdminDisabledError(AuthError):
-    """
-    Attempt to access /admin from non-local host
-
-    Extra attributes::
-        None
-    """
-    code = 403
-    subcode = 106
-    message = 'Remote administration not allowed'
-
-
-class CannotDeactivateTheOnlyAdminError(AuthError):
-    """
-    Deactivating, removing admin role, or deleting the only admin user
-    in the system
-
-    Extra attributes::
-        None
-    """
-    code = 403
-    subcode = 107
-    message = 'Cannot deactivate/delete the only admin in the system'
-
-
-class DuplicateUsernameError(AuthError):
-    """
-    Attempting to register user with username that is already associated with
-    some other user
-
-    Extra attributes::
-        username: duplicate username
-    """
-    code = 403
-    subcode = 108
-    message = 'User with this username already exists'
-
-
-class UnknownAuthMethodError(AuthError):
-    """
-    Auth method was requested that is not registered in USER_AUTH
-
-    Extra attributes::
-        method: auth method ID
-    """
-    code = 404
-    subcode = 109
-    message = 'Unknown authentication method'
-
-
-class CannotSetProtectedUserDataError(errors.AfterglowError):
-    """
-    The user is trying to update protected info
-
-    Extra attributes::
-        attr: read-only user attribute
-    """
-    code = 403
-    subcode = 110
-    message = 'Cannot modify protected user info'
-
-
-class HttpAuthFailedError(AuthError):
-    """
-    HTTP authentication data (username/password or Authentication-Token header)
-    missing or invalid
-
-    Extra attributes::
-        None
-    """
-    code = 401
-    subcode = 120
-    message = 'Invalid or missing username/password or authentication token'
-    headers = [
-        ('WWW-Authenticate',
-         'Basic realm="{}"'.format('Local Afterglow Users Only'))]
-
-
-class CannotDeleteCurrentUserError(AuthError):
-    """
-    Deleting currently authenticated user
-
-    Extra attributes::
-        None
-    """
-    code = 403
-    subcode = 111
-    message = 'Cannot delete the currently authenticated user'
-
-
-class LocalAccessRequiredError(AuthError):
-    """
-    Only requests from localhost allowed
-
-    Extra attributes::
-        None
-    """
-    code = 403
-    subcode = 112
-    message = 'Must be local to do that'
-
-
-class InitPageNotAvailableError(AuthError):
-    """
-    Afterglow Core has already been initialized
-
-    Extra attributes::
-        None
-    """
-    code = 403
-    subcode = 113
-    message = 'Afterglow Core has already been initialized'
-
-
-class NotInitializedError(AuthError):
-    """
-    Afterglow core has not yet been initialized
-
-    Extra attributes::
-        None
-    """
-    code = 403
-    subcode = 113
-    message = 'Afterglow Core has not yet been initialized'
-
 
 # Read/create secret key
 keyfile = os.path.join(
@@ -359,7 +149,7 @@ def auth_required(fn, *roles, **kwargs):
             token_sig = request.cookies.get('access_token_sig')
             token_hdr_payload = request.cookies.get('access_token')
             if token_sig and token_hdr_payload:
-                result = _set_access_cookies(
+                result = set_access_cookies(
                     result, token_hdr_payload + '.' + token_sig)
 
             return result
@@ -464,7 +254,7 @@ def create_token(identity, expires_delta=None, user_claims=None,
     return encode_jwt(token_data, expires_delta)
 
 
-def _set_access_cookies(*_, **__):
+def set_access_cookies(*_, **__):
     """
     Set access cookies for browser access
 
@@ -475,7 +265,7 @@ def _set_access_cookies(*_, **__):
     return
 
 
-def _clear_access_cookies(*_, **__):
+def clear_access_cookies(*_, **__):
     """
     Clear access cookies for browser access
 
@@ -498,11 +288,11 @@ def init_auth():
 
     # noinspection PyGlobalUndefined
     global oauth_plugins, authenticate, security, current_user, \
-        _set_access_cookies, _clear_access_cookies
+        set_access_cookies, clear_access_cookies
 
     current_user = _current_user
 
-    def __set_access_cookies(response, access_token=None):
+    def _set_access_cookies(response, access_token=None):
         """
         Adds two new cookies to response. The signature cookie is HTTP-Only (not
         accessible to the client-side JS and expires with the session. The
@@ -537,9 +327,9 @@ def init_auth():
 
         return response
 
-    _set_access_cookies = __set_access_cookies
+    set_access_cookies = _set_access_cookies
 
-    def __clear_access_cookies(response):
+    def _clear_access_cookies(response):
         """
         Clears the access cookies
 
@@ -556,7 +346,7 @@ def init_auth():
 
         return response
 
-    _clear_access_cookies = __clear_access_cookies
+    clear_access_cookies = _clear_access_cookies
 
     def _authenticate(roles=None, request_type='access', **__):
         """

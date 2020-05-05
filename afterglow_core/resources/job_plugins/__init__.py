@@ -16,22 +16,11 @@ from datetime import datetime
 from marshmallow import fields, __version_info__ as marshmallow_version
 
 from ... import app, errors
+from ...errors.job import CannotCreateJobFileError
 from ...models import DateTime, Float, AfterglowSchema
 
+
 __all__ = ['Job', 'JobResult', 'JobState']
-
-
-class CannotCreateJobFileError(errors.AfterglowError):
-    """
-    Error creating extra job file
-
-    Extra attributes::
-        id: job file ID
-        reason: error message describing the reason of failure
-    """
-    code = 500
-    subcode = 350
-    message = 'Cannot create job file'
 
 
 class JobState(AfterglowSchema):

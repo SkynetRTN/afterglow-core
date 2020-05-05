@@ -11,7 +11,7 @@ from astropy.coordinates import Angle
 from astroquery.skyview import SkyView
 
 from . import DataProvider, DataProviderAsset
-from ..data_providers import AssetNotFoundError
+from ...errors.data_provider import AssetNotFoundError
 from ... import errors
 from ..imaging_surveys import survey_scales
 

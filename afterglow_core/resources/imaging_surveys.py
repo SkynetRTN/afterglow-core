@@ -13,48 +13,14 @@ from io import BytesIO
 
 from skylib.io.conversion import get_image
 
-from .. import app, errors, json_response, url_prefix
+from .. import app, json_response, url_prefix
 from ..auth import auth_required
+from ..errors import MissingFieldError, NotAcceptedError, ValidationError
+from ..errors.imaging_survey import (
+    UnknownSurveyError, SkyViewQueryError, NoSurveyDataError)
 
 
 __all__ = ['default_size', 'survey_scales']
-
-
-class UnknownSurveyError(errors.AfterglowError):
-    """
-    SkyView does not host the given survey
-
-    Extra attributes::
-        survey: survey name
-    """
-    code = 404
-    subcode = 3100
-    message = 'SkyView does not host the given survey'
-
-
-class SkyViewQueryError(errors.AfterglowError):
-    """
-    An error occurred during SkyView server query
-
-    Extra attributes::
-        msg: query error message
-    """
-    code = 502
-    subcode = 3101
-    message = 'SkyView query error'
-
-
-class NoSurveyDataError(errors.AfterglowError):
-    """
-    Survey does not have any data for the given coordinates
-
-    Extra attributes::
-        survey: survey name
-        position: coordinates or object name
-    """
-    code = 404
-    subcode = 3102
-    message = 'No data at the given coordinates'
 
 
 # Default pixel scale for each known survey (arcsec/pixel); needed to return
@@ -214,7 +180,7 @@ def get_imaging_surveys(name=None):
     args = request.args.to_dict()
     size = args.pop('size', None)
     if not size:
-        raise errors.MissingFieldError('size')
+        raise MissingFieldError('size')
     try:
         fov_ra = fov_dec = float(size)
     except ValueError:
@@ -222,7 +188,7 @@ def get_imaging_surveys(name=None):
             fov_ra, fov_dec = size.split(',')
             fov_ra, fov_dec = float(fov_ra), float(fov_dec)
         except ValueError:
-            raise errors.ValidationError(
+            raise ValidationError(
                 'size', 'Expected FOV size or RA,Dec size in arcmins')
     try:
         scale = survey_scales[name]
@@ -247,24 +213,22 @@ def get_imaging_surveys(name=None):
     if not position:
         ra = args.pop('ra_hours', None)
         if ra is None:
-            raise errors.MissingFieldError('object|ra_hours,dec_degs')
+            raise MissingFieldError('object|ra_hours,dec_degs')
         try:
             ra = float(ra)
             if not 0 <= ra < 24:
                 raise ValueError()
         except ValueError:
-            raise errors.ValidationError(
-                'ra_hours', 'Expected 0 <= ra_hours < 24')
+            raise ValidationError('ra_hours', 'Expected 0 <= ra_hours < 24')
         dec = args.pop('dec_degs', None)
         if dec is None:
-            raise errors.MissingFieldError('object|ra_hours,dec_degs')
+            raise MissingFieldError('object|ra_hours,dec_degs')
         try:
             dec = float(dec)
             if not -90 <= ra <= 90:
                 raise ValueError()
         except ValueError:
-            raise errors.ValidationError(
-                'dec_degs', 'Expected -90 <= dec_degs <= +90')
+            raise ValidationError('dec_degs', 'Expected -90 <= dec_degs <= +90')
         # noinspection PyUnresolvedReferences
         position = '{}, {}'.format(
             Angle(ra*u.hour).to_string(sep=' ', precision=3, pad=2),
@@ -322,7 +286,7 @@ def get_imaging_surveys(name=None):
             return json_response(data.tolist(), 200)
 
         # Could not send data in any of the formats supported by the client
-        raise errors.NotAcceptedError(accepted_mimetypes=accepted_mimetypes)
+        raise NotAcceptedError(accepted_mimetypes=accepted_mimetypes)
 
     # Otherwise, convert to the given raster format via SkyLib; the rest of
     # request args are interpreted as conversion arguments

@@ -18,16 +18,20 @@ from marshmallow.fields import Dict, String
 
 from flask import url_for
 
-from .. import app, auth, errors
+from .. import app, errors
 from ..models import Resource
+from ..errors.auth import NotAuthenticatedError
+
 
 __all__ = ['OAuthPlugin', 'OAuthUserProfile', 'OAuthToken']
+
 
 if sys.version_info < (3, 1):
     # noinspection PyDeprecation
     base64_decode = base64.decodestring
 else:
     base64_decode = base64.decodebytes
+
 
 if app.config.get('DEBUG'):
     # Skip SSL certificate validation in debug mode
@@ -246,7 +250,7 @@ class OAuthPlugin(Resource):
                 expiration=expires)
 
         except Exception as e:
-            raise auth.NotAuthenticatedError(error_msg=str(e))
+            raise NotAuthenticatedError(error_msg=str(e))
 
     def get_user_profile(self, token):
         """

@@ -1,19 +1,25 @@
+"""
+Afterglow Core: top-level and initialization routes
+"""
+
 from __future__ import absolute_import, division, print_function
 
-from flask import redirect, request, render_template
+from flask import request, render_template
 from flask_security.utils import hash_password
 import marshmallow
 
-from ..auth import auth_required, authenticate, create_token, LocalAccessRequiredError, InitPageNotAvailableError
+from .. import app, json_response
+from ..auth import auth_required
 from ..users import User, UserSchema, Role, db
-from .. import app, errors, json_response, url_prefix
+from ..errors import MissingFieldError
+from ..errors.auth import LocalAccessRequiredError, InitPageNotAvailableError
 
-__all__ = [
-    'default',
-]
+
+__all__ = []
+
 
 @app.route('/', methods=['GET'])
-@auth_required('user', allow_redirect=True)
+@auth_required(allow_redirect=True)
 def default():
     """
     Homepage for Afterglow Core
@@ -26,12 +32,13 @@ def default():
     """
     return render_template('index.html.j2', current_user=request.user)
 
+
 @app.route('/initialize', methods=['GET', 'POST'])
 def initialize():
     """
     Homepage for Afterglow Core
 
-    GET /
+    GET|POST /initialize
         - Homepage/Initialize
 
     :return: Afterglow Core initialization
@@ -40,7 +47,8 @@ def initialize():
     if User.query.count() != 0:
         raise InitPageNotAvailableError()
 
-    if request.remote_addr != '127.0.0.1':
+    if not app.config.get('REMOTE_ADMIN') and \
+            request.remote_addr != '127.0.0.1':
         # Remote administration is not allowed
         raise LocalAccessRequiredError()
 
@@ -50,19 +58,16 @@ def initialize():
     if request.method == 'POST':
         username = request.args.get('username')
         if not username:
-            raise errors.ValidationError(
-                'username', 'Username cannot be empty')
-            
+            raise MissingFieldError('username')
+
         password = request.args.get('password')
         if not password:
-            raise errors.ValidationError(
-                'password', 'Password cannot be empty')
-        #TODO check security of password
+            raise MissingFieldError('password')
+        # TODO check security of password
 
         email = request.args.get('email')
         if not email:
-            raise errors.ValidationError(
-                'email', 'Email cannot be empty')
+            raise MissingFieldError('email')
 
         admin_role = Role.query.filter_by(name='admin').one()
         user_role = Role.query.filter_by(name='user').one()
@@ -75,7 +80,7 @@ def initialize():
             u.email = email
             u.active = True
             u.roles = roles
-        
+
             db.session.add(u)
             db.session.flush()
             db.session.commit()

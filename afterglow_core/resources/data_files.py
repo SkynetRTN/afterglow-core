@@ -35,6 +35,10 @@ from skylib.sonification import sonify_image
 from . import data_providers
 from .. import app, auth, errors, json_response, url_prefix
 from ..models import Resource
+from ..errors.data_provider import UnknownDataProviderError
+from ..errors.data_file import (
+    UnknownDataFileError, CannotCreateDataFileDirError,
+    CannotImportFromCollectionAssetError)
 
 try:
     from PIL import Image as PILImage, ExifTags
@@ -62,9 +66,6 @@ except ImportError:
 
 
 __all__ = [
-    'UnknownDataFileError', 'CannotCreateDataFileDirError',
-    'CannotImportFromCollectionAssetError', 'UnrecognizedDataFileError',
-    'MissingWCSError',
     'Base', 'DataFile', 'Session', 'SqlaDataFile', 'SqlaSession',
     'data_files_engine', 'data_files_engine_lock', 'create_data_file',
     'save_data_file', 'get_data_file', 'get_data_file_data',
@@ -73,68 +74,6 @@ __all__ = [
     'get_root', 'get_subframe', 'import_data_file',
     'convert_exif_field',
 ]
-
-
-class UnknownDataFileError(errors.AfterglowError):
-    """
-    Format of the data file being imported is not recognized
-
-    Extra attributes::
-        id: requested data file ID
-    """
-    code = 404
-    subcode = 2000
-    message = 'Unknown data file ID'
-
-
-class CannotCreateDataFileDirError(errors.AfterglowError):
-    """
-    Initializing the user data file storage failed (e.g. directory not
-    writeable or database creation error)
-
-    Extra attributes::
-        reason: error message describing the reason why the operation has failed
-    """
-    code = 403
-    subcode = 2001
-    message = 'Cannot create data file storage directory'
-
-
-class CannotImportFromCollectionAssetError(errors.AfterglowError):
-    """
-    An attempt was made to import a data file from a collection asset
-
-    Extra attributes::
-        provider_id: data provider ID
-        path: requested asset path
-    """
-    code = 403
-    subcode = 2002
-    message = 'Cannot import from collection asset'
-
-
-class UnrecognizedDataFileError(errors.AfterglowError):
-    """
-    An attempt was made to import a data file that has unknown format
-
-    Extra attributes::
-        none
-    """
-    code = 403
-    subcode = 2003
-    message = 'Data file format not recognized'
-
-
-class MissingWCSError(errors.AfterglowError):
-    """
-    Data file has now WCS calibration
-
-    Extra attributes::
-        none
-    """
-    code = 400
-    subcode = 2004
-    message = 'Missing WCS info'
 
 
 class DataFile(Resource):
@@ -1296,8 +1235,7 @@ def data_files(id=None):
                     try:
                         provider = data_providers.providers[provider_id]
                     except KeyError:
-                        raise data_providers.UnknownDataProviderError(
-                            id=provider_id)
+                        raise UnknownDataProviderError(id=provider_id)
                     provider_id = provider.id
 
                     recurse = import_params.pop('recurse', False)

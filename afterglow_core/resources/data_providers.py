@@ -8,145 +8,20 @@ DATA_PROVIDERS configuration variable.
 from __future__ import absolute_import, division, print_function
 from flask import request
 from .. import app, errors, json_response, plugins, url_prefix
-from ..auth import (
-    NotAuthenticatedError, oauth_plugins, auth_required, current_user)
+from ..auth import oauth_plugins, auth_required, current_user
+from ..errors.auth import NotAuthenticatedError
+from ..errors.data_provider import (
+    UnknownDataProviderError, ReadOnlyDataProviderError,
+    NonBrowseableDataProviderError, NonSearchableDataProviderError,
+    AssetNotFoundError, AssetAlreadyExistsError,
+    CannotSearchInNonCollectionError, CannotDeleteNonEmptyCollectionAssetError,
+    QuotaExceededError)
 from . import data_provider_plugins
 
 
 __all__ = [
     'providers',
-    'UnknownDataProviderError', 'ReadOnlyDataProviderError',
-    'NonBrowseableDataProviderError', 'NonSearchableDataProviderError',
-    'AssetNotFoundError', 'AssetAlreadyExistsError',
-    'CannotSearchInNonCollectionError', 'CannotUpdateCollectionAssetError',
-    'CannotDeleteNonEmptyCollectionAssetError', 'QuotaExceededError',
 ]
-
-
-class UnknownDataProviderError(errors.AfterglowError):
-    """
-    The user requested an unknown data provider
-
-    Extra attributes::
-        id: data provider ID requested
-    """
-    code = 404
-    subcode = 1000
-    message = 'Unknown data provider ID'
-
-
-class ReadOnlyDataProviderError(errors.AfterglowError):
-    """
-    The user requested a POST, PUT, or DELETE for an asset of a read-only
-    data provider
-
-    Extra attributes::
-        id: data provider ID requested
-    """
-    code = 403
-    subcode = 1001
-    message = 'Read-only data provider'
-
-
-class NonBrowseableDataProviderError(errors.AfterglowError):
-    """
-    The user requested a GET for a collection asset of a non-browseable data
-    provider
-
-    Extra attributes::
-        id: data provider ID requested
-    """
-    code = 403
-    subcode = 1002
-    message = 'Non-browseable data provider'
-
-
-class NonSearchableDataProviderError(errors.AfterglowError):
-    """
-    The user requested a GET with search keywords for an asset of
-    a non-searchable data provider
-
-    Extra attributes::
-        id: data provider ID requested
-    """
-    code = 403
-    subcode = 1003
-    message = 'Non-searchable data provider'
-
-
-class AssetNotFoundError(errors.AfterglowError):
-    """
-    No asset found at the given path
-
-    Extra attributes::
-        path: requested asset path
-    """
-    code = 404
-    subcode = 1004
-    message = 'No asset found at the given path'
-
-
-class AssetAlreadyExistsError(errors.AfterglowError):
-    """
-    Attempt to create asset over the existing path
-
-    Extra attributes::
-        None
-    """
-    code = 403
-    subcode = 1005
-    message = 'Asset already exists at the given path'
-
-
-class CannotSearchInNonCollectionError(errors.AfterglowError):
-    """
-    Attempt to search within a path that identifies a non-collection resource
-
-    Extra attributes::
-        None
-    """
-    code = 403
-    subcode = 1006
-    message = 'Can only search in collection assets'
-
-
-class CannotUpdateCollectionAssetError(errors.AfterglowError):
-    """
-    Attempt to update a collection asset
-
-    Extra attributes::
-        None
-    """
-    code = 403
-    subcode = 1007
-    message = 'Cannot update a collection asset'
-
-
-class CannotDeleteNonEmptyCollectionAssetError(errors.AfterglowError):
-    """
-    Attempt to delete a non-empty collection asset
-
-    Extra attributes::
-        None
-    """
-    code = 403
-    subcode = 1008
-    message = 'Cannot delete non-empty collection asset without "force"'
-
-
-class QuotaExceededError(errors.AfterglowError):
-    """
-    Attempting to create/update an asset of a read-write data provider would
-    exceed the user quota
-
-    Extra attributes::
-        quota: storage quota in bytes
-        usage: used storage
-        size: size of asset being created or updated
-    """
-    code = 403
-    subcode = 1009
-    message = 'Storage quota exceeded'
 
 
 def _check_provider_auth(provider):

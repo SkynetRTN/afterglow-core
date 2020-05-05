@@ -12,9 +12,9 @@ from skylib.extraction.centroiding import centroid_iraf
 
 from .. import app, auth, errors, json_response, url_prefix
 from ..models import Float, Resource
+from ..errors.data_file import MissingWCSError
 from .data_files import (
-    MissingWCSError, get_exp_length, get_gain, get_data_file, get_phot_cal)
-
+    get_exp_length, get_gain, get_data_file, get_phot_cal)
 
 __all__ = ['Photometry', 'get_photometry']
 

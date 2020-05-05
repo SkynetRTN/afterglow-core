@@ -4,24 +4,13 @@ Afterglow Core: catalog endpoint
 
 from __future__ import absolute_import, division, print_function
 
-from .. import app, errors, json_response, plugins, url_prefix
+from .. import app, json_response, plugins, url_prefix
 from ..auth import auth_required
+from ..errors.catalog import UnknownCatalogError
 from . import catalog_plugins
 
 
 __all__ = ['catalogs']
-
-
-class UnknownCatalogError(errors.AfterglowError):
-    """
-    The user requested an unknown catalog
-
-    Extra attributes::
-        name: catalog name requested
-    """
-    code = 404
-    subcode = 3000
-    message = 'Unknown catalog'
 
 
 resource_prefix = url_prefix + 'catalogs/'

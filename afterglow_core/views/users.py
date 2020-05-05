@@ -19,7 +19,7 @@ from ..errors import MissingFieldError, ValidationError
 from ..errors.auth import (
     AdminRequiredError, UnknownUserError, CannotDeactivateTheOnlyAdminError,
     DuplicateUsernameError, HttpAuthFailedError, CannotDeleteCurrentUserError,
-    NotInitializedError, NotAuthenticatedError, RemoteAdminDisabledError,
+    NotInitializedError, NotAuthenticatedError, LocalAccessRequiredError,
     UnknownAuthMethodError)
 from ..errors.oauth2 import UnknownClientError, MissingClientIdError
 
@@ -43,7 +43,7 @@ def login():
 
     # Do not allow login if Afterglow Core has not yet been configured
     if User.query.count() == 0:
-        if request.remote_addr == '127.0.0.1':
+        if app.config.get('REMOTE_ADMIN') or request.remote_addr == '127.0.0.1':
             return redirect(url_for('initialize'))
 
         raise NotInitializedError()
@@ -301,7 +301,7 @@ def users(user_id: int = None):
             raise AdminRequiredError()
         if not app.config.get('REMOTE_ADMIN') and \
                 request.remote_addr != '127.0.0.1':
-            raise RemoteAdminDisabledError()
+            raise LocalAccessRequiredError()
 
     # Request is authorized properly
     if request.method == 'GET' and user_id is None:
@@ -436,7 +436,7 @@ def users_authorized_apps(user_id: int, client_id: str = None):
             raise AdminRequiredError()
         if not app.config.get('REMOTE_ADMIN') and \
                 request.remote_addr != '127.0.0.1':
-            raise RemoteAdminDisabledError()
+            raise LocalAccessRequiredError()
 
     if request.method == 'GET':
         authorized_client_ids = [

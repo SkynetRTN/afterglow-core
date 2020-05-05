@@ -11,10 +11,10 @@ from marshmallow.fields import Integer, List, Nested, String
 
 from ... import AfterglowSchema
 from ...models import Boolean
-from ..data_providers import UnknownDataProviderError, providers
-from ..data_files import (
-    CannotImportFromCollectionAssetError, get_data_file_db, get_root,
-    import_data_file)
+from ...errors.data_provider import UnknownDataProviderError
+from ...errors.data_file import CannotImportFromCollectionAssetError
+from ..data_providers import providers
+from ..data_files import get_data_file_db, get_root, import_data_file
 from . import Job, JobResult
 
 

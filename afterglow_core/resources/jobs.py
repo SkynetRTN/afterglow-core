@@ -37,10 +37,14 @@ from sqlalchemy.types import TypeDecorator
 from flask import Response, request
 
 from .. import (
-    AfterglowSchemaEncoder, app, auth, errors, json_response, plugins,
-    url_prefix)
-from .data_files import SqlaSession, get_data_file_db
+    AfterglowSchemaEncoder, app, auth, json_response, plugins, url_prefix)
+from ..errors import AfterglowError, MissingFieldError, ValidationError
+from ..errors.job import (
+    JobServerError, UnknownJobError, UnknownJobFileError, UnknownJobTypeError,
+    InvalidMethodError, CannotSetJobStatusError, CannotCancelJobError,
+    CannotDeleteJobError)
 from . import job_plugins
+from .data_files import SqlaSession, get_data_file_db
 
 if sys.version_info.major < 3:
     # noinspection PyUnresolvedReferences,PyCompatibility
@@ -72,103 +76,6 @@ except ImportError:
 
 
 __all__ = ['job_file_path']
-
-
-class JobServerError(errors.AfterglowError):
-    """
-    Unhandled job server error
-
-    Extra attributes::
-        reason: error message describing the reason of failure
-    """
-    code = 500
-    subcode = 300
-    message = 'Internal job server error'
-
-
-class UnknownJobError(errors.AfterglowError):
-    """
-    Unknown job ID requested
-
-    Extra attributes::
-        id: job ID
-    """
-    code = 404
-    subcode = 301
-    message = 'Unknown job'
-
-
-class UnknownJobFileError(errors.AfterglowError):
-    """
-    Unknown job file ID requested
-
-    Extra attributes::
-        id: job file ID
-    """
-    code = 404
-    subcode = 302
-    message = 'Unknown job file'
-
-
-class UnknownJobTypeError(errors.AfterglowError):
-    """
-    Creating a job which type is not registered
-
-    Extra attributes::
-        type: job type
-    """
-    code = 400
-    subcode = 303
-    message = 'Unknown job type'
-
-
-class InvalidMethodError(errors.AfterglowError):
-    """
-    The given resource does not support HTTP method requested
-
-    Extra attributes::
-        resource: resource ID
-        method: HTTP method requested
-    """
-    code = 405
-    subcode = 304
-    message = 'Method is not supported'
-
-
-class CannotSetJobStatusError(errors.AfterglowError):
-    """
-    Setting job status to something other than "canceled"
-
-    Extra attributes::
-        status: job status
-    """
-    code = 403
-    subcode = 305
-    message = 'Cannot set job status'
-
-
-class CannotCancelJobError(errors.AfterglowError):
-    """
-    Canceling a job that is not in in_progress state
-
-    Extra attributes::
-        status: job status
-    """
-    code = 403
-    subcode = 306
-    message = 'Cannot cancel job'
-
-
-class CannotDeleteJobError(errors.AfterglowError):
-    """
-    Deleting a job that is not in completed or canceled state
-
-    Extra attributes::
-        status: job status
-    """
-    code = 403
-    subcode = 307
-    message = 'Cannot delete job in its current state'
 
 
 # Read/write lock by Fazal Majid
@@ -406,8 +313,8 @@ WINDOWS = sys.platform.startswith('win')
 
 # Message encryption
 job_server_port = None
-job_server_key = ''  # type: str
-job_server_iv = ''  # type: str
+job_server_key = b''
+job_server_iv = b''
 
 
 def encrypt(msg):
@@ -756,8 +663,11 @@ class JobRequestHandler(BaseRequestHandler):
     """
     Job TCP server request handler class
     """
+
+    # noinspection PyUnresolvedReferences
     def handle(self):
         server = self.server
+        # noinspection PyUnresolvedReferences
         session = self.server.session_factory()
 
         http_status = 200
@@ -839,14 +749,14 @@ class JobRequestHandler(BaseRequestHandler):
                     try:
                         job_type = msg['type']
                     except KeyError:
-                        raise errors.MissingFieldError(field='type')
+                        raise MissingFieldError(field='type')
                     if job_type not in server.db_job_types:
                         raise UnknownJobTypeError(type=msg['type'])
 
                     session_id = msg.get('session_id')
                     if session_id is not None and get_data_file_db(user_id).\
                             query(SqlaSession).get(session_id) is None:
-                        raise errors.ValidationError(
+                        raise ValidationError(
                             'session_id',
                             'Unknown session "{}"'.format(session_id), 404)
 
@@ -908,7 +818,7 @@ class JobRequestHandler(BaseRequestHandler):
                     try:
                         job_id = msg['id']
                     except KeyError:
-                        raise errors.MissingFieldError(field='id')
+                        raise MissingFieldError(field='id')
 
                     job = session.query(DbJob).get(job_id)
                     if job is None or job.user_id != user_id:
@@ -944,7 +854,7 @@ class JobRequestHandler(BaseRequestHandler):
                 try:
                     job_id = msg['id']
                 except KeyError:
-                    raise errors.MissingFieldError(field='id')
+                    raise MissingFieldError(field='id')
 
                 job = session.query(DbJob).get(job_id)
                 if job is None or job.user_id != user_id:
@@ -962,7 +872,7 @@ class JobRequestHandler(BaseRequestHandler):
                         if msg['status'] != 'canceled':
                             raise CannotSetJobStatusError(status=msg['status'])
                     except KeyError:
-                        raise errors.MissingFieldError(field='status')
+                        raise MissingFieldError(field='status')
 
                     # Find worker process that is currently running the job
                     if job.state.status != 'in_progress':
@@ -993,7 +903,7 @@ class JobRequestHandler(BaseRequestHandler):
                     try:
                         job_id = msg['id']
                     except KeyError:
-                        raise errors.MissingFieldError(field='id')
+                        raise MissingFieldError(field='id')
 
                     job = session.query(DbJob).get(job_id)
                     if job is None or job.user_id != user_id:
@@ -1014,12 +924,12 @@ class JobRequestHandler(BaseRequestHandler):
                     try:
                         job_id = msg['id']
                     except KeyError:
-                        raise errors.MissingFieldError(field='id')
+                        raise MissingFieldError(field='id')
 
                     try:
                         file_id = msg['file_id']
                     except KeyError:
-                        raise errors.MissingFieldError(field='file_id')
+                        raise MissingFieldError(field='file_id')
 
                     job_file = session.query(DbJobFile).filter_by(
                         job_id=job_id, file_id=file_id).one_or_none()
@@ -1045,7 +955,7 @@ class JobRequestHandler(BaseRequestHandler):
                 raise JobServerError(
                     reason='Invalid resource "{}"'.format(resource))
 
-        except errors.AfterglowError as e:
+        except AfterglowError as e:
             # Construct JSON error response in the same way as
             # errors.afterglow_error_handler()
             result = {
@@ -1403,7 +1313,7 @@ def job_server_request(resource, **args):
         finally:
             # sock.shutdown(socket.SHUT_RDWR)
             sock.close()
-    except errors.AfterglowError:
+    except AfterglowError:
         raise
     except Exception as e:
         # noinspection PyUnresolvedReferences

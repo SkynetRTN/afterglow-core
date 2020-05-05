@@ -7,8 +7,10 @@ from __future__ import absolute_import, division, print_function
 from sqlalchemy import Column, Float, Integer, String
 from flask import request
 
+from .. import app, auth, json_response, url_prefix
 from ..models.field_cal import FieldCal
-from .. import app, auth, errors, json_response, url_prefix
+from ..errors import MissingFieldError
+from ..errors.field_cal import UnknownFieldCalError, DuplicateFieldCalError
 from .data_files import Base, get_data_file_db
 
 try:
@@ -21,30 +23,7 @@ except ImportError:
     alembic_config = alembic_context = None
 
 
-__all__ = ['DuplicateFieldCalError', 'UnknownFieldCalError', 'get_field_cal']
-
-
-class UnknownFieldCalError(errors.AfterglowError):
-    """
-    Unknown field calibration
-
-    Extra attributes::
-        id: requested field cal ID
-    """
-    code = 404
-    subcode = 4000
-    message = 'Unknown field cal'
-
-
-class DuplicateFieldCalError(errors.AfterglowError):
-    """
-    Field cal with this name already exists
-
-    Extra attributes::
-        name: field cal name
-    """
-    subcode = 4001
-    message = 'Duplicate field cal name'
+__all__ = ['get_field_cal']
 
 
 class SqlaFieldCal(Base):
@@ -152,7 +131,7 @@ def field_cals(id_or_name=None):
     if request.method == 'POST':
         # Create field cal
         if not request.args.get('name'):
-            raise errors.MissingFieldError(field='name')
+            raise MissingFieldError(field='name')
         if adb.query(SqlaFieldCal).filter(
                 SqlaFieldCal.name == request.args['name']).count():
             raise DuplicateFieldCalError(name=request.args['name'])

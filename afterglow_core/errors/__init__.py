@@ -6,10 +6,13 @@ from __future__ import absolute_import, division, print_function
 import sys
 import traceback
 from werkzeug import exceptions
-from . import app, json_response
+from .. import app, json_response
 
 
-__all__ = ['AfterglowError', 'MethodNotImplementedError', 'ValidationError']
+__all__ = [
+    'AfterglowError', 'MethodNotImplementedError', 'ValidationError',
+    'MissingFieldError', 'NotAcceptedError',
+]
 
 
 def afterglow_error_handler(e):

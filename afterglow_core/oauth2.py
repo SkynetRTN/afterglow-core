@@ -36,16 +36,15 @@ from sqlalchemy import Column, Integer, create_engine
 import sqlalchemy.orm.session
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import StaticPool
-from flask import redirect, request
 from authlib.oauth2.rfc6749 import ClientMixin
 from authlib.oauth2.rfc6749 import grants
 from authlib.integrations.sqla_oauth2 import (
     OAuth2AuthorizationCodeMixin, OAuth2TokenMixin, create_save_token_func)
 from authlib.integrations.flask_oauth2 import AuthorizationServer
 
-from . import app, errors, json_response, url_prefix
-from .users import User, UserClient, db
-from .auth import auth_required, authenticate, create_token, current_user
+from . import app
+from .users import User
+from .auth import create_token
 
 if sys.version_info.major < 3:
     # noinspection PyUnresolvedReferences,PyCompatibility
@@ -59,30 +58,6 @@ __all__ = [
     'init_oauth', 'oauth_clients', 'create_access_token',
     'create_refresh_token',
 ]
-
-
-class UnknownClientError(errors.AfterglowError):
-    """
-    The user requested an unknown OAuth2 client
-
-    Extra attributes::
-        id: client ID requested
-    """
-    code = 404
-    subcode = 200
-    message = 'Unknown OAuth2 client ID'
-
-
-class MissingClientIdError(errors.AfterglowError):
-    """
-    POSTing to /oauth/user-clients with no client_id
-
-    Extra attributes::
-        None
-    """
-    code = 400
-    subcode = 201
-    message = 'Missing client ID'
 
 
 class OAuth2Client(ClientMixin):
@@ -367,4 +342,4 @@ def init_oauth():
     oauth_server.register_grant(AuthorizationCodeGrant)
     oauth_server.register_grant(RefreshTokenGrant)
 
-app.logger.info('Initialized Afterglow OAuth2 Service')
+    app.logger.info('Initialized Afterglow OAuth2 Service')
