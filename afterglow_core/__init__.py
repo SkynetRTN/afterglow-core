@@ -108,10 +108,9 @@ def resolve_request_body():
 
 
 # Initialize the user authentication engine
-from . import auth
-# if app.config.get('USER_AUTH'):
-#     auth.init_auth()
-auth.init_auth()
+if app.config.get('AUTH_ENABLED'):
+    from . import auth
+    auth.init_auth()
 
 # Initialize OAuth2 server if enabled
 if app.config.get('OAUTH_CLIENTS'):
