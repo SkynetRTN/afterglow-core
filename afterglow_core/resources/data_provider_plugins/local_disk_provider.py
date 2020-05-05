@@ -15,14 +15,6 @@ from glob import glob
 from marshmallow.fields import Boolean, String
 import astropy.io.fits as pyfits
 
-from . import DataProvider, DataProviderAsset
-from ... import auth, errors
-from ...errors.data_provider import (
-    AssetNotFoundError, AssetAlreadyExistsError,
-    CannotUpdateCollectionAssetError)
-from ...errors.data_provider_local_disk import (
-    AssetOutsideRootError, UnrecognizedDataFormatError, FilesystemError)
-
 try:
     from PIL import Image as PILImage, ExifTags
 except ImportError:
@@ -37,6 +29,15 @@ try:
     import exifread
 except ImportError:
     exifread = None
+
+from ... import auth, errors
+from ...models.data_provider import DataProviderAsset
+from ...errors.data_provider import (
+    AssetNotFoundError, AssetAlreadyExistsError,
+    CannotUpdateCollectionAssetError)
+from ...errors.data_provider_local_disk import (
+    AssetOutsideRootError, UnrecognizedDataFormatError, FilesystemError)
+from . import DataProvider
 
 
 __all__ = ['LocalDiskDataProvider']

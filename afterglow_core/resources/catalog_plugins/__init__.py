@@ -7,16 +7,14 @@ least its get_asset() and get_asset_data() methods.
 
 from __future__ import absolute_import, division, print_function
 
-from marshmallow.fields import Dict, Integer, List, String
-
 from ... import app, errors
-from ...models import Resource
+from ...models.catalog import CatalogSchema
 from ...models.field_cal import CatalogSource
 
 __all__ = ['Catalog']
 
 
-class Catalog(Resource):
+class Catalog(CatalogSchema):
     """
     Base class for JSON-serializable catalog plugins
 
@@ -42,39 +40,13 @@ class Catalog(Resource):
                        constraints=None):
             ...
 
-    Attributes::
-        name: unique catalog name
-        display_name: more verbose catalog description; defaults to name
-        num_sources: number of sources in the catalog
-        mags: mapping between standard magnitude names like 'B', 'V', 'R' for
-            magnitudes present in the catalog and catalog-specific magnitude
-            names and errors; the value is a 0 to 2-element list: the first item
-            is magnitude column name, the second item (if any) is magnitude
-            error column name; empty list or null means that there is no direct
-            correspondence to a catalog magnitude (e.g. if standard magnitudes
-            are derived from catalog magnitudes using certain expressions);
-            the mapping can be used to create catalog-specific constraint
-            expressions
-        filter_lookup: default custom mapping between certain bandpasses not
-            present in the catalog and catalog magnitudes (in particular,
-            aliases for non-standard catalog magnitude names), e.g. {'Open':
-            '(3*B + 5*R)/8', "r'": 'rprime'}; used by field cal job
-
-    Methods::
+    Methods:
         query_objects: return a list of catalog objects with the specified names
         query_box: return catalog objects within the specified rectangular
             region
         query_circ: return catalog objects within the specified circular
             region
     """
-    __get_view__ = 'get_catalogs'
-
-    name = String(default=None)
-    display_name = String(default=None)
-    num_sources = Integer()
-    mags = Dict(keys=String, values=List(String()), default={})
-    filter_lookup = Dict(keys=String, values=String)
-
     def __init__(self, *args, **kwargs):
         """
         Create a Catalog instance

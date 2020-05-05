@@ -10,17 +10,16 @@ create_asset(), update_asset(), and delete_asset().
 
 from __future__ import absolute_import, division, print_function
 
-from marshmallow.fields import Boolean, Dict, Integer, List, String
-
-from ... import app, errors
-from ...models import Resource
+from ... import app
+from ...errors import MethodNotImplementedError
+from ...models.data_provider import DataProviderSchema
 from ...auth import oauth_plugins
 
 
-__all__ = ['DataProvider', 'DataProviderAsset']
+__all__ = ['DataProvider']
 
 
-class DataProvider(Resource):
+class DataProvider(DataProviderSchema):
     """
     Base class for JSON-serializable data provider plugins
 
@@ -43,42 +42,7 @@ class DataProvider(Resource):
         def find_assets(self, path=None, **kwargs):
             ...
 
-    Attributes::
-        id: unique integer ID of the data provider; assigned automatically on
-            initialization
-        name: unique data provider name; can be used by the clients in requests
-            like GET /data-providers/[id]/assets in place of the integer
-            data provider ID
-        auth_methods: list of data provider-specific authentication methods;
-            if None, defaults to DEFAULT_DATA_PROVIDER_AUTH -> DATA_FILE_AUTH ->
-            all auth methods defined by USER_AUTH
-        icon: optional data provider icon name
-        display_name: data provider plugin visible in the Afterglow UI
-        description: a longer description of the data provider
-        columns: list of dictionary
-            {name: string, field_name: string, sortable: boolean}
-        sort_by: string - name of column to use for initial sort
-        sort_asc: boolean - initial sort order should be ascending
-        browseable: True if the data provider supports browsing (i.e. getting
-            child assets of a collection asset at the given path); automatically
-            set depending on whether the provider implements get_child_assets()
-        searchable: True if the data provider supports searching (i.e. querying
-            using the custom search keywords defined by `search_fields`);
-            automatically set depending on whether the provider implements
-            find_assets()
-        search_fields: dictionary
-            {field_name: {"label": label, "type": type, ...}, ...}
-            containing names and descriptions of search fields used on the
-            client side to create search forms
-        readonly: True if the data provider assets cannot be modified (created,
-            updated, or deleted); automatically set depending on whether the
-            provider implements create_asset(), update_asset(), or
-            delete_asset()
-        quota: data provider storage quota, in bytes, if applicable
-        usage: current usage of the data provider storage, in bytes, if
-            applicable
-
-    Methods::
+    Methods:
         get_asset(): return asset at the given path; must be implemented by any
             data provider
         get_asset_data(): return data for a non-collection asset at the given
@@ -97,24 +61,6 @@ class DataProvider(Resource):
         delete_asset(): delete an asset at the given path; must be implemented
             by a read-write provider if it supports deleting assets
     """
-    __get_view__ = 'data_providers'
-
-    id = Integer(default=None)
-    name = String(default=None)
-    auth_methods = List(String(), default=None)
-    display_name = String(default=None)
-    icon = String(default=None)
-    description = String(default=None)
-    columns = List(Dict(), default=[])
-    sort_by = String(default=None)
-    sort_asc = Boolean(default=True)
-    browseable = Boolean(default=False)
-    searchable = Boolean(default=False)
-    search_fields = Dict(default={})
-    readonly = Boolean(default=True)
-    quota = Integer(default=None)
-    usage = Integer(default=None)
-
     # noinspection PyUnresolvedReferences
     def __init__(self, *args, **kwargs):
         """
@@ -172,9 +118,9 @@ class DataProvider(Resource):
         :param str path: asset path
 
         :return: asset object
-        :rtype: DataProviderAsset
+        :rtype: afterglow_core.models.data_provider.DataProviderAsset
         """
-        raise errors.MethodNotImplementedError(
+        raise MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='get_assets')
 
     def get_child_assets(self, path):
@@ -184,9 +130,9 @@ class DataProvider(Resource):
         :param str path: asset path; must identify a collection asset
 
         :return: list of :class:`DataProviderAsset` objects for child assets
-        :rtype: list[DataProviderAsset]
+        :rtype: list[afterglow_core.models.data_provider.DataProviderAsset]
         """
-        raise errors.MethodNotImplementedError(
+        raise MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='get_child_assets')
 
     def find_assets(self, path=None, **kwargs):
@@ -201,9 +147,9 @@ class DataProvider(Resource):
 
         :return: list of :class:`DataProviderAsset` objects for assets matching
             the search query parameters
-        :rtype: list[DataProviderAsset]
+        :rtype: list[afterglow_core.models.data_provider.DataProviderAsset]
         """
-        raise errors.MethodNotImplementedError(
+        raise MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='find_assets')
 
     def get_asset_data(self, path):
@@ -215,7 +161,7 @@ class DataProvider(Resource):
         :return: asset data
         :rtype: str
         """
-        raise errors.MethodNotImplementedError(
+        raise MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='get_asset_data')
 
     def create_asset(self, path, data=None, **kwargs):
@@ -228,9 +174,9 @@ class DataProvider(Resource):
         :param kwargs: optional extra provider specific parameters
 
         :return: new data provider asset object
-        :rtype: :class:`DataProviderAsset`
+        :rtype: :class:`afterglow_core.models.data_provider.DataProviderAsset`
         """
-        raise errors.MethodNotImplementedError(
+        raise MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='create_asset')
 
     def update_asset(self, path, data, **kwargs):
@@ -242,9 +188,9 @@ class DataProvider(Resource):
         :param kwargs: optional extra provider-specific parameters
 
         :return: updated data provider asset object
-        :rtype: :class:`DataProviderAsset`
+        :rtype: :class:`afterglow_core.models.data_provider.DataProviderAsset`
         """
-        raise errors.MethodNotImplementedError(
+        raise MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='update_asset')
 
     def delete_asset(self, path, **kwargs):
@@ -257,23 +203,5 @@ class DataProvider(Resource):
 
         :return: None
         """
-        raise errors.MethodNotImplementedError(
+        raise MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='delete_asset')
-
-
-class DataProviderAsset(Resource):
-    """
-    Class representing a JSON-serializable data provider asset
-
-    Attributes::
-        name: asset name (e.g. filename)
-        collection: True for a collection asset
-        path: asset path in the provider-specific form; serves as a unique ID
-            of the asset
-        metadata: extra asset metadata (e.g. data format, image dimensions,
-            etc.)
-    """
-    name = String(default=None)
-    collection = Boolean(default=False)
-    path = String(default=None)
-    metadata = Dict(default={})

@@ -10,10 +10,11 @@ from astropy import units as u
 from astropy.coordinates import Angle
 from astroquery.skyview import SkyView
 
-from . import DataProvider, DataProviderAsset
+from ...models.data_provider import DataProviderAsset
+from ...errors import MissingFieldError, ValidationError
 from ...errors.data_provider import AssetNotFoundError
-from ... import errors
 from ..imaging_surveys import survey_scales
+from . import DataProvider
 
 
 __all__ = ['ImagingSurveyDataProvider']
@@ -166,31 +167,30 @@ class ImagingSurveyDataProvider(DataProvider):
         :rtype: list[DataProviderAsset]
         """
         if all(item is None for item in (ra_hours, dec_degs, object)):
-            raise errors.MissingFieldError('ra_hours,dec_degs|object')
+            raise MissingFieldError('ra_hours,dec_degs|object')
         if (ra_hours is not None or dec_degs is not None) and \
                 object is not None:
-            raise errors.ValidationError(
+            raise ValidationError(
                 'ra_hours,dec_degs|object',
                 '"ra_hours"/"dec_degs" are mutually exclusive with "object"')
         if object is None and (ra_hours is None or dec_degs is None):
-            raise errors.MissingFieldError('ra_hours,dec_degs')
+            raise MissingFieldError('ra_hours,dec_degs')
         if width is None and height is None:
-            raise errors.MissingFieldError('width,height')
+            raise MissingFieldError('width,height')
         if ra_hours is not None:
             try:
                 ra_hours = float(ra_hours)
                 if not 0 <= ra_hours < 23:
                     raise ValueError()
             except ValueError:
-                raise errors.ValidationError(
-                    'ra_hours', 'Expected 0 <= ra_hours < 23')
+                raise ValidationError('ra_hours', 'Expected 0 <= ra_hours < 23')
         if dec_degs is not None:
             try:
                 dec_degs = float(dec_degs)
                 if not -90 <= dec_degs <= 90:
                     raise ValueError()
             except ValueError:
-                raise errors.ValidationError(
+                raise ValidationError(
                     'dec_degs', 'Expected -90 <= dec_degs <= 90')
         if width is not None:
             try:
@@ -198,16 +198,14 @@ class ImagingSurveyDataProvider(DataProvider):
                 if width <= 0:
                     raise ValueError()
             except ValueError:
-                raise errors.ValidationError(
-                    'width', 'Positive FOV width expected')
+                raise ValidationError('width', 'Positive FOV width expected')
         if height is not None:
             try:
                 height = float(height)
                 if height <= 0:
                     raise ValueError()
             except ValueError:
-                raise errors.ValidationError(
-                    'height', 'Positive FOV height expected')
+                raise ValidationError('height', 'Positive FOV height expected')
         if width is None:
             width = height
         elif height is None:
