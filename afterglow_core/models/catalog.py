@@ -38,5 +38,5 @@ class CatalogSchema(Resource):
     filter_lookup = Dict(keys=String, values=String)
 
 
-__all__ = [name for name, value in __dict__.items()
+__all__ = [name for name, value in globals().items()
            if issubclass(value, AfterglowSchema)]

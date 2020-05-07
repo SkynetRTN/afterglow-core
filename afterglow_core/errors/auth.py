@@ -188,5 +188,5 @@ class NotInitializedError(AuthError):
     message = 'Afterglow Core has not yet been initialized'
 
 
-__all__ = [name for name, value in __dict__.items()
+__all__ = [name for name, value in globals().items()
            if issubclass(value, AfterglowError)]

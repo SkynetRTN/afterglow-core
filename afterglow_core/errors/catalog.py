@@ -17,5 +17,5 @@ class UnknownCatalogError(AfterglowError):
     message = 'Unknown catalog'
 
 
-_all__ = [name for name, value in __dict__.items()
+_all__ = [name for name, value in globals().items()
           if issubclass(value, AfterglowError)]

@@ -85,5 +85,5 @@ class FieldCalResult(AfterglowSchema):
     zero_point_error = Float()  # type: float
 
 
-__all__ = [name for name, value in __dict__.items()
+__all__ = [name for name, value in globals().items()
            if issubclass(value, AfterglowSchema)]

@@ -103,5 +103,5 @@ class SourceExtractionData(ISourceMeta, IAstrometry, IFWHM, ISourceId):
         return data
 
 
-__all__ = [name for name, value in __dict__.items()
+__all__ = [name for name, value in globals().items()
            if issubclass(value, AfterglowSchema)] + ['sigma_to_fwhm']

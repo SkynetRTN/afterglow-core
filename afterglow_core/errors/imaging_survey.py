@@ -42,5 +42,5 @@ class NoSurveyDataError(AfterglowError):
     message = 'No data at the given coordinates'
 
 
-__all__ = [name for name, value in __dict__.items()
+__all__ = [name for name, value in globals().items()
            if issubclass(value, AfterglowError)]
