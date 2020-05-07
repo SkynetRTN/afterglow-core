@@ -4,7 +4,10 @@ Afterglow Core: data provider schemas
 
 from marshmallow.fields import Dict, Integer, List, String
 
-from . import AfterglowSchema, Resource
+from . import Resource
+
+
+__all__ = ['CatalogSchema']
 
 
 class CatalogSchema(Resource):
@@ -36,7 +39,3 @@ class CatalogSchema(Resource):
     num_sources = Integer()
     mags = Dict(keys=String, values=List(String()), default={})
     filter_lookup = Dict(keys=String, values=String)
-
-
-__all__ = [name for name, value in globals().items()
-           if issubclass(value, AfterglowSchema)]

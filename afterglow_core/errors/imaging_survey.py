@@ -5,6 +5,11 @@ Afterglow Core: imaging survey errors (subcodes 31xx)
 from . import AfterglowError
 
 
+__all__ = [
+    'NoSurveyDataError', 'SkyViewQueryError', 'UnknownSurveyError',
+]
+
+
 class UnknownSurveyError(AfterglowError):
     """
     SkyView does not host the given survey
@@ -40,7 +45,3 @@ class NoSurveyDataError(AfterglowError):
     code = 404
     subcode = 3102
     message = 'No data at the given coordinates'
-
-
-__all__ = [name for name, value in globals().items()
-           if issubclass(value, AfterglowError)]

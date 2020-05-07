@@ -5,6 +5,12 @@ Afterglow Core: data file errors (subcodes 20xx)
 from . import AfterglowError
 
 
+__all__ = [
+    'CannotCreateDataFileDirError', 'CannotImportFromCollectionAssetError',
+    'MissingWCSError', 'UnknownDataFileError', 'UnrecognizedDataFileError',
+]
+
+
 class UnknownDataFileError(AfterglowError):
     """
     Format of the data file being imported is not recognized
@@ -65,7 +71,3 @@ class MissingWCSError(AfterglowError):
     code = 400
     subcode = 2004
     message = 'Missing WCS info'
-
-
-__all__ = [name for name, value in globals().items()
-           if issubclass(value, AfterglowError)]

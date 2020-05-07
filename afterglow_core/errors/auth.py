@@ -5,6 +5,17 @@ Afterglow Core: authentication errors (subcodes 1xx)
 from . import AfterglowError
 
 
+__all__ = [
+    'AdminOrSameUserRequiredError', 'AdminRequiredError', 'AuthError',
+    'CannotDeactivateTheOnlyAdminError', 'CannotDeleteCurrentUserError',
+    'CannotSetProtectedUserDataError', 'DuplicateUsernameError',
+    'HttpAuthFailedError', 'InactiveUserError', 'InitPageNotAvailableError',
+    'LocalAccessRequiredError', 'NoAdminRegisteredError',
+    'NotAuthenticatedError', 'NotInitializedError', 'UnknownAuthMethodError',
+    'UnknownUserError',
+]
+
+
 class AuthError(AfterglowError):
     """
     Base class for all Afterglow authentication errors
@@ -186,7 +197,3 @@ class NotInitializedError(AuthError):
     """
     subcode = 114
     message = 'Afterglow Core has not yet been initialized'
-
-
-__all__ = [name for name, value in globals().items()
-           if issubclass(value, AfterglowError)]

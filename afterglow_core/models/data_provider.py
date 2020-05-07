@@ -4,7 +4,10 @@ Afterglow Core: data provider schemas
 
 from marshmallow.fields import Boolean, Dict, Integer, List, String
 
-from . import AfterglowSchema, Resource
+from . import Resource
+
+
+__all__ = ['DataProviderSchema', 'DataProviderAsset']
 
 
 class DataProviderSchema(Resource):
@@ -81,7 +84,3 @@ class DataProviderAsset(Resource):
     collection = Boolean(default=False)
     path = String(default=None)
     metadata = Dict(default={})
-
-
-__all__ = [name for name, value in globals().items()
-           if issubclass(value, AfterglowSchema)]

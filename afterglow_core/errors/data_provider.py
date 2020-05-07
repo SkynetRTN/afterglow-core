@@ -5,6 +5,16 @@ Afterglow Core: data provider errors (subcodes 10xx)
 from . import AfterglowError
 
 
+__all__ = [
+    'AssetAlreadyExistsError', 'AssetNotFoundError',
+    'CannotDeleteNonEmptyCollectionAssetError',
+    'CannotSearchInNonCollectionError', 'CannotUpdateCollectionAssetError',
+    'NonBrowseableDataProviderError', 'NonSearchableDataProviderError',
+    'QuotaExceededError', 'ReadOnlyDataProviderError',
+    'UnknownDataProviderError',
+]
+
+
 class UnknownDataProviderError(AfterglowError):
     """
     The user requested an unknown data provider
@@ -129,7 +139,3 @@ class QuotaExceededError(AfterglowError):
     code = 403
     subcode = 1009
     message = 'Storage quota exceeded'
-
-
-__all__ = [name for name, value in globals().items()
-           if issubclass(value, AfterglowError)]

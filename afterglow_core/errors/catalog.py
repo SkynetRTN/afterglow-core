@@ -5,6 +5,11 @@ Afterglow Core: catalog errors (subcodes 30xx)
 from . import AfterglowError
 
 
+__all__ = [
+    'UnknownCatalogError',
+]
+
+
 class UnknownCatalogError(AfterglowError):
     """
     The user requested an unknown catalog
@@ -15,7 +20,3 @@ class UnknownCatalogError(AfterglowError):
     code = 404
     subcode = 3000
     message = 'Unknown catalog'
-
-
-_all__ = [name for name, value in globals().items()
-          if issubclass(value, AfterglowError)]

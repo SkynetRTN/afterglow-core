@@ -11,6 +11,11 @@ from .photometry import Mag, IPhotometry, PhotometryData
 from .source_extraction import IAstrometry
 
 
+__all__ = [
+    'CatalogSource', 'FieldCal', 'FieldCalResult', 'ICatalogSource',
+]
+
+
 class ICatalogSource(AfterglowSchema):
     """
     Generic catalog source definition without astrometry
@@ -83,7 +88,3 @@ class FieldCalResult(AfterglowSchema):
     phot_results = List(Nested(PhotometryData), default=[])  # type: list
     zero_point = Float()  # type: float
     zero_point_error = Float()  # type: float
-
-
-__all__ = [name for name, value in globals().items()
-           if issubclass(value, AfterglowSchema)]

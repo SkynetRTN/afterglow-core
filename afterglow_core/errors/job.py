@@ -5,6 +5,13 @@ Afterglow Core: job errors (subcodes 3xx)
 from . import AfterglowError
 
 
+__all__ = [
+    'CannotCancelJobError', 'CannotCreateJobFileError', 'CannotDeleteJobError',
+    'CannotSetJobStatusError', 'InvalidMethodError', 'JobServerError',
+    'UnknownJobError', 'UnknownJobFileError', 'UnknownJobTypeError',
+]
+
+
 class JobServerError(AfterglowError):
     """
     Unhandled job server error
@@ -113,7 +120,3 @@ class CannotCreateJobFileError(AfterglowError):
     code = 500
     subcode = 308
     message = 'Cannot create job file'
-
-
-_all__ = [name for name, value in globals().items()
-          if issubclass(value, AfterglowError)]

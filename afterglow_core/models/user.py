@@ -10,6 +10,9 @@ from marshmallow.fields import Integer, List, Nested, String
 from . import AfterglowSchema, Boolean, DateTime
 
 
+__all__ = ['RoleSchema', 'UserSchema']
+
+
 class RoleSchema(AfterglowSchema):
     id = Integer()  # type: int
     name = String()  # type: str
@@ -28,7 +31,3 @@ class UserSchema(AfterglowSchema):
     roles = List(
         Nested(RoleSchema, only=['name']))  # type: ListType[RoleSchema]
     settings = String()  # type: str
-
-
-__all__ = [name for name, value in globals().items()
-           if issubclass(value, AfterglowSchema)]

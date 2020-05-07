@@ -5,6 +5,11 @@ Afterglow Core: OAuth2 server errors (subcodes 2xx)
 from . import AfterglowError
 
 
+__all__ = [
+    'MissingClientIdError', 'UnknownClientError',
+]
+
+
 class UnknownClientError(AfterglowError):
     """
     The user requested an unknown OAuth2 client
@@ -27,7 +32,3 @@ class MissingClientIdError(AfterglowError):
     code = 400
     subcode = 201
     message = 'Missing client ID'
-
-
-__all__ = [name for name, value in globals().items()
-           if issubclass(value, AfterglowError)]

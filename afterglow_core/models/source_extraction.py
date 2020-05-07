@@ -10,6 +10,12 @@ from numpy import sqrt, log, rad2deg
 from . import AfterglowSchema, DateTime, Float, Boolean
 
 
+__all__ = [
+    'sigma_to_fwhm', 'IAstrometry', 'IFWHM', 'ISourceId', 'ISourceMeta',
+    'SourceExtractionData', 'SourceExtractionSettings',
+]
+
+
 sigma_to_fwhm = 2.0*sqrt(2*log(2))
 
 
@@ -101,7 +107,3 @@ class SourceExtractionData(ISourceMeta, IAstrometry, IFWHM, ISourceId):
             data.ra_hours /= 15
 
         return data
-
-
-__all__ = [name for name, value in globals().items()
-           if issubclass(value, AfterglowSchema)] + ['sigma_to_fwhm']

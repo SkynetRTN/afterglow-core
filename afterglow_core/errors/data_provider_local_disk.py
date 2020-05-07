@@ -5,6 +5,11 @@ Afterglow Core: local disk data provider errors (subcodes 11xx)
 from . import AfterglowError
 
 
+__all__ = [
+    'AssetOutsideRootError', 'FilesystemError', 'UnrecognizedDataFormatError',
+]
+
+
 class AssetOutsideRootError(AfterglowError):
     """
     An asset requested that is outside the root data directory
@@ -34,7 +39,3 @@ class FilesystemError(AfterglowError):
     code = 403
     subcode = 1102
     message = 'Filesystem error'
-
-
-__all__ = [name for name, value in globals().items()
-           if issubclass(value, AfterglowError)]

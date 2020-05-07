@@ -5,6 +5,11 @@ Afterglow Core: photometric calibration errors (subcodes 40xx)
 from . import AfterglowError
 
 
+__all__ = [
+    'DuplicateFieldCalError', 'UnknownFieldCalError',
+]
+
+
 class UnknownFieldCalError(AfterglowError):
     """
     Unknown field calibration
@@ -26,7 +31,3 @@ class DuplicateFieldCalError(AfterglowError):
     """
     subcode = 4001
     message = 'Duplicate field cal name'
-
-
-__all__ = [name for name, value in globals().items()
-           if issubclass(value, AfterglowError)]

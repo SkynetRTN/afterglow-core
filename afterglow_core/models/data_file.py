@@ -7,7 +7,10 @@ from datetime import datetime
 
 from marshmallow.fields import Dict, Integer, List, String
 
-from . import AfterglowSchema, DateTime, Resource
+from . import DateTime, Resource
+
+
+__all__ = ['DataFile', 'Session']
 
 
 class DataFile(Resource):
@@ -112,7 +115,3 @@ class Session(Resource):
         kw['data_file_ids'] = [data_file.id for data_file in _obj.data_files]
 
         super(Session, self).__init__(**kw)
-
-
-__all__ = [name for name, value in globals().items()
-           if issubclass(value, AfterglowSchema)]

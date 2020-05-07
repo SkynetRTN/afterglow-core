@@ -8,6 +8,12 @@ from . import AfterglowSchema, Float, Resource
 from .source_extraction import SourceExtractionData
 
 
+__all__ = [
+    'IAperture', 'IPhotometry', 'Mag', 'Photometry', 'PhotometryData',
+    'PhotSettings',
+]
+
+
 class Mag(AfterglowSchema):
     value = Float()
     error = Float()
@@ -129,7 +135,3 @@ class Photometry(Resource):
     background_area = Float()  # type: float
     background = Float()  # type: float
     background_rms = Float()  # type: float
-
-
-__all__ = [name for name, value in globals().items()
-           if issubclass(value, AfterglowSchema)]
