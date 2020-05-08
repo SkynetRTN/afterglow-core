@@ -111,7 +111,7 @@ def logout():
 
 
 # Register OAuth2.0 authorization code redirect handler
-@app.route('/users/oauth2/<str:plugin_id>')
+@app.route('/users/oauth2/<string:plugin_id>')
 def oauth2_authorized(plugin_id):
     """
     OAuth2.0 authorization code granted redirect endpoint
@@ -428,7 +428,7 @@ def users(user_id: int = None):
 @app.route(url_prefix + 'users/<int:user_id>/authorized-apps',
            methods=['GET', 'POST'])
 @app.route(url_prefix +
-           'users/<int:user_id>/authorized-apps/<str:client_id>',
+           'users/<int:user_id>/authorized-apps/<string:client_id>',
            methods=['DELETE'])
 @auth_required
 def users_authorized_apps(user_id: int, client_id: str = None):
@@ -495,7 +495,7 @@ def current_user():
 
 
 @app.route(url_prefix + 'user/authorized-apps', methods=['GET', 'POST'])
-@app.route(url_prefix + 'user/authorized-apps/<str:client_id>',
+@app.route(url_prefix + 'user/authorized-apps/<string:client_id>',
            methods=['DELETE'])
 def current_user_authorized_apps(client_id: str = None):
     return users_authorized_apps(request.user.id, client_id)
