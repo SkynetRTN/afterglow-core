@@ -36,6 +36,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.types import TypeDecorator
 from flask import Response, request
 
+from ..models.jobs import Job, JobResult, JobState, job_file_dir, job_file_path
 from .. import (
     AfterglowSchemaEncoder, app, auth, json_response, plugins, url_prefix)
 from ..errors import AfterglowError, MissingFieldError, ValidationError
@@ -43,7 +44,6 @@ from ..errors.job import (
     JobServerError, UnknownJobError, UnknownJobFileError, UnknownJobTypeError,
     InvalidMethodError, CannotSetJobStatusError, CannotCancelJobError,
     CannotDeleteJobError)
-from . import job_plugins
 from .data_files import SqlaSession, get_data_file_db
 
 if sys.version_info.major < 3:
@@ -75,7 +75,7 @@ except ImportError:
         Random = AES = None
 
 
-__all__ = ['job_file_path']
+__all__ = []
 
 
 # Read/write lock by Fazal Majid
@@ -186,8 +186,7 @@ class RWLock(object):
 
 
 # Load job plugins
-job_types = plugins.load_plugins(
-    'job', 'resources.job_plugins', job_plugins.Job)
+job_types = plugins.load_plugins('job', 'resources.job_plugins', Job)
 
 
 Base = declarative_base()
@@ -590,11 +589,11 @@ def subclass_from_schema(base_class, schema, plugin_name=None):
 
     :return: new db model class
     """
-    if schema.__class__ is job_plugins.JobResult:
+    if schema.__class__ is JobResult:
         # Plugin does not define its own result schema; use job_results table
         return base_class
 
-    if isinstance(schema, job_plugins.Job):
+    if isinstance(schema, Job):
         kind = 'jobs'
     else:
         kind = 'job_results'
@@ -631,28 +630,6 @@ def subclass_from_schema(base_class, schema, plugin_name=None):
                 ('__mapper_args__', {'polymorphic_identity': plugin_name}),
             ] + new_fields),
     )
-
-
-job_file_dir = os.path.join(
-    os.path.abspath(app.config['DATA_ROOT']), 'job_files')
-
-
-def job_file_path(user_id, job_id, file_id):
-    """
-    Return path to extra job file
-
-    :param int | str user_id: user ID
-    :param int | str job_id: job ID
-    :param str file_id: job file ID
-
-    :return: path to job file
-    :rtype: str
-    """
-    if user_id:
-        p = os.path.join(job_file_dir, str(user_id))
-    else:
-        p = job_file_dir
-    return os.path.join(p, '{}_{}'.format(job_id, file_id))
 
 
 msg_hdr = '!i'
@@ -862,7 +839,7 @@ class JobRequestHandler(BaseRequestHandler):
 
                 if method == 'get':
                     # Return job state
-                    result = job_plugins.JobState().dump(job.state)
+                    result = JobState().dump(job.state)
                     if marshmallow_version < (3, 0):
                         result = result[0]
 
@@ -889,7 +866,7 @@ class JobRequestHandler(BaseRequestHandler):
                                 break
 
                     # Return the current job state
-                    result = job_plugins.JobState().dump(job.state)
+                    result = JobState().dump(job.state)
                     if marshmallow_version < (3, 0):
                         result = result[0]
 

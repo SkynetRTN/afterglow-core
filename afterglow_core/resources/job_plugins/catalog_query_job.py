@@ -2,20 +2,17 @@
 Afterglow Core: catalog query job plugin
 """
 
-from __future__ import absolute_import, division, print_function
-
 from typing import Dict as DictType, List as ListType
 
 from numpy import argmax, array, cos, deg2rad, r_, rad2deg, unwrap
 from numpy.ma import masked_array
 from astropy.wcs import WCS
-from marshmallow.fields import Dict, Integer, List, Nested, String
 
-from ...models import Float
+from ...models.jobs import Job
+from ...models.jobs.catalog_query_job import CatalogQueryJobSchema
 from ...models.field_cal import CatalogSource
 from ..catalogs import catalogs as known_catalogs
 from ..data_files import get_data_file_fits
-from . import Job, JobResult
 
 
 __all__ = ['CatalogQueryJob', 'run_catalog_query_job']
@@ -306,24 +303,9 @@ def run_catalog_query_job(job: Job, catalogs: ListType[str],
     return final_sources
 
 
-class CatalogQueryJobResult(JobResult):
-    data = List(Nested(CatalogSource), default=[])  # type: list
-
-
-class CatalogQueryJob(Job):
+class CatalogQueryJob(CatalogQueryJobSchema):
     name = 'catalog_query'
     description = 'Catalog Query'
-    result = Nested(
-        CatalogQueryJobResult, default={})  # type: CatalogQueryJobResult
-    catalogs = List(String(), default=[])  # type: list
-    ra_hours = Float()  # type: float
-    dec_degs = Float()  # type: float
-    radius_arcmins = Float()  # type: float
-    width_arcmins = Float()  # type: float
-    height_arcmins = Float()  # type: float
-    file_ids = List(Integer())  # type: list
-    constraints = Dict(keys=String, values=String)
-    source_ids = List(String())  # type: list
 
     def run(self):
         self.result.data = run_catalog_query_job(

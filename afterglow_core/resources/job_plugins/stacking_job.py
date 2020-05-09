@@ -2,43 +2,19 @@
 Afterglow Core: image stacking job plugin
 """
 
-from __future__ import absolute_import, division, print_function
-
-from marshmallow.fields import Integer, List, Nested, String
-
 from skylib.combine.stacking import combine
 
-from . import Job, JobResult
+from ...models.jobs.stacking_job import StackingJobSchema
 from ..data_files import (
     create_data_file, get_data_file, get_data_file_db, get_root)
-from ... import AfterglowSchema
-from ...models import Float
+
 
 __all__ = ['StackingJob']
 
 
-class StackingSettings(AfterglowSchema):
-    mode = String(default='average')  # type: str
-    scaling = String(default=None)  # type: str
-    rejection = String(default=None)  # type: str
-    percentile = Integer(default=50)  # type: int
-    lo = Float(default=0)  # type: float
-    hi = Float(default=100)  # type: float
-
-
-class StackingJobResult(JobResult):
-    file_id = Integer()  # type: int
-
-
-class StackingJob(Job):
+class StackingJob(StackingJobSchema):
     name = 'stacking'
     description = 'Stack Images'
-    result = Nested(StackingJobResult, default={})  # type: StackingJobResult
-    file_ids = List(Integer(), default=[])  # type: list
-    # alignment_settings = Nested(
-    #     AlignmentSettings, default={})  # type: AlignmentSettings
-    stacking_settings = Nested(
-        StackingSettings, default={})  # type: StackingSettings
 
     def run(self):
         settings = self.stacking_settings

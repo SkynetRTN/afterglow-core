@@ -2,11 +2,8 @@
 Afterglow Core: batch photometry job plugin
 """
 
-from __future__ import absolute_import, division, print_function
-
 from datetime import datetime
 
-from marshmallow.fields import Integer, List, Nested
 from numpy import clip, cos, deg2rad, hypot, isfinite, sin, vstack, zeros
 from astropy.wcs import WCS
 import sep
@@ -14,19 +11,14 @@ import sep
 from skylib.photometry import aperture_photometry
 from skylib.extraction.centroiding import centroid_sources
 
-from ...models.field_cal import FieldCalResult
-from ...models.photometry import PhotSettings, PhotometryData
+from ...models.jobs.photometry_job import PhotometryJobSchema
+from ...models.photometry import PhotometryData
 from ...models.source_extraction import sigma_to_fwhm, SourceExtractionData
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time, get_phot_cal)
-from . import Job, JobResult
 
 
 __all__ = ['PhotometryJob', 'get_source_xy', 'run_photometry_job']
-
-
-class PhotometryJobResult(JobResult):
-    data = List(Nested(PhotometryData), default=[])  # type: list
 
 
 def get_source_xy(source, epoch, wcs):
@@ -283,15 +275,9 @@ def run_photometry_job(job, settings, job_file_ids, job_sources,
     return result_data
 
 
-class PhotometryJob(Job):
+class PhotometryJob(PhotometryJobSchema):
     name = 'photometry'
     description = 'Photometer Sources'
-    result = Nested(
-        PhotometryJobResult, default={})  # type: PhotometryJobResult
-    file_ids = List(Integer(), default=[])  # type: list
-    sources = List(Nested(SourceExtractionData), default=[])  # type: list
-    settings = Nested(PhotSettings, default={})  # type: PhotSettings
-    field_cal_results = List(Nested(FieldCalResult))  # type: list
 
     def run(self):
         self.result.data = run_photometry_job(

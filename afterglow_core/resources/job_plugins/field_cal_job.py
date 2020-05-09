@@ -2,45 +2,28 @@
 Afterglow Core: photometric calibration job plugin
 """
 
-from __future__ import absolute_import, division, print_function
-
 from datetime import datetime
 
-from marshmallow.fields import Integer, List, Nested
 import numpy
 from astropy.wcs import WCS
 
+from ...models.jobs.field_cal_job import FieldCalJobSchema
 from ...models.field_cal import FieldCal, FieldCalResult
-from ...models.photometry import Mag, PhotSettings
-from ...models.source_extraction import SourceExtractionSettings
+from ...models.photometry import Mag
 from ..data_files import get_data_file_fits, get_image_time
 from ..field_cals import get_field_cal
 from ..catalogs import catalogs as known_catalogs
 from .catalog_query_job import run_catalog_query_job
 from .source_extraction_job import run_source_extraction_job
 from .photometry_job import get_source_xy, run_photometry_job
-from . import Job, JobResult
 
 
 __all__ = ['FieldCalJob']
 
 
-class FieldCalJobResult(JobResult):
-    data = List(Nested(FieldCalResult), default=[])  # type: list
-
-
-class FieldCalJob(Job):
+class FieldCalJob(FieldCalJobSchema):
     name = 'field_cal'
     description = 'Photometric Calibration'
-    result = Nested(
-        FieldCalJobResult, default={})  # type: FieldCalJobResult
-    file_ids = List(Integer(), default=[])  # type: list
-    field_cal = Nested(FieldCal, default={})  # type: FieldCal
-    source_extraction_settings = Nested(
-        SourceExtractionSettings,
-        default=None)  # type: SourceExtractionSettings
-    photometry_settings = Nested(
-        PhotSettings, default=None)  # type: PhotSettings
 
     def run(self):
         if not getattr(self, 'file_ids', None):

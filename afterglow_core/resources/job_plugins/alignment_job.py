@@ -2,45 +2,26 @@
 Afterglow Core: image alignment job plugin
 """
 
-from __future__ import absolute_import, division, print_function
-
-from marshmallow.fields import Integer, List, Nested, String
 from astropy.wcs import WCS
 
 from skylib.combine.alignment import apply_transform_stars, apply_transform_wcs
 
-from ... import AfterglowSchema, errors
-from ...models import Boolean
-from ...models.source_extraction import SourceExtractionData
+from ...models.jobs.alignment_job import AlignmentJobSchema
+from ...errors import AfterglowError, ValidationError
 from ..data_files import (
     SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,
     save_data_file)
-from . import Job, JobResult
 
 
 __all__ = ['AlignmentJob']
 
 
-class AlignmentSettings(AfterglowSchema):
-    ref_image = String(default='central')  # type: str
-    wcs_grid_points = Integer(default=0)  # type: int
-
-
-class AlignmentJobResult(JobResult):
-    file_ids = List(Integer(), default=[])  # type: list
-
-
-class AlignmentJob(Job):
+class AlignmentJob(AlignmentJobSchema):
     """
     Image alignment job
     """
     name = 'alignment'
     description = 'Align Images'
-    result = Nested(AlignmentJobResult, default={})  # type: AlignmentJobResult
-    file_ids = List(Integer(), default=[])  # type: list
-    settings = Nested(AlignmentSettings, default={})  # type: AlignmentSettings
-    sources = List(Nested(SourceExtractionData), default=[])  # type: list
-    inplace = Boolean(default=False)  # type: bool
 
     def run(self):
         settings = self.settings
@@ -64,7 +45,7 @@ class AlignmentJob(Job):
                 # 0-based index in file_ids
                 ref_image = int(settings.ref_image.strip()[1:])
                 if not 0 <= ref_image < len(file_ids):
-                    raise errors.ValidationError(
+                    raise ValidationError(
                         'settings.ref_image',
                         'Reference image index out of range', 422)
             else:
@@ -76,10 +57,10 @@ class AlignmentJob(Job):
                     # Not in file_ids; implicitly add
                     file_ids.append(ref_image)
                     ref_image = len(file_ids) - 1
-        except errors.AfterglowError:
+        except AfterglowError:
             raise
         except Exception:
-            raise errors.ValidationError(
+            raise ValidationError(
                 'settings.ref_image',
                 'Reference image must be "first", "last", "central", or '
                 'data file ID, or #file_no', 422)

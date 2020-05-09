@@ -2,31 +2,16 @@
 Afterglow Core: image cropping job plugin
 """
 
-from __future__ import absolute_import, division, print_function
-
-from marshmallow.fields import Integer, List, Nested
 from numpy.ma import MaskedArray
 
-from ... import AfterglowSchema, errors
-from ...models import Boolean
+from ...models.jobs.cropping_job import CroppingJobSchema
+from ...errors import ValidationError
 from ..data_files import (
     SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,
     save_data_file)
-from . import Job, JobResult
 
 
 __all__ = ['CroppingJob']
-
-
-class CroppingSettings(AfterglowSchema):
-    left = Integer(default=0)  # type: int
-    right = Integer(default=0)  # type: int
-    top = Integer(default=0)  # type: int
-    bottom = Integer(default=0)  # type: int
-
-
-class CroppingJobResult(JobResult):
-    file_ids = List(Integer(), default=[])  # type: list
 
 
 def max_rectangle(histogram):
@@ -115,16 +100,12 @@ def get_auto_crop(user_id, file_ids):
     return left, right, top, bottom
 
 
-class CroppingJob(Job):
+class CroppingJob(CroppingJobSchema):
     """
     Image cropping job
     """
     name = 'cropping'
     description = 'Crop Images'
-    result = Nested(CroppingJobResult, default={})  # type: CroppingJobResult
-    file_ids = List(Integer(), default=[])  # type: list
-    settings = Nested(CroppingSettings, default={})  # type: CroppingSettings
-    inplace = Boolean(default=False)  # type: bool
 
     def run(self):
         if not getattr(self, 'file_ids'):
@@ -147,16 +128,16 @@ class CroppingJob(Job):
         else:
             left = right = top = bottom = 0
         if left < 0:
-            raise errors.ValidationError(
+            raise ValidationError(
                 'settings.left', 'Left margin must be non-negative')
         if right < 0:
-            raise errors.ValidationError(
+            raise ValidationError(
                 'settings.right', 'Right margin must be non-negative')
         if top < 0:
-            raise errors.ValidationError(
+            raise ValidationError(
                 'settings.top', 'Top margin must be non-negative')
         if bottom < 0:
-            raise errors.ValidationError(
+            raise ValidationError(
                 'settings.bottom', 'Bottom margin must be non-negative')
 
         auto_crop = not any([left, right, top, bottom])
