@@ -27,7 +27,7 @@ from ..errors.auth import (
 from ..errors.oauth2 import UnknownClientError, MissingClientIdError
 
 
-@app.route(url_prefix + '/users/login', methods=['GET', 'POST'])
+@app.route(url_prefix + 'users/login', methods=['GET', 'POST'])
 def login():
     """
     Login to Afterglow
@@ -98,7 +98,7 @@ def login():
     return set_access_cookies(json_response(dict()), access_token)
 
 
-@app.route(url_prefix + '/users/logout', methods=['GET', 'POST'])
+@app.route(url_prefix + 'users/logout', methods=['GET', 'POST'])
 def logout():
     """
     Logout from Afterglow
@@ -113,7 +113,7 @@ def logout():
 
 
 # Register OAuth2.0 authorization code redirect handler
-@app.route(url_prefix + '/users/oauth2/<string:plugin_id>')
+@app.route(url_prefix + 'users/oauth2/<string:plugin_id>')
 def oauth2_authorized(plugin_id):
     """
     OAuth2.0 authorization code granted redirect endpoint
@@ -195,7 +195,7 @@ def oauth2_authorized(plugin_id):
     return set_access_cookies(redirect(next_url), access_token)
 
 
-@app.route(url_prefix + '/users/oauth2/consent', methods=['GET', 'POST'])
+@app.route(url_prefix + 'users/oauth2/consent', methods=['GET', 'POST'])
 @auth_required(allow_redirect=True)
 def oauth2_consent():
     client_id = request.args.get('client_id')
