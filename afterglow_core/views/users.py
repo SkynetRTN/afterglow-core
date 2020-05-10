@@ -6,6 +6,8 @@ import os
 import shutil
 import json
 
+# noinspection PyProtectedMember
+from flask import _request_ctx_stack
 from flask_security.utils import hash_password, verify_password
 from flask import redirect, request, render_template, url_for
 
@@ -25,7 +27,7 @@ from ..errors.auth import (
 from ..errors.oauth2 import UnknownClientError, MissingClientIdError
 
 
-@app.route('/users/login', methods=['GET', 'POST'])
+@app.route(url_prefix + '/users/login', methods=['GET', 'POST'])
 def login():
     """
     Login to Afterglow
@@ -96,7 +98,7 @@ def login():
     return set_access_cookies(json_response(dict()), access_token)
 
 
-@app.route('/users/logout', methods=['GET', 'POST'])
+@app.route(url_prefix + '/users/logout', methods=['GET', 'POST'])
 def logout():
     """
     Logout from Afterglow
@@ -111,7 +113,7 @@ def logout():
 
 
 # Register OAuth2.0 authorization code redirect handler
-@app.route('/users/oauth2/<string:plugin_id>')
+@app.route(url_prefix + '/users/oauth2/<string:plugin_id>')
 def oauth2_authorized(plugin_id):
     """
     OAuth2.0 authorization code granted redirect endpoint
@@ -148,7 +150,7 @@ def oauth2_authorized(plugin_id):
     user_profile = oauth_plugin.get_user_profile(token)
 
     if not user_profile:
-        raise NotAuthenticatedError()
+        raise NotAuthenticatedError(error_msg='No user profile data returned')
 
     # Get the user from db
     method_uid = "{}:{}".format(oauth_plugin.name, user_profile.id)
@@ -193,7 +195,7 @@ def oauth2_authorized(plugin_id):
     return set_access_cookies(redirect(next_url), access_token)
 
 
-@app.route('/users/oauth2/consent', methods=['GET', 'POST'])
+@app.route(url_prefix + '/users/oauth2/consent', methods=['GET', 'POST'])
 @auth_required(allow_redirect=True)
 def oauth2_consent():
     client_id = request.args.get('client_id')
@@ -499,3 +501,40 @@ def current_user():
            methods=['DELETE'])
 def current_user_authorized_apps(client_id: str = None):
     return users_authorized_apps(request.user.id, client_id)
+
+
+@app.route(url_prefix + 'user/token', methods=['GET', 'POST'])
+@auth_required
+def user_token():
+    """
+    Return access and refresh tokens for the currently logged in user
+
+    :return: JSON object {"access_token": ..., "refresh_token": ...}
+    :rtype: flask.Response
+    """
+    method = _request_ctx_stack.top.auth_method
+    return json_response({
+        'access_token': create_token(
+            request.user.id, app.config.get('ACCESS_TOKEN_EXPIRES'),
+            dict(method=method)),
+        'refresh_token': create_token(
+            request.user.id, app.config.get('REFRESH_TOKEN_EXPIRES'),
+            dict(method=method), 'refresh'),
+    })
+
+
+@app.route(url_prefix + 'user/refresh', methods=['GET', 'POST'])
+@auth_required(request_type='refresh')
+def user_refresh():
+    """
+    Exchange refresh token for access token
+
+    :return: JSON object {"access_token": ...}
+    :rtype: flask.Response
+    """
+    method = _request_ctx_stack.top.auth_method
+    return json_response({
+        'access_token': create_token(
+            request.user.id, app.config.get('ACCESS_TOKEN_EXPIRES'),
+            dict(method=method)),
+    })
