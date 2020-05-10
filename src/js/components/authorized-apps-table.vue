@@ -11,7 +11,7 @@
                 </b-table-column>
 
                 <b-table-column field="options" label="Options">
-                    <button class="button is-danger" v-on:click="denyApp(props.row.id)">Revoke Access</button>
+                    <button class="button is-danger" v-on:click="denyApp(props.row.id)">Deny Access</button>
                      
                 </b-table-column>
 

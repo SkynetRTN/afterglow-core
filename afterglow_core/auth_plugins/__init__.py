@@ -1,7 +1,7 @@
 """
 Afterglow Core: oauth plugin package
 
-An OpenAuth2 plugin must subclass :class:`OAuthPlugin` and implement its
+An OpenAuth2 plugin must subclass :class:`OAuthPluginBase` and implement its
 methods.
 """
 
@@ -23,7 +23,7 @@ from ..models import Resource
 from ..errors.auth import NotAuthenticatedError
 
 
-__all__ = ['OAuthPlugin', 'OAuthUserProfile', 'OAuthToken']
+__all__ = ['AuthnPluginBase', 'AuthnPluginUser', 'HttpPluginBase', 'OAuthPluginBase', 'OAuthToken', 'base64_decode']
 
 
 if sys.version_info < (3, 1):
@@ -48,7 +48,94 @@ if app.config.get('DEBUG'):
     install_opener(build_opener(HTTPSHandler(context=ctx)))
 
 
-class OAuthUserProfile:
+# class AuthzPluginBase(Resource):
+#     """
+#     Future Base class for all authorization plugins
+#     """
+
+#     id = String(default=None)
+#     name = String(default=None)
+#     type = String(default=None)
+
+#     def __init__(self, id=None):
+        
+#         super(AuthzPluginBase, self).__init__()
+
+#         if id is None:
+#             self.id = self.name
+#         else:
+#             self.id = id
+
+    
+
+
+class AuthnPluginBase(Resource):
+    """
+    Base class for all authentication plugins
+    """
+
+    id = String(default=None)
+    name = String(default=None)
+    type = String(default=None)
+    description = String(default=None)
+    icon = String(default=None)
+
+
+    def __init__(self, id=None, description=None, icon=None,
+                 register_users=None):
+        
+        super(AuthnPluginBase, self).__init__()
+
+        if id is None:
+            self.id = self.name
+        else:
+            self.id = id
+
+        if description is None:
+            if self.description is None:
+                self.description = self.name
+        else:
+            self.description = description
+
+        if icon is not None:
+            self.icon = icon
+        if self.icon is None:
+            self.icon = self.name
+
+        if self.register_users is None:
+            self.register_users = register_users
+
+
+class HttpPluginBase(AuthnPluginBase):
+    """
+    Class for HTTP Auth plugins
+    """
+    def __init__(self, id=None, description=None, icon=None,
+                 register_users=None):
+
+        super(HttpPluginBase, self).__init__(id=id, description=description,
+            icon=icon, register_users=register_users)
+
+        type = 'http_authn'
+
+    def get_user(self, username, password):
+        """
+        Provider-specific user getter; implemented by HTTP auth plugin that
+        retrieves the user's profile based on the provided username and password
+
+        :param str username: username
+        :param str password: password
+
+        :return: plugin user
+        :rtype: AuthnPluginUser
+        """
+        raise errors.MethodNotImplementedError(
+            class_name=self.__class__.__name__, method_name='get_user')
+
+        
+
+
+class AuthnPluginUser:
     id = None
     username = None
     email = None
@@ -64,16 +151,11 @@ class OAuthToken:
         self.expiration = expiration
 
 
-class OAuthPlugin(Resource):
+class OAuthPluginBase(AuthnPluginBase):
     """
     Class for OAuth plugins
     """
     # Fields visible on the client side
-    id = String(default=None)
-    name = String(default=None)
-    type = String(default=None)
-    description = String(default=None)
-    icon = String(default=None)
     register_users = String(default=None)
     authorize_url = String(default=None)
     request_token_params = Dict(default=None)
@@ -113,26 +195,10 @@ class OAuthPlugin(Resource):
         :param dict access_token_params: additional parameters for token
             exchange
         """
-        super(OAuthPlugin, self).__init__()
+        super(OAuthPluginBase, self).__init__(id=id, description=description,
+            icon=icon, register_users=register_users)
 
-        if id is None:
-            self.id = self.name
-        else:
-            self.id = id
-
-        if description is None:
-            if self.description is None:
-                self.description = self.name
-        else:
-            self.description = description
-
-        if icon is not None:
-            self.icon = icon
-        if self.icon is None:
-            self.icon = self.name
-
-        if self.register_users is None:
-            self.register_users = register_users
+        type = 'oauth_authn'
 
         self.authorize_url = authorize_url
         if request_token_params:
@@ -252,16 +318,16 @@ class OAuthPlugin(Resource):
         except Exception as e:
             raise NotAuthenticatedError(error_msg=str(e))
 
-    def get_user_profile(self, token):
+    def get_user(self, token):
         """
-        Provider-specific user profile getter; implemented by OAuth plugin that
-        retrieves the user's profile using the provider API and token
+        Provider-specific user getter; implemented by OAuth plugin that
+        retrieves the user using the provider API and token
 
         :param OAuthToken token: provider API access, refresh, expiration token
             info
 
-        :return: user profile
-        :rtype: OAuthUserProfile
+        :return: user
+        :rtype: AuthnPluginUser
         """
         raise errors.MethodNotImplementedError(
-            class_name=self.__class__.__name__, method_name='get_user_profile')
+            class_name=self.__class__.__name__, method_name='get_user')

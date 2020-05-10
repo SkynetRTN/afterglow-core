@@ -41,6 +41,7 @@ def login():
     :rtype: flask.Response
     """
     # TODO Ensure CORS is disabled for POSTS to this endpoint
+    # TODO Allow additional domains for cookies to be specified in server config
 
     # Do not allow login if Afterglow Core has not yet been configured
     if User.query.count() == 0:
@@ -111,7 +112,7 @@ def logout():
 
 
 # Register OAuth2.0 authorization code redirect handler
-@app.route('/users/oauth2/<str:plugin_id>')
+@app.route('/users/oauth2/<string:plugin_id>')
 def oauth2_authorized(plugin_id):
     """
     OAuth2.0 authorization code granted redirect endpoint

@@ -62,6 +62,7 @@ del f, key, keyfile
 
 
 oauth_plugins = {}
+http_auth_plugins = {}
 
 security = None  # flask_security instance
 anonymous_user = current_user = AnonymousUser()
@@ -146,8 +147,8 @@ def auth_required(fn, *roles, **kwargs):
                 result = make_response(result)
 
             # Update access cookie if present in request
-            token_sig = request.cookies.get('access_token_sig')
-            token_hdr_payload = request.cookies.get('access_token')
+            token_sig = request.cookies.get('afterglow_core_access_token_sig')
+            token_hdr_payload = request.cookies.get('afterglow_core_access_token')
             if token_sig and token_hdr_payload:
                 result = set_access_cookies(
                     result, token_hdr_payload + '.' + token_sig)
@@ -284,10 +285,10 @@ def init_auth():
     from flask import _request_ctx_stack
     from flask_security import Security, current_user as _current_user
     from .plugins import load_plugins
-    from .oauth_plugins import OAuthPlugin
+    from .auth_plugins import AuthnPluginBase, OAuthPluginBase, HttpAuthPluginBase
 
     # noinspection PyGlobalUndefined
-    global oauth_plugins, authenticate, security, current_user, \
+    global oauth_plugins, http_auth_plugins, authenticate, security, current_user, \
         set_access_cookies, clear_access_cookies
 
     current_user = _current_user
@@ -318,11 +319,11 @@ def init_auth():
 
         hdr_payload, signature = access_token.rsplit('.', 1)
         response.set_cookie(
-            'access_token', value=hdr_payload,
+            'afterglow_core_access_token', value=hdr_payload,
             max_age=expires_delta.total_seconds() if expires_delta else None,
             secure=False, httponly=False)
         response.set_cookie(
-            'access_token_sig', value=signature, max_age=None, secure=False,
+            'afterglow_core_access_token_sig', value=signature, max_age=None, secure=False,
             httponly=True)
 
         return response
@@ -341,8 +342,8 @@ def init_auth():
         :return: Flask response with access token removed from cookies
         :rtype: flask.Response
         """
-        response.set_cookie('access_token_sig', '', expires=0)
-        response.set_cookie('access_token', '', expires=0)
+        response.set_cookie('afterglow_core_access_token_sig', '', expires=0)
+        response.set_cookie('afterglow_core_access_token', '', expires=0)
 
         return response
 
@@ -370,8 +371,8 @@ def init_auth():
             if parts[0] == 'Bearer' and len(parts) == 2:
                 tokens.append(('headers', parts[1]))
 
-        token_sig = request.cookies.get('access_token_sig')
-        token_hdr_payload = request.cookies.get('access_token')
+        token_sig = request.cookies.get('afterglow_core_access_token_sig')
+        token_hdr_payload = request.cookies.get('afterglow_core_access_token')
         if token_sig and token_hdr_payload:
             tokens.append(('cookies', token_hdr_payload + '.' + token_sig))
 
@@ -430,9 +431,14 @@ def init_auth():
     authenticate = _authenticate
 
     # Load auth plugins
-    oauth_plugins = load_plugins(
-        'authentication', 'oauth_plugins', OAuthPlugin,
-        app.config['OAUTH_PLUGINS'])
+    authn_plugins = load_plugins(
+        'authentication', 'auth_plugins', AuthnPluginBase,
+        app.config['AUTH_PLUGINS'])
+
+    for name, plugin in authn_plugins.items():
+        if plugin.type == OAuthPluginBase.type: oauth_plugins[name] = plugin
+        elif plugin.type == HttpAuthPluginBase.type: http_auth_plugins[name] = plugin
+        
 
     # Initialize security subsystem
     app.config.setdefault('SECURITY_TOKEN_MAX_AGE', None)

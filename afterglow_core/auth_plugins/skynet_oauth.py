@@ -8,7 +8,7 @@ import sys
 import json
 import requests
 
-from . import OAuthPlugin, OAuthUserProfile
+from . import OAuthPluginBase, AuthnPluginUser
 
 if sys.version_info.major < 3:
     # noinspection PyCompatibility
@@ -20,7 +20,7 @@ else:
 
 __all__ = ['SkynetOAuthPlugin']
 
-class SkynetOAuthPlugin(OAuthPlugin):
+class SkynetOAuthPlugin(OAuthPluginBase):
     """
     Skynet OAuth2 plugin (server-side flow)
     """
@@ -75,7 +75,7 @@ class SkynetOAuthPlugin(OAuthPlugin):
                 'Authorization': 'Bearer {}'.format(token.access),
             }).json()
 
-        pf = OAuthUserProfile()
+        pf = AuthnPluginUser()
         pf.id = user['id']
         pf.username = user['username']
         pf.first_name = user['firstName']
