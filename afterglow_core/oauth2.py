@@ -55,7 +55,7 @@ else:
 
 
 __all__ = [
-    'init_oauth', 'oauth_clients', 'create_access_token',
+    'init_oauth', 'oauth_clients', 'oauth_server', 'create_access_token',
     'create_refresh_token',
 ]
 

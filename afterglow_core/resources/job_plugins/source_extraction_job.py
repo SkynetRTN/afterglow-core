@@ -2,29 +2,22 @@
 Afterglow Core: source extraction job plugin
 """
 
-from __future__ import absolute_import, division, print_function
-
 from typing import List as ListType
 
-from marshmallow.fields import Integer, List, Nested
 from astropy.wcs import WCS
 
 from skylib.extraction import extract_sources
 
-from ...models import Boolean
-from ...models.source_extraction import (
-    SourceExtractionSettings, SourceExtractionData)
+from ...models.jobs import Job
+from ...models.jobs.source_extraction_job import (
+    SourceExtractionSettings, SourceExtractionJobSchema)
+from ...models.source_extraction import SourceExtractionData
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time, get_subframe)
-from .source_merge_job import SourceMergeSettings, merge_sources
-from . import Job, JobResult
+from .source_merge_job import merge_sources
 
 
 __all__ = ['SourceExtractionJob', 'run_source_extraction_job']
-
-
-class SourceExtractionJobResult(JobResult):
-    data = List(Nested(SourceExtractionData), default=[])  # type: list
 
 
 def run_source_extraction_job(job: Job, settings: SourceExtractionSettings,
@@ -114,17 +107,9 @@ def run_source_extraction_job(job: Job, settings: SourceExtractionSettings,
     return result_data
 
 
-class SourceExtractionJob(Job):
+class SourceExtractionJob(SourceExtractionJobSchema):
     name = 'source_extraction'
     description = 'Extract Sources'
-    result = Nested(
-        SourceExtractionJobResult)  # type: SourceExtractionJobResult
-    file_ids = List(Integer(), default=[])  # type: list
-    source_extraction_settings = Nested(
-        SourceExtractionSettings, default={})  # type: SourceExtractionSettings
-    merge_sources = Boolean(default=True)  # type: bool
-    source_merge_settings = Nested(
-        SourceMergeSettings, default={})  # type: SourceMergeSettings
 
     def run(self):
         result_data = run_source_extraction_job(

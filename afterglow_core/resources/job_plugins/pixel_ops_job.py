@@ -2,21 +2,18 @@
 Afterglow Core: pixel operations job plugin
 """
 
-from __future__ import absolute_import, division, print_function
-
 from types import ModuleType
 
 import numpy
 import numpy.fft
 import scipy.ndimage as ndimage
 import astropy.io.fits as pyfits
-from marshmallow.fields import Float, Integer, List, Nested, String
 
-from . import Job, JobResult
+from ...models.jobs.pixel_ops_job import PixelOpsJobSchema
 from ..data_files import (
     SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,
     save_data_file)
-from ...models import Boolean
+
 
 __all__ = ['PixelOpsJob']
 
@@ -34,12 +31,7 @@ for _name in ['fft', 'ifft', 'rfft', 'irfft', 'hfft', 'ihfft', 'rfftn',
     context[_name] = getattr(numpy.fft, _name)
 
 
-class PixelOpsJobResult(JobResult):
-    file_ids = List(Integer(), default=[])  # type: list
-    data = List(Float(), default=[])  # type: list
-
-
-class PixelOpsJob(Job):
+class PixelOpsJob(PixelOpsJobSchema):
     """
     Pixel operations job plugin class
 
@@ -75,11 +67,6 @@ class PixelOpsJob(Job):
     """
     name = 'pixel_ops'
     description = 'Pixel Operations'
-    result = Nested(PixelOpsJobResult)  # type: PixelOpsJobResult
-    file_ids = List(Integer(), default=[])  # type: list
-    op = String(default=None)  # type: str
-    inplace = Boolean(default=False)  # type: bool
-    aux_file_ids = List(Integer(), default=[])  # type: list
 
     def run(self):
         # Deduce the type of result by analyzing the user-supplied expression

@@ -2,47 +2,25 @@
 Afterglow Core: batch data file import job plugin
 """
 
-from __future__ import absolute_import, division, print_function
-
 import json
 from io import BytesIO
 
-from marshmallow.fields import Integer, List, Nested, String
-
-from ... import AfterglowSchema
-from ...models import Boolean
+from ...models.jobs.batch_import_job import BatchImportJobSchema
 from ...errors.data_provider import UnknownDataProviderError
 from ...errors.data_file import CannotImportFromCollectionAssetError
 from ..data_providers import providers
 from ..data_files import get_data_file_db, get_root, import_data_file
-from . import Job, JobResult
 
 
 __all__ = ['BatchImportJob']
 
 
-class BatchImportSettings(AfterglowSchema):
-    provider_id = String()  # type: str
-    path = String()  # type: str
-    duplicates = String(default='ignore')  # type: str
-    recurse = Boolean(default=False)  # type: bool
-
-
-class BatchImportJobResult(JobResult):
-    file_ids = List(Integer(), default=[])  # type: list
-
-
-class BatchImportJob(Job):
+class BatchImportJob(BatchImportJobSchema):
     """
     Batch data file import job
     """
     name = 'batch_import'
     description = 'Batch Data File Import'
-    result = Nested(
-        BatchImportJobResult, default={})  # type: BatchImportJobResult
-    settings = List(
-        Nested(BatchImportSettings, default={}), default=[])  # type: list
-    session_id = Integer(default=None)  # type: int
 
     def run(self):
         adb = get_data_file_db(self.user_id)

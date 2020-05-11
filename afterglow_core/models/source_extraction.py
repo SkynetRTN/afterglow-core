@@ -7,12 +7,12 @@ from datetime import datetime
 from marshmallow.fields import Integer, String
 from numpy import sqrt, log, rad2deg
 
-from . import AfterglowSchema, DateTime, Float, Boolean
+from . import AfterglowSchema, DateTime, Float
 
 
 __all__ = [
     'sigma_to_fwhm', 'IAstrometry', 'IFWHM', 'ISourceId', 'ISourceMeta',
-    'SourceExtractionData', 'SourceExtractionSettings',
+    'SourceExtractionData',
 ]
 
 
@@ -47,27 +47,6 @@ class IFWHM(AfterglowSchema):
 
 class ISourceId(AfterglowSchema):
     id = String()  # type: str
-
-
-class SourceExtractionSettings(AfterglowSchema):
-    x = Integer(default=1)  # type: int
-    y = Integer(default=1)  # type: int
-    width = Integer(default=0)  # type: int
-    height = Integer(default=0)  # type: int
-    threshold = Float(default=2.5)  # type: float
-    bk_size = Float(default=1/64)  # type: float
-    bk_filter_size = Integer(default=3)  # type: int
-    fwhm = Float(default=0)  # type: float
-    ratio = Float(default=1)  # type: float
-    theta = Float(default=0)  # type: float
-    min_pixels = Integer(default=3)  # type: int
-    deblend = Boolean(default=False)  # type: bool
-    deblend_levels = Integer(default=32)  # type: int
-    deblend_contrast = Float(default=0.005)  # type: float
-    gain = Float(default=None)  # type: float
-    clean = Float(default=1)  # type: float
-    centroid = Boolean(default=True)  # type: bool
-    limit = Integer(default=None)  # type: int
 
 
 class SourceExtractionData(ISourceMeta, IAstrometry, IFWHM, ISourceId):

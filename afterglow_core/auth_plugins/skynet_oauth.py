@@ -2,25 +2,17 @@
 Afterglow Core: Skynet OAuth authentication plugin
 """
 
-from __future__ import absolute_import, division, print_function
-
-import sys
-import json
 import requests
+from urllib.parse import urljoin
 
-from . import OAuthPluginBase, AuthnPluginUser
-
-if sys.version_info.major < 3:
-    # noinspection PyCompatibility
-    from urlparse import urljoin
-else:
-    # noinspection PyCompatibility,PyUnresolvedReferences
-    from urllib.parse import urljoin
+from .. import app
+from . import OAuthPlugin, OAuthToken, OAuthUserProfile
 
 
 __all__ = ['SkynetOAuthPlugin']
 
-class SkynetOAuthPlugin(OAuthPluginBase):
+
+class SkynetOAuthPlugin(OAuthPlugin):
     """
     Skynet OAuth2 plugin (server-side flow)
     """
@@ -28,7 +20,8 @@ class SkynetOAuthPlugin(OAuthPluginBase):
 
     base_url = None
 
-    def __init__(self, description='Login via Skynet', icon=None, register_users=None,
+    def __init__(self, description='Login via Skynet', icon=None,
+                 register_users=None,
                  base_url='https://api.skynet.unc.edu/2.0/',
                  access_token_url='https://skynet.unc.edu/oauth2/token',
                  authorize_url='https://skynet.unc.edu/oauth2/'
@@ -48,32 +41,35 @@ class SkynetOAuthPlugin(OAuthPluginBase):
         :param str client_secret: client secret
         :param dict request_token_params: additional token exchange parameters
         """
+        if not request_token_params:
+            request_token_params = {
+                'response_type': 'code',
+            }
+
         # Always set id=name (required by the local Skynet data provider)
         super(SkynetOAuthPlugin, self).__init__(
-            self.name, description=description, icon=icon, register_users=register_users,
-            authorize_url=authorize_url, access_token_url=access_token_url,
-            client_id=client_id, client_secret=client_secret,
+            self.name, description=description, icon=icon,
+            register_users=register_users, authorize_url=authorize_url,
+            access_token_url=access_token_url, client_id=client_id,
+            client_secret=client_secret,
             request_token_params=request_token_params)
 
         self.base_url = base_url
 
-    def get_user_profile(self, token):
+    def get_user_profile(self, token: OAuthToken):
         """
         Return the user's Skynet username given the access token
 
-        :param str access_token: provider API access token
-        :param str | None refresh_token: refresh token
-        :param datetime.datetime | None expires: UTC time of access token
-            expiration
+        :param token: provider API token object
 
-        :return: username of the authorized user
-        :rtype: str
+        :return: user profile
+        :rtype: OAuthUserProfile
         """
         user = requests.get(
             urljoin(self.base_url, 'users'),
             headers={
                 'Authorization': 'Bearer {}'.format(token.access),
-            }).json()
+            }, verify=False if app.config.get('DEBUG') else True).json()
 
         pf = AuthnPluginUser()
         pf.id = user['id']
@@ -83,4 +79,3 @@ class SkynetOAuthPlugin(OAuthPluginBase):
         pf.email = user['email']
 
         return pf
-

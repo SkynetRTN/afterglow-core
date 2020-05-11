@@ -2,30 +2,16 @@
 Afterglow Core: source merge job plugin
 """
 
-from __future__ import absolute_import, division, print_function
-
 from datetime import datetime
 
-from marshmallow.fields import List, Nested, String
 from numpy import asarray, cos, deg2rad, pi, sin, sqrt, transpose, zeros
 from scipy.spatial import cKDTree
 
-from ... import AfterglowSchema
-from ...models import Float
+from ...models.jobs.source_merge_job import SourceMergeJobSchema
 from ...models.source_extraction import SourceExtractionData
-from . import Job, JobResult
 
 
-__all__ = ['SourceMergeJob', 'SourceMergeSettings', 'merge_sources']
-
-
-class SourceMergeSettings(AfterglowSchema):
-    pos_type = String(default='auto')  # type: str
-    tol = Float(default=None)  # type: float
-
-
-class SourceMergeJobResult(JobResult):
-    data = List(Nested(SourceExtractionData), default=[])  # type: list
+__all__ = ['SourceMergeJob', 'merge_sources']
 
 
 def dcs2c(ra, dec):
@@ -178,13 +164,9 @@ def merge_sources(sources, settings, job_id=None):
     return merged_sources
 
 
-class SourceMergeJob(Job):
+class SourceMergeJob(SourceMergeJobSchema):
     name = 'source_merge'
     description = 'Merge Sources from Multiple Images'
-    result = Nested(SourceMergeJobResult)  # type: SourceMergeJobResult
-    sources = List(Nested(SourceExtractionData))  # type: list
-    settings = Nested(
-        SourceMergeSettings, default={})  # type: SourceMergeSettings
 
     def run(self):
         self.result.data = merge_sources(self.sources, self.settings, self.id)
