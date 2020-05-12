@@ -25,9 +25,6 @@
                 </b-table-column>
 
             </template>
-            <template slot="detail" slot-scope="props">
-                
-            </template>
             <template slot="empty">
                 <section class="section">
                     <div class="content has-text-grey has-text-centered">

@@ -285,7 +285,7 @@ def init_auth():
     from flask import _request_ctx_stack
     from flask_security import Security, current_user as _current_user
     from .plugins import load_plugins
-    from .auth_plugins import AuthnPluginBase, OAuthPluginBase, HttpAuthPluginBase
+    from .auth_plugins import AuthnPluginBase, OAuthServerPluginBase, HttpAuthPluginBase
 
     # noinspection PyGlobalUndefined
     global oauth_plugins, http_auth_plugins, authenticate, security, current_user, \
@@ -436,8 +436,8 @@ def init_auth():
         app.config['AUTH_PLUGINS'])
 
     for name, plugin in authn_plugins.items():
-        if plugin.type == OAuthPluginBase.type: oauth_plugins[name] = plugin
-        elif plugin.type == HttpAuthPluginBase.type: http_auth_plugins[name] = plugin
+        if isinstance(plugin, OAuthServerPluginBase): oauth_plugins[name] = plugin
+        elif isinstance(plugin, HttpAuthPluginBase): http_auth_plugins[name] = plugin
         
 
     # Initialize security subsystem

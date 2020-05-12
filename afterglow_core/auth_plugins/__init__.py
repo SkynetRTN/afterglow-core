@@ -106,17 +106,17 @@ class AuthnPluginBase(Resource):
             self.register_users = register_users
 
 
-class HttpPluginBase(AuthnPluginBase):
+class HttpAuthPluginBase(AuthnPluginBase):
     """
     Class for HTTP Auth plugins
     """
     def __init__(self, id=None, description=None, icon=None,
                  register_users=None):
 
-        super(HttpPluginBase, self).__init__(id=id, description=description,
+        super(HttpAuthPluginBase, self).__init__(id=id, description=description,
             icon=icon, register_users=register_users)
 
-        type = 'http_authn'
+        self.type = 'http'
 
     def get_user(self, username, password):
         """
@@ -151,7 +151,7 @@ class OAuthToken:
         self.expiration = expiration
 
 
-class OAuthPluginBase(AuthnPluginBase):
+class OAuthServerPluginBase(AuthnPluginBase):
     """
     Class for OAuth plugins
     """
@@ -195,10 +195,10 @@ class OAuthPluginBase(AuthnPluginBase):
         :param dict access_token_params: additional parameters for token
             exchange
         """
-        super(OAuthPluginBase, self).__init__(id=id, description=description,
+        super(OAuthServerPluginBase, self).__init__(id=id, description=description,
             icon=icon, register_users=register_users)
 
-        type = 'oauth_authn'
+        self.type = 'oauth_server'
 
         self.authorize_url = authorize_url
         if request_token_params:

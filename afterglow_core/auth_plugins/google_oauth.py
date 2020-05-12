@@ -4,7 +4,7 @@ import sys
 import json
 import requests
 
-from . import OAuthPluginBase, AuthnPluginUser, base64_decode
+from . import OAuthServerPluginBase, OAuthToken, AuthnPluginUser, base64_decode
 
 if sys.version_info.major < 3:
     # noinspection PyCompatibility
@@ -13,7 +13,7 @@ else:
     # noinspection PyCompatibility,PyUnresolvedReferences
     from urllib.parse import urljoin
 
-class GoogleOAuthPlugin(OAuthPluginBase):
+class GoogleOAuthPlugin(OAuthServerPluginBase):
     """
     Google OAuth2 plugin (server-side flow)
     """
@@ -92,6 +92,7 @@ class GoogleOAuthPlugin(OAuthPluginBase):
             }).json()
 
         pf = AuthnPluginUser()
+        pf.id = user['email']
         pf.email = user['email']
         
         return pf

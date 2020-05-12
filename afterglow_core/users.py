@@ -61,9 +61,6 @@ class User(db.Model, UserMixin):
     username = db.Column(
         db.String,
         db.CheckConstraint('username is null or length(username) <= 255'))
-    alias = db.Column(
-        db.String,
-        db.CheckConstraint('alias is null or length(email) <= 255'))
     email = db.Column(
         db.String,
         db.CheckConstraint('email is null or length(email) <= 255'))
@@ -109,8 +106,6 @@ class User(db.Model, UserMixin):
             return self.full_name
         if self.username:
             return self.username
-        if self.alias:
-            return self.alias
         if self.email:
             return self.email
         return "Anonymous"
@@ -193,7 +188,6 @@ class AnonymousUserRole(object):
 class AnonymousUser(object):
     id = None
     username = display_name = '<Anonymous>'
-    alias = None
     first_name = None
     last_name = None
     full_name = ''

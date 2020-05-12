@@ -20,13 +20,13 @@ function login(username, password) {
 }
 
 function getUser(userId) {
-    return axios.get(`/api/v1.0/users/${userId}`)
+    return axios.get(`${config.apiUrl}/users/${userId}`)
 }
 
 function getAuthorizedApps(userId) {
-    return axios.get(`/api/v1.0/users/${userId}/authorized-apps`)
+    return axios.get(`${config.apiUrl}/users/${userId}/authorized-apps`)
 }
 
 function removeAuthorizedApp(userId, appId) {
-    return axios.delete(`/api/v1.0/users/${userId}/authorized-apps/${appId}`)
+    return axios.delete(`${config.apiUrl}/users/${userId}/authorized-apps/${appId}`)
 }

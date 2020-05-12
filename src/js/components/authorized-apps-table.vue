@@ -50,7 +50,7 @@ export default {
       userService
         .getAuthorizedApps(this.userId)
         .then(({ data }) => {
-          this.data = [...data];
+          this.data = [...data.items];
           this.loading = false;
         })
         .catch(error => {

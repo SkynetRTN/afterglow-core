@@ -12,13 +12,13 @@ import datetime
 import json
 import os
 
+from flask_cors import CORS
 # noinspection PyProtectedMember
 from marshmallow import (
     missing, __version_info__ as marshmallow_version)
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
 from flask import Flask, Response
 
-from .__version__ import __version__, url_prefix
 from .models import AfterglowSchema
 
 if sys.version_info.major < 3:
@@ -77,6 +77,7 @@ def json_response(obj='', status_code=None, headers=None):
 
 
 app = Flask(__name__)
+cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
 app.config.from_object('afterglow_core.default_cfg')
 app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=True)
 

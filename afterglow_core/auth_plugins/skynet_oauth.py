@@ -6,13 +6,13 @@ import requests
 from urllib.parse import urljoin
 
 from .. import app
-from . import OAuthPlugin, OAuthToken, OAuthUserProfile
+from . import OAuthServerPluginBase, OAuthToken, AuthnPluginUser
 
 
 __all__ = ['SkynetOAuthPlugin']
 
 
-class SkynetOAuthPlugin(OAuthPlugin):
+class SkynetOAuthPlugin(OAuthServerPluginBase):
     """
     Skynet OAuth2 plugin (server-side flow)
     """

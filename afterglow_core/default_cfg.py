@@ -22,7 +22,7 @@ AUTH_ENABLED = True
 #          'authorize_url': 'https://api.twitter.com/oauth/authenticate',
 #          'client_id': '<client id>', 'client_secret': '<client secret'}
 #     ]
-OAUTH_PLUGINS = []
+AUTH_PLUGINS = []
 
 # Automatically register authenticated users if missing from the local user
 # database; auth plugin option "register_users" overrides this
