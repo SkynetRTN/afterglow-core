@@ -1,15 +1,10 @@
-#TODO remove unused imports
+"""
+Afterglow Core: API v1 job views
+"""
 
-from . import url_prefix
-from ....models.jobs import Job, JobResult, JobState, job_file_dir, job_file_path
-from .... import (
-    AfterglowSchemaEncoder, app, auth, json_response, plugins)
-from ....errors import AfterglowError, MissingFieldError, ValidationError
-from ....errors.job import (
-    JobServerError, UnknownJobError, UnknownJobFileError, UnknownJobTypeError,
-    InvalidMethodError, CannotSetJobStatusError, CannotCancelJobError,
-    CannotDeleteJobError)
+from .... import app, auth
 from ....resources.jobs import job_server_request
+from . import url_prefix
 
 
 resource_prefix = url_prefix + 'jobs/'

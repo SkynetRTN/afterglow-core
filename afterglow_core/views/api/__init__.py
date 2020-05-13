@@ -1,3 +1,5 @@
-from __future__ import absolute_import, division, print_function
+"""
+Afterglow Core: all API versions
+"""
 
 from .v1 import *

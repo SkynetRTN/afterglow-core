@@ -1,18 +1,19 @@
-#TODO remove unused imports
+"""
+Afterglow Core: API v1 photometry views
+"""
 
-from __future__ import absolute_import, division, print_function
 from flask import request
 
-from numpy import array, sqrt
+from numpy import array
 from astropy.wcs import WCS
 
-from . import url_prefix
 from .... import app, auth, errors, json_response
-from ....models.photometry import Photometry
-from ....errors.data_file import MissingWCSError
 from ....resources.data_files import (
     get_exp_length, get_gain, get_data_file, get_phot_cal)
 from ....resources.photometry import get_photometry
+from ....errors.data_file import MissingWCSError
+from . import url_prefix
+
 
 @app.route(url_prefix + 'data-files/<int:id>/photometry')
 @auth.auth_required('user')

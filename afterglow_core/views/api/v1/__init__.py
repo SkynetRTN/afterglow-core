@@ -1,6 +1,10 @@
-from __future__ import absolute_import, division, print_function
+"""
+Afterglow Core: API version 1
+"""
 
-from .__version__ import __version__, url_prefix
+__version__ = 1, 0, 1
+
+url_prefix = '/api/v{0}/'.format(__version__[0])
 
 from . import (
     catalogs, data_files, data_providers, field_cals, imaging_surveys, jobs,

@@ -1,8 +1,12 @@
-#TODO remove unused imports
+"""
+Afterglow Core: API v1 data provider views
+"""
+
 from flask import request
-from . import url_prefix
-from .... import app, errors, json_response, plugins
-from ....auth import oauth_plugins, auth_required, current_user
+
+from .... import app, errors, json_response, oauth_plugins
+from ....auth import auth_required, current_user
+from ....resources.data_providers import providers
 from ....errors.auth import NotAuthenticatedError
 from ....errors.data_provider import (
     UnknownDataProviderError, ReadOnlyDataProviderError,
@@ -10,10 +14,45 @@ from ....errors.data_provider import (
     AssetNotFoundError, AssetAlreadyExistsError,
     CannotSearchInNonCollectionError, CannotDeleteNonEmptyCollectionAssetError,
     QuotaExceededError)
-from ....resources.data_providers import providers, _check_provider_auth
+from . import url_prefix
 
 
 resource_prefix = url_prefix + 'data-providers/'
+
+
+def check_provider_auth(provider):
+    """
+    Check that the user is authenticated with any of the auth methods required
+    for the given data provider; raises NotAuthenticatedError if not
+
+    :param DataProvider provider: data provider plugin instance
+
+    :return: None
+    """
+    if not oauth_plugins:
+        # User auth disabled, always succeed
+        return
+
+    auth_methods = provider.auth_methods
+    if not auth_methods:
+        auth_methods = app.config.get('DEFAULT_DATA_PROVIDER_AUTH')
+    if not auth_methods:
+        # No specific auth methods requested
+        return
+
+    # Retrieve the currently authenticated user's auth method from access token
+    # noinspection PyProtectedMember
+    from flask import _request_ctx_stack
+    try:
+        method = _request_ctx_stack.top.auth_method
+    except Exception:
+        raise NotAuthenticatedError(
+            error_msg='Refresh token does not contain auth method')
+    if method not in auth_methods:
+        raise NotAuthenticatedError(
+            error_msg='Data provider "{}" requires authentication with '
+            'methods: {}'.format(provider.id, ', '.join(auth_methods)))
+
 
 @app.route(resource_prefix[:-1])
 @app.route(resource_prefix + '<id>')
@@ -40,7 +79,7 @@ def data_providers(id=None):
         for id in sorted({provider.id for provider in providers.values()}):
             provider = providers[id]
             try:
-                _check_provider_auth(provider)
+                check_provider_auth(provider)
             except NotAuthenticatedError:
                 pass
             else:
@@ -57,7 +96,7 @@ def data_providers(id=None):
 
     # If specific auth method(s) are requested for data provider, check that the
     # user is authenticated with any of these methods
-    _check_provider_auth(provider)
+    check_provider_auth(provider)
 
     return json_response(provider)
 
@@ -106,7 +145,7 @@ def data_providers_assets(id):
             provider = providers[int(id)]
         except (KeyError, ValueError):
             raise UnknownDataProviderError(id=id)
-    _check_provider_auth(provider)
+    check_provider_auth(provider)
 
     if request.method != 'GET' and provider.readonly:
         raise ReadOnlyDataProviderError(id=id)
@@ -190,4 +229,3 @@ def data_providers_assets(id):
 
         provider.delete_asset(path, **params)
         return json_response()
-

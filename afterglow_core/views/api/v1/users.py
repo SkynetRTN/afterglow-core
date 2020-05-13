@@ -6,31 +6,22 @@ import os
 import shutil
 import json
 
-# noinspection PyProtectedMember
-from flask import _request_ctx_stack
-from flask_security.utils import hash_password, verify_password
-from flask import redirect, request, render_template, url_for
+from flask_security.utils import hash_password
+from flask import request
 
 from . import url_prefix
 from .... import app, json_response
-from ....auth import (
-    auth_required, create_token, clear_access_cookies, set_access_cookies,
-    oauth_plugins)
+from ....auth import auth_required
 from ....oauth2 import oauth_clients
 from ....users import Role, User, UserClient, db
 from ....models.user import UserSchema
 from ....errors import MissingFieldError, ValidationError
 from ....errors.auth import (
     AdminRequiredError, UnknownUserError, CannotDeactivateTheOnlyAdminError,
-    DuplicateUsernameError, HttpAuthFailedError, CannotDeleteCurrentUserError,
-    NotInitializedError, NotAuthenticatedError, LocalAccessRequiredError,
-    UnknownAuthMethodError)
+    DuplicateUsernameError, CannotDeleteCurrentUserError,
+    LocalAccessRequiredError)
 from ....errors.oauth2 import UnknownClientError, MissingClientIdError
 
-
-# ############################## #
-# ###            API         ### #
-# ############################## #
 
 def parse_user_fields():
     username = request.args.get('username')

@@ -1,12 +1,14 @@
-#TODO remove unused imports
+"""
+Afterglow Core: API v1 data file views
+"""
 
-from io import BytesIO
 import json
 import astropy.io.fits as pyfits
 import os
 import tempfile
 import subprocess
 import shutil
+from io import BytesIO
 
 import numpy
 from flask import request, Response
@@ -14,16 +16,18 @@ from astropy.wcs import WCS
 from skylib.calibration.background import estimate_background
 from skylib.sonification import sonify_image
 
-from . import url_prefix
-from .... import app, json_response, plugins, auth, errors
-from ....auth import auth_required
+from .... import app, json_response, auth, errors
+from ....models.data_file import DataFile, Session
 from ....errors.data_provider import UnknownDataProviderError
 from ....errors.data_file import (
-    UnknownDataFileError, CannotCreateDataFileDirError,
-    CannotImportFromCollectionAssetError)
+    UnknownDataFileError, CannotImportFromCollectionAssetError)
 from ....resources import data_providers
-from ....resources.data_files import (get_data_file_db, get_root, SqlaDataFile, _get_session_id, create_data_file, import_data_file,
- remove_data_file, get_data_file, get_data_file_path, get_subframe, get_data_file_data, make_data_response, DataFile, Session, SqlaSession)
+from ....resources.data_files import (
+    get_data_file_db, get_root, SqlaDataFile, get_session_id, create_data_file,
+    import_data_file, remove_data_file, get_data_file, get_data_file_path,
+    get_subframe, get_data_file_data, make_data_response, SqlaSession)
+from . import url_prefix
+
 
 resource_prefix = url_prefix + 'data-files/'
 
@@ -96,7 +100,7 @@ def data_files(id=None):
             return json_response(
                 [DataFile(data_file)
                  for data_file in adb.query(SqlaDataFile).filter(
-                    SqlaDataFile.session_id == _get_session_id(adb))])
+                    SqlaDataFile.session_id == get_session_id(adb))])
 
         # Return specific data file resource
         return json_response(DataFile(data_file))
@@ -106,7 +110,7 @@ def data_files(id=None):
         all_data_files = []
 
         try:
-            session_id = _get_session_id(adb)
+            session_id = get_session_id(adb)
 
             if request.args.get('provider_id') is None and \
                     request.args.get('width') is not None and \
@@ -209,7 +213,7 @@ def data_files(id=None):
     if request.method == 'PUT':
         # Update data file
         name = request.args.get('name')
-        session_id = _get_session_id(adb)
+        session_id = get_session_id(adb)
         try:
             if name:
                 data_file.name = name

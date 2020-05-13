@@ -1,6 +1,5 @@
-#TODO remove unused imports
 """
-Afterglow Core: data-files resource
+Afterglow Core: data-files resource implementation
 """
 
 import sys
@@ -9,9 +8,6 @@ from glob import glob
 from datetime import datetime
 import json
 import gzip
-import tempfile
-import shutil
-import subprocess
 import sqlite3
 from threading import Lock
 from io import BytesIO
@@ -25,19 +21,12 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import Engine
 import numpy
 import astropy.io.fits as pyfits
-from astropy.wcs import WCS
 from flask import Response, request
 
-from skylib.calibration.background import estimate_background
-from skylib.sonification import sonify_image
-
-from . import data_providers
-from .. import app, auth, errors, json_response
-from ..models.data_file import DataFile, Session
-from ..errors.data_provider import UnknownDataProviderError
+from .. import app, errors, json_response
+from ..models.data_file import DataFile
 from ..errors.data_file import (
-    UnknownDataFileError, CannotCreateDataFileDirError,
-    CannotImportFromCollectionAssetError)
+    UnknownDataFileError, CannotCreateDataFileDirError)
 
 try:
     from PIL import Image as PILImage, ExifTags
@@ -65,12 +54,12 @@ except ImportError:
 
 
 __all__ = [
-    'Base', 'SqlaDataFile', 'SqlaSession',
+    'Base', 'SqlaDataFile', 'SqlaSession', 'make_data_response',
     'data_files_engine', 'data_files_engine_lock', 'create_data_file',
-    'save_data_file', 'get_data_file', 'get_data_file_data',
+    'save_data_file', 'get_data_file', 'remove_data_file', 'get_data_file_data',
     'get_data_file_db', 'get_data_file_fits', 'get_data_file_path',
     'get_exp_length', 'get_gain', 'get_image_time', 'get_phot_cal',
-    'get_root', 'get_subframe', 'import_data_file',
+    'get_root', 'get_subframe', 'import_data_file', 'get_session_id',
     'convert_exif_field',
 ]
 
@@ -962,7 +951,7 @@ def make_data_response(data, status_code=200):
     raise errors.NotAcceptedError(accepted_mimetypes=accepted_mimetypes)
 
 
-def _get_session_id(adb):
+def get_session_id(adb):
     """
     Helper function used by resource handlers to retrieve session ID from
     request arguments and check that the session (if any) exists
@@ -985,5 +974,3 @@ def _get_session_id(adb):
             'session_id', 'Unknown session "{}"'.format(session_id),
             404)
     return session.id
-
-

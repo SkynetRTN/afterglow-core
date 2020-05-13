@@ -1,21 +1,14 @@
-#TODO remove unused imports
 """
 Afterglow Core: image data file photometry
 """
 
 from __future__ import absolute_import, division, print_function
-from flask import request
 from numpy import array, sqrt
-from astropy.wcs import WCS
 
 from skylib.photometry.aperture import aperture_photometry
 from skylib.extraction.centroiding import centroid_iraf
 
-from .. import app, auth, errors, json_response
 from ..models.photometry import Photometry
-from ..errors.data_file import MissingWCSError
-from .data_files import (
-    get_exp_length, get_gain, get_data_file, get_phot_cal)
 
 
 __all__ = ['get_photometry']
@@ -117,5 +110,3 @@ def get_photometry(data, texp, gain, phot_cal, x, y, a, b=None, theta=0,
         background=source['background'],
         background_rms=source['background_rms'],
     )
-
-

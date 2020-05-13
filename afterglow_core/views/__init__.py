@@ -1,6 +1,7 @@
-from __future__ import absolute_import, division, print_function
+"""
+Afterglow Core: subpackage containing all Flask app routes
+"""
 
 from .api import *
 from .default import *
-from .users import *
 from .oauth2 import *

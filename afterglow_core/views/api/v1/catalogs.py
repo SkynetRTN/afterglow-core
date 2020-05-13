@@ -1,14 +1,16 @@
-#TODO remove unused imports
-from __future__ import absolute_import, division, print_function
+"""
+Afterglow Core: API v1 catalog views
+"""
 
-from . import url_prefix
-from .... import app, json_response, plugins
+from .... import app, json_response
 from ....auth import auth_required
-from ....errors.catalog import UnknownCatalogError
 from ....resources.catalogs import catalogs
+from ....errors.catalog import UnknownCatalogError
+from . import url_prefix
 
 
 resource_prefix = url_prefix + 'catalogs/'
+
 
 @app.route(resource_prefix[:-1])
 @app.route(resource_prefix + '<name>')

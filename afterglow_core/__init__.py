@@ -1,6 +1,3 @@
-# TODO Improve organization of views, errors, db, and other files
-# TODO Add database structure and management pages for API Token used in scripted access
-
 """
 Afterglow Core: main app package
 """
@@ -29,10 +26,7 @@ else:
     from urllib.parse import quote
 
 
-__all__ = [
-    '__version__', 'url_prefix',
-    'app', 'json_response',
-]
+__all__ = ['app', 'json_response']
 
 
 class AfterglowSchemaEncoder(json.JSONEncoder):
@@ -118,6 +112,6 @@ if app.config.get('OAUTH_CLIENTS'):
     from . import oauth2
     oauth2.init_oauth()
 
-# Define API resources.
+# Define API resources and endpoints
 from .resources import *
 from .views import *

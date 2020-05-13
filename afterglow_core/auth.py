@@ -148,7 +148,8 @@ def auth_required(fn, *roles, **kwargs):
 
             # Update access cookie if present in request
             token_sig = request.cookies.get('afterglow_core_access_token_sig')
-            token_hdr_payload = request.cookies.get('afterglow_core_access_token')
+            token_hdr_payload = request.cookies.get(
+                'afterglow_core_access_token')
             if token_sig and token_hdr_payload:
                 result = set_access_cookies(
                     result, token_hdr_payload + '.' + token_sig)
@@ -285,11 +286,12 @@ def init_auth():
     from flask import _request_ctx_stack
     from flask_security import Security, current_user as _current_user
     from .plugins import load_plugins
-    from .auth_plugins import AuthnPluginBase, OAuthServerPluginBase, HttpAuthPluginBase
+    from .auth_plugins import (
+        AuthnPluginBase, OAuthServerPluginBase, HttpAuthPluginBase)
 
     # noinspection PyGlobalUndefined
-    global oauth_plugins, http_auth_plugins, authenticate, security, current_user, \
-        set_access_cookies, clear_access_cookies
+    global oauth_plugins, http_auth_plugins, authenticate, security, \
+        current_user, set_access_cookies, clear_access_cookies
 
     current_user = _current_user
 
@@ -436,9 +438,10 @@ def init_auth():
         app.config['AUTH_PLUGINS'])
 
     for name, plugin in authn_plugins.items():
-        if isinstance(plugin, OAuthServerPluginBase): oauth_plugins[name] = plugin
-        elif isinstance(plugin, HttpAuthPluginBase): http_auth_plugins[name] = plugin
-        
+        if isinstance(plugin, OAuthServerPluginBase):
+            oauth_plugins[name] = plugin
+        elif isinstance(plugin, HttpAuthPluginBase):
+            http_auth_plugins[name] = plugin
 
     # Initialize security subsystem
     app.config.setdefault('SECURITY_TOKEN_MAX_AGE', None)

@@ -1,13 +1,8 @@
-#TODO remove unused imports
 """
 Afterglow Core: catalog endpoint
 """
 
-from __future__ import absolute_import, division, print_function
-
-from .. import app, json_response, plugins
-from ..auth import auth_required
-from ..errors.catalog import UnknownCatalogError
+from .. import plugins
 from . import catalog_plugins
 
 

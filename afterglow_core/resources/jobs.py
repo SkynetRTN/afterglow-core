@@ -67,7 +67,7 @@ except ImportError:
     from Crypto.Cipher import AES
 
 
-__all__ = []
+__all__ = ['init_jobs', 'job_server_request']
 
 
 # Read/write lock by Fazal Majid

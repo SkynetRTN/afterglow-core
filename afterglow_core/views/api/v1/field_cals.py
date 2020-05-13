@@ -1,12 +1,17 @@
-#TODO remove unused imports
+"""
+Afterglow Core: API v1 field cal views
+"""
+
 from flask import request
 
-from . import url_prefix
 from .... import app, auth, json_response
+from ....resources.field_cals import SqlaFieldCal
+from ....resources.data_files import get_data_file_db
 from ....models.field_cal import FieldCal
 from ....errors import MissingFieldError
 from ....errors.field_cal import UnknownFieldCalError, DuplicateFieldCalError
-from ....resources.field_cals import SqlaFieldCal, get_data_file_db
+from . import url_prefix
+
 
 resource_prefix = url_prefix + 'field-cals/'
 

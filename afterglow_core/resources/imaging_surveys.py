@@ -1,24 +1,7 @@
-#TODO remove unused imports
 """
 Afterglow Core: access to the various imaging surveys via SkyView
 (skyview.gsfc.nasa.gov)
 """
-
-from __future__ import absolute_import, division, print_function
-
-from astropy import units as u
-from astropy.coordinates import Angle
-from astroquery.skyview import SkyView
-from flask import Response, request
-from io import BytesIO
-
-from skylib.io.conversion import get_image
-
-from .. import app, json_response
-from ..auth import auth_required
-from ..errors import MissingFieldError, NotAcceptedError, ValidationError
-from ..errors.imaging_survey import (
-    UnknownSurveyError, SkyViewQueryError, NoSurveyDataError)
 
 
 __all__ = ['default_size', 'survey_scales']

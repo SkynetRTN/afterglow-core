@@ -1,21 +1,14 @@
-#TODO remove unused imports
 """
 Afterglow Core: field-cals resource
 """
 
-from __future__ import absolute_import, division, print_function
-
 from sqlalchemy import Column, Float, Integer, String
-from flask import request
 
-from .. import app, auth, json_response
 from ..models.field_cal import FieldCal
-from ..errors import MissingFieldError
-from ..errors.field_cal import UnknownFieldCalError, DuplicateFieldCalError
+from ..errors.field_cal import UnknownFieldCalError
 from .data_files import Base, get_data_file_db
 
 try:
-    # noinspection PyUnresolvedReferences
     from alembic import config as alembic_config, context as alembic_context
     from alembic.script import ScriptDirectory
     from alembic.runtime.environment import EnvironmentContext
@@ -24,7 +17,7 @@ except ImportError:
     alembic_config = alembic_context = None
 
 
-__all__ = ['get_field_cal']
+__all__ = ['SqlaFieldCal', 'get_field_cal']
 
 
 class SqlaFieldCal(Base):
@@ -65,5 +58,3 @@ def get_field_cal(user_id, id_or_name):
     if field_cal is None:
         raise UnknownFieldCalError(id=id_or_name)
     return FieldCal.from_db(field_cal)
-
-

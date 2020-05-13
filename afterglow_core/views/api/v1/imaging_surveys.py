@@ -1,5 +1,6 @@
-#TODO remove unused imports
-from __future__ import absolute_import, division, print_function
+"""
+Afterglow Core: API v1 imaging survey views
+"""
 
 import sys
 
@@ -11,13 +12,13 @@ from io import BytesIO
 
 from skylib.io.conversion import get_image
 
-from . import url_prefix
 from .... import app, json_response
 from ....auth import auth_required
+from ....resources.imaging_surveys import survey_scales, default_size
 from ....errors import MissingFieldError, NotAcceptedError, ValidationError
 from ....errors.imaging_survey import (
     UnknownSurveyError, SkyViewQueryError, NoSurveyDataError)
-from ....resources.imaging_surveys import survey_scales, default_size
+from . import url_prefix
 
 
 resource_prefix = url_prefix + 'imaging-surveys/'
