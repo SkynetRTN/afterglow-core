@@ -1,4 +1,3 @@
-#remove 
 """
 Afterglow Core: job resources
 
@@ -64,16 +63,8 @@ try:
     from Cryptodome.Cipher import AES
 except ImportError:
     # Fall back to pycryptodome
-    try:
-        # noinspection PyProtectedMember
-        from Crypto import Random, __version__
-        from Crypto.Cipher import AES
-        if int(__version__.split('.')[0]) < 3:
-            # This is actually pycrypto, which is not supported
-            Random = AES = None
-        del __version__
-    except (ImportError, AttributeError):
-        Random = AES = None
+    from Crypto import Random
+    from Crypto.Cipher import AES
 
 
 __all__ = []
@@ -1218,13 +1209,8 @@ def init_jobs():
 
     # Initialize message encryption
     if app.config.get('JOB_SERVER_ENCRYPTION', True):
-        if Random is None or AES is None:
-            app.logger.warn(
-                'Job server encryption not enabled, please install '
-                'pycryptodome or pycryptodomex')
-        else:
-            job_server_key = os.urandom(32)
-            job_server_iv = Random.new().read(AES.block_size)
+        job_server_key = os.urandom(32)
+        job_server_iv = Random.new().read(AES.block_size)
 
     # Start job server process
     notify_queue = Queue()
