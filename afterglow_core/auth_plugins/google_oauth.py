@@ -1,17 +1,12 @@
 from __future__ import absolute_import, division, print_function
 
-import sys
+import base64
 import json
+
 import requests
 
-from . import OAuthServerPluginBase, OAuthToken, AuthnPluginUser, base64_decode
+from . import OAuthServerPluginBase, OAuthToken, AuthnPluginUser
 
-if sys.version_info.major < 3:
-    # noinspection PyCompatibility
-    from urlparse import urljoin
-else:
-    # noinspection PyCompatibility,PyUnresolvedReferences
-    from urllib.parse import urljoin
 
 class GoogleOAuthPlugin(OAuthServerPluginBase):
     """
@@ -49,21 +44,19 @@ class GoogleOAuthPlugin(OAuthServerPluginBase):
             client_id=client_id,
             client_secret=client_secret)
 
-    def get_username(self, access_token, refresh_token, expires):
+    @staticmethod
+    def get_user_profile(token: OAuthToken):
         """
-        Return the user's Google email address given the access token
+        Return the user's Skynet username given the access token
 
-        :param str access_token: provider API access token
-        :param str | None refresh_token: refresh token
-        :param datetime.datetime | None expires: UTC time of access token
-            expiration
+        :param token: provider API token object
 
-        :return: username of the authorized user
-        :rtype: str
+        :return: user profile
+        :rtype: OAuthUserProfile
         """
         # Decode the access token (which is a JWT) and extract the email
-        s = access_token[:access_token.rfind('.')]
-        s = base64_decode(s + '='*((4 - len(s) % 4) % 4))
+        s = token.access[:token.access.rfind('.')]
+        s = base64.decodebytes(s + '='*((4 - len(s) % 4) % 4))
 
         # Decode header
         i = 1
@@ -88,12 +81,11 @@ class GoogleOAuthPlugin(OAuthServerPluginBase):
         user = requests.get(
             'https://www.googleapis.com/oauth2/v1/userinfo',
             headers={
-                'Authorization': 'Bearer {}'.format(access_token),
+                'Authorization': 'Bearer {}'.format(token.access),
             }).json()
 
         pf = AuthnPluginUser()
         pf.id = user['email']
         pf.email = user['email']
-        
-        return pf
 
+        return pf

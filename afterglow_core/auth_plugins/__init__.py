@@ -5,11 +5,8 @@ An OpenAuth2 plugin must subclass :class:`OAuthPluginBase` and implement its
 methods.
 """
 
-from __future__ import absolute_import, division, print_function
-
 import sys
 import requests
-import base64
 import json
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
@@ -23,14 +20,11 @@ from ..models import Resource
 from ..errors.auth import NotAuthenticatedError
 
 
-__all__ = ['AuthnPluginBase', 'AuthnPluginUser', 'HttpPluginBase', 'OAuthPluginBase', 'OAuthToken', 'base64_decode']
-
-
-if sys.version_info < (3, 1):
-    # noinspection PyDeprecation
-    base64_decode = base64.decodestring
-else:
-    base64_decode = base64.decodebytes
+__all__ = [
+    'AuthnPluginBase', 'AuthnPluginUser',
+    'HttpAuthPluginBase', 'OAuthServerPluginBase',
+    'OAuthToken',
+]
 
 
 if app.config.get('DEBUG'):
@@ -58,15 +52,13 @@ if app.config.get('DEBUG'):
 #     type = String(default=None)
 
 #     def __init__(self, id=None):
-        
+
 #         super(AuthzPluginBase, self).__init__()
 
 #         if id is None:
 #             self.id = self.name
 #         else:
 #             self.id = id
-
-    
 
 
 class AuthnPluginBase(Resource):
@@ -80,10 +72,8 @@ class AuthnPluginBase(Resource):
     description = String(default=None)
     icon = String(default=None)
 
-
     def __init__(self, id=None, description=None, icon=None,
                  register_users=None):
-        
         super(AuthnPluginBase, self).__init__()
 
         if id is None:
@@ -113,8 +103,9 @@ class HttpAuthPluginBase(AuthnPluginBase):
     def __init__(self, id=None, description=None, icon=None,
                  register_users=None):
 
-        super(HttpAuthPluginBase, self).__init__(id=id, description=description,
-            icon=icon, register_users=register_users)
+        super(HttpAuthPluginBase, self).__init__(
+            id=id, description=description, icon=icon,
+            register_users=register_users)
 
         self.type = 'http'
 
@@ -131,8 +122,6 @@ class HttpAuthPluginBase(AuthnPluginBase):
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='get_user')
-
-        
 
 
 class AuthnPluginUser:
@@ -195,8 +184,9 @@ class OAuthServerPluginBase(AuthnPluginBase):
         :param dict access_token_params: additional parameters for token
             exchange
         """
-        super(OAuthServerPluginBase, self).__init__(id=id, description=description,
-            icon=icon, register_users=register_users)
+        super(OAuthServerPluginBase, self).__init__(
+            id=id, description=description, icon=icon,
+            register_users=register_users)
 
         self.type = 'oauth_server'
 
