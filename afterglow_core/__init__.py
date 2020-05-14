@@ -101,16 +101,13 @@ def resolve_request_body():
     # noinspection PyPropertyAccess
     request.args = CombinedMultiDict(ds)
 
+#oauth2 must be initialized first since it holds mem_db
+from . import oauth2
+oauth2.init_oauth()
 
-# Initialize the user authentication engine
-if app.config.get('AUTH_ENABLED'):
-    from . import auth
-    auth.init_auth()
+from . import auth
+auth.init_auth()
 
-# Initialize OAuth2 server if enabled
-if app.config.get('OAUTH_CLIENTS'):
-    from . import oauth2
-    oauth2.init_oauth()
 
 # Define API resources and endpoints
 from .resources import *

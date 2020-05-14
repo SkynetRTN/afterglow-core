@@ -14,7 +14,7 @@ from ..errors.auth import (
     NotAuthenticatedError, NotInitializedError, UnknownAuthMethodError)
 from ..errors.oauth2 import UnknownClientError
 from ..auth import (
-    auth_required, create_token, oauth_plugins, set_access_cookies)
+    auth_required, oauth_plugins, set_access_cookies)
 from ..oauth2 import oauth_clients, oauth_server
 from ..users import UserClient
 
@@ -116,10 +116,8 @@ def oauth2_authorized(plugin_id):
     next_url = state.get('next')
     if not next_url:
         next_url = '/'
-    expires_delta = app.config.get('ACCESS_TOKEN_EXPIRES')
-    access_token = create_token(
-        user.id, expires_delta, dict(method=oauth_plugin.name))
-    return set_access_cookies(redirect(next_url), access_token)
+    request.user = user
+    return set_access_cookies(redirect(next_url))
 
 
 @app.route('/oauth2/consent', methods=['GET', 'POST'])

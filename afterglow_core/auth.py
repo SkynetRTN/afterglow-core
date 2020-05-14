@@ -18,23 +18,26 @@ retrieved via :func:`auth_plugins` associated with the "auth" endpoint.
 
 from __future__ import absolute_import, division, print_function
 
+import secrets
 import os
 import errno
 import uuid
 from datetime import datetime, timedelta
 from functools import wraps
+import time
 
 import jwt
 from flask import request, make_response, redirect, url_for
 
 from . import app
 from .errors.auth import NotAuthenticatedError
-from .users import AnonymousUser, Role, User, user_datastore
+from .users import AnonymousUser, Role, User, user_datastore, db
+from .oauth2 import OAuth2Token, mem_db
 
 
 __all__ = [
     'oauth_plugins', 'auth_required', 'authenticate', 'security',
-    'current_user', 'anonymous_user', 'jwt_manager', 'create_token',
+    'current_user', 'anonymous_user', 'jwt_manager',
     'set_access_cookies', 'clear_access_cookies',
 ]
 
@@ -147,12 +150,10 @@ def auth_required(fn, *roles, **kwargs):
                 result = make_response(result)
 
             # Update access cookie if present in request
-            token_sig = request.cookies.get('afterglow_core_access_token_sig')
-            token_hdr_payload = request.cookies.get(
-                'afterglow_core_access_token')
-            if token_sig and token_hdr_payload:
-                result = set_access_cookies(
-                    result, token_hdr_payload + '.' + token_sig)
+            access_token = request.cookies.get('afterglow_core_access_token')
+            
+            if access_token:
+                result = set_access_cookies(result, access_token)
 
             return result
         finally:
@@ -169,91 +170,6 @@ def auth_required(fn, *roles, **kwargs):
                 pass
 
     return wrapper
-
-
-def encode_jwt(additional_token_data, expires_delta):
-    """
-    Creates a JWT with the optional user data
-
-    :param dict additional_token_data: additional data to add to the JWT
-    :param datetime.datetime expires_delta: token expiration time;
-        False = never expire
-
-    :return: encoded JWT
-    :rtype: str
-    """
-    now = datetime.utcnow()
-    token_data = {
-        'iat': now,
-        'nbf': now,
-        'jti': str(uuid.uuid4()),
-    }
-
-    # If expires_delta is False, the JWT should never expire
-    # and the 'exp' claim is not set.
-    if expires_delta:
-        token_data['exp'] = now + expires_delta
-
-    token_data.update(additional_token_data)
-    return jwt.encode(
-        token_data, app.config['SECRET_KEY'], algorithm='HS256').decode('utf-8')
-
-
-def decode_jwt(encoded_token):
-    """
-    Decodes an encoded JWT
-
-    :param str encoded_token: The encoded JWT string to decode
-
-    :return: dictionary containing contents of the JWT
-    :rtype: dict
-    """
-    # This call verifies the ext, iat, and nbf claims
-    data = jwt.decode(
-        encoded_token, app.config['SECRET_KEY'], algorithms=['HS256'])
-
-    # Make sure that any custom claims we expect in the token are present
-    if 'jti' not in data:
-        raise NotAuthenticatedError(error_msg='Missing claim: jti')
-    if 'identity' not in data:
-        raise NotAuthenticatedError(
-            error_msg='Missing claim: {}'.format('identity'))
-    if 'type' not in data or data['type'] not in ('refresh', 'access'):
-        raise NotAuthenticatedError(
-            error_msg='Missing or invalid claim: type')
-    if data['type'] == 'access':
-        if 'user_claims' not in data:
-            data['user_claims'] = {}
-
-    return data
-
-
-def create_token(identity, expires_delta=None, user_claims=None,
-                 token_type='access'):
-    """
-    Creates a new encoded (utf-8) access or refresh token.
-
-    :param identity: identifier for who this token is for (ex, username);
-        must be json serializable.
-    :param datetime.timedelta expires_delta: how far in the future this
-        token should expire (set to False to disable expiration)
-    :param dict user_claims: custom claims to include in this token; must be
-        json serializable
-    :param str token_type: token type: "access" or "refresh"
-
-    :return: encoded access/refresh token
-    :rtype: str
-    """
-    token_data = {
-        'identity': identity,
-        'type': token_type,
-    }
-
-    # Don't add extra data to the token if user_claims is empty.
-    if user_claims:
-        token_data['user_claims'] = user_claims
-
-    return encode_jwt(token_data, expires_delta)
 
 
 def set_access_cookies(*_, **__):
@@ -297,13 +213,7 @@ def init_auth():
 
     def _set_access_cookies(response, access_token=None):
         """
-        Adds two new cookies to response. The signature cookie is HTTP-Only (not
-        accessible to the client-side JS and expires with the session. The
-        second cookie contains the access token header and payload and expires
-        after configured idle period.
-
-        See: https://medium.com/lightrail/getting-token-authentication-right-
-        in-a-stateless-single-page-application-57d0c6474e3
+        Adds session authorization cookie.
 
         :param flask.Response response: Flask response object
         :param str | None access_token: encoded access token; if None, create
@@ -313,20 +223,35 @@ def init_auth():
         :rtype: flask.Response
         """
 
-        expires_delta = app.config.get('ACCESS_TOKEN_EXPIRES')
+        expires_in = app.config.get('COOKIE_TOKEN_EXPIRES_IN', 86400)
         if not access_token:
-            method = _request_ctx_stack.top.auth_method
-            access_token = create_token(
-                current_user.id, expires_delta, dict(method=method))
+            access_token = secrets.token_hex(20)
 
-        hdr_payload, signature = access_token.rsplit('.', 1)
+            token = OAuth2Token(
+                token_type='cookie',
+                access_token=access_token,
+                user_id=request.user.id,
+            )
+            mem_db.add(token)
+            mem_db.flush()
+        else:
+            token = mem_db.query(OAuth2Token).filter_by(
+                access_token=access_token,
+                user_id=request.user.id,
+                token_type='cookie',
+                revoked=False).one_or_none()
+            if not token or time.time() > token.get_expires_at():
+                clear_access_cookies()
+                return response
+        
+        token.expires_in = expires_in
+        token.issued_at = time.time()
+        mem_db.commit()
+
         response.set_cookie(
-            'afterglow_core_access_token', value=hdr_payload,
-            max_age=expires_delta.total_seconds() if expires_delta else None,
+            'afterglow_core_access_token', value=token.access_token,
+            max_age=expires_in,
             secure=False, httponly=False)
-        response.set_cookie(
-            'afterglow_core_access_token_sig', value=signature, max_age=None, secure=False,
-            httponly=True)
 
         return response
 
@@ -344,7 +269,6 @@ def init_auth():
         :return: Flask response with access token removed from cookies
         :rtype: flask.Response
         """
-        response.set_cookie('afterglow_core_access_token_sig', '', expires=0)
         response.set_cookie('afterglow_core_access_token', '', expires=0)
 
         return response
@@ -371,12 +295,12 @@ def init_auth():
         if token_hdr:
             parts = token_hdr.split()
             if parts[0] == 'Bearer' and len(parts) == 2:
-                tokens.append(('headers', parts[1]))
+                tokens.append(('oauth2', parts[1]))
+                tokens.append(('personal', parts[1]))
 
-        token_sig = request.cookies.get('afterglow_core_access_token_sig')
-        token_hdr_payload = request.cookies.get('afterglow_core_access_token')
-        if token_sig and token_hdr_payload:
-            tokens.append(('cookies', token_hdr_payload + '.' + token_sig))
+        access_token = request.cookies.get('afterglow_core_access_token')
+        if access_token:
+            tokens.append(('cookie', access_token))
 
         if not tokens:
             raise NotAuthenticatedError(
@@ -384,40 +308,24 @@ def init_auth():
 
         user = None
         error_msgs = []
-        for token_source, token in tokens:
+        for token_type, access_token in tokens:
             try:
-                token_decoded = decode_jwt(token)
+                token = mem_db.query(OAuth2Token).filter_by(
+                    access_token=access_token,
+                    token_type=token_type,
+                    revoked=False).one_or_none()
+                if not token or time.time() > token.get_expires_at():
+                    continue
 
-                if token_decoded.get('type') != request_type:
-                    raise ValueError('Expected {} token'.format(request_type))
-
-                user_id = token_decoded.get('identity')
-                if not user_id:
-                    raise ValueError('Missing username')
-
-                # Make the user's auth method available via the request context
-                # stack
-                method = token_decoded.get('user_claims', {}).get('method')
-                if method:
-                    _request_ctx_stack.top.auth_method = method
-
-                # Get the user from db
-                user = User.query.filter_by(id=user_id).one_or_none()
+                user = token.user    
+                
                 if user is None:
-                    raise ValueError('Unknown username')
+                    raise ValueError('Unknown user ID')
                 if not user.active:
                     raise ValueError('The user is deactivated')
 
-                # Check roles if any
-                if roles:
-                    if isinstance(roles, str) or isinstance(roles, type(u'')):
-                        roles = [roles]
-                    for role in roles:
-                        if not Role.query.filter_by(
-                                name=role).one_or_none() in user.roles:
-                            raise ValueError('"{}" role required'.format(role))
             except Exception as e:
-                error_msgs.append('{} (source: {})'.format(e, token_source))
+                error_msgs.append('{} (source: {})'.format(e, token_type))
             else:
                 break
 

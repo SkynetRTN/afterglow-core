@@ -4,8 +4,8 @@ Afterglow Core: API v1 data provider views
 
 from flask import request
 
-from .... import app, errors, json_response, oauth_plugins
-from ....auth import auth_required, current_user
+from .... import app, errors, json_response
+from ....auth import auth_required, current_user, oauth_plugins
 from ....resources.data_providers import providers
 from ....errors.auth import NotAuthenticatedError
 from ....errors.data_provider import (

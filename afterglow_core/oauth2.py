@@ -28,11 +28,12 @@ time.
 
 from __future__ import absolute_import, division, print_function
 
+import secrets
 import sys
 import time
 from typing import Optional
 
-from sqlalchemy import Column, Integer, create_engine
+from sqlalchemy import Column, Integer, Text, String, create_engine
 import sqlalchemy.orm.session
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import StaticPool
@@ -44,7 +45,6 @@ from authlib.integrations.flask_oauth2 import AuthorizationServer
 
 from . import app
 from .users import User
-from .auth import create_token
 
 if sys.version_info.major < 3:
     # noinspection PyUnresolvedReferences,PyCompatibility
@@ -56,7 +56,7 @@ else:
 
 __all__ = [
     'init_oauth', 'oauth_clients', 'oauth_server', 'create_access_token',
-    'create_refresh_token',
+    'create_refresh_token', 'mem_db'
 ]
 
 
@@ -201,7 +201,7 @@ class OAuth2Client(ClientMixin):
 Base = declarative_base()
 memory_engine = None
 memory_session = None  # type: Optional[sqlalchemy.orm.session.Session]
-
+mem_db = None
 
 class OAuth2AuthorizationCode(Base, OAuth2AuthorizationCodeMixin):
     __tablename__ = 'oauth_codes'
@@ -220,8 +220,10 @@ class OAuth2Token(Base, OAuth2TokenMixin):
     """
     __tablename__ = 'oauth_tokens'
 
+    token_type = Column(String(40), default='oauth2')  #override Mixin to set default=oauth2
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, nullable=False)
+    note = Column(Text, default='')
 
     @property
     def user(self):
@@ -293,16 +295,10 @@ oauth_server = None
 
 
 def create_access_token(req):
-    return create_token(
-        req.user.id, app.config.get('ACCESS_TOKEN_EXPIRES'),
-        dict(method='oauth2'))
-
+    return secrets.token_hex(20)
 
 def create_refresh_token(req):
-    return create_token(
-        req.user.id, app.config.get('REFRESH_TOKEN_EXPIRES'),
-        dict(method='oauth2'), 'refresh')
-
+    return secrets.token_hex(20)
 
 def init_oauth():
     """
@@ -310,7 +306,7 @@ def init_oauth():
 
     :return: None
     """
-    global memory_engine, memory_session, oauth_server
+    global memory_engine, memory_session, oauth_server, mem_db
 
     for client_def in app.config['OAUTH_CLIENTS']:
         oauth_clients[client_def.get('client_id')] = OAuth2Client(**client_def)
@@ -321,6 +317,7 @@ def init_oauth():
     Base.metadata.create_all(bind=memory_engine)
     memory_session = sqlalchemy.orm.scoped_session(
         sqlalchemy.orm.session.sessionmaker(bind=memory_engine))()
+    mem_db = memory_session
 
     # Configure Afterglow OAuth2 tokens
     app.config['OAUTH2_ACCESS_TOKEN_GENERATOR'] = create_access_token

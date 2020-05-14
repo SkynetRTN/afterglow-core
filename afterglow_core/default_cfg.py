@@ -34,6 +34,8 @@ REMOTE_ADMIN = False
 # OAuth2 bearer token expiration time in seconds
 OAUTH2_PROVIDER_TOKEN_EXPIRES_IN = 3600
 
+# Cookie token expiration time in seconds
+COOKIE_TOKEN_EXPIRES_IN = 86400
 
 ################################################################################
 # Data provider options

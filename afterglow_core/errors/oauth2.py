@@ -32,3 +32,14 @@ class MissingClientIdError(AfterglowError):
     code = 400
     subcode = 201
     message = 'Missing client ID'
+
+class UnknownTokenError(AfterglowError):
+    """
+    DELETEing /users/tokens/<id> with invalid id
+
+    Extra attributes::
+        None
+    """
+    code = 400
+    subcode = 202
+    message = 'Unknown token error'
