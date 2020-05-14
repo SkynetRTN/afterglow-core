@@ -22,14 +22,9 @@ def upgrade():
         sa.Column('min_snr', sa.Float(), server_default='0'),
         sa.Column('max_snr', sa.Float(), server_default='0'),
         sa.Column('source_match_tol', sa.Float()),
+        sa.CheckConstraint('length(name) <= 1024'),
         sqlite_autoincrement=True,
     )
-
-    with op.batch_alter_table(
-            'field_cals',
-            table_args=(sa.CheckConstraint('length(name) <= 1024'),),
-            table_kwargs=dict(sqlite_autoincrement=True)):
-        pass
 
 
 def downgrade():

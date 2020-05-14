@@ -42,7 +42,6 @@ setup(
         'Pillow == 7.1.2',
         'plaster_pastedeploy == 0.7',
         'pycryptodome == 3.9.7',
-        'PyJWT == 1.7.1',
         'python_dateutil == 2.8.1',
         'rawpy == 0.14.0',
         'requests == 2.23.0',

@@ -12,7 +12,7 @@ __all__ = [
     'HttpAuthFailedError', 'InactiveUserError', 'InitPageNotAvailableError',
     'LocalAccessRequiredError', 'NoAdminRegisteredError',
     'NotAuthenticatedError', 'NotInitializedError', 'UnknownAuthMethodError',
-    'UnknownUserError',
+    'UnknownUserError', 'UnknownTokenError',
 ]
 
 
@@ -197,3 +197,15 @@ class NotInitializedError(AuthError):
     """
     subcode = 114
     message = 'Afterglow Core has not yet been initialized'
+
+
+class UnknownTokenError(AfterglowError):
+    """
+    DELETEing /users/tokens/<id> with invalid id
+
+    Extra attributes::
+        None
+    """
+    code = 400
+    subcode = 115
+    message = 'Unknown token error'

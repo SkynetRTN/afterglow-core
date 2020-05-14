@@ -10,7 +10,7 @@ from marshmallow.fields import Integer, List, Nested, String
 from . import AfterglowSchema, Boolean, DateTime
 
 
-__all__ = ['RoleSchema', 'UserSchema']
+__all__ = ['RoleSchema', 'UserSchema', 'TokenSchema']
 
 
 class RoleSchema(AfterglowSchema):
@@ -31,3 +31,13 @@ class UserSchema(AfterglowSchema):
     roles = List(
         Nested(RoleSchema, only=['name']))  # type: ListType[RoleSchema]
     settings = String()  # type: str
+
+
+class TokenSchema(AfterglowSchema):
+    id = Integer()  # type: int
+    user_id = Integer()  # type: int
+    token_type = String()  # type: str
+    access_token = String()  # type: str
+    issued_at = Integer()  # type: int
+    expires_in = Integer()  # type: int
+    note = String()  # type: str

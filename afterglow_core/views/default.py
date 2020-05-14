@@ -2,22 +2,15 @@
 Afterglow Core: top-level and initialization routes
 """
 
-# noinspection PyProtectedMember
-from flask import (
-    request, render_template, redirect, url_for, _request_ctx_stack)
-from flask_security.utils import hash_password, verify_password
-import marshmallow
+from flask import request, render_template
+from flask_security.utils import hash_password
 
 from .. import app, json_response
-from ..auth import (
-    auth_required, clear_access_cookies, oauth_plugins,
-    set_access_cookies)
+from ..auth import auth_required
 from ..users import User, Role, db
 from ..models.user import UserSchema
-from ..errors import MissingFieldError, ValidationError
-from ..errors.auth import (
-    HttpAuthFailedError, InitPageNotAvailableError,
-    LocalAccessRequiredError, NotInitializedError)
+from ..errors import MissingFieldError
+from ..errors.auth import InitPageNotAvailableError, LocalAccessRequiredError
 
 
 __all__ = []
@@ -93,9 +86,4 @@ def initialize():
             db.session.rollback()
             raise
         else:
-            res = UserSchema().dump(u)
-            if marshmallow.__version_info__ < (3, 0):
-                res = res[0]
-            return json_response(res, 201)
-
-
+            return json_response(UserSchema().dump(u), 201)

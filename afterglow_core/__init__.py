@@ -2,17 +2,13 @@
 Afterglow Core: main app package
 """
 
-from __future__ import absolute_import, division, print_function
-
 import sys
 import datetime
 import json
 import os
 
 from flask_cors import CORS
-# noinspection PyProtectedMember
-from marshmallow import (
-    missing, __version_info__ as marshmallow_version)
+from marshmallow import missing
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
 from flask import Flask, Response
 
@@ -37,10 +33,7 @@ class AfterglowSchemaEncoder(json.JSONEncoder):
         if isinstance(obj, type(missing)):
             return None
         if isinstance(obj, AfterglowSchema):
-            res = obj.dump(obj)
-            if marshmallow_version < (3, 0):
-                res = res[0]
-            return res
+            return obj.dump(obj)
         if isinstance(obj, datetime.datetime):
             return obj.isoformat(' ')
         return super(AfterglowSchemaEncoder, self).default(obj)
@@ -71,7 +64,7 @@ def json_response(obj='', status_code=None, headers=None):
 
 
 app = Flask(__name__)
-cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
+cors = CORS(app, resources={'/api/*': {'origins': '*'}})
 app.config.from_object('afterglow_core.default_cfg')
 app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=True)
 
@@ -81,8 +74,8 @@ if app.config.get('PROFILE'):
     app.config['DEBUG'] = True
     app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[10])
 
-if app.config.get('OAUTH2_ALLOW_HTTP'):
-    os.environ["AUTHLIB_INSECURE_TRANSPORT"] = "1"
+if app.config.get('OAUTH2_ALLOW_HTTP') or app.config.get('DEBUG'):
+    os.environ['AUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 
 @app.before_request
@@ -101,12 +94,11 @@ def resolve_request_body():
     # noinspection PyPropertyAccess
     request.args = CombinedMultiDict(ds)
 
-#oauth2 must be initialized first since it holds mem_db
-from . import oauth2
-oauth2.init_oauth()
 
-from . import auth
-auth.init_auth()
+if app.config.get('AUTH_ENABLED'):
+    # Initialize user authentication and enable non-versioned /users routes
+    # and Afterglow OAuth2 server at /oauth2
+    from . import auth
 
 
 # Define API resources and endpoints

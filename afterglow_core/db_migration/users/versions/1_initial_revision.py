@@ -14,7 +14,7 @@ def upgrade():
     # noinspection PyProtectedMember
     engine = op._proxy.migration_context.connection.engine
 
-    if not engine.dialect.has_table(engine, 'users'):
+    if not engine.dialect.has_table(engine, 'roles'):
         op.create_table(
             'roles',
             sa.Column('id', sa.Integer, primary_key=True),

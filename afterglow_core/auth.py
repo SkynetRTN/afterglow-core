@@ -16,23 +16,19 @@ See :func:`admin_users` for request specs. Registered auth plugins can be
 retrieved via :func:`auth_plugins` associated with the "auth" endpoint.
 """
 
-from __future__ import absolute_import, division, print_function
-
 import secrets
 import os
 import errno
-import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 from functools import wraps
 import time
 
-import jwt
 from flask import request, make_response, redirect, url_for
 
 from . import app
 from .errors.auth import NotAuthenticatedError
-from .users import AnonymousUser, Role, User, user_datastore, db
-from .oauth2 import OAuth2Token, mem_db
+from .users import AnonymousUser, PersistentToken, user_datastore
+from .oauth2 import Token, memory_session
 
 
 __all__ = [
@@ -40,6 +36,7 @@ __all__ = [
     'current_user', 'anonymous_user', 'jwt_manager',
     'set_access_cookies', 'clear_access_cookies',
 ]
+
 
 # Read/create secret key
 keyfile = os.path.join(
@@ -75,13 +72,11 @@ USER_REALM = 'Registered Afterglow Users Only'
 
 
 # noinspection PyUnusedLocal
-def authenticate(roles=None, request_type='access'):
+def authenticate(roles=None):
     """
-    Perform user authentication using the given methods
+    Perform user authentication and return a User object
 
     :param roles: list of authenticated user role IDs or a single role ID
-    :param str request_type: JWT type to expect: "access" (for most resources)
-        or "refresh" (for auth/refresh)
 
     :return: database object for the authenticated user; raises
         :class:`AuthError` on authentication error
@@ -123,20 +118,19 @@ def auth_required(fn, *roles, **kwargs):
     or
         @auth_required('user', 'admin')
     or
-        @auth_required(request_type='refresh')
+        @auth_required(allow_redirect=True)
 
     :param callable fn: function being decorated
     :param roles: one or multiple user role ID(s)
     :param kwargs::
-        request_type: JWT type to expect: "access" (for most resources, default)
-            or "refresh" (for auth/refresh)
+        allow_redirect=True: redirect to login page if not authenticated
 
     :return: decorated resource
     """
     @wraps(fn)
     def wrapper(*args, **kw):
         try:
-            authenticate(roles, **kwargs)
+            authenticate(roles)
         except NotAuthenticatedError:
             if kwargs.get('allow_redirect'):
                 return redirect(url_for('login', next=request.url))
@@ -151,9 +145,9 @@ def auth_required(fn, *roles, **kwargs):
 
             # Update access cookie if present in request
             access_token = request.cookies.get('afterglow_core_access_token')
-            
+
             if access_token:
-                result = set_access_cookies(result, access_token)
+                result = set_access_cookies(result, access_token=access_token)
 
             return result
         finally:
@@ -172,29 +166,34 @@ def auth_required(fn, *roles, **kwargs):
     return wrapper
 
 
-def set_access_cookies(*_, **__):
+# noinspection PyUnusedLocal
+def set_access_cookies(response, access_token=None):
     """
     Set access cookies for browser access
 
-    :return: response
+    :param flask.Response response: original Flask response object
+    :param str | None access_token: encoded access token; if None, create
+        access token automatically
+
+    :return: modified Flask response
     :rtype: flask.response
-
     """
-    return
+    return response
 
 
-def clear_access_cookies(*_, **__):
+def clear_access_cookies(response, **__):
     """
     Clear access cookies for browser access
 
-    :return: response
+    :param flask.Response response: original Flask response object
+
+    :return: modified Flask response
     :rtype: flask.response
-
     """
-    return
+    return response
 
 
-def init_auth():
+def _init_auth():
     """Initialize multi-user mode with authentication plugins"""
     # To reduce dependencies, only import marshmallow, flask-security, and
     # flask-sqlalchemy if user auth is enabled
@@ -216,37 +215,37 @@ def init_auth():
         Adds session authorization cookie.
 
         :param flask.Response response: Flask response object
-        :param str | None access_token: encoded access token; if None, create
-            access token automatically
+        :param str | None access_token: optional access token provided
+            by the client; if None, create access token automatically
 
         :return: Flask response
         :rtype: flask.Response
         """
-
         expires_in = app.config.get('COOKIE_TOKEN_EXPIRES_IN', 86400)
         if not access_token:
-            access_token = secrets.token_hex(20)
-
-            token = OAuth2Token(
+            # Generate a temporary in-memory token
+            token = Token(
                 token_type='cookie',
-                access_token=access_token,
+                access_token=secrets.token_hex(20),
                 user_id=request.user.id,
             )
-            mem_db.add(token)
-            mem_db.flush()
+            memory_session.add(token)
+            memory_session.flush()
         else:
-            token = mem_db.query(OAuth2Token).filter_by(
-                access_token=access_token,
-                user_id=request.user.id,
-                token_type='cookie',
-                revoked=False).one_or_none()
+            # Check that the token provided by the user exists and not expired
+            token = memory_session.query(Token)\
+                .filter_by(
+                    access_token=access_token,
+                    user_id=request.user.id,
+                    token_type='cookie',
+                    revoked=False)\
+                .one_or_none()
             if not token or time.time() > token.get_expires_at():
-                clear_access_cookies()
-                return response
-        
+                return clear_access_cookies(response)
+
         token.expires_in = expires_in
         token.issued_at = time.time()
-        mem_db.commit()
+        db.session.commit()
 
         response.set_cookie(
             'afterglow_core_access_token', value=token.access_token,
@@ -275,14 +274,12 @@ def init_auth():
 
     clear_access_cookies = _clear_access_cookies
 
-    def _authenticate(roles=None, request_type='access', **__):
+    def _authenticate(roles=None):
         """
         Authenticate the user
 
         :param str | list[str] roles: list of authenticated user role IDs
             or a single role ID
-        :param str request_type: JWT type to expect: "access" (for most
-            resources) or "refresh" (for auth/refresh)
 
         :return: database object for the authenticated user; raises
             :class:`AuthError` on authentication error
@@ -310,27 +307,45 @@ def init_auth():
         error_msgs = []
         for token_type, access_token in tokens:
             try:
-                token = mem_db.query(OAuth2Token).filter_by(
-                    access_token=access_token,
-                    token_type=token_type,
-                    revoked=False).one_or_none()
-                if not token or time.time() > token.get_expires_at():
-                    continue
+                if token_type == 'personal':
+                    # Should be an existing permanent token
+                    token = PersistentToken.query.filtger_by(
+                        access_token=access_token,
+                        token_type=token_type).one_or_none()
+                else:
+                    token = memory_session.query(Token).filter_by(
+                        access_token=access_token,
+                        token_type=token_type,
+                        revoked=False).one_or_none()
+                if not token:
+                    raise ValueError('Token does not exist')
+                if time.time() > token.get_expires_at():
+                    raise ValueError('Token expired')
 
-                user = token.user    
-                
+                user = token.user
+
                 if user is None:
                     raise ValueError('Unknown user ID')
                 if not user.active:
                     raise ValueError('The user is deactivated')
 
             except Exception as e:
-                error_msgs.append('{} (source: {})'.format(e, token_type))
+                error_msgs.append('{} (type: {})'.format(e, token_type))
             else:
                 break
 
         if user is None:
             raise NotAuthenticatedError(error_msg='. '.join(error_msgs))
+
+        # Check roles
+        if roles:
+            if isinstance(roles, str):
+                roles = roles.split(',')
+            for role in roles:
+                role = role.strip()
+                if not any(user_role.name == role for user_role in user.roles):
+                    raise NotAuthenticatedError(
+                        error_msg='"{}" role required'.format(role))
 
         # Make the authenticated user object available via `current_user` and
         # request.user
@@ -360,3 +375,7 @@ def init_auth():
     app.config.setdefault('REFRESH_TOKEN_EXPIRES', None)
 
     security = Security(app, user_datastore, register_blueprint=False)
+
+
+if app.config.get('AUTH_ENABLED'):
+    _init_auth()
