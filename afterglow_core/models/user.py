@@ -2,15 +2,15 @@
 Afterglow Core: user schemas
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import List as ListType
 
 from marshmallow.fields import Integer, List, Nested, String
 
-from . import AfterglowSchema, Boolean, DateTime
+from . import AfterglowSchema, Boolean, Date, DateTime
 
 
-__all__ = ['RoleSchema', 'UserSchema', 'TokenSchema']
+__all__ = ['RoleSchema', 'UserSchema', 'TokenSchema', 'UserProfile']
 
 
 class RoleSchema(AfterglowSchema):
@@ -25,6 +25,7 @@ class UserSchema(AfterglowSchema):
     email = String()  # type: str
     first_name = String()  # type: str
     last_name = String()  # type: str
+    birth_date = Date()  # type: date
     active = Boolean()  # type: bool
     created_at = DateTime()  # type: datetime
     modified_at = DateTime()  # type: datetime
@@ -41,3 +42,19 @@ class TokenSchema(AfterglowSchema):
     issued_at = Integer()  # type: int
     expires_in = Integer()  # type: int
     note = String()  # type: str
+
+
+class UserProfile(AfterglowSchema):
+    """User profile data retrieved from auth server"""
+    id = String(default=None)  # type: str
+    username = String(default=None)  # type: str
+    email = String(default=None)  # type: str
+    first_name = String(default=None)  # type: str
+    last_name = String(default=None)  # type: str
+    birth_date = Date(default=None)  # type: date
+
+    @property
+    def full_name(self):
+        return ' '.join(
+            ([self.first_name] if self.first_name else []) +
+            ([self.last_name] if self.last_name else []))

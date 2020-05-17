@@ -5,7 +5,7 @@ Afterglow Core: API v1 data provider views
 from flask import request
 
 from .... import app, errors, json_response
-from ....auth import auth_required, current_user, oauth_plugins
+from ....auth import auth_required, current_user
 from ....resources.data_providers import providers
 from ....errors.auth import NotAuthenticatedError
 from ....errors.data_provider import (
@@ -29,29 +29,32 @@ def check_provider_auth(provider):
 
     :return: None
     """
-    if not oauth_plugins:
+    if not app.config.get('USER_AUTH'):
         # User auth disabled, always succeed
         return
 
     auth_methods = provider.auth_methods
     if not auth_methods:
-        auth_methods = app.config.get('DEFAULT_DATA_PROVIDER_AUTH')
-    if not auth_methods:
         # No specific auth methods requested
         return
 
-    # Retrieve the currently authenticated user's auth method from access token
-    # noinspection PyProtectedMember
-    from flask import _request_ctx_stack
-    try:
-        method = _request_ctx_stack.top.auth_method
-    except Exception:
-        raise NotAuthenticatedError(
-            error_msg='Refresh token does not contain auth method')
-    if method not in auth_methods:
-        raise NotAuthenticatedError(
-            error_msg='Data provider "{}" requires authentication with '
-            'methods: {}'.format(provider.id, ', '.join(auth_methods)))
+    # Check that any of the auth methods requested is present
+    # in any of the user's identities
+    for required_method in auth_methods:
+        if required_method == 'http':
+            # HTTP auth requires username and password being set
+            if current_user.username and current_user.password:
+                return
+            continue
+
+        # For non-HTTP methods, check identities
+        for identity in current_user.identities:
+            if identity.auth_method == required_method:
+                return
+
+    raise NotAuthenticatedError(
+        error_msg='Data provider "{}" requires authentication with either of '
+        'the methods: {}'.format(provider.id, ', '.join(auth_methods)))
 
 
 @app.route(resource_prefix[:-1])

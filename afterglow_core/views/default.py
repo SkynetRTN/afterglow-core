@@ -67,20 +67,22 @@ def initialize():
         if not email:
             raise MissingFieldError('email')
 
-        admin_role = Role.query.filter_by(name='admin').one()
-        user_role = Role.query.filter_by(name='user').one()
-        roles = [admin_role, user_role]
-
         try:
-            u = User()
-            u.username = username
-            u.password = hash_password(password)
-            u.email = email
-            u.active = True
-            u.roles = roles
-
+            u = User(
+                username=username,
+                password=hash_password(password),
+                email=email,
+                first_name=request.args.get('first_name'),
+                last_name=request.args.get('last_name'),
+                birth_date=request.args.get('birth_date'),
+                active=True,
+                roles=[
+                    Role.query.filter_by(name='admin').one(),
+                    Role.query.filter_by(name='user').one(),
+                ],
+                settings=request.args.get('settings'),
+            )
             db.session.add(u)
-            db.session.flush()
             db.session.commit()
         except Exception:
             db.session.rollback()

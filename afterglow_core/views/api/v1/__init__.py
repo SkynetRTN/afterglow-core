@@ -11,7 +11,7 @@ from . import (
     photometry,
 )
 
-from ... import app
+from .... import app
 if app.config.get('AUTH_ENABLED'):
     from . import users
 del app

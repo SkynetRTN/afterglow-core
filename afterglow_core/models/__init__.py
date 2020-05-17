@@ -96,7 +96,7 @@ class AfterglowSchema(Schema):
     uninitialized fields. Serves as a self-contained schema that can both hold
     field values and dump itself to a dict or a JSON string.
     """
-    def __init__(self, _obj=None, **kwargs):
+    def __init__(self, _obj=None, only=None, **kwargs):
         """
         Create a resource class instance
 
@@ -106,10 +106,11 @@ class AfterglowSchema(Schema):
 
         :param _obj: initialize fields from the given object (usually an SQLA
             declarative instance)
+        :param only: see :class:`Schema`
         :param kwargs: keyword arguments are assigned to the corresponding
             instance attributes, including fields
         """
-        super(AfterglowSchema, self).__init__()
+        super(AfterglowSchema, self).__init__(only=only)
 
         if _obj is not None:
             for name, val in self.dump(_obj).items():

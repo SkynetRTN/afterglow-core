@@ -1,11 +1,15 @@
-from __future__ import absolute_import, division, print_function
+"""
+Afterglow Core: Google OAuth authentication plugin
+"""
 
 import base64
 import json
+from typing import Optional
 
 import requests
 
-from . import OAuthServerPluginBase, OAuthToken, AuthnPluginUser
+from . import OAuthServerPluginBase, OAuthToken
+from ..models.user import UserProfile
 
 
 class GoogleOAuthPlugin(OAuthServerPluginBase):
@@ -14,21 +18,25 @@ class GoogleOAuthPlugin(OAuthServerPluginBase):
     """
     name = 'google'
 
-    def __init__(self, id=None, description='Login via Google', icon='google',
-                 register_users=False, client_id=None, client_secret=None,
-                 request_token_params=None):
+    def __init__(self, id: Optional[str] = None,
+                 description: Optional[str] = 'Login via Google',
+                 icon: Optional[str] = 'google_btn_icon.png',
+                 register_users: Optional[bool] = False,
+                 client_id: str = None,
+                 client_secret: str = None,
+                 request_token_params: Optional[dict] = None):
         """
         Initialize Google OAuth2 plugin
 
-        :param str id: plugin ID
-        :param str description: plugin description
-        :param str icon: plugin icon ID used by the client UI
-        :param bool register_users: automatically register authenticated users
+        :param id: plugin ID
+        :param description: plugin description
+        :param icon: plugin icon ID used by the client UI
+        :param register_users: automatically register authenticated users
             if missing from the local user database; overrides
             REGISTER_AUTHENTICATED_USERS
-        :param str client_id: client ID
-        :param str client_secret: client secret
-        :param dict request_token_params: additional token exchange parameters;
+        :param client_id: client ID
+        :param client_secret: client secret
+        :param request_token_params: additional token exchange parameters;
             Google requires at least scope="email", access_type="offline",
             response_type="code", which is the default
         """
@@ -44,15 +52,13 @@ class GoogleOAuthPlugin(OAuthServerPluginBase):
             client_id=client_id,
             client_secret=client_secret)
 
-    @staticmethod
-    def get_user_profile(token: OAuthToken):
+    def get_user(self, token: OAuthToken) -> UserProfile:
         """
-        Return the user's Skynet username given the access token
+        Return the user's Google profile given the access token
 
         :param token: provider API token object
 
         :return: user profile
-        :rtype: OAuthUserProfile
         """
         # Decode the access token (which is a JWT) and extract the email
         s = token.access[:token.access.rfind('.')]
@@ -84,8 +90,9 @@ class GoogleOAuthPlugin(OAuthServerPluginBase):
                 'Authorization': 'Bearer {}'.format(token.access),
             }).json()
 
-        pf = AuthnPluginUser()
-        pf.id = user['email']
-        pf.email = user['email']
+        pf = UserProfile(
+            id=user['email'],
+            email=user['email'],
+        )
 
         return pf

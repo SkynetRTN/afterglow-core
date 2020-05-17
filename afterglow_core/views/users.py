@@ -1,6 +1,7 @@
 """
 Afterglow Core: user routes
 """
+
 import secrets
 
 from flask import request, render_template, redirect, url_for
@@ -59,8 +60,8 @@ def login():
     if not password:
         raise ValidationError('password', 'Password cannot be empty')
 
-    user = User.query.filter(User.username == username).one_or_none()
-    if not user:
+    user = User.query.filter_by(username=username).one_or_none()
+    if user is None:
         raise HttpAuthFailedError()
 
     if not verify_password(password, user.password):
@@ -100,13 +101,9 @@ def tokens(token_id: int = None):
     :rtype: flask.Response
     """
     if request.method == 'GET':
-        personal_tokens = PersistentToken.query.filter_by(
-            token_type='personal', user_id=request.user.id, revoked=False).all()
-
-        res = TokenSchema(only=('id', 'note')).dump(personal_tokens, many=True)
-
         return json_response({
-            'items': res
+            'items': TokenSchema(only=('id', 'note')).dump(
+                request.user.tokens, many=True)
         })
 
     if request.method == 'POST':

@@ -10,6 +10,7 @@ import requests
 import json
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
+from typing import Optional
 
 from marshmallow.fields import Dict, String
 
@@ -17,12 +18,12 @@ from flask import url_for
 
 from .. import app, errors
 from ..models import Resource
+from ..models.user import UserProfile
 from ..errors.auth import NotAuthenticatedError
 
 
 __all__ = [
-    'AuthnPluginBase', 'AuthnPluginUser',
-    'HttpAuthPluginBase', 'OAuthServerPluginBase',
+    'AuthnPluginBase', 'HttpAuthPluginBase', 'OAuthServerPluginBase',
     'OAuthToken',
 ]
 
@@ -42,25 +43,6 @@ if app.config.get('DEBUG'):
     install_opener(build_opener(HTTPSHandler(context=ctx)))
 
 
-# class AuthzPluginBase(Resource):
-#     """
-#     Future Base class for all authorization plugins
-#     """
-
-#     id = String(default=None)
-#     name = String(default=None)
-#     type = String(default=None)
-
-#     def __init__(self, id=None):
-
-#         super(AuthzPluginBase, self).__init__()
-
-#         if id is None:
-#             self.id = self.name
-#         else:
-#             self.id = id
-
-
 class AuthnPluginBase(Resource):
     """
     Base class for all authentication plugins
@@ -72,8 +54,9 @@ class AuthnPluginBase(Resource):
     description = String(default=None)
     icon = String(default=None)
 
-    def __init__(self, id=None, description=None, icon=None,
-                 register_users=None):
+    def __init__(self, id: Optional[str] = None,
+                 description: Optional[str] = None, icon: Optional[str] = None,
+                 register_users: Optional[bool] = None):
         super(AuthnPluginBase, self).__init__()
 
         if id is None:
@@ -100,41 +83,24 @@ class HttpAuthPluginBase(AuthnPluginBase):
     """
     Class for HTTP Auth plugins
     """
-    def __init__(self, id=None, description=None, icon=None,
-                 register_users=None):
+    type = 'http'
 
-        super(HttpAuthPluginBase, self).__init__(
-            id=id, description=description, icon=icon,
-            register_users=register_users)
-
-        self.type = 'http'
-
-    def get_user(self, username, password):
+    def get_user(self, username: str, password: str) -> UserProfile:
         """
         Provider-specific user getter; implemented by HTTP auth plugin that
         retrieves the user's profile based on the provided username and password
 
-        :param str username: username
-        :param str password: password
+        :param username: username
+        :param password: password
 
-        :return: plugin user
-        :rtype: AuthnPluginUser
+        :return: user profile
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='get_user')
 
 
-class AuthnPluginUser:
-    id = None
-    username = None
-    email = None
-    first_name = None
-    last_name = None
-    birth_date = None
-
-
 class OAuthToken:
-    def __init__(self, access, refresh, expiration):
+    def __init__(self, access: str, refresh: str, expiration: datetime):
         self.access = access
         self.refresh = refresh
         self.expiration = expiration
@@ -157,32 +123,37 @@ class OAuthServerPluginBase(AuthnPluginBase):
     access_token_headers = None
     access_token_params = None
 
-    def __init__(self, id=None, description=None, icon=None,
-                 register_users=None, authorize_url=None,
-                 request_token_params=None, client_id=None,
-                 client_secret=None, access_token_url=None,
-                 access_token_method='POST', access_token_headers=None,
-                 access_token_params=None):
+    def __init__(self, id: Optional[str] = None,
+                 description: Optional[str] = None,
+                 icon: Optional[str] = None,
+                 register_users: Optional[bool] = None,
+                 authorize_url: Optional[str] = None,
+                 request_token_params: Optional[dict] = None,
+                 client_id: str = None,
+                 client_secret: str = None,
+                 access_token_url: str = None,
+                 access_token_method: str = 'POST',
+                 access_token_headers: Optional[dict] = None,
+                 access_token_params: Optional[dict] = None):
         """
         Initialize OAuth plugin
 
-        :param str id: plugin ID
-        :param str description: plugin description
-        :param str icon: plugin icon ID used by the client UI
-        :param bool register_users: automatically register authenticated users
+        :param id: plugin ID
+        :param description: plugin description
+        :param icon: plugin icon ID used by the client UI
+        :param register_users: automatically register authenticated users
             if missing from the local user database; overrides
             REGISTER_AUTHENTICATED_USERS
-        :param str authorize_url: URL for authorization (needed by client)
-        :param dict request_token_params: additional parameters for auth code
+        :param authorize_url: URL for authorization (needed by client)
+        :param request_token_params: additional parameters for auth code
             exchange, like scope
-        :param str client_id: client ID
-        :param str client_secret: client secret
-        :param str access_token_url: URL for token exchange
-        :param str access_token_method: HTTP method for access token URL;
+        :param client_id: client ID
+        :param client_secret: client secret
+        :param access_token_url: URL for token exchange
+        :param access_token_method: HTTP method for access token URL;
             default: "POST"
-        :param dict access_token_headers: additional headers for token exchange
-        :param dict access_token_params: additional parameters for token
-            exchange
+        :param access_token_headers: additional headers for token exchange
+        :param access_token_params: additional parameters for token exchange
         """
         super(OAuthServerPluginBase, self).__init__(
             id=id, description=description, icon=icon,
@@ -234,16 +205,15 @@ class OAuthServerPluginBase(AuthnPluginBase):
                         access_token_params))
         self.access_token_params = access_token_params
 
-    def construct_authorize_url(self, state=None):
+    def construct_authorize_url(self, state: Optional[dict] = None) -> str:
         """
         Generic authorization url formatter; implemented by OAuth plugin base
         that creates the OAuth server's authorization URL from state parameters
 
-        :param dict state: additional application state to be added to OAuth
-        state query parameter
+        :param state: additional application state to be added to OAuth state
+            query parameter
 
         :return: authorization URL
-        :rtype: str
         """
         if state is None:
             state = {}
@@ -256,15 +226,14 @@ class OAuthServerPluginBase(AuthnPluginBase):
             **self.request_token_params))
         return '{}?{}'.format(self.authorize_url, qs)
 
-    def get_token(self, code):
+    def get_token(self, code: str) -> OAuthToken:
         """
         Generic token getter; implemented by OAuth plugin base that
         retrieves the token using an authorization code
 
-        :param str code: authorization code
+        :param code: authorization code
 
         :return: OAuthToken containing access, refresh, and expiration
-        :rtype: OAuthToken
         """
 
         args = {
@@ -308,16 +277,14 @@ class OAuthServerPluginBase(AuthnPluginBase):
         except Exception as e:
             raise NotAuthenticatedError(error_msg=str(e))
 
-    def get_user(self, token):
+    def get_user(self, token: OAuthToken) -> UserProfile:
         """
         Provider-specific user getter; implemented by OAuth plugin that
         retrieves the user using the provider API and token
 
-        :param OAuthToken token: provider API access, refresh, expiration token
-            info
+        :param token: provider API access, refresh, expiration token info
 
-        :return: user
-        :rtype: AuthnPluginUser
+        :return: user profile
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='get_user')

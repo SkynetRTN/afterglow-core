@@ -233,6 +233,14 @@ def _init_oauth():
         def user(self):
             return User.query.get(self.user_id)
 
+        @property
+        def active(self):
+            if self.revoked:
+                return False
+            if not self.expires_in:
+                return True
+            return self.issued_at + self.expires_in >= time.time()
+
         def is_refresh_token_active(self):
             if self.revoked:
                 return False

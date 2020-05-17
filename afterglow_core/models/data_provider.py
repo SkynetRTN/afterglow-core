@@ -22,7 +22,7 @@ class DataProviderSchema(Resource):
             data provider ID
         auth_methods: list of data provider-specific authentication methods;
             if None, defaults to DEFAULT_DATA_PROVIDER_AUTH -> DATA_FILE_AUTH ->
-            all auth methods defined by USER_AUTH
+            all auth methods available
         icon: optional data provider icon name
         display_name: data provider plugin visible in the Afterglow UI
         description: a longer description of the data provider

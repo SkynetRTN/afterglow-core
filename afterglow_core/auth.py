@@ -240,12 +240,12 @@ def _init_auth():
                     token_type='cookie',
                     revoked=False)\
                 .one_or_none()
-            if not token or time.time() > token.get_expires_at():
+            if not token or not token.active:
                 return clear_access_cookies(response)
 
         token.expires_in = expires_in
         token.issued_at = time.time()
-        db.session.commit()
+        memory_session.commit()
 
         response.set_cookie(
             'afterglow_core_access_token', value=token.access_token,
@@ -309,17 +309,17 @@ def _init_auth():
             try:
                 if token_type == 'personal':
                     # Should be an existing permanent token
-                    token = PersistentToken.query.filtger_by(
+                    token = PersistentToken.query.filter_by(
                         access_token=access_token,
                         token_type=token_type).one_or_none()
                 else:
                     token = memory_session.query(Token).filter_by(
                         access_token=access_token,
-                        token_type=token_type,
+                        # token_type=token_type,
                         revoked=False).one_or_none()
                 if not token:
                     raise ValueError('Token does not exist')
-                if time.time() > token.get_expires_at():
+                if not token.active:
                     raise ValueError('Token expired')
 
                 user = token.user

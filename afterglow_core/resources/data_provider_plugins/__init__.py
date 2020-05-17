@@ -13,7 +13,6 @@ from __future__ import absolute_import, division, print_function
 from ... import app
 from ...errors import MethodNotImplementedError
 from ...models.data_provider import DataProviderSchema
-from ...auth import oauth_plugins
 
 
 __all__ = ['DataProvider']
@@ -104,12 +103,8 @@ class DataProvider(DataProviderSchema):
             if self.auth_methods is None:
                 # Inherit auth methods from data files
                 self.auth_methods = app.config.get('DATA_FILE_AUTH')
-                if self.auth_methods is None:
-                    # Use all available auth methods
-                    self.auth_methods = [
-                        plugin.id for plugin in oauth_plugins.values()]
         if isinstance(self.auth_methods, str):
-            self.auth_methods = [self.auth_methods]
+            self.auth_methods = self.auth_methods.split(',')
 
     def get_asset(self, path):
         """

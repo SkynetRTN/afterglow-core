@@ -25,14 +25,17 @@ from ....errors.oauth2 import UnknownClientError, MissingClientIdError
 
 def parse_user_fields():
     username = request.args.get('username')
-    if username is not None:
-        if not username:
-            raise ValidationError('username', 'Username cannot be empty')
+    if username == '':
+        raise ValidationError('username', 'Username cannot be empty')
 
     password = request.args.get('password')
-
-    if password is not None and not password:
+    if password == '':
         raise ValidationError('password', 'Password cannot be empty')
+
+    email = request.args.get('email')
+    first_name = request.args.get('first_name')
+    last_name = request.args.get('last_name')
+    birth_date = request.args.get('birth_date')
 
     active = request.args.get('active')
     if active is not None:
@@ -51,7 +54,12 @@ def parse_user_fields():
             role_objs.append(r)
         roles = role_objs
 
-    return username, password, active, roles
+    settings = request.args.get('settings')
+
+    return (
+        username, password, email, first_name, last_name, birth_date, active,
+        roles, settings,
+    )
 
 
 @app.route(url_prefix + 'users', methods=['GET', 'POST'])
@@ -69,14 +77,16 @@ def users(user_id: int = None):
         - return the list of IDs of registered users matching the given
             criteria; non-admins get only their own ID
 
-    POST /users?username=...&password=...&roles=...
+    POST /users?username=...&password=...&roles=...&first_name=...&last_name=...
+        &email=...&birth_date=...&settings=...
         - create a new user account; must be admin; roles may include
             "admin" and "user" (separated by comma if both)
 
     GET /users/[id]
         - return the given user info; must be admin or same user
 
-    PUT /users/[id]?username=...&password=...&active=...
+    PUT /users/[id]?username=...&password=...&active=...&roles=...
+        &first_name=...&last_name=...&email=...&birth_date=...&settings=...
         - update user account; must be admin or same user
 
     DELETE /users/[id]
@@ -104,8 +114,7 @@ def users(user_id: int = None):
         # Return all users matching the given attributes
         q = User.query
         if request.args.get('username'):
-            q = q.filter(User.username.ilike(
-                request.args['username'].lower()))
+            q = q.filter(User.username.ilike(request.args['username'].lower()))
         if request.args.get('active'):
             try:
                 active = bool(int(request.args['active']))
@@ -119,7 +128,8 @@ def users(user_id: int = None):
         return json_response({'items': UserSchema().dump(q.all(), many=True)})
 
     if request.method == 'POST':
-        username, password, active, roles = parse_user_fields()
+        username, password, email, first_name, last_name, birth_date, active, \
+            roles, settings = parse_user_fields()
         if username is None:
             raise MissingFieldError('username')
         if password is None:
@@ -129,15 +139,23 @@ def users(user_id: int = None):
         if roles is None:
             roles = []
 
-        try:
-            u = User()
-            u.username = username
-            u.password = hash_password(password)
-            u.active = True
-            u.roles = roles
+        if User.query.filter(
+                db.func.lower(User.username) == username.lower()).count():
+            raise DuplicateUsernameError(username=username)
 
+        try:
+            u = User(
+                username=username,
+                password=hash_password(password),
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                birth_date=birth_date,
+                active=True,
+                roles=roles,
+                settings=settings,
+            )
             db.session.add(u)
-            db.session.flush()
             db.session.commit()
         except Exception:
             db.session.rollback()
@@ -159,7 +177,8 @@ def users(user_id: int = None):
     active_admins = admin_role.users.filter(User.active == True).count()
 
     if request.method == 'PUT':
-        username, password, active, roles = parse_user_fields()
+        username, password, email, first_name, last_name, birth_date, active, \
+            roles, settings = parse_user_fields()
 
         if username is not None and User.query.filter(
                 db.func.lower(User.username) ==
@@ -181,11 +200,21 @@ def users(user_id: int = None):
             if username is not None:
                 u.username = username
             if password is not None:
-                u.password = hash_password(password)
+                u.password = password
+            if email is not None:
+                u.email = email
+            if first_name is not None:
+                u.first_name = first_name
+            if last_name is not None:
+                u.last_name = first_name
+            if birth_date is not None:
+                u.birth_date = birth_date
             if active is not None:
                 u.active = active
             if roles is not None:
                 u.roles = roles
+            if settings is not None:
+                u.settings = settings
 
             db.session.commit()
         except Exception:
@@ -285,6 +314,7 @@ def users_authorized_apps(user_id: int, client_id: str = None):
 
 # Aliases for logged in user
 @app.route(url_prefix + 'user', methods=['GET', 'PUT'])
+@auth_required
 def current_user():
     return users(request.user.id)
 

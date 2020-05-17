@@ -8,7 +8,7 @@ import json
 
 from flask import redirect, request, url_for, render_template
 from .. import app, json_response
-from ..users import Role, User, db
+from ..users import Identity, Role, User, db
 from ..errors import MissingFieldError, ValidationError
 from ..errors.auth import (
     NotAuthenticatedError, NotInitializedError, UnknownAuthMethodError)
@@ -20,7 +20,7 @@ from ..users import UserClient
 
 
 @app.route('/oauth2/authorize')
-@auth_required('user', allow_redirect=True)
+@auth_required(allow_redirect=True)
 def oauth2_authorize():
     client_id = request.args.get('client_id')
     if not client_id:
@@ -75,17 +75,39 @@ def oauth2_authorized(plugin_id):
         raise MissingFieldError('code')
 
     token = oauth_plugin.get_token(request.args.get('code'))
-    user_profile = oauth_plugin.get_user_profile(token)
+    user_profile = oauth_plugin.get_user(token)
 
     if not user_profile:
         raise NotAuthenticatedError(error_msg='No user profile data returned')
 
     # Get the user from db
-    method_uid = "{}:{}".format(oauth_plugin.name, user_profile.id)
-    user = User.query\
-        .filter(User.auth_methods.like("%{}%".format(method_uid)))\
+    identity = Identity.query\
+        .filter_by(auth_method=oauth_plugin.name, name=user_profile.id) \
         .one_or_none()
-    if user is None:
+    if identity is None and oauth_plugin.name == 'skynet':
+        # A workaround for migrating the accounts of users registered in early
+        # versions that used Skynet usernames instead of IDs; a potential
+        # security issue is a Skynet user with a numeric username matching
+        # some other user's Skynet user ID
+        identity = Identity.query \
+            .filter_by(auth_method=oauth_plugin.name,
+                       name=user_profile.username) \
+            .one_or_none()
+        if identity is not None:
+            # First login via Skynet after migration: replace Identity.name =
+            # username with user ID to prevent a possible future account seizure
+            try:
+                identity.name = user_profile.id
+                identity.data = user_profile.json()
+                identity.user.first_name = user_profile.first_name or None
+                identity.user.last_name = user_profile.last_name or None
+                identity.user.email = user_profile.email or None
+                identity.user.birth_date = user_profile.birth_date
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                raise
+    if identity is None:
         # Authenticated but not in the db; register a new Afterglow user if
         # allowed by plugin or the global config option
         register_users = oauth_plugin.register_users
@@ -96,22 +118,45 @@ def oauth2_authorized(plugin_id):
             raise NotAuthenticatedError(
                 error_msg='Automatic user registration disabled')
 
-        user = User()
-        user.username = None
-        user.password = None
-        user.first_name = user_profile.first_name if user_profile.first_name \
-            else None
-        user.last_name = user_profile.last_name if user_profile.last_name \
-            else None
-        user.email = user_profile.email if user_profile.email else None
-        user.auth_methods = method_uid
-        user.roles = [Role.query.filter_by(name='user').one()]
         try:
+            # By default, Afterglow username becomes the same as the OAuth
+            # provider username; if empty or such user already exists, also try
+            # email, full name, and id
+            username = None
+            for username_candidate in (
+                    user_profile.username,
+                    user_profile.email,
+                    user_profile.full_name,
+                    user_profile.id):
+                if username_candidate and str(username_candidate).strip() and \
+                        not User.query.filter(
+                            db.func.lower(User.username) ==
+                            username_candidate.lower()).count():
+                    username = username_candidate
+                    break
+            user = User(
+                username=username or None,
+                first_name=user_profile.first_name or None,
+                last_name=user_profile.last_name or None,
+                email=user_profile.email or None,
+                birth_date=user_profile.birth_date,
+                roles=[Role.query.filter_by(name='user').one()],
+            )
             db.session.add(user)
+            db.session.flush()
+            identity = Identity(
+                user_id=user.id,
+                name=user_profile.id,
+                auth_method=oauth_plugin.name,
+                data=user_profile.json(),
+            )
+            db.session.add(identity)
             db.session.commit()
         except Exception:
             db.session.rollback()
             raise
+    else:
+        user = identity.user
 
     next_url = state.get('next')
     if not next_url:
