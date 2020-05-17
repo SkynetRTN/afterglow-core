@@ -29,7 +29,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '-s', '--https', action='store_true', help='use HTTPS instead of HTTP')
     parser.add_argument(
-        '-v', '--api-version', default='1.0', help='server API version')
+        '-v', '--api-version', default='1', help='server API version')
     parser.add_argument(
         'method', metavar='METHOD',
         help='request method (GET, POST, PUT, DELETE)')
@@ -47,8 +47,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '-p', '--password', help='authenticate with this password')
     parser.add_argument(
-        '-t', '--token',
-        help='authenticate with this API access or refresh token')
+        '-t', '--token', help='authenticate with this personal token')
     parser.add_argument(
         '-b', '--body', help='request body (- = get from stdin)')
     parser.add_argument(
@@ -115,9 +114,11 @@ if __name__ == '__main__':
                 f.write(data)
             data = s.getvalue()
 
-    url = 'http{}://{}:{:d}/api/v{}/{}'.format(
-        's' if args.https else '', args.host, args.port, args.api_version,
-        args.resource)
+    url = 'http{}://{}:{:d}/'.format(
+        's' if args.https else '', args.host, args.port)
+    if args.resource not in ('users/login', 'users/logout', 'users/tokens'):
+        url += 'api/v{}/'.format(args.api_version)
+    url += args.resource
     print('\n{} {}'.format(args.method, url), file=sys.stderr)
     if headers:
         print('\n'.join('{}: {}'.format(h, v) for h, v in headers.items()),

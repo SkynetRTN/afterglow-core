@@ -61,7 +61,7 @@ Examples:
     parser.add_argument(
         '-n', '--no-https', action='store_true', help='disable HTTPS')
     parser.add_argument(
-        '-v', '--api-version', default='1.0', help='server API version')
+        '-v', '--api-version', default='1', help='server API version')
     parser.add_argument(
         'command', metavar='CMD',
         choices=['list', 'get', 'add', 'update', 'delete'],
@@ -71,7 +71,7 @@ Examples:
     parser.add_argument(
         '-p', '--password', help='authenticate with this password')
     parser.add_argument(
-        '-t', '--auth-token', help='authenticate with this token')
+        '-t', '--auth-token', help='authenticate with this personal token')
     parser.add_argument(
         '-i', '--uid', type=int, default=0,
         help='get/update/delete this user ID (0 - get/update your own account)')
@@ -90,7 +90,7 @@ Examples:
     else:
         auth = None
 
-    resource = 'admin/users'
+    resource = 'users'
     if args.command in ('get', 'update', 'delete'):
         if args.uid is None:
             print('Missing user ID', file=sys.stderr)
@@ -101,8 +101,11 @@ Examples:
         'list': 'GET', 'get': 'GET', 'add': 'POST', 'update': 'PUT',
         'delete': 'DELETE'}[args.command]
     params = dict([item.split('=') for item in args.params])
-    url = '://{}:{:d}/api/v{}/{}'.format(
-        args.host, args.port, args.api_version, resource)
+
+    url = '://{}:{:d}/'.format(args.host, args.port)
+    if resource not in ('users/login', 'users/logout', 'users/tokens'):
+        url += 'api/v{}/'.format(args.api_version)
+    url += resource
 
     r = requests.request(
         method, 'http' + ('s' if not args.no_https else '') + url,
