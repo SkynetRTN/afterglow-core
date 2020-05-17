@@ -1,4 +1,4 @@
-"""Add user settings"""
+"""Add user first and last name"""
 from alembic import op
 import sqlalchemy as sa
 
