@@ -97,8 +97,8 @@ class Photometry(Resource):
         flux: flux within the aperture in ADUs; mean background within the
             annulus is subtracted if annulus is enabled
         flux_err: estimated 1-sigma error of flux
-        mag: magnitude computed as -2.5log10(flux/texp) + optional calibration
-            terms if calibration data are available
+        mag: magnitude computed as -2.5log10(flux/texp) + 20 + optional
+            calibration terms if calibration data are available
         mag_err: estimated 1-sigma error of magnitude
         x, y: pixel coordinates of the aperture center
         a: aperture radius (or semi-major axis) in pixels
