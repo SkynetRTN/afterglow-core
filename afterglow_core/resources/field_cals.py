@@ -1,20 +1,14 @@
 """
-Afterglow Core: field-cals resource
+Afterglow Core: photometric field calibration prescriptions resource
 """
+
+from typing import Optional, Union
 
 from sqlalchemy import Column, Float, Integer, String
 
 from ..models.field_cal import FieldCal
 from ..errors.field_cal import UnknownFieldCalError
 from .data_files import Base, get_data_file_db
-
-try:
-    from alembic import config as alembic_config, context as alembic_context
-    from alembic.script import ScriptDirectory
-    from alembic.runtime.environment import EnvironmentContext
-except ImportError:
-    ScriptDirectory = EnvironmentContext = None
-    alembic_config = alembic_context = None
 
 
 __all__ = ['SqlaFieldCal', 'get_field_cal']
@@ -35,15 +29,15 @@ class SqlaFieldCal(Base):
     source_match_tol = Column(Float)
 
 
-def get_field_cal(user_id, id_or_name):
+def get_field_cal(user_id: Optional[int],
+                  id_or_name: Union[int, str]) -> FieldCal:
     """
     Return field cal with the given ID or name
 
-    :param int | None user_id: current user ID (None if user auth is disabled)
-    :param int | str id_or_name: field cal ID (integer) or name
+    :param user_id: current user ID (None if user auth is disabled)
+    :param id_or_name: field cal ID (integer) or name
 
-    :return: serialized field cal object
-    :rtype: FieldCal
+    :return: field cal schema
     """
     adb = get_data_file_db(user_id)
 

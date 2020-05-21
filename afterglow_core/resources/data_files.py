@@ -44,7 +44,6 @@ except ImportError:
     exifread = None
 
 try:
-    # noinspection PyUnresolvedReferences
     from alembic import config as alembic_config, context as alembic_context
     from alembic.script import ScriptDirectory
     from alembic.runtime.environment import EnvironmentContext
@@ -608,7 +607,7 @@ def convert_exif_field(val):
     if hasattr(val, 'num') and hasattr(val, 'den'):
         # ExifRead ratio
         if val.den:
-            return val.num/val.den
+            return float(val.num)/float(val.den)
         return val.num
 
     # Otherwise, return as string
