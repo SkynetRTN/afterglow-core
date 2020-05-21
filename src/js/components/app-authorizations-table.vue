@@ -7,11 +7,11 @@
 
             <template slot-scope="props">
                 <b-table-column field="name" label="Name">
-                    {{ props.row.name }}
+                    {{ props.row.client.name }}
                 </b-table-column>
 
-                <b-table-column field="options" label="Options">
-                    <button class="button is-danger" v-on:click="denyApp(props.row.id)">Deny Access</button>
+                <b-table-column field="options" label="Options" width="250">
+                    <button class="button is-danger" v-on:click="revokeApp(props.row.id)">Revoke Access</button>
                      
                 </b-table-column>
 
@@ -31,7 +31,7 @@
 </template>
 
 <script>
-import { userService } from "../services";
+import { coreService } from "../services";
 
 export default {
   data() {
@@ -47,8 +47,8 @@ export default {
     },
     loadAsyncData() {
       this.loading = true;
-      userService
-        .getAuthorizedApps(this.userId)
+      coreService
+        .getAppAuthorizations()
         .then(({ data }) => {
           this.data = [...data.items];
           this.loading = false;
@@ -59,11 +59,10 @@ export default {
           throw error;
         });
     },
-    denyApp(appId) {
+    revokeApp(authorizationId) {
       this.loading = true;
-      let fields = ['id', 'type', 'state']
-      userService
-        .removeAuthorizedApp(this.userId, appId)
+      coreService
+        .removeAppAuthorization(authorizationId)
         .then(() => {
           return this.loadAsyncData();
         })

@@ -97,10 +97,10 @@ def data_files(id=None):
     if request.method == 'GET':
         if id is None:
             # List all data files for the given session
-            return json_response(
+            return json_response(dict(items=
                 [DataFile(data_file)
                  for data_file in adb.query(SqlaDataFile).filter(
-                    SqlaDataFile.session_id == get_session_id(adb))])
+                    SqlaDataFile.session_id == get_session_id(adb))]))
 
         # Return specific data file resource
         return json_response(DataFile(data_file))
@@ -653,8 +653,8 @@ def sessions(id=None):
     if request.method == 'GET':
         if session is None:
             # List all sessions
-            return json_response(
-                [Session(session) for session in adb.query(SqlaSession)])
+            return json_response(dict(items=
+                [Session(session) for session in adb.query(SqlaSession)]))
 
         # Return specific session resource
         return json_response(Session(session))

@@ -703,6 +703,7 @@ class JobRequestHandler(BaseRequestHandler):
                             if marshmallow_version < (3, 0):
                                 res = res[0]
                             result.append(res)
+                        result = dict(items=result)
                     else:
                         # Return the given job
                         job = session.query(DbJob).get(job_id)

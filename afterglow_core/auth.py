@@ -131,6 +131,12 @@ def auth_required(fn, *roles, **kwargs):
     def wrapper(*args, **kw):
         try:
             authenticate(roles)
+
+            # if not request.args.get('identity_confirmed') and kwargs.get('confirm_identity'):
+            #     #verify that the user wants to continue with the currently authenticated user account
+            #     nextUrl = request.base_url + request.query_string + '&identity_confirmed'
+            #     return redirect(url_for('confirm_identity', next=nextUrl))
+
         except NotAuthenticatedError:
             if kwargs.get('allow_redirect'):
                 return redirect(url_for('login', next=request.url))

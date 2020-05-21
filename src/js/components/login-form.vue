@@ -31,7 +31,7 @@
     </div>
     <div class="field is-grouped is-grouped-right">
       <div class="control">
-        <a class="button is-link is-light" href="/">Cancel</a>
+        <a class="button is-link is-light" :href="cancelUrl">Cancel</a>
       </div>
       <div class="control">
         <button
@@ -45,7 +45,7 @@
 </template>
 
 <script>
-import { userService } from "../services/user.service";
+import { coreService } from "../services";
 
 export default {
   data: function() {
@@ -57,7 +57,7 @@ export default {
       errors: []
     };
   },
-  props: ["nextUrl"],
+  props: ["nextUrl", "cancelUrl"],
   methods: {
     formSubmit: function(e) {
       e.preventDefault();
@@ -73,7 +73,7 @@ export default {
 
       if (this.errors.length == 0) {
         this.loading = true;
-        userService
+        coreService
           .login(this.username, this.password)
           .then(() => {
             if (this.nextUrl) window.location = this.nextUrl;

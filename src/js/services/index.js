@@ -1,3 +1,2 @@
 
-export * from './job.service';
-export * from './user.service';
+export * from './core.service';

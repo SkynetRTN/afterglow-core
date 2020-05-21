@@ -27,6 +27,8 @@
 
 <script>
 import axios from "axios";
+import {config} from '../config';
+import {coreService} from '../services'
 
 export default {
   data: function() {
@@ -43,9 +45,7 @@ export default {
       this.loading=true;
       this.errors = [];
       
-      axios.post("/users/oauth2/consent", {
-        client_id: this.id
-      })
+      coreService.createAppAuthorization(this.id)
       .then((response) => {
         if (this.nextUrl) {
           window.location = this.nextUrl;

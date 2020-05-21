@@ -143,6 +143,7 @@ def _init_oauth():
 
             :rtype: str
             """
+            if scope is None: scope = ''
             return ' '.join({s for s in scope.split()
                              if s in self.default_scopes})
 
@@ -314,10 +315,13 @@ def _init_oauth():
     memory_session = sqlalchemy.orm.scoped_session(
         sqlalchemy.orm.session.sessionmaker(bind=memory_engine))()
 
+    def access_token_generator(client, grant_type, user, scope):
+        return secrets.token_hex(20)
+    
     # Configure Afterglow OAuth2 tokens
     app.config['OAUTH2_ACCESS_TOKEN_GENERATOR'] = \
         app.config['OAUTH2_REFRESH_TOKEN_GENERATOR'] = \
-        lambda _: secrets.token_hex(20)
+        access_token_generator 
 
     oauth_server = AuthorizationServer(
         app,

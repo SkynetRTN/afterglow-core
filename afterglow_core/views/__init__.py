@@ -8,5 +8,5 @@ from .. import app
 if app.config.get('AUTH_ENABLED'):
     from .default import *
     from .oauth2 import *
-    from .users import *
+    from .settings import *
 del app

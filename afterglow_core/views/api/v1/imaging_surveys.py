@@ -61,7 +61,7 @@ def get_imaging_surveys(name=None):
     """
     if name is None:
         # List all surveys
-        return json_response(SkyView.survey_dict)
+        return json_response(dict(items=SkyView.survey_dict))
 
     # Query specific survey: get RA/Dec FOV size
     # noinspection PyProtectedMember

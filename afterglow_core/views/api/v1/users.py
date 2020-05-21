@@ -249,78 +249,8 @@ def users(user_id: int = None):
             return json_response()
 
 
-@app.route(url_prefix + 'users/<int:user_id>/authorized-apps',
-           methods=['GET', 'POST'])
-@app.route(url_prefix +
-           'users/<int:user_id>/authorized-apps/<string:client_id>',
-           methods=['DELETE'])
-@auth_required
-def users_authorized_apps(user_id: int, client_id: str = None):
-    if request.user.id != user_id:
-        if not request.user.is_admin:
-            raise AdminRequiredError()
-        if not app.config.get('REMOTE_ADMIN') and \
-                request.remote_addr != '127.0.0.1':
-            raise LocalAccessRequiredError()
-
-    if request.method == 'GET':
-        authorized_client_ids = [
-            c.client_id for c in UserClient.query.filter_by(user_id=user_id)]
-        clients = [dict(id=c.client_id, name=c.name)
-                   for c in oauth_clients.values()
-                   if c.client_id in authorized_client_ids]
-
-        return json.dumps({'items': clients})
-
-    if request.method == 'POST':
-        try:
-            client_id = request.args['client_id']
-        except KeyError:
-            raise MissingClientIdError()
-
-        if client_id not in oauth_clients:
-            raise UnknownClientError(id=client_id)
-
-        user_client = UserClient.query.filter_by(
-            user_id=user_id, client_id=client_id).one_or_none()
-
-        if not user_client:
-            try:
-                db.session.add(UserClient(
-                    user_id=user_id, client_id=client_id))
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
-                raise
-            return json_response('', 201)
-
-        return json_response()
-
-    if request.method == 'DELETE':
-        # TODO remove all active tokens associated with user/client
-        if client_id not in oauth_clients:
-            raise UnknownClientError(id=client_id)
-
-        try:
-            UserClient.query.filter_by(
-                user_id=user_id, client_id=client_id).delete()
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            raise
-
-        return json_response({})
-
-
 # Aliases for logged in user
 @app.route(url_prefix + 'user', methods=['GET', 'PUT'])
 @auth_required
 def current_user():
     return users(request.user.id)
-
-
-@app.route(url_prefix + 'user/authorized-apps', methods=['GET', 'POST'])
-@app.route(url_prefix + 'user/authorized-apps/<string:client_id>',
-           methods=['DELETE'])
-def current_user_authorized_apps(client_id: str = None):
-    return users_authorized_apps(request.user.id, client_id)

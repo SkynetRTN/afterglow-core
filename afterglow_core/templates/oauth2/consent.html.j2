@@ -14,10 +14,10 @@
         <p class="panel-heading">Third-party Application Consent</p>
         <div class="panel-block">
           <div class="container">
-            <authorize-app-form next-url="{{next_url}}" id="{{oauth_client.client_id}}"
+            <app-consent-form next-url="{{next_url}}" id="{{oauth_client.client_id}}"
               name="{{oauth_client.name}}" description="{{oauth_client.description}}"
               icon="{{url_for('static', filename='plugins/{}'.format(oauth_client.icon)) if oauth_client.icon else 'null' }}">
-            </authorize-app-form>
+            </app-consent-form>
             
           </div>
 

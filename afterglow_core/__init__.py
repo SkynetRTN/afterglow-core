@@ -24,6 +24,21 @@ else:
 
 __all__ = ['app', 'json_response']
 
+class PrefixMiddleware(object):
+
+    def __init__(self, app, prefix=''):
+        self.app = app
+        self.prefix = prefix
+
+    def __call__(self, environ, start_response):
+        if environ['PATH_INFO'].startswith(self.prefix):
+            environ['PATH_INFO'] = environ['PATH_INFO'][len(self.prefix):]
+            environ['SCRIPT_NAME'] = self.prefix
+            return self.app(environ, start_response)
+        else:
+            start_response('404', [('Content-Type', 'text/plain')])
+            return ["This url does not belong to the app.".encode()]
+
 
 class AfterglowSchemaEncoder(json.JSONEncoder):
     """
@@ -67,6 +82,9 @@ app = Flask(__name__)
 cors = CORS(app, resources={'/api/*': {'origins': '*'}})
 app.config.from_object('afterglow_core.default_cfg')
 app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=True)
+
+if app.config.get('APP_PREFIX'):
+    app.wsgi_app = PrefixMiddleware(app.wsgi_app, prefix=app.config.get('APP_PREFIX'))
 
 if app.config.get('PROFILE'):
     # Enable profiling

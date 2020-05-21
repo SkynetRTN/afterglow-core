@@ -40,7 +40,7 @@
 </template>
 
 <script>
-import { jobService } from "../services";
+import { coreService } from "../services";
 
 export default {
   data() {
@@ -64,13 +64,10 @@ export default {
     loadAsyncData() {
       this.loading = true;
       let fields = ['id', 'type', 'state']
-      jobService
+      coreService
         .getJobs(fields, this.page, this.perPage)
         .then(({ data }) => {
-          this.data = [];
-          data.forEach(item => {
-            this.data.push(item);
-          });
+          this.data = [...data.items];
           if(data.length == this.perPage) {
               this.total = (this.page+1)*this.perPage;
           }

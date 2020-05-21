@@ -33,7 +33,7 @@ def get_catalogs(name=None):
     """
     if name is None:
         # List all catalogs
-        return json_response(catalogs)
+        return json_response(dict(items=list(catalogs.values())))
 
     try:
         return json_response(catalogs[name])

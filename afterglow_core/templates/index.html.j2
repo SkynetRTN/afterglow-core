@@ -1,115 +1,47 @@
 {% extends "base.html.j2" %}
+{% set active_page = "dashboard" %}
 
 {% block title %}
 Dashboard
 {% endblock %}
 
 {% block content %}
-<!-- <div class="tile is-ancestor">
-  <div class="tile is-parent">
-    <div class="card tile is-child">
-      <div class="card-content">
-        <div class="level is-mobile">
-          <div class="level-item">
-            <div class="is-widget-label"><h3 class="subtitle is-spaced">
-              Active Jobs
-            </h3>
-              <h1 class="title">
-                ?
-              </h1>
-            </div>
-          </div>
-          <div class="level-item has-widget-icon">
-            <div class="is-widget-icon"><span class="icon has-text-primary is-large"><i
-                class="mdi mdi-account-multiple mdi-48px"></i></span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="tile is-parent">
-    <div class="card tile is-child">
-      <div class="card-content">
-        <div class="level is-mobile">
-          <div class="level-item">
-            <div class="is-widget-label"><h3 class="subtitle is-spaced">
-              Disk Quota
-            </h3>
-              <h1 class="title">
-                ?
-              </h1>
-            </div>
-          </div>
-          <div class="level-item has-widget-icon">
-            <div class="is-widget-icon"><span class="icon has-text-info is-large"><i
-                class="mdi mdi-cart-outline mdi-48px"></i></span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="tile is-parent">
-    <div class="card tile is-child">
-      <div class="card-content">
-        <div class="level is-mobile">
-          <div class="level-item">
-            <div class="is-widget-label"><h3 class="subtitle is-spaced">
-              Sessions
-            </h3>
-              <h1 class="title">
-                ?
-              </h1>
-            </div>
-          </div>
-          <div class="level-item has-widget-icon">
-            <div class="is-widget-icon"><span class="icon has-text-success is-large"><i
-                class="mdi mdi-finance mdi-48px"></i></span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div> -->
-
-
 <div class="card has-table has-mobile-sort-spaced">
   <header class="card-header">
     <p class="card-header-title">
-      <span class="icon"><i class="mdi mdi-account-multiple"></i></span>
+      <span class="icon"><i class="fa fa-tasks"></i></span>
       Active Jobs
     </p>
-    <a href="#" class="card-header-icon">
+    <a href="#" class="card-header-icon" v-on:click="refreshJobs();">
       <span class="icon"><i class="fa fa-sync-alt"></i></span>
     </a>
   </header>
   <div class="card-content">
     <div class="table-container">
-      <jobs-table></jobs-table>
+      <jobs-table ref="jobsTable"></jobs-table>
     </div>
   </div>
 </div>
 
 <div class="card has-table has-mobile-sort-spaced">
-  <header class="card-header">
-    <p class="card-header-title">
-      <span class="icon"><i class="mdi mdi-account-multiple"></i></span>
-      API Tokens
-    </p>
-    <a href="#" class="card-header-icon">
-      <span class="icon"><i class="fa fa-sync-alt"></i></span>
-    </a>
-  </header>
-  <div class="card-content">
-  </div>
+    <header class="card-header">
+        <p class="card-header-title">
+        <span class="icon"><i class="fa fa-key"></i></span>
+        Personal Access Tokens
+        </p>
+        <a href="#" class="card-header-icon" v-on:click="refreshTokens();">
+        <span class="icon"><i class="fa fa-sync-alt"></i></span>
+        </a>
+    </header>
+    <div class="card-content">
+        <tokens-table ref="tokensTable"></tokens-table>
+    </div>
 </div>
 
 <div class="card has-table has-mobile-sort-spaced">
   <header class="card-header">
     <p class="card-header-title">
-      <span class="icon"><i class="mdi mdi-account-multiple"></i></span>
+      <span class="icon"><i class="fa fa-external-link-square-alt"></i></span>
       Authorized Apps
     </p>
     <a href="#" class="card-header-icon" v-on:click="refreshAuthorizedApps();">
@@ -117,12 +49,12 @@ Dashboard
     </a>
   </header>
   <div class="card-content">
-    <authorized-apps-table ref="authorizedAppsTable" user-id="{{current_user.id}}"></authorized-apps-table>
+    <app-authorizations-table ref="authorizedAppsTable" user-id="{{current_user.id}}"></app-authorizations-table>
   </div>
 </div>
 
 {%if current_user.is_admin %}
-<div class="card has-table has-mobile-sort-spaced">
+{# <div class="card has-table has-mobile-sort-spaced">
   <header class="card-header">
     <p class="card-header-title">
       <span class="icon"><i class="mdi mdi-account-multiple"></i></span>
@@ -131,7 +63,7 @@ Dashboard
   </header>
   <div class="card-content">
   </div>
-</div>
+</div> #}
 {% endif %}
 {%endblock%}
 
@@ -139,9 +71,23 @@ Dashboard
 {{ super() }}
 
 <script>
-  function refreshAuthorizedApps() {
-    this.app.$refs.authorizedAppsTable.loadAsyncData();
-  }
+    var refreshTokens;
+    var refreshAuthorizedApps;
+    var refreshJobs;
+    window.addEventListener(window.APP_MOUNTED_EVENT, (evt) => {
+        var app = evt.detail;
+        refreshTokens = () => {
+            app.$refs.tokensTable.loadAsyncData();
+        }
+
+        refreshAuthorizedApps = () => {
+            app.$refs.authorizedAppsTable.loadAsyncData();
+        }
+
+        refreshJobs = () => {
+            app.$refs.jobsTable.loadAsyncData();
+        }
+    });
 </script>
 
 {% endblock %}
