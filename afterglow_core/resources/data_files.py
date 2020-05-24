@@ -57,9 +57,8 @@ __all__ = [
     'data_files_engine', 'data_files_engine_lock', 'create_data_file',
     'save_data_file', 'get_data_file', 'remove_data_file', 'get_data_file_data',
     'get_data_file_db', 'get_data_file_fits', 'get_data_file_path',
-    'get_exp_length', 'get_gain', 'get_image_time', 'get_phot_cal',
-    'get_root', 'get_subframe', 'import_data_file', 'get_session_id',
-    'convert_exif_field',
+    'get_exp_length', 'get_gain', 'get_image_time', 'get_root', 'get_subframe',
+    'import_data_file', 'get_session_id', 'convert_exif_field',
 ]
 
 Base = declarative_base()
@@ -855,30 +854,6 @@ def get_gain(hdr):
         else:
             break
     return gain
-
-
-def get_phot_cal(hdr):
-    """
-    Get photometric calibration from FITS header
-
-    :param `astropy.io.fits.Header` hdr: FITS file header
-
-    :return: dictionary with photometric calibration parameters
-    :rtype: dict
-    """
-    params = {}
-
-    try:
-        params['m0'] = float(hdr['PHOT_M0'])
-    except (KeyError, ValueError):
-        pass
-
-    try:
-        params['m0_err'] = float(hdr['PHOT_M0E'])
-    except (KeyError, ValueError):
-        pass
-
-    return params
 
 
 def make_data_response(data, status_code=200):

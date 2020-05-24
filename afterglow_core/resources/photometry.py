@@ -3,7 +3,7 @@ Afterglow Core: image data file photometry
 """
 
 from __future__ import absolute_import, division, print_function
-from numpy import array, sqrt
+from numpy import array
 
 from skylib.photometry.aperture import aperture_photometry
 from skylib.extraction.centroiding import centroid_iraf
@@ -14,7 +14,7 @@ from ..models.photometry import Photometry
 __all__ = ['get_photometry']
 
 
-def get_photometry(data, texp, gain, phot_cal, x, y, a, b=None, theta=0,
+def get_photometry(data, texp, gain, x, y, a, b=None, theta=0,
                    a_in=None, a_out=None, b_out=None, theta_out=None,
                    background=None, background_rms=None, centroid_radius=None):
     """
@@ -23,8 +23,6 @@ def get_photometry(data, texp, gain, phot_cal, x, y, a, b=None, theta=0,
     :param array_like data: image data array
     :param float texp: exposure time in seconds
     :param float gain: CCD gain in e-/ADU
-    :param phot_cal: optional photometric calibration as returned by
-        :func:`afterglow_core.data_files.get_phot_cal`
     :param float x: X position of aperture center (1-based)
     :param float y: Y position of aperture center (1-based)
     :param float a: aperture radius or semi-major axis (for elliptical
@@ -84,19 +82,6 @@ def get_photometry(data, texp, gain, phot_cal, x, y, a, b=None, theta=0,
                      ('saturated', int), ('flag', int)]),
         background, background_rms, texp, gain, a, b, theta, a_in, a_out, b_out,
         theta_out)[0]
-
-    # Apply calibration if available
-    if source['mag']:
-        try:
-            source['mag'] += phot_cal['m0']
-        except (KeyError, TypeError):
-            pass
-    if source['mag_err']:
-        try:
-            source['mag_err'] = sqrt(source['mag_err']**2 +
-                                     phot_cal['m0_err']**2)
-        except (KeyError, TypeError):
-            pass
 
     return Photometry(
         flux=source['flux'], flux_err=source['flux_err'],
