@@ -135,15 +135,15 @@ def _init_oauth():
             """
             return self.redirect_uris[0]
 
-        def get_allowed_scope(self, scope):
-            """Return requested scopes which are supported by this client
-
-            :param str scope: requested scope(s), multiple scopes are separated
-                by spaces
-
-            :rtype: str
+        def get_allowed_scope(self, scope: str) -> str:
             """
-            if scope is None: scope = ''
+            Return requested scopes which are supported by this client
+
+            :param scope: requested scope(s), multiple scopes are separated
+                by spaces
+            """
+            if scope is None:
+                scope = ''
             return ' '.join({s for s in scope.split()
                              if s in self.default_scopes})
 
@@ -315,13 +315,13 @@ def _init_oauth():
     memory_session = sqlalchemy.orm.scoped_session(
         sqlalchemy.orm.session.sessionmaker(bind=memory_engine))()
 
-    def access_token_generator(client, grant_type, user, scope):
+    def access_token_generator(*_):
         return secrets.token_hex(20)
-    
+
     # Configure Afterglow OAuth2 tokens
     app.config['OAUTH2_ACCESS_TOKEN_GENERATOR'] = \
         app.config['OAUTH2_REFRESH_TOKEN_GENERATOR'] = \
-        access_token_generator 
+        access_token_generator
 
     oauth_server = AuthorizationServer(
         app,

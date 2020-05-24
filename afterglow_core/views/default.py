@@ -1,7 +1,7 @@
 """
 Afterglow Core: top-level and initialization routes
 """
-import secrets
+
 import json
 
 from flask import request, render_template, redirect, url_for
@@ -13,12 +13,10 @@ from ..auth import (
     set_access_cookies)
 from ..users import User, Role, db, Identity
 from ..models.user import UserSchema
-from ..models.user import TokenSchema
 from ..errors import ValidationError, MissingFieldError
-from ..errors.auth import (HttpAuthFailedError, NotInitializedError,
-    UnknownTokenError, UnknownAuthMethodError, NotAuthenticatedError,
-    InitPageNotAvailableError, LocalAccessRequiredError)
-
+from ..errors.auth import (
+    HttpAuthFailedError, NotInitializedError, UnknownAuthMethodError,
+    NotAuthenticatedError, InitPageNotAvailableError, LocalAccessRequiredError)
 
 
 __all__ = []
@@ -98,46 +96,49 @@ def initialize():
         else:
             return json_response(UserSchema().dump(u), 201)
 
+
 # @app.route('/confirm_identity', methods=['GET', 'POST'])
 # @auth_required(allow_redirect=True)
 # def confirm_identity():
 #     """
 #     Confirm identity before proceeding
-
+#
 #     GET|POST /confirm_identity
-#         - confirm identity: verify that the client wantst to continue as the currently authorized user or switch accounts
-
-#     :return: 
+#         - confirm identity: verify that the client wantst to continue
+#           as the currently authorized user or switch accounts
+#
+#     :return:
 #     :rtype: flask.Response
 #     """
 #     next_url = request.args.get('next')
 #     if not next_url:
 #         next_url = url_for('default')
-
+#
 #     if request.method == 'GET':
 #         return render_template(
 #             'confirm_identity.html.j2',
 #             next_url=next_url)
-
+#
 #     username = request.args.get('username')
 #     if not username:
 #         raise ValidationError('username', 'Username cannot be empty')
-
+#
 #     password = request.args.get('password')
 #     if not password:
 #         raise ValidationError('password', 'Password cannot be empty')
-
+#
 #     user = User.query.filter_by(username=username).one_or_none()
 #     if user is None:
 #         raise HttpAuthFailedError()
-
+#
 #     if not verify_password(password, user.password):
 #         raise HttpAuthFailedError()
-
+#
 #     # set token cookies
 #     request.user = user
-
+#
 #     return set_access_cookies(json_response())
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -175,8 +176,6 @@ def login():
 
         raise NotInitializedError()
 
-    
-
     if request.method == 'GET':
         return render_template(
             'login.html.j2', oauth_plugins=oauth_plugins.values(),
@@ -201,6 +200,7 @@ def login():
     request.user = user
 
     return set_access_cookies(json_response())
+
 
 @app.route('/login/oauth2/<string:plugin_id>')
 def oauth2_authorized(plugin_id):
@@ -338,5 +338,3 @@ def logout():
     :rtype: flask.Response
     """
     return clear_access_cookies(redirect(url_for('login')))
-
-

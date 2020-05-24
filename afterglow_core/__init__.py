@@ -24,10 +24,10 @@ else:
 
 __all__ = ['app', 'json_response']
 
-class PrefixMiddleware(object):
 
-    def __init__(self, app, prefix=''):
-        self.app = app
+class PrefixMiddleware(object):
+    def __init__(self, application, prefix=''):
+        self.app = application
         self.prefix = prefix
 
     def __call__(self, environ, start_response):
@@ -84,7 +84,8 @@ app.config.from_object('afterglow_core.default_cfg')
 app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=True)
 
 if app.config.get('APP_PREFIX'):
-    app.wsgi_app = PrefixMiddleware(app.wsgi_app, prefix=app.config.get('APP_PREFIX'))
+    app.wsgi_app = PrefixMiddleware(
+        app.wsgi_app, prefix=app.config.get('APP_PREFIX'))
 
 if app.config.get('PROFILE'):
     # Enable profiling

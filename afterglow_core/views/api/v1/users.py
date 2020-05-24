@@ -4,7 +4,6 @@ Afterglow Core: login and user account management routes
 
 import os
 import shutil
-import json
 
 from flask_security.utils import hash_password
 from flask import request
@@ -12,15 +11,13 @@ from flask import request
 from . import url_prefix
 from .... import app, json_response
 from ....auth import auth_required
-from ....oauth2 import oauth_clients
-from ....users import Role, User, UserClient, db
+from ....users import Role, User, db
 from ....models.user import UserSchema
 from ....errors import MissingFieldError, ValidationError
 from ....errors.auth import (
     AdminRequiredError, UnknownUserError, CannotDeactivateTheOnlyAdminError,
     DuplicateUsernameError, CannotDeleteCurrentUserError,
     LocalAccessRequiredError)
-from ....errors.oauth2 import UnknownClientError, MissingClientIdError
 
 
 def parse_user_fields():

@@ -2,31 +2,20 @@
 Afterglow Core: login and user account management routes
 """
 
-import os
-import shutil
 import json
 
-from flask_security.utils import hash_password
 from flask import request
 
 from . import url_prefix
 from .... import app, json_response
 from ....auth import auth_required
 from ....oauth2 import oauth_clients
-from ....users import Role, User, UserClient, db
-from ....models.user import UserSchema
-from ....errors import MissingFieldError, ValidationError
-from ....errors.auth import (
-    AdminRequiredError, UnknownUserError, CannotDeactivateTheOnlyAdminError,
-    DuplicateUsernameError, CannotDeleteCurrentUserError,
-    LocalAccessRequiredError)
+from ....users import UserClient, db
 from ....errors.oauth2 import UnknownClientError, MissingClientIdError
 
-@app.route(url_prefix + 'app-authorizations',
-           methods=['GET', 'POST'])
-@app.route(url_prefix +
-           'app-authorizations/<int:id>',
-           methods=['DELETE'])
+
+@app.route(url_prefix + 'app-authorizations', methods=['GET', 'POST'])
+@app.route(url_prefix + 'app-authorizations/<int:id>', methods=['DELETE'])
 @auth_required
 def app_authorizations(id: int = None):
     user_id = request.user.id
@@ -74,8 +63,7 @@ def app_authorizations(id: int = None):
     if request.method == 'DELETE':
         # TODO remove all active tokens associated with user/client
         try:
-            uc = UserClient.query.filter_by(
-                user_id=user_id, id=id).delete()
+            UserClient.query.filter_by(user_id=user_id, id=id).delete()
 
             db.session.commit()
         except Exception:

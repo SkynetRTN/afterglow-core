@@ -4,19 +4,15 @@ Afterglow Core: settings routes
 
 import secrets
 
-from flask import request, render_template, redirect, url_for
-from flask_security.utils import verify_password
+from flask import request
 
 from . import url_prefix
 from .... import app, json_response
-from ....auth import (
-    auth_required, clear_access_cookies, oauth_plugins,
-    set_access_cookies)
-from ....users import User, PersistentToken, db
+from ....auth import auth_required
+from ....users import PersistentToken, db
 from ....models.user import TokenSchema
 from ....errors import ValidationError
-from ....errors.auth import (
-    HttpAuthFailedError, NotInitializedError, UnknownTokenError)
+from ....errors.auth import UnknownTokenError
 
 
 @app.route(url_prefix + 'tokens', methods=['GET', 'POST'])
@@ -59,7 +55,7 @@ def tokens():
             raise
 
         return json_response(TokenSchema().dump(personal_token), 201)
-        
+
 
 @app.route(url_prefix + 'tokens/<int:token_id>', methods=['DELETE'])
 @auth_required

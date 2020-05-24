@@ -2,22 +2,10 @@
 Afterglow Core: settings routes
 """
 
-import secrets
+from flask import render_template
 
-from flask import request, render_template, redirect, url_for
-from flask_security.utils import verify_password
-
-from .. import app, json_response
-from ..auth import (
-    auth_required, clear_access_cookies, oauth_plugins,
-    set_access_cookies)
-from ..users import User, PersistentToken, db
-from ..models.user import TokenSchema
-from ..errors import ValidationError
-from ..errors.auth import (
-    HttpAuthFailedError, NotInitializedError, UnknownTokenError)
-
-
+from .. import app
+from ..auth import auth_required
 
 
 @app.route('/settings/tokens', methods=['GET'])
