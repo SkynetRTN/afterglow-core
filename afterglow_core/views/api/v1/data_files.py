@@ -23,9 +23,9 @@ from ....errors.data_file import (
     UnknownDataFileError, CannotImportFromCollectionAssetError)
 from ....resources import data_providers
 from ....resources.data_files import (
-    get_data_file_db, get_root, SqlaDataFile, get_session_id, create_data_file,
-    import_data_file, remove_data_file, get_data_file, get_data_file_path,
-    get_subframe, get_data_file_data, make_data_response, SqlaSession)
+    SqlaSession, SqlaDataFile, get_data_file_db, get_root, get_session_id,
+    create_data_file, import_data_file, remove_data_file, get_data_file,
+    get_data_file_path, get_subframe, get_data_file_data, make_data_response)
 from . import url_prefix
 
 
@@ -322,6 +322,77 @@ def data_files_wcs(id):
             dict(key=key, value=value, comment=wcs_hdr.comments[i])
             for i, (key, value) in enumerate(wcs_hdr.items())])
     return json_response([])
+
+
+@app.route(resource_prefix + '<int:id>/phot_cal', methods=['GET', 'PUT'])
+@auth.auth_required('user')
+def data_files_phot_cal(id):
+    """
+    Return or update data file photometric calibration (zero point and error)
+
+    GET /data-files/[id]/phot_cal
+
+    PUT /data-files/[id]/phot_cal?m0=...[&m0_err=...]
+
+    :param int id: data file ID
+
+    :return: JSON-serialized structure {"m0": ..., "m0_err": ...} containing
+        photometric zero point and its error, if any; empty structure means
+        no calibration data available
+    :rtype: flask.Response
+    """
+    if request.method == 'GET':
+        phot_cal = {}
+        with pyfits.open(get_data_file_path(auth.current_user.id, id),
+                         'readonly') as fits:
+            hdr = fits[0].header
+            try:
+                phot_cal['m0'] = float(hdr['PHOT_M0'])
+            except (KeyError, ValueError):
+                pass
+
+            try:
+                phot_cal['m0_err'] = float(hdr['PHOT_M0E'])
+            except (KeyError, ValueError):
+                pass
+    else:
+        with pyfits.open(get_data_file_path(auth.current_user.id, id),
+                         'update') as fits:
+            phot_cal = {}
+            try:
+                phot_cal['m0'] = float(request.args['m0'])
+            except KeyError:
+                pass
+            except ValueError:
+                raise errors.ValidationError(
+                    'm0', 'Floating-point m0 expected')
+            try:
+                phot_cal['m0_err'] = float(request.args['m0_err'])
+                if phot_cal['m0_err'] <= 0:
+                    raise ValueError()
+            except KeyError:
+                pass
+            except ValueError:
+                raise errors.ValidationError(
+                    'm0_err', 'Positive floating-point m0_err expected')
+
+            hdr = fits[0].header
+            try:
+                hdr['PHOT_M0'] = phot_cal['m0']
+            except KeyError:
+                try:
+                    del hdr['PHOT_M0']
+                except KeyError:
+                    pass
+            try:
+                hdr['PHOT_M0E'] = phot_cal['m0_err']
+            except KeyError:
+                try:
+                    del hdr['PHOT_M0E']
+                except KeyError:
+                    pass
+
+    return json_response(phot_cal)
 
 
 @app.route(resource_prefix + '<int:id>/hist')
