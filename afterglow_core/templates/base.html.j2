@@ -1,10 +1,13 @@
 {% set navigation_bar = [
     ('General', [
       (url_for("default"), 'dashboard', 'Dashboard', 'fa fa-tachometer-alt')
-    ]),
+    ], false),
     ('Settings', [
       (url_for("settings_tokens"), 'settings_tokens', 'Personal Access Tokens', 'fa fa-key')
-    ]),
+    ], false),
+    ('Administration', [
+      (url_for("admin_users"), 'admin_users', 'User Management', 'fa fa-user')
+    ], true),
 ] -%}
 
 {% set active_page = active_page|default('dashboard') -%}
@@ -98,20 +101,22 @@
       </div>
     </div>
     <div class="menu is-menu-main">
-    {% for nav_group, nav_items in navigation_bar %}
-      <p class="menu-label">{{ nav_group }}</p>
-      <ul class="menu-list">
-      {% for href, id, caption, icon in nav_items %}
-        <li>
-          <a href="{{ href }}" class="router-link-active has-icon level {% if id == active_page %}is-active{% endif%}">
-            <div class="level-left">
-              <span class="icon"><i class="{{icon}}"></i></span>
-              <span class="menu-item-label">{{caption}}</span>
-            </div>
-          </a>
-        </li>
-      {% endfor %}
-      </ul>
+    {% for nav_group, nav_items, admin_required in navigation_bar %}
+      {% if current_user.is_admin or not admin_required %}
+        <p class="menu-label">{{ nav_group }}</p>
+        <ul class="menu-list">
+        {% for href, id, caption, icon in nav_items %}
+          <li>
+            <a href="{{ href }}" class="router-link-active has-icon level {% if id == active_page %}is-active{% endif%}">
+              <div class="level-left">
+                <span class="icon"><i class="{{icon}}"></i></span>
+                <span class="menu-item-label">{{caption}}</span>
+              </div>
+            </a>
+          </li>
+        {% endfor %}
+        </ul>
+      {% endif %}
     {% endfor %}
     </div>
   </aside>

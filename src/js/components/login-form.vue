@@ -1,6 +1,6 @@
 <template>
   <form id="login-form" method="post" @submit="formSubmit">
-    <div class="notification is-danger" v-if="errors.length">
+    <div class="notification is-danger" v-if="errors.length" role="alert">
       <ul>
         <li v-for="error in errors" v-bind:key="error">{{ error }}</li>
       </ul>
@@ -9,7 +9,7 @@
     <div class="field">
       <label for="username" class="label">Username</label>
       <div class="control has-icons-left">
-        <input id="username" name="username" v-model="username" type="text" value class="input" />
+        <input id="username" name="username" v-model="username" type="text" value class="input" required/>
         <span class="icon is-small is-left">
           <i class="fas fa-user"></i>
         </span>
@@ -18,21 +18,21 @@
     <div class="field">
       <label for="password" class="label">Password</label>
       <div class="control has-icons-left">
-        <input id="password" name="password" v-model="password" type="password" value class="input" />
+        <input id="password" name="password" v-model="password" type="password" value class="input"  required />
         <span class="icon is-small is-left">
           <i class="fas fa-lock"></i>
         </span>
       </div>
     </div>
-    <div class="field">
+    <!-- <div class="field">
       <label for="rememberMe" class="checkbox">
         <input id="rememberMe" class="checkbox" v-model="rememberMe" type="checkbox" /> Remember me
       </label>
-    </div>
+    </div> -->
     <div class="field is-grouped is-grouped-right">
-      <div class="control">
-        <a class="button is-link is-light" :href="cancelUrl">Cancel</a>
-      </div>
+      <!-- <div class="control">
+        <a class="button is-link is-light" :href="cancelUrl" aria-label="Cancel">Cancel</a>
+      </div> -->
       <div class="control">
         <button
           class="button is-link"
@@ -101,6 +101,11 @@ export default {
 
                 break;
               }
+              case 401: {
+                this.errors = ['Invalid username or password'];
+                break;
+              }
+
               default: {
                 this.errors.push("An unexpected error occurred");
                 break;

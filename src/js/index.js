@@ -19,6 +19,7 @@ import AppConsentForm from './components/app-consent-form';
 import AppAuthorizationsTable from './components/app-authorizations-table';
 import CreateTokenForm from './components/create-token-form';
 import TokensTable from './components/tokens-table';
+import CreateUserForm from './components/create-user-form';
 
 Vue.use(Buefy);
 
@@ -34,7 +35,7 @@ window.onload = function () {
             'app-authorizations-table': AppAuthorizationsTable,
             'create-token-form': CreateTokenForm,
             'tokens-table': TokensTable,
-
+            'create-user-form': CreateUserForm,
         },
         created: function () {
         },

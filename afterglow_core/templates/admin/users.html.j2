@@ -1,0 +1,31 @@
+{% extends "base.html.j2" %}
+{% set active_page = "settings_tokens" %}
+
+{% block title %}
+User Management
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="box">
+        <div class="content">
+            <p>Use the following form to create accounts for new users.</p>
+            
+            <div class="table-container">
+            <create-user-form></create-user-form>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+{%endblock%}
+
+{% block scripts %}
+{{ super() }}
+
+<script>
+</script>
+
+{% endblock %}

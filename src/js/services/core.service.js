@@ -5,6 +5,7 @@ export const coreService = {
     login,
     getUser,
     createToken,
+    createUser,
     getTokens,
     deleteToken,
     getAppAuthorizations,
@@ -28,6 +29,9 @@ function getUser(userId) {
     return axios.get(`${apiUrl}/users/${userId}`)
 }
 
+function createUser(user) {
+    return axios.post(`${apiUrl}/users`, user)
+}
 
 function createToken(token) {
     return axios.post(`${apiUrl}/tokens`, token);
