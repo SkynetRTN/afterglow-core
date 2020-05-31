@@ -112,7 +112,8 @@ export default {
       coreService.createUser({
           username: this.username,
           password: this.password,
-          email: this.email
+          email: this.email,
+          roles: 'user'
         })
         .then((response) => {
          this.success = 'The account was successfully created';
