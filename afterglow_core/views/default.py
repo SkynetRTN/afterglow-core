@@ -51,10 +51,10 @@ def initialize():
     if User.query.count() != 0:
         raise InitPageNotAvailableError()
 
-    if not app.config.get('REMOTE_ADMIN') and \
-            request.remote_addr != '127.0.0.1':
-        # Remote administration is not allowed
-        raise LocalAccessRequiredError()
+    # if not app.config.get('REMOTE_ADMIN') and \
+    #         request.remote_addr != '127.0.0.1':
+    #     # Remote administration is not allowed
+    #     raise LocalAccessRequiredError()
 
     if request.method == 'GET':
         return render_template('initialize.html.j2')
