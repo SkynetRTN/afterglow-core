@@ -106,7 +106,7 @@ export default {
           body: JSON.stringify({})
         };
 
-      axios.post("/initialize", {
+      axios.post(`${config.baseUrl}/initialize`, {
           username: this.username,
           password: this.password,
           email: this.email
