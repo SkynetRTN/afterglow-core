@@ -171,10 +171,10 @@ def login():
 
     # Do not allow login if Afterglow Core has not yet been configured
     if User.query.count() == 0:
-        if app.config.get('REMOTE_ADMIN') or request.remote_addr == '127.0.0.1':
-            return redirect(url_for('initialize'))
+        # if app.config.get('REMOTE_ADMIN') or request.remote_addr == '127.0.0.1':
+        return redirect(url_for('initialize'))
 
-        raise NotInitializedError()
+        # raise NotInitializedError()
 
     if request.method == 'GET':
         return render_template(
