@@ -68,9 +68,8 @@ def field_cals(id_or_name=None):
     if request.method == 'GET':
         if id_or_name is None:
             # List all field cals
-            return json_response(dict(
-                items=[FieldCal.from_db(field_cal)
-                       for field_cal in adb.query(SqlaFieldCal)]))
+            return json_response([FieldCal.from_db(field_cal)
+                       for field_cal in adb.query(SqlaFieldCal)])
 
         # Return specific field cal resource
         return json_response(FieldCal.from_db(field_cal))

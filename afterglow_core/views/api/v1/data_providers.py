@@ -87,7 +87,7 @@ def data_providers(id=None):
                 pass
             else:
                 allowed_providers.append(provider)
-        return json_response(dict(items=allowed_providers))
+        return json_response(allowed_providers)
 
     try:
         provider = providers[id]
@@ -166,7 +166,7 @@ def data_providers_assets(id):
             if path is not None and not provider.get_asset(path).collection:
                 raise CannotSearchInNonCollectionError()
 
-            return json_response(dict(items=provider.find_assets(path=path, **params)))
+            return json_response(provider.find_assets(path=path, **params))
 
         # "Get" request; assume empty path by default
         if path is None:
@@ -176,8 +176,8 @@ def data_providers_assets(id):
             # "Browse" request
             if not provider.browseable:
                 raise NonBrowseableDataProviderError(id=id)
-            return json_response(dict(items=provider.get_child_assets(path)))
-        return json_response(dict(items=[asset]))
+            return json_response(provider.get_child_assets(path))
+        return json_response([asset])
 
     # POST/PUT/DELETE always work with asset(s) at the given path
     if path is None:
