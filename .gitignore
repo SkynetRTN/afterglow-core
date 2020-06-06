@@ -1,3 +1,7 @@
+#static
+afterglow_core/static
+plugins/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -5,6 +9,10 @@ __pycache__/
 
 # C extensions
 *.so
+
+# Node
+node_modules/
+package-lock.json
 
 # Distribution / packaging
 .Python
@@ -105,3 +113,10 @@ MANIFEST
 
 # IntelliJ/PyCharm
 *.iml
+
+# Visual Studio
+/.vscode/
+
+# Locally generated data
+/*.db
+AFTERGLOW_CORE_KEY

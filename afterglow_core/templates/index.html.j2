@@ -1,0 +1,93 @@
+{% extends "base.html.j2" %}
+{% set active_page = "dashboard" %}
+
+{% block title %}
+Dashboard
+{% endblock %}
+
+{% block content %}
+<div class="card has-table has-mobile-sort-spaced">
+  <header class="card-header">
+    <p class="card-header-title">
+      <span class="icon"><i class="fa fa-tasks"></i></span>
+      Active Jobs
+    </p>
+    <a href="#" class="card-header-icon" v-on:click="refreshJobs();">
+      <span class="icon"><i class="fa fa-sync-alt"></i></span>
+    </a>
+  </header>
+  <div class="card-content">
+    <div class="table-container">
+      <jobs-table ref="jobsTable"></jobs-table>
+    </div>
+  </div>
+</div>
+
+<div class="card has-table has-mobile-sort-spaced">
+    <header class="card-header">
+        <p class="card-header-title">
+        <span class="icon"><i class="fa fa-key"></i></span>
+        Personal Access Tokens
+        </p>
+        <a href="#" class="card-header-icon" v-on:click="refreshTokens();">
+        <span class="icon"><i class="fa fa-sync-alt"></i></span>
+        </a>
+    </header>
+    <div class="card-content">
+        <tokens-table ref="tokensTable"></tokens-table>
+    </div>
+</div>
+
+<div class="card has-table has-mobile-sort-spaced">
+  <header class="card-header">
+    <p class="card-header-title">
+      <span class="icon"><i class="fa fa-external-link-square-alt"></i></span>
+      Authorized Apps
+    </p>
+    <a href="#" class="card-header-icon" v-on:click="refreshAuthorizedApps();">
+      <span class="icon"><i class="fa fa-sync-alt"></i></span>
+    </a>
+  </header>
+  <div class="card-content">
+    <app-authorizations-table ref="authorizedAppsTable" user-id="{{current_user.id}}"></app-authorizations-table>
+  </div>
+</div>
+
+{%if current_user.is_admin %}
+{# <div class="card has-table has-mobile-sort-spaced">
+  <header class="card-header">
+    <p class="card-header-title">
+      <span class="icon"><i class="mdi mdi-account-multiple"></i></span>
+      Create Accounts
+    </p>
+  </header>
+  <div class="card-content">
+  </div>
+</div> #}
+{% endif %}
+{%endblock%}
+
+{% block scripts %}
+{{ super() }}
+
+<script>
+    var refreshTokens;
+    var refreshAuthorizedApps;
+    var refreshJobs;
+    window.addEventListener(window.APP_MOUNTED_EVENT, (evt) => {
+        var app = evt.detail;
+        refreshTokens = () => {
+            app.$refs.tokensTable.loadAsyncData();
+        }
+
+        refreshAuthorizedApps = () => {
+            app.$refs.authorizedAppsTable.loadAsyncData();
+        }
+
+        refreshJobs = () => {
+            app.$refs.jobsTable.loadAsyncData();
+        }
+    });
+</script>
+
+{% endblock %}
