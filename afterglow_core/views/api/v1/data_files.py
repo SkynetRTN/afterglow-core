@@ -112,32 +112,38 @@ def data_files(id=None):
         try:
             session_id = get_session_id(adb)
 
-            if request.args.get('provider_id') is None and \
-                    request.args.get('width') is not None and \
-                    request.args.get('height') is not None:
+            import_params = request.args.to_dict()
+            provider_id = import_params.pop('provider_id', None)
+            duplicates = import_params.pop('duplicates', 'ignore')
+            files = request.files
+
+            if provider_id is None and not files:
                 # Create an empty image data file
-                name = request.args.get('name')
                 try:
-                    width = int(request.args['width'])
+                    width = int(import_params['width'])
                     if width < 1:
                         raise errors.ValidationError(
                             'width', 'Width must be positive', 422)
+                except KeyError:
+                    raise errors.MissingFieldError('width')
                 except ValueError:
                     raise errors.ValidationError(
                         'width', 'Width must be a positive integer')
                 try:
-                    height = int(request.args['height'])
+                    height = int(import_params['height'])
                     if height < 1:
                         raise errors.ValidationError(
                             'height', 'Height must be positive', 422)
+                except KeyError:
+                    raise errors.MissingFieldError('height')
                 except ValueError:
                     raise errors.ValidationError(
                         'width', 'Width must be a positive integer')
 
                 data = numpy.zeros([height, width], dtype=numpy.float32)
-                if request.args.get('pixel_value') is not None:
+                if import_params.get('pixel_value') is not None:
                     try:
-                        pixel_value = float(request.args['pixel_value'])
+                        pixel_value = float(import_params['pixel_value'])
                     except ValueError:
                         raise errors.ValidationError(
                             'pixel_value', 'Pixel value must be a number')
@@ -146,8 +152,18 @@ def data_files(id=None):
                         data += pixel_value
 
                 all_data_files.append(create_data_file(
-                    adb, name, root, data, duplicates='append',
-                    session_id=session_id))
+                    adb, import_params.get('name'), root, data,
+                    duplicates='append', session_id=session_id))
+            elif provider_id is None:
+                # Data file upload: get from multipart/form-data; use filename
+                # for the 2nd and subsequent files or if the "name" parameter
+                # is not provided
+                for i, (name, file) in enumerate(files.items()):
+                    all_data_files += import_data_file(
+                        adb, root, None, None, import_params,
+                        BytesIO(file.read()),
+                        name if i else import_params.get('name') or name,
+                        duplicates='append', session_id=session_id)
             else:
                 # Import data file
                 import_params = request.args.to_dict()
@@ -724,7 +740,8 @@ def sessions(id=None):
     if request.method == 'GET':
         if session is None:
             # List all sessions
-            return json_response([Session(session) for session in adb.query(SqlaSession)])
+            return json_response(
+                [Session(session) for session in adb.query(SqlaSession)])
 
         # Return specific session resource
         return json_response(Session(session))
