@@ -165,8 +165,8 @@ class FieldCalJob(FieldCalJobSchema):
             # by setting field_cal_results to False since we need raw
             # (uncalibrated) mags here
             phot_data = [source for source in run_photometry_job(
-                self, self.photometry_settings, self.file_ids, catalog_sources,
-                False) if source.mag]
+                self, self.photometry_settings, self.file_ids, catalog_sources)
+                if source.mag]
             if not phot_data:
                 raise RuntimeError('No catalog sources could be photometered')
         else:

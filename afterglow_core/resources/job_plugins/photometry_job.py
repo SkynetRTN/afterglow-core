@@ -137,6 +137,9 @@ def run_photometry_job(job, settings, job_file_ids, job_sources):
         for source in job_sources:
             sources.setdefault(source.file_id, []).append(source)
 
+    # Apply custom zero point to instrumental mags if requested
+    m0 = getattr(settings, 'zero_point', None) or 0
+
     result_data = []
     for file_no, file_id in enumerate(file_ids):
         try:
@@ -204,10 +207,8 @@ def run_photometry_job(job, settings, job_file_ids, job_sources):
                     settings.centroid_radius)
 
             # Photometer all sources in the current image
-            source_table = aperture_photometry(
-                data, source_table, **phot_kw)
+            source_table = aperture_photometry(data, source_table, **phot_kw)
 
-            # noinspection PyTypeChecker
             result_data += [
                 PhotometryData.from_phot_table(
                     row, source,
@@ -215,6 +216,7 @@ def run_photometry_job(job, settings, job_file_ids, job_sources):
                     filter=flt,
                     telescope=scope,
                     exp_length=texp,
+                    zero_point=m0,
                 )
                 for row, source in zip(source_table, sources[file_id])
                 if row['flag'] & (0xF0 & ~sep.APER_HASMASKED) == 0 and

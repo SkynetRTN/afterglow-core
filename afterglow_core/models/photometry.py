@@ -49,6 +49,7 @@ class PhotSettings(AfterglowSchema):
     theta_out = Float(default=None)  # type: float
     gain = Float(default=None)  # type: float
     centroid_radius = Float(default=0)  # type: float
+    zero_point = Float(default=0)  # type: float
 
 
 class PhotometryData(SourceExtractionData, IPhotometry):
@@ -63,15 +64,18 @@ class PhotometryData(SourceExtractionData, IPhotometry):
 
         :param numpy.void row: photometry table row
         :param SourceExtractionData source: input source object
-        :param kwargs: see :meth:`from_source_table`
+        :param kwargs: see :meth:`from_source_table`; extra kwargs:
+            - zero_point: apply the optional zero point to instrumental mag
         """
+        m0 = kwargs.pop('zero_point', 0)
+
         data = cls(source, **kwargs)
 
         data.x = row['x']
         data.y = row['y']
         data.flux = row['flux']
         data.flux_error = row['flux_err']
-        data.mag = row['mag']
+        data.mag = row['mag'] + m0
         data.mag_error = row['mag_err']
 
         if row['aper_a']:
