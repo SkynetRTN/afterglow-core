@@ -51,12 +51,12 @@ setup(
         'SQLAlchemy == 1.3.16',
         'Werkzeug == 1.0.1',
         # extra skynet dependencies
-        'cryptography == 2.9.2',
-        'marshmallow_sqlalchemy == 0.23.0',
-        'PyMySQL == 0.9.3',
-        'redis == 3.5.0',
-        'SQLAlchemy-Utils == 0.36.5',
-        'WTForms == 2.3.1',
+        # 'cryptography == 2.9.2',
+        # 'marshmallow_sqlalchemy == 0.23.0',
+        # 'PyMySQL == 0.9.3',
+        # 'redis == 3.5.0',
+        # 'SQLAlchemy-Utils == 0.36.5',
+        # 'WTForms == 2.3.1',
     ],
     entry_points={
         'paste.app_factory': [
