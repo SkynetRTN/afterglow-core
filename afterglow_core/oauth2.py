@@ -305,7 +305,7 @@ def _init_oauth():
                 db.session.rollback()
                 raise
 
-    for client_def in app.config['OAUTH_CLIENTS']:
+    for client_def in app.config.get('OAUTH_CLIENTS', []):
         oauth_clients[client_def.get('client_id')] = OAuth2Client(**client_def)
 
     memory_engine = create_engine(
