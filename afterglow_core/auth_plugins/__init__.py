@@ -53,6 +53,7 @@ class AuthnPluginBase(Resource):
     type = String(default=None)
     description = String(default=None)
     icon = String(default=None)
+    register_users = String(default=None)
 
     def __init__(self, id: Optional[str] = None,
                  description: Optional[str] = None, icon: Optional[str] = None,
@@ -111,7 +112,6 @@ class OAuthServerPluginBase(AuthnPluginBase):
     Class for OAuth plugins
     """
     # Fields visible on the client side
-    register_users = String(default=None)
     authorize_url = String(default=None)
     request_token_params = Dict(default=None)
     client_id = String(default=None)

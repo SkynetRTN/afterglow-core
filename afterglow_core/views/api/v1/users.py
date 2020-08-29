@@ -16,8 +16,7 @@ from ....models.user import UserSchema
 from ....errors import MissingFieldError, ValidationError
 from ....errors.auth import (
     AdminRequiredError, UnknownUserError, CannotDeactivateTheOnlyAdminError,
-    DuplicateUsernameError, CannotDeleteCurrentUserError,
-    LocalAccessRequiredError)
+    DuplicateUsernameError, CannotDeleteCurrentUserError)
 
 
 def parse_user_fields():
@@ -141,6 +140,7 @@ def users(user_id: int = None):
             raise DuplicateUsernameError(username=username)
 
         try:
+            # noinspection PyArgumentList
             u = User(
                 username=username,
                 password=hash_password(password),
