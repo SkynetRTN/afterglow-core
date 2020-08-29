@@ -7,7 +7,7 @@ from datetime import datetime
 
 from marshmallow.fields import Dict, Integer, List, String
 
-from . import DateTime, Resource
+from . import Boolean, DateTime, Resource
 
 
 __all__ = ['DataFile', 'Session']
@@ -32,6 +32,7 @@ class DataFile(Resource):
         layer: layer ID for data files imported from multi-layer data provider
             assets
         created_on: datetime.datetime of data file creation
+        modified: True if the file was modified after creation
         modified_on: datetime.datetime of data file modification
     """
     __get_view__ = 'data_files'
@@ -47,6 +48,7 @@ class DataFile(Resource):
     layer = String(default=None)  # type: str
     created_on = DateTime(
         default=None, format='%Y-%m-%d %H:%M:%S')  # type: datetime
+    modified = Boolean(default=False)
     modified_on = DateTime(
         default=None, format='%Y-%m-%d %H:%M:%S')  # type: datetime
     session_id = Integer(default=None)  # type: int

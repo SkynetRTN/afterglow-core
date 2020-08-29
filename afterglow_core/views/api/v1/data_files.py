@@ -235,6 +235,7 @@ def data_files(id=None):
             if name:
                 data_file.name = name
             data_file.session_id = session_id
+            data_file.modified = True
             data_file.modified_on = datetime.utcnow()
             adb.commit()
         except Exception:
@@ -284,7 +285,9 @@ def data_files_header(id):
 
         adb = get_data_file_db(auth.current_user.id)
         try:
-            adb.query(SqlaDataFile).get(id).modified_on = datetime.utcnow()
+            data_file = adb.query(SqlaDataFile).get(id)
+            data_file.modified = True
+            data_file.modified_on = datetime.utcnow()
             adb.commit()
         except Exception:
             adb.rollback()
@@ -344,7 +347,9 @@ def data_files_wcs(id):
 
     adb = get_data_file_db(auth.current_user.id)
     try:
-        adb.query(SqlaDataFile).get(id).modified_on = datetime.utcnow()
+        data_file = adb.query(SqlaDataFile).get(id)
+        data_file.modified = True
+        data_file.modified_on = datetime.utcnow()
         adb.commit()
     except Exception:
         adb.rollback()
@@ -428,7 +433,9 @@ def data_files_phot_cal(id):
 
         adb = get_data_file_db(auth.current_user.id)
         try:
-            adb.query(SqlaDataFile).get(id).modified_on = datetime.utcnow()
+            data_file = adb.query(SqlaDataFile).get(id)
+            data_file.modified = True
+            data_file.modified_on = datetime.utcnow()
             adb.commit()
         except Exception:
             adb.rollback()

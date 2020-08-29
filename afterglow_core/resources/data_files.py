@@ -13,7 +13,7 @@ from threading import Lock
 from io import BytesIO
 
 from sqlalchemy import (
-    CheckConstraint, Column, DateTime, ForeignKey, Integer, String,
+    Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, String,
     create_engine, event)
 from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -78,6 +78,7 @@ class SqlaDataFile(Base):
     asset_metadata = Column(String)
     layer = Column(String)
     created_on = Column(DateTime, default=datetime.utcnow)
+    modified = Column(Boolean, default=False)
     modified_on = Column(DateTime, onupdate=datetime.utcnow)
     session_id = Column(
         Integer,
@@ -246,7 +247,9 @@ def save_data_file(adb, root, file_id, data, hdr):
         'silentfix', overwrite=True)
 
     # Update file modification timestamp
-    adb.query(SqlaDataFile).get(file_id).modified_on = datetime.utcnow()
+    data_file = adb.query(SqlaDataFile).get(file_id)
+    data_file.modified = True
+    data_file.modified_on = datetime.utcnow()
 
 
 def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
