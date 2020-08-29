@@ -14,7 +14,7 @@ from io import BytesIO
 
 from sqlalchemy import (
     CheckConstraint, Column, DateTime, ForeignKey, Integer, String,
-    create_engine, event, func)
+    create_engine, event)
 from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 # noinspection PyProtectedMember
@@ -77,7 +77,8 @@ class SqlaDataFile(Base):
     asset_path = Column(String)
     asset_metadata = Column(String)
     layer = Column(String)
-    created_on = Column(DateTime, default=func.now())
+    created_on = Column(DateTime, default=datetime.utcnow)
+    modified_on = Column(DateTime, onupdate=datetime.utcnow)
     session_id = Column(
         Integer,
         ForeignKey('sessions.id', name='fk_sessions_id', ondelete='cascade'),
@@ -196,12 +197,13 @@ def get_data_file_db(user_id):
             else ', '.join(str(arg) for arg in e.args) if e.args else str(e))
 
 
-def save_data_file(root, file_id, data, hdr):
+def save_data_file(adb, root, file_id, data, hdr):
     """
     Save data file to the user's data file directory as a single (image) or
     double (image + mask) HDU FITS or a primary + table HDU FITS, depending on
     whether the input HDU contains an image or a table
 
+    :param sqlalchemy.orm.session.Session adb: SQLA database session
     :param str root: user's data file storage root directory
     :param int file_id: data file ID
     :param array_like data: image or table data; image data can be a masked
@@ -242,6 +244,9 @@ def save_data_file(root, file_id, data, hdr):
     fits.writeto(
         os.path.join(root, '{}.fits'.format(file_id)),
         'silentfix', overwrite=True)
+
+    # Update file modification timestamp
+    adb.query(SqlaDataFile).get(file_id).modified_on = datetime.utcnow()
 
 
 def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
@@ -328,7 +333,8 @@ def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
         adb.add(sqla_data_file)
         adb.flush()  # obtain the new row ID by flushing db
 
-    save_data_file(root, sqla_data_file.id, data, hdr)
+    save_data_file(adb, root, sqla_data_file.id, data, hdr)
+    sqla_data_file.modified_on = sqla_data_file.created_on
 
     return DataFile(sqla_data_file)
 

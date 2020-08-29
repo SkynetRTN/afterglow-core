@@ -8,6 +8,7 @@ import os
 import tempfile
 import subprocess
 import shutil
+from datetime import datetime
 from io import BytesIO
 
 import numpy
@@ -234,6 +235,7 @@ def data_files(id=None):
             if name:
                 data_file.name = name
             data_file.session_id = session_id
+            data_file.modified_on = datetime.utcnow()
             adb.commit()
         except Exception:
             adb.rollback()
@@ -279,6 +281,14 @@ def data_files_header(id):
             hdr = fits[0].header
             for name, val in request.args.items():
                 hdr[name] = val
+
+        adb = get_data_file_db(auth.current_user.id)
+        try:
+            adb.query(SqlaDataFile).get(id).modified_on = datetime.utcnow()
+            adb.commit()
+        except Exception:
+            adb.rollback()
+            raise
 
     return json_response([
         dict(key=key, value=value, comment=hdr.comments[i])
@@ -332,10 +342,19 @@ def data_files_wcs(id):
     except Exception:
         pass
 
+    adb = get_data_file_db(auth.current_user.id)
+    try:
+        adb.query(SqlaDataFile).get(id).modified_on = datetime.utcnow()
+        adb.commit()
+    except Exception:
+        adb.rollback()
+        raise
+
     if wcs_hdr:
         return json_response([
             dict(key=key, value=value, comment=wcs_hdr.comments[i])
             for i, (key, value) in enumerate(wcs_hdr.items())])
+
     return json_response([])
 
 
@@ -406,6 +425,14 @@ def data_files_phot_cal(id):
                     del hdr['PHOT_M0E']
                 except KeyError:
                     pass
+
+        adb = get_data_file_db(auth.current_user.id)
+        try:
+            adb.query(SqlaDataFile).get(id).modified_on = datetime.utcnow()
+            adb.commit()
+        except Exception:
+            adb.rollback()
+            raise
 
     return json_response(phot_cal)
 

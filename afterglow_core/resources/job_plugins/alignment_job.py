@@ -198,15 +198,17 @@ class AlignmentJob(AlignmentJobSchema):
                             adb.rollback()
                             raise
                 elif i != ref_image:  # not replacing reference image
-                    save_data_file(get_root(self.user_id), file_id, data, hdr)
-
-                    # May need to update the image size
                     try:
+                        save_data_file(
+                            adb, get_root(self.user_id), file_id, data, hdr)
+
+                        # May need to update the image size
                         data_file = adb.query(SqlaDataFile).get(file_id)
                         shape = data.shape
                         if shape != [data_file.height, data_file.width]:
                             data_file.height, data_file.width = shape
-                            adb.commit()
+
+                        adb.commit()
                     except Exception:
                         adb.rollback()
                         raise
