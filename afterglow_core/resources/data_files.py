@@ -79,7 +79,10 @@ class SqlaDataFile(Base):
     layer = Column(String)
     created_on = Column(DateTime, default=datetime.utcnow)
     modified = Column(Boolean, default=False)
-    modified_on = Column(DateTime, onupdate=datetime.utcnow)
+    modified_on = Column(
+        DateTime,
+        default=lambda ctx: ctx.get_current_parameters()['created_on'],
+        onupdate=datetime.utcnow)
     session_id = Column(
         Integer,
         ForeignKey('sessions.id', name='fk_sessions_id', ondelete='cascade'),
