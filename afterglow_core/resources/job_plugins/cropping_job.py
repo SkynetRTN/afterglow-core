@@ -180,17 +180,18 @@ class CroppingJob(CroppingJobSchema):
                             pass
 
                     if self.inplace:
-                        # Overwrite the original data file
-                        save_data_file(
-                            get_root(self.user_id), file_id, data, hdr)
-
-                        # Update image dimensions in the database
                         try:
+                            # Overwrite the original data file
+                            save_data_file(
+                                adb, get_root(self.user_id), file_id, data, hdr)
+
+                            # Update image dimensions in the database
                             data_file = adb.query(SqlaDataFile).get(file_id)
                             shape = data.shape
                             if shape != [data_file.height, data_file.width]:
                                 data_file.height, data_file.width = shape
-                                adb.commit()
+
+                            adb.commit()
                         except Exception:
                             adb.rollback()
                             raise

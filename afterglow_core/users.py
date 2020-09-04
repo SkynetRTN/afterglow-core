@@ -4,6 +4,7 @@ Afterglow Core: user management
 
 import os
 import time
+import errno
 
 from flask_sqlalchemy import SQLAlchemy
 from flask_security import SQLAlchemyUserDatastore, UserMixin, RoleMixin
@@ -222,6 +223,13 @@ def _init_users():
     global user_datastore
 
     user_datastore = SQLAlchemyUserDatastore(db, User, Role)
+
+    # Make sure that the database directory exists
+    try:
+        os.makedirs(os.path.abspath(app.config['DATA_ROOT']))
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
 
     # Create data_files table
     if alembic_config is None:

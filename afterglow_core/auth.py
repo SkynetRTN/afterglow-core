@@ -367,7 +367,7 @@ def _init_auth():
     # Load auth plugins
     authn_plugins = load_plugins(
         'authentication', 'auth_plugins', AuthnPluginBase,
-        app.config['AUTH_PLUGINS'])
+        app.config.get('AUTH_PLUGINS', []))
 
     for name, plugin in authn_plugins.items():
         if isinstance(plugin, OAuthServerPluginBase):

@@ -162,15 +162,18 @@ class PixelOpsJob(PixelOpsJobSchema):
                 hdr = get_data_file(self.user_id, file_id)[1]
                 hdr.add_history(
                     'Updated by evaluating expression "{}"'.format(expr))
-                save_data_file(get_root(self.user_id), file_id, res, hdr)
 
-                # May need to update the image size
                 try:
+                    save_data_file(
+                        adb, get_root(self.user_id), file_id, res, hdr)
+
+                    # May need to update the image size
                     data_file = adb.query(SqlaDataFile).get(file_id)
                     shape = numpy.shape(res)
                     if shape != [data_file.height, data_file.width]:
                         data_file.height, data_file.width = shape
-                        adb.commit()
+
+                    adb.commit()
                 except Exception:
                     adb.rollback()
                     raise
