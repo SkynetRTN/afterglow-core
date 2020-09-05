@@ -8,7 +8,6 @@ import os
 import tempfile
 import subprocess
 import shutil
-from datetime import datetime
 from io import BytesIO
 
 import numpy
@@ -231,16 +230,17 @@ def data_files(id=None):
         # Update data file
         name = request.args.get('name')
         session_id = get_session_id(adb)
-        try:
-            if name:
-                data_file.name = name
-            data_file.session_id = session_id
-            data_file.modified = True
-            data_file.modified_on = datetime.utcnow()
-            adb.commit()
-        except Exception:
-            adb.rollback()
-            raise
+        if name and name != data_file.name or \
+                session_id != data_file.session_id:
+            try:
+                if name:
+                    data_file.name = name
+                data_file.session_id = session_id
+                data_file.modified = True
+                adb.commit()
+            except Exception:
+                adb.rollback()
+                raise
 
         return json_response(DataFile(data_file))
 
@@ -287,7 +287,6 @@ def data_files_header(id):
         try:
             data_file = adb.query(SqlaDataFile).get(id)
             data_file.modified = True
-            data_file.modified_on = datetime.utcnow()
             adb.commit()
         except Exception:
             adb.rollback()
@@ -349,7 +348,6 @@ def data_files_wcs(id):
     try:
         data_file = adb.query(SqlaDataFile).get(id)
         data_file.modified = True
-        data_file.modified_on = datetime.utcnow()
         adb.commit()
     except Exception:
         adb.rollback()
@@ -435,7 +433,6 @@ def data_files_phot_cal(id):
         try:
             data_file = adb.query(SqlaDataFile).get(id)
             data_file.modified = True
-            data_file.modified_on = datetime.utcnow()
             adb.commit()
         except Exception:
             adb.rollback()

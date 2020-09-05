@@ -79,10 +79,7 @@ class SqlaDataFile(Base):
     layer = Column(String)
     created_on = Column(DateTime, default=datetime.utcnow)
     modified = Column(Boolean, default=False)
-    modified_on = Column(
-        DateTime,
-        default=lambda ctx: ctx.get_current_parameters()['created_on'],
-        onupdate=datetime.utcnow)
+    modified_on = Column(DateTime, onupdate=datetime.utcnow)
     session_id = Column(
         Integer,
         ForeignKey('sessions.id', name='fk_sessions_id', ondelete='cascade'),
@@ -252,7 +249,6 @@ def save_data_file(adb, root, file_id, data, hdr):
     # Update file modification timestamp
     data_file = adb.query(SqlaDataFile).get(file_id)
     data_file.modified = True
-    data_file.modified_on = datetime.utcnow()
 
 
 def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
@@ -340,7 +336,6 @@ def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
         adb.flush()  # obtain the new row ID by flushing db
 
     save_data_file(adb, root, sqla_data_file.id, data, hdr)
-    sqla_data_file.modified_on = sqla_data_file.created_on
 
     return DataFile(sqla_data_file)
 
