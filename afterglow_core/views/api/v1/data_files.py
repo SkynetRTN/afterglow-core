@@ -324,23 +324,21 @@ def data_files_wcs(id):
         with pyfits.open(get_data_file_path(auth.current_user.id, id),
                          'update') as fits:
             hdr = fits[0].header
-            for name in (
-                    'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
-                    'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2',
-                    'CDELT1', 'CDELT2', 'CROTA1', 'CROTA2'):
-                try:
-                    del hdr[name]
-                except KeyError:
-                    pass
             for name, val in request.args.items():
-                hdr[name] = val
+                if val is None:
+                    try:
+                        del hdr[name]
+                    except KeyError:
+                        pass
+                else:
+                    hdr[name] = val
 
     wcs_hdr = None
     # noinspection PyBroadException
     try:
-        wcs = WCS(hdr)
+        wcs = WCS(hdr, relax=True)
         if wcs.has_celestial:
-            wcs_hdr = wcs.to_header()
+            wcs_hdr = wcs.to_header(relax=True)
     except Exception:
         pass
 

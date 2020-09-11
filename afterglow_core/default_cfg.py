@@ -97,6 +97,13 @@ CATALOG_OPTIONS = {}
 # ]
 CUSTOM_VIZIER_CATALOGS = []
 
+# Path or list of paths to Astrometry.net index files used for plate solving
+# ANET_INDEX_PATH = '/usr/local/astrometry-net/data'
+# or
+# ANET_INDEX_PATH = ['C:\\Astrometry.net\\data\\Tycho-2',
+#                    'C:\\Astrometry.net\\Data\\2MASS']
+ANET_INDEX_PATH = []
+
 
 ################################################################################
 # Job server options
