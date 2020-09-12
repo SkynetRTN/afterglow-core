@@ -3,6 +3,7 @@ Afterglow Core: image alignment job plugin
 """
 
 import re
+from datetime import datetime
 
 from skylib.astrometry import Solver, solve_field
 
@@ -113,7 +114,8 @@ class WcsCalibrationJob(WcsCalibrationJobSchema):
                 xy = [(source.x, source.y) for source in sources]
                 fluxes = [source.flux for source in sources]
 
-                # Run Astrometry.net
+                # Run Astrometry.net; allow to abort the job by calling back
+                # from the engine into Python code
                 solution = solve_field(
                     solver, xy, fluxes,
                     width=data.shape[1],
@@ -126,7 +128,8 @@ class WcsCalibrationJob(WcsCalibrationJobSchema):
                     sip_order=settings.sip_order,
                     crpix_center=settings.crpix_center,
                     max_sources=settings.max_sources,
-                    retry_lost=False)
+                    retry_lost=False,
+                    callback=lambda: 1)
                 if solution.wcs is None:
                     raise RuntimeError('WCS solution not found')
 
@@ -137,10 +140,12 @@ class WcsCalibrationJob(WcsCalibrationJobSchema):
                         del hdr[name]
 
                 hdr.add_history(
-                    'WCS calibration obtained with index {} from {} sources; '
-                    'matched sources: {}, conflicts: {}, log-odds: {}'.format(
-                        solution.index_name, solution.n_field, solution.n_match,
-                        solution.n_conflict, solution.log_odds))
+                    'WCS calibration obtained at {} with index {} from {} '
+                    'sources; matched sources: {}, conflicts: {}, log-odds: '
+                    '{}'.format(
+                        datetime.utcnow(), solution.index_name,
+                        solution.n_field, solution.n_match, solution.n_conflict,
+                        solution.log_odds))
 
                 # Overwrite WCS in FITS header; preserve epoch of observation
                 orig_kw = {
