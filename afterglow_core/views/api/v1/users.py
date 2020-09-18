@@ -101,9 +101,6 @@ def users(user_id: int = None):
     if request.method not in ('GET', 'PUT') or user_id != request.user.id:
         if not request.user.is_admin:
             raise AdminRequiredError()
-        # if not app.config.get('REMOTE_ADMIN') and \
-        #         request.remote_addr != '127.0.0.1':
-        #     raise LocalAccessRequiredError()
 
     # Request is authorized properly
     if request.method == 'GET' and user_id is None:

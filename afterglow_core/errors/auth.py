@@ -10,9 +10,8 @@ __all__ = [
     'CannotDeactivateTheOnlyAdminError', 'CannotDeleteCurrentUserError',
     'CannotSetProtectedUserDataError', 'DuplicateUsernameError',
     'HttpAuthFailedError', 'InactiveUserError', 'InitPageNotAvailableError',
-    'LocalAccessRequiredError', 'NoAdminRegisteredError',
-    'NotAuthenticatedError', 'NotInitializedError', 'UnknownAuthMethodError',
-    'UnknownUserError', 'UnknownTokenError',
+    'NoAdminRegisteredError', 'NotAuthenticatedError', 'NotInitializedError',
+    'UnknownAuthMethodError', 'UnknownUserError', 'UnknownTokenError',
 ]
 
 
@@ -166,17 +165,6 @@ class CannotDeleteCurrentUserError(AuthError):
     message = 'Cannot delete the currently authenticated user'
 
 
-class LocalAccessRequiredError(AuthError):
-    """
-    Only requests from localhost allowed
-
-    Extra attributes::
-        None
-    """
-    subcode = 112
-    message = 'Must be local to do that'
-
-
 class InitPageNotAvailableError(AuthError):
     """
     Afterglow Core has already been initialized
@@ -184,7 +172,7 @@ class InitPageNotAvailableError(AuthError):
     Extra attributes::
         None
     """
-    subcode = 113
+    subcode = 112
     message = 'Afterglow Core has already been initialized'
 
 
@@ -195,7 +183,7 @@ class NotInitializedError(AuthError):
     Extra attributes::
         None
     """
-    subcode = 114
+    subcode = 113
     message = 'Afterglow Core has not yet been initialized'
 
 
@@ -207,5 +195,5 @@ class UnknownTokenError(AfterglowError):
         None
     """
     code = 400
-    subcode = 115
+    subcode = 114
     message = 'Unknown token error'

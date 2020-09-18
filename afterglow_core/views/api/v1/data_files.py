@@ -580,11 +580,11 @@ def data_files_fits(id):
     [Accept-Encoding:]
     [Accept-Encoding: identity]
     -> (uncompressed FITS)
-    Content-Type: application/octet-stream
+    Content-Type: image/fits
 
     Accept-Encoding: gzip
     -> (compressed FITS)
-    Content-Type: application/octet-stream
+    Content-Type: image/fits
     Content-Encoding: gzip
 
     :param int id: data file ID

@@ -28,9 +28,6 @@ AUTH_PLUGINS = []
 # database; auth plugin option "register_users" overrides this
 REGISTER_AUTHENTICATED_USERS = True
 
-# Allow remote admin access with HTTP user auth enabled
-REMOTE_ADMIN = False
-
 # OAuth2 bearer token expiration time in seconds
 OAUTH2_PROVIDER_TOKEN_EXPIRES_IN = 3600
 

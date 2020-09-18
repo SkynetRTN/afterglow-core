@@ -52,7 +52,7 @@ class PhotSettings(AfterglowSchema):
     zero_point = Float(default=0)  # type: float
 
 
-class PhotometryData(SourceExtractionData, IPhotometry):
+class PhotometryData(SourceExtractionData, IPhotometry, IAperture):
     """
     Description of object returned by batch photometry
     """

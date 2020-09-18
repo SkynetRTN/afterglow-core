@@ -16,7 +16,7 @@ from ..models.user import UserSchema
 from ..errors import ValidationError, MissingFieldError
 from ..errors.auth import (
     HttpAuthFailedError, NotInitializedError, UnknownAuthMethodError,
-    NotAuthenticatedError, InitPageNotAvailableError, LocalAccessRequiredError)
+    NotAuthenticatedError, InitPageNotAvailableError)
 
 
 __all__ = []
@@ -40,21 +40,21 @@ def default():
 @app.route('/initialize', methods=['GET', 'POST'])
 def initialize():
     """
-    Homepage for Afterglow Core
+    Afterglow Core initialization
 
-    GET|POST /initialize
-        - Homepage/Initialize
+    GET /initialize
+        - render initialization page
 
-    :return: Afterglow Core initialization
+    POST /initialize
+        - create admin user
+
+    :return::
+        GET: initialization page HTML
+        POST: JSON-serialized :class:`UserSchema`
     :rtype: flask.Response
     """
     if User.query.count() != 0:
         raise InitPageNotAvailableError()
-
-    # if not app.config.get('REMOTE_ADMIN') and \
-    #         request.remote_addr != '127.0.0.1':
-    #     # Remote administration is not allowed
-    #     raise LocalAccessRequiredError()
 
     if request.method == 'GET':
         return render_template('initialize.html.j2')
@@ -149,10 +149,8 @@ def login():
         - login to Afterglow; authentication required using any of the methods
           defined in USER_AUTH
 
-    GET|POST /auth/login/[method]
-        - login using the given auth method ID (see GET /auth/methods)
-
-    :return: JSON {"access_token": "token", "refresh_token": token}
+    :return: empty response with "afterglow_core_access_token" cookie
+        if successfully logged in
     :rtype: flask.Response
     """
     # TODO Ensure CORS is disabled for POSTS to this endpoint
@@ -171,7 +169,6 @@ def login():
 
     # Do not allow login if Afterglow Core has not yet been configured
     if User.query.count() == 0:
-        # if app.config.get('REMOTE_ADMIN') or request.remote_addr == '127.0.0.1':
         return redirect(url_for('initialize'))
 
         # raise NotInitializedError()
