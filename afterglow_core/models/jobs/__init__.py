@@ -222,7 +222,6 @@ class Job(Resource):
         type: job type name; used when submitting a job via
             POST /jobs?type=`name`
         user_id: ID of the user who submitted the job
-        username: username of the job owner
         session_id: ID of the client session (None = default anonymous session);
             new data files will be created with this session ID
         state: current job state, an instance of DbJobState
@@ -242,7 +241,6 @@ class Job(Resource):
     id = Integer(default=None)  # type: int
     type = String()  # type: str
     user_id = Integer(default=None)  # type: int
-    username = String(default=None)  # type: str
     session_id = Integer(default=None)  # type: int
     state = Nested(JobState)  # type: JobState
     result = Nested(JobResult)  # type: JobResult

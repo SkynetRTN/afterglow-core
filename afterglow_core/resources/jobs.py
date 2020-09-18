@@ -37,13 +37,14 @@ from sqlalchemy.types import TypeDecorator
 from flask import Response, request
 
 from ..models.jobs import Job, JobResult, JobState, job_file_dir, job_file_path
-from .. import (
-    AfterglowSchemaEncoder, app, auth, json_response, plugins)
 from ..errors import AfterglowError, MissingFieldError, ValidationError
 from ..errors.job import (
     JobServerError, UnknownJobError, UnknownJobFileError, UnknownJobTypeError,
     InvalidMethodError, CannotSetJobStatusError, CannotCancelJobError,
     CannotDeleteJobError)
+from ..users import User
+from .. import (
+    AfterglowSchemaEncoder, app, auth, json_response, plugins)
 from .data_files import SqlaSession, get_data_file_db
 
 if sys.version_info.major < 3:
@@ -287,7 +288,6 @@ class DbJob(Base):
     id = Column(Integer, primary_key=True, nullable=False)
     type = Column(String(40), nullable=False, index=True)
     user_id = Column(Integer, index=True)
-    username = Column(String, index=True)
     session_id = Column(Integer, nullable=True, index=True)
 
     state = relationship(DbJobState, backref='job', uselist=False)
@@ -428,16 +428,8 @@ class JobWorkerProcess(Process):
                     ))
                     continue
 
-                # Replace auth.current_user with a fake user db object
-                # with the current user id and username for those modules
-                # that need them; within a worker process, auth.current_user
-                # is an AnonymousUser object with settable "id" and "username"
-                # attrs
-                if not hasattr(auth.current_user, 'id'):
-                    from ..users import AnonymousUser
-                    auth.current_user = AnonymousUser()
-                auth.current_user.id = job.user_id
-                auth.current_user.username = job.username
+                # Set auth.current_user to the actual db user
+                auth.current_user.id = User.query.get(job.user_id)
 
                 # Clear the possible cancel request
                 if WINDOWS:
@@ -698,7 +690,7 @@ class JobRequestHandler(BaseRequestHandler):
                                 DbJob.user_id == user_id,
                                 DbJob.session_id == msg.get('session_id')):
                             res = job_types[job.type].__class__(
-                                exclude=['user_id', 'username', 'result']
+                                exclude=['user_id', 'result']
                             ).dump(job)
                             if marshmallow_version < (3, 0):
                                 res = res[0]
@@ -774,7 +766,7 @@ class JobRequestHandler(BaseRequestHandler):
                             result = result[0]
                         server.job_queue.put(result)
                         result = dict(result)
-                        del result['user_id'], result['username']
+                        del result['user_id']
                         session.commit()
                     except Exception:
                         session.rollback()
@@ -1250,7 +1242,6 @@ def job_server_request(resource, **args):
             resource=resource,
             method=request.method,
             user_id=auth.current_user.id,
-            username=auth.current_user.username,
         ))
         msg = encrypt(json.dumps(msg).encode('utf8'))
 
