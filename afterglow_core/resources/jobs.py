@@ -429,7 +429,7 @@ class JobWorkerProcess(Process):
                     continue
 
                 # Set auth.current_user to the actual db user
-                auth.current_user.id = User.query.get(job.user_id)
+                auth.current_user = User.query.get(job.user_id)
 
                 # Clear the possible cancel request
                 if WINDOWS:
