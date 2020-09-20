@@ -2,28 +2,33 @@
 Afterglow Core: image cropping job schemas
 """
 
+from typing import List as TList
+
 from marshmallow.fields import Integer, List, Nested
 
 from .... import AfterglowSchema, Boolean
-from ..job import Job, JobResult
+from ..job import JobSchema, JobResultSchema
 
 
-__all__ = ['CroppingSettings', 'CroppingJobResult', 'CroppingJobSchema']
+__all__ = ['CroppingSettingsSchema', 'CroppingJobResultSchema',
+           'CroppingJobSchema']
 
 
-class CroppingSettings(AfterglowSchema):
+class CroppingSettingsSchema(AfterglowSchema):
     left = Integer(default=0)  # type: int
     right = Integer(default=0)  # type: int
     top = Integer(default=0)  # type: int
     bottom = Integer(default=0)  # type: int
 
 
-class CroppingJobResult(JobResult):
-    file_ids = List(Integer(), default=[])  # type: list
+class CroppingJobResultSchema(JobResultSchema):
+    file_ids = List(Integer(), default=[])  # type: TList[int]
 
 
-class CroppingJobSchema(Job):
-    result = Nested(CroppingJobResult, default={})  # type: CroppingJobResult
-    file_ids = List(Integer(), default=[])  # type: list
-    settings = Nested(CroppingSettings, default={})  # type: CroppingSettings
+class CroppingJobSchema(JobSchema):
+    result = Nested(
+        CroppingJobResultSchema, default={})  # type: CroppingJobResultSchema
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+    settings = Nested(
+        CroppingSettingsSchema, default={})  # type: CroppingSettingsSchema
     inplace = Boolean(default=False)  # type: bool

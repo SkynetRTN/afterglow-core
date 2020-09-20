@@ -6,7 +6,7 @@ from typing import Optional, Union
 
 from sqlalchemy import Column, Float, Integer, String
 
-from ..schemas.api.v1 import FieldCal
+from ..schemas.api.v1 import FieldCalSchema
 from ..errors.field_cal import UnknownFieldCalError
 from .data_files import Base, get_data_file_db
 
@@ -30,7 +30,7 @@ class SqlaFieldCal(Base):
 
 
 def get_field_cal(user_id: Optional[int],
-                  id_or_name: Union[int, str]) -> FieldCal:
+                  id_or_name: Union[int, str]) -> FieldCalSchema:
     """
     Return field cal with the given ID or name
 
@@ -51,4 +51,4 @@ def get_field_cal(user_id: Optional[int],
             SqlaFieldCal.name == id_or_name).one_or_none()
     if field_cal is None:
         raise UnknownFieldCalError(id=id_or_name)
-    return FieldCal.from_db(field_cal)
+    return FieldCalSchema.from_db(field_cal)

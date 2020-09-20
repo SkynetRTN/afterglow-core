@@ -17,7 +17,7 @@ from skylib.calibration.background import estimate_background
 from skylib.sonification import sonify_image
 
 from .... import app, json_response, auth, errors
-from ....schemas.api.v1 import DataFile, Session
+from ....schemas.api.v1 import DataFileSchema, SessionSchema
 from ....errors.data_provider import UnknownDataProviderError
 from ....errors.data_file import (
     UnknownDataFileError, CannotImportFromCollectionAssetError)
@@ -98,12 +98,12 @@ def data_files(id=None):
         if id is None:
             # List all data files for the given session
             return json_response([
-                    DataFile(data_file)
+                    DataFileSchema(data_file)
                     for data_file in adb.query(SqlaDataFile).filter(
                         SqlaDataFile.session_id == get_session_id(adb))])
 
         # Return specific data file resource
-        return json_response(DataFile(data_file))
+        return json_response(DataFileSchema(data_file))
 
     if request.method == 'POST':
         # Create data file(s)
@@ -242,7 +242,7 @@ def data_files(id=None):
                 adb.rollback()
                 raise
 
-        return json_response(DataFile(data_file))
+        return json_response(DataFileSchema(data_file))
 
     if request.method == 'DELETE':
         # Delete data file
@@ -770,10 +770,10 @@ def sessions(id=None):
         if session is None:
             # List all sessions
             return json_response(
-                [Session(session) for session in adb.query(SqlaSession)])
+                [SessionSchema(session) for session in adb.query(SqlaSession)])
 
         # Return specific session resource
-        return json_response(Session(session))
+        return json_response(SessionSchema(session))
 
     if request.method == 'POST':
         # Create session
@@ -786,7 +786,7 @@ def sessions(id=None):
         except Exception:
             adb.rollback()
             raise
-        return json_response(Session(session), 201)
+        return json_response(SessionSchema(session), 201)
 
     if request.method == 'PUT':
         # Rename session
@@ -797,7 +797,7 @@ def sessions(id=None):
         except Exception:
             adb.rollback()
             raise
-        return json_response(Session(session))
+        return json_response(SessionSchema(session))
 
     if request.method == 'DELETE':
         # Delete session and all its data files

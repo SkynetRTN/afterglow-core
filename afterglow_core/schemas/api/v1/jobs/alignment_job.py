@@ -2,28 +2,35 @@
 Afterglow Core: image alignment job schemas
 """
 
+from typing import List as TList
+
 from marshmallow.fields import String, Integer, List, Nested
 
 from .... import AfterglowSchema, Boolean
-from ..job import Job, JobResult
-from ..source_extraction import SourceExtractionData
+from ..job import JobSchema, JobResultSchema
+from ..source_extraction import SourceExtractionDataSchema
 
 
-__all__ = ['AlignmentSettings', 'AlignmentJobResult', 'AlignmentJobSchema']
+__all__ = ['AlignmentSettingsSchema', 'AlignmentJobResultSchema',
+           'AlignmentJobSchema']
 
 
-class AlignmentSettings(AfterglowSchema):
+class AlignmentSettingsSchema(AfterglowSchema):
     ref_image = String(default='central')  # type: str
     wcs_grid_points = Integer(default=0)  # type: int
 
 
-class AlignmentJobResult(JobResult):
-    file_ids = List(Integer(), default=[])  # type: list
+class AlignmentJobResultSchema(JobResultSchema):
+    file_ids = List(Integer(), default=[])  # type: TList[int]
 
 
-class AlignmentJobSchema(Job):
-    result = Nested(AlignmentJobResult, default={})  # type: AlignmentJobResult
-    file_ids = List(Integer(), default=[])  # type: list
-    settings = Nested(AlignmentSettings, default={})  # type: AlignmentSettings
-    sources = List(Nested(SourceExtractionData), default=[])  # type: list
+class AlignmentJobSchema(JobSchema):
+    result = Nested(
+        AlignmentJobResultSchema, default={})  # type: AlignmentJobResultSchema
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+    settings = Nested(
+        AlignmentSettingsSchema, default={})  # type: AlignmentSettingsSchema
+    sources = List(
+        Nested(SourceExtractionDataSchema),
+        default=[])  # type: TList[SourceExtractionDataSchema]
     inplace = Boolean(default=False)  # type: bool

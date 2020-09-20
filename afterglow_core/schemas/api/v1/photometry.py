@@ -9,24 +9,24 @@ from ... import AfterglowSchema, Float, Resource
 
 
 __all__ = [
-    'IAperture', 'IPhotometry', 'Mag', 'Photometry', 'PhotometryData',
-    'PhotSettings',
+    'IApertureSchema', 'IPhotometrySchema', 'MagSchema', 'PhotometrySchema',
+    'PhotometryDataSchema', 'PhotSettingsSchema',
 ]
 
 
-class Mag(AfterglowSchema):
+class MagSchema(AfterglowSchema):
     value = Float()
     error = Float()
 
 
-class IPhotometry(AfterglowSchema):
+class IPhotometrySchema(AfterglowSchema):
     flux = Float()  # type: float
     flux_error = Float()  # type: float
     mag = Float()  # type: float
     mag_error = Float()  # type: float
 
 
-class IAperture(AfterglowSchema):
+class IApertureSchema(AfterglowSchema):
     aper_a = Float()  # type: float
     aper_b = Float()  # type: float
     aper_theta = Float()  # type: float
@@ -38,7 +38,7 @@ class IAperture(AfterglowSchema):
     annulus_theta_out = Float()  # type: float
 
 
-class PhotSettings(AfterglowSchema):
+class PhotSettingsSchema(AfterglowSchema):
     mode = String(default='aperture')  # type: str
     a = Float(default=None)  # type: float
     b = Float(default=None)  # type: float
@@ -52,7 +52,8 @@ class PhotSettings(AfterglowSchema):
     zero_point = Float(default=0)  # type: float
 
 
-class PhotometryData(SourceExtractionData, IPhotometry, IAperture):
+class PhotometryDataSchema(SourceExtractionData, IPhotometrySchema,
+                           IApertureSchema):
     """
     Description of object returned by batch photometry
     """
@@ -93,7 +94,7 @@ class PhotometryData(SourceExtractionData, IPhotometry, IAperture):
         return data
 
 
-class Photometry(Resource):
+class PhotometrySchema(Resource):
     """
     JSON-serializable photometry results
 

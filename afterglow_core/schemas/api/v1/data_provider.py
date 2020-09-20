@@ -7,7 +7,7 @@ from marshmallow.fields import Boolean, Dict, Integer, List, String
 from ... import Resource
 
 
-__all__ = ['DataProviderSchema', 'DataProviderAsset']
+__all__ = ['DataProviderSchema', 'DataProviderAssetSchema']
 
 
 class DataProviderSchema(Resource):
@@ -68,7 +68,7 @@ class DataProviderSchema(Resource):
     usage = Integer(default=None)
 
 
-class DataProviderAsset(Resource):
+class DataProviderAssetSchema(Resource):
     """
     Class representing a JSON-serializable data provider asset
 

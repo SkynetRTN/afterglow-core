@@ -11,15 +11,16 @@ from ... import AfterglowSchema, DateTime, Float
 
 
 __all__ = [
-    'sigma_to_fwhm', 'IAstrometry', 'IFWHM', 'ISourceId', 'ISourceMeta',
-    'SourceExtractionData',
+    'IAstrometrySchema', 'IFwhmSchema', 'ISourceIdSchema', 'ISourceMetaSchema',
+    'SourceExtractionDataSchema',
+    'sigma_to_fwhm'
 ]
 
 
 sigma_to_fwhm = 2.0*sqrt(2*log(2))
 
 
-class ISourceMeta(AfterglowSchema):
+class ISourceMetaSchema(AfterglowSchema):
     file_id = Integer()  # type: int
     time = DateTime()  # type: datetime
     filter = String()  # type: str
@@ -27,7 +28,7 @@ class ISourceMeta(AfterglowSchema):
     exp_length = Float()  # type: float
 
 
-class IAstrometry(AfterglowSchema):
+class IAstrometrySchema(AfterglowSchema):
     ra_hours = Float()  # type: float
     dec_degs = Float()  # type: float
     pm_sky = Float()  # type: float
@@ -40,17 +41,18 @@ class IAstrometry(AfterglowSchema):
     flux = Float()  # type: float
 
 
-class IFWHM(AfterglowSchema):
+class IFwhmSchema(AfterglowSchema):
     fwhm_x = Float()  # type: float
     fwhm_y = Float()  # type: float
     theta = Float()  # type: float
 
 
-class ISourceId(AfterglowSchema):
+class ISourceIdSchema(AfterglowSchema):
     id = String()  # type: str
 
 
-class SourceExtractionData(ISourceMeta, IAstrometry, IFWHM, ISourceId):
+class SourceExtractionDataSchema(ISourceMetaSchema, IAstrometrySchema,
+                                 IFwhmSchema, ISourceIdSchema):
     """
     Description of object returned by source extraction
     """

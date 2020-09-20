@@ -7,17 +7,17 @@ from typing import List as TList, Optional
 from marshmallow.fields import Float, Integer, List, Nested
 
 from .... import AfterglowSchema, Boolean
-from ..job import Job, JobResult
-from .source_extraction_job import SourceExtractionSettings
+from ..job import JobSchema, JobResultSchema
+from .source_extraction_job import SourceExtractionSettingsSchema
 
 
 __all__ = [
-    'WcsCalibrationSettings', 'WcsCalibrationJobResult',
+    'WcsCalibrationSettingsSchema', 'WcsCalibrationJobResultSchema',
     'WcsCalibrationJobSchema',
 ]
 
 
-class WcsCalibrationSettings(AfterglowSchema):
+class WcsCalibrationSettingsSchema(AfterglowSchema):
     ra_hours = Float(default=0)  # type: float
     dec_degs = Float(default=0)  # type: float
     radius = Float(default=180)  # type: float
@@ -31,17 +31,19 @@ class WcsCalibrationSettings(AfterglowSchema):
     max_sources = Integer(default=100)  # type: Optional[int]
 
 
-class WcsCalibrationJobResult(JobResult):
+class WcsCalibrationJobResultSchema(JobResultSchema):
     file_ids = List(Integer(), default=[])  # type: TList[int]
 
 
-class WcsCalibrationJobSchema(Job):
+class WcsCalibrationJobSchema(JobSchema):
     result = Nested(
-        WcsCalibrationJobResult, default={})  # type: WcsCalibrationJobResult
-    file_ids = List(Integer(), default=[])  # type: list
+        WcsCalibrationJobResultSchema,
+        default={})  # type: WcsCalibrationJobResultSchema
+    file_ids = List(Integer(), default=[])  # type: TList[int]
     settings = Nested(
-        WcsCalibrationSettings, default={})  # type: WcsCalibrationSettings
+        WcsCalibrationSettingsSchema,
+        default={})  # type: WcsCalibrationSettingsSchema
     source_extraction_settings = Nested(
-        SourceExtractionSettings,
-        default=None)  # type: SourceExtractionSettings
+        SourceExtractionSettingsSchema,
+        default=None)  # type: SourceExtractionSettingsSchema
     inplace = Boolean(default=False)  # type: bool

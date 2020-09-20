@@ -10,7 +10,7 @@ from astropy import units as u
 from astropy.coordinates import Angle
 from astroquery.skyview import SkyView
 
-from ...schemas.api.v1 import DataProviderAsset
+from ...schemas.api.v1 import DataProviderAssetSchema
 from ...errors import MissingFieldError, ValidationError
 from ...errors.data_provider import AssetNotFoundError
 from ..imaging_surveys import survey_scales
@@ -90,7 +90,7 @@ class ImagingSurveyDataProvider(DataProvider):
             size = str(width)
         else:
             size = '{},{}'.format(width, height)
-        return DataProviderAsset(
+        return DataProviderAssetSchema(
             name='{}_{}'.format(survey, position.replace(' ', '_')),
             collection=False,
             path='{}\\{}\\{}'.format(survey, position, size),

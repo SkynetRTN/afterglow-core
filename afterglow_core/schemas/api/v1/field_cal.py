@@ -3,20 +3,22 @@ Afterglow Core: field calibration data structures
 """
 
 import json
+from typing import List as TList
 
 from marshmallow.fields import String, Integer, Dict, Nested, List
 
 from ... import AfterglowSchema, Resource, Float
-from .photometry import Mag, IPhotometry, PhotometryData
-from .source_extraction import IAstrometry
+from .photometry import MagSchema, IPhotometrySchema, PhotometryDataSchema
+from .source_extraction import IAstrometrySchema
 
 
 __all__ = [
-    'CatalogSource', 'FieldCal', 'FieldCalResult', 'ICatalogSource',
+    'CatalogSourceSchema', 'FieldCalSchema', 'FieldCalResultSchema',
+    'ICatalogSourceSchema',
 ]
 
 
-class ICatalogSource(AfterglowSchema):
+class ICatalogSourceSchema(AfterglowSchema):
     """
     Generic catalog source definition without astrometry
     """
@@ -24,23 +26,25 @@ class ICatalogSource(AfterglowSchema):
     file_id = Integer()  # type: int
     label = String()  # type: str
     catalog_name = String()  # type: str
-    mags = Dict(keys=String, values=Nested(Mag))  # type: dict
+    mags = Dict(keys=String, values=Nested(MagSchema))  # type: dict
 
 
-class CatalogSource(ICatalogSource, IAstrometry, IPhotometry):
+class CatalogSourceSchema(ICatalogSourceSchema, IAstrometrySchema,
+                          IPhotometrySchema):
     """
     Catalog source definition for field calibration
     """
     pass
 
 
-class FieldCal(Resource):
+class FieldCalSchema(Resource):
     """
     Field calibration prescription
     """
     id = Integer()  # type: int
     name = String()  # type: str
-    catalog_sources = List(Nested(CatalogSource))  # type: list
+    catalog_sources = List(
+        Nested(CatalogSourceSchema))  # type: TList[CatalogSourceSchema]
     catalogs = List(String())  # type: list
     custom_filter_lookup = Dict(
         keys=String, values=Dict(keys=String, values=String))  # type: dict
@@ -80,11 +84,13 @@ class FieldCal(Resource):
         return cls(**kw)
 
 
-class FieldCalResult(AfterglowSchema):
+class FieldCalResultSchema(AfterglowSchema):
     """
     Result of field calibration for a data file
     """
     file_id = Integer()  # type: int
-    phot_results = List(Nested(PhotometryData), default=[])  # type: list
+    phot_results = List(
+        Nested(PhotometryDataSchema),
+        default=[])  # type: TList[PhotometryDataSchema]
     zero_point = Float()  # type: float
     zero_point_error = Float()  # type: float

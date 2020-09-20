@@ -2,30 +2,34 @@
 Afterglow Core: photometric calibration job schemas
 """
 
+from typing import List as TList
+
 from marshmallow.fields import Integer, List, Nested
 
-from ..job import Job, JobResult
-from ..field_cal import FieldCal, FieldCalResult
-from ..photometry import PhotSettings
-from .source_extraction_job import SourceExtractionSettings
+from ..job import JobSchema, JobResultSchema
+from ..field_cal import FieldCalSchema, FieldCalResultSchema
+from ..photometry import PhotSettingsSchema
+from .source_extraction_job import SourceExtractionSettingsSchema
 
 
-__all__ = ['FieldCalJobResult', 'FieldCalJobSchema']
+__all__ = ['FieldCalJobResultSchema', 'FieldCalJobSchema']
 
 
-class FieldCalJobResult(JobResult):
-    data = List(Nested(FieldCalResult), default=[])  # type: list
+class FieldCalJobResultSchema(JobResultSchema):
+    data = List(
+        Nested(FieldCalResultSchema),
+        default=[])  # type: TList[FieldCalResultSchema]
 
 
-class FieldCalJobSchema(Job):
+class FieldCalJobSchema(JobSchema):
     name = 'field_cal'
     description = 'Photometric Calibration'
     result = Nested(
-        FieldCalJobResult, default={})  # type: FieldCalJobResult
-    file_ids = List(Integer(), default=[])  # type: list
-    field_cal = Nested(FieldCal, default={})  # type: FieldCal
+        FieldCalJobResultSchema, default={})  # type: FieldCalJobResultSchema
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+    field_cal = Nested(FieldCalResultSchema, default={})  # type: FieldCalSchema
     source_extraction_settings = Nested(
-        SourceExtractionSettings,
-        default=None)  # type: SourceExtractionSettings
+        SourceExtractionSettingsSchema,
+        default=None)  # type: SourceExtractionSettingsSchema
     photometry_settings = Nested(
-        PhotSettings, default=None)  # type: PhotSettings
+        PhotSettingsSchema, default=None)  # type: PhotSettingsSchema

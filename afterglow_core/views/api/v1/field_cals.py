@@ -7,7 +7,7 @@ from flask import request
 from .... import app, auth, json_response
 from ....resources.field_cals import SqlaFieldCal
 from ....resources.data_files import get_data_file_db
-from ....schemas.api.v1 import FieldCal
+from ....schemas.api.v1 import FieldCalSchema
 from ....errors import MissingFieldError
 from ....errors.field_cal import UnknownFieldCalError, DuplicateFieldCalError
 from . import url_prefix
@@ -69,11 +69,11 @@ def field_cals(id_or_name=None):
         if id_or_name is None:
             # List all field cals
             return json_response(
-                [FieldCal.from_db(field_cal)
+                [FieldCalSchema.from_db(field_cal)
                  for field_cal in adb.query(SqlaFieldCal)])
 
         # Return specific field cal resource
-        return json_response(FieldCal.from_db(field_cal))
+        return json_response(FieldCalSchema.from_db(field_cal))
 
     if request.method == 'POST':
         # Create field cal
@@ -86,7 +86,7 @@ def field_cals(id_or_name=None):
             field_cal = SqlaFieldCal(**request.args.to_dict())
             adb.add(field_cal)
             adb.flush()
-            res = FieldCal.from_db(field_cal)
+            res = FieldCalSchema.from_db(field_cal)
             adb.commit()
         except Exception:
             adb.rollback()
@@ -105,7 +105,7 @@ def field_cals(id_or_name=None):
                 raise DuplicateFieldCalError(name=val)
             setattr(field_cal, key, val)
         try:
-            res = FieldCal.from_db(field_cal)
+            res = FieldCalSchema.from_db(field_cal)
             adb.commit()
         except Exception:
             adb.rollback()

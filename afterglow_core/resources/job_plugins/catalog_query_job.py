@@ -8,7 +8,7 @@ from numpy import argmax, array, cos, deg2rad, r_, rad2deg, unwrap
 from numpy.ma import masked_array
 from astropy.wcs import WCS
 
-from ...schemas.api.v1 import CatalogQueryJobSchema, Job
+from ...schemas.api.v1 import CatalogQueryJobSchema, JobSchema
 from ..catalogs import catalogs as known_catalogs
 from ..data_files import get_data_file_fits
 
@@ -16,7 +16,7 @@ from ..data_files import get_data_file_fits
 __all__ = ['CatalogQueryJob', 'run_catalog_query_job']
 
 
-def run_catalog_query_job(job: Job, catalogs: ListType[str],
+def run_catalog_query_job(job: JobSchema, catalogs: ListType[str],
                           ra_hours: float = None, dec_degs: float = None,
                           radius_arcmins: float = None,
                           width_arcmins: float = None,

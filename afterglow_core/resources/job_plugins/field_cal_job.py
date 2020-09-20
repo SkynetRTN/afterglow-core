@@ -7,7 +7,8 @@ from datetime import datetime
 import numpy
 from astropy.wcs import WCS
 
-from ...schemas.api.v1 import FieldCal, FieldCalJobSchema, FieldCalResult, Mag
+from ...schemas.api.v1 import (
+    FieldCalSchema, FieldCalJobSchema, FieldCalResultSchema, MagSchema)
 from ..data_files import get_data_file_fits, get_image_time
 from ..field_cals import get_field_cal
 from ..catalogs import catalogs as known_catalogs
@@ -33,7 +34,7 @@ class FieldCalJob(FieldCalJobSchema):
         field_cal = self.field_cal
         # noinspection PyProtectedMember
         if all(getattr(field_cal, name, None) is None
-               for name in FieldCal._declared_fields
+               for name in FieldCalSchema._declared_fields
                if name not in ('id', 'name')):
             id_or_name = getattr(field_cal, 'id', None)
             if id_or_name is None:
@@ -55,7 +56,7 @@ class FieldCalJob(FieldCalJobSchema):
             for source in catalog_sources:
                 for name, val in getattr(source, 'mags', {}).items():
                     if isinstance(val, dict):
-                        source.mags[name] = Mag(**val)
+                        source.mags[name] = MagSchema(**val)
         else:
             # No input catalog sources, query the specified catalogs
             catalog_sources = run_catalog_query_job(
@@ -287,7 +288,7 @@ class FieldCalJob(FieldCalJobSchema):
                                     {f: m.value
                                      for f, m in catalog_source.mags.items()})
                                 try:
-                                    mag = Mag(value=eval(expr, ctx, {}))
+                                    mag = MagSchema(value=eval(expr, ctx, {}))
                                 except Exception:
                                     # Could not compute reference magnitude
                                     # (e.g. missing the given filter); retry
@@ -355,7 +356,7 @@ class FieldCalJob(FieldCalJobSchema):
                     m0_error = d.std()/numpy.sqrt(n)
                 else:
                     m0_error = None
-            result_data.append(FieldCalResult(
+            result_data.append(FieldCalResultSchema(
                 file_id=file_id,
                 phot_results=sources,
                 zero_point=m0,

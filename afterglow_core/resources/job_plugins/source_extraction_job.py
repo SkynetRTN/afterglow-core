@@ -2,15 +2,15 @@
 Afterglow Core: source extraction job plugin
 """
 
-from typing import List as ListType
+from typing import List as TList
 
 from astropy.wcs import WCS
 
 from skylib.extraction import extract_sources
 
 from ...schemas.api.v1 import (
-    Job, SourceExtractionData, SourceExtractionJobSchema,
-    SourceExtractionSettings)
+    JobSchema, SourceExtractionDataSchema, SourceExtractionJobSchema,
+    SourceExtractionSettingsSchema)
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time, get_subframe)
 from .source_merge_job import merge_sources
@@ -19,9 +19,10 @@ from .source_merge_job import merge_sources
 __all__ = ['SourceExtractionJob', 'run_source_extraction_job']
 
 
-def run_source_extraction_job(job: Job, settings: SourceExtractionSettings,
-                              job_file_ids: ListType[int]) -> \
-        ListType[SourceExtractionData]:
+def run_source_extraction_job(job: JobSchema,
+                              settings: SourceExtractionSettingsSchema,
+                              job_file_ids: TList[int]) -> \
+        TList[SourceExtractionDataSchema]:
     """
     Batch photometry job body; also used during photometric calibration
 
@@ -87,7 +88,7 @@ def run_source_extraction_job(job: Job, settings: SourceExtractionSettings,
                 wcs = None
 
             result_data += [
-                SourceExtractionData.from_source_table(
+                SourceExtractionDataSchema.from_source_table(
                     row=row,
                     x0=settings.x,
                     y0=settings.y,

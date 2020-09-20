@@ -8,7 +8,7 @@ from numpy import array
 from skylib.photometry.aperture import aperture_photometry
 from skylib.extraction.centroiding import centroid_iraf
 
-from ..schemas.api.v1 import Photometry
+from ..schemas.api.v1 import PhotometrySchema
 
 
 __all__ = ['get_photometry']
@@ -83,7 +83,7 @@ def get_photometry(data, texp, gain, x, y, a, b=None, theta=0,
         background, background_rms, texp, gain, a, b, theta, a_in, a_out, b_out,
         theta_out)[0]
 
-    return Photometry(
+    return PhotometrySchema(
         flux=source['flux'], flux_err=source['flux_err'],
         mag=source['mag'], mag_err=source['mag_err'],
         x=x, y=y,

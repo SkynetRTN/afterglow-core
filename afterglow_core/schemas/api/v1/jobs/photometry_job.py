@@ -2,23 +2,30 @@
 Afterglow Core: batch photometry job schemas
 """
 
+from typing import List as TList
+
 from marshmallow.fields import Integer, List, Nested
 
-from ..job import Job, JobResult
-from ..photometry import PhotSettings, PhotometryData
-from ..source_extraction import SourceExtractionData
+from ..job import JobSchema, JobResultSchema
+from ..photometry import PhotSettingsSchema, PhotometryDataSchema
+from ..source_extraction import SourceExtractionDataSchema
 
 
-__all__ = ['PhotometryJobResult', 'PhotometryJobSchema']
+__all__ = ['PhotometryJobResultSchema', 'PhotometryJobSchema']
 
 
-class PhotometryJobResult(JobResult):
-    data = List(Nested(PhotometryData), default=[])  # type: list
+class PhotometryJobResultSchema(JobResultSchema):
+    data = List(Nested(PhotometryDataSchema),
+                default=[])  # type: TList[PhotometryDataSchema]
 
 
-class PhotometryJobSchema(Job):
+class PhotometryJobSchema(JobSchema):
     result = Nested(
-        PhotometryJobResult, default={})  # type: PhotometryJobResult
-    file_ids = List(Integer(), default=[])  # type: list
-    sources = List(Nested(SourceExtractionData), default=[])  # type: list
-    settings = Nested(PhotSettings, default={})  # type: PhotSettings
+        PhotometryJobResultSchema,
+        default={})  # type: PhotometryJobResultSchema
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+    sources = List(
+        Nested(SourceExtractionDataSchema),
+        default=[])  # type: TList[SourceExtractionDataSchema]
+    settings = Nested(
+        PhotSettingsSchema, default={})  # type: PhotSettingsSchema

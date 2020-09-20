@@ -2,29 +2,36 @@
 Afterglow Core: source merge job schemas
 """
 
+from typing import List as TList
+
 from marshmallow.fields import List, Nested, String
 
 from .... import AfterglowSchema, Float
-from ..job import Job, JobResult
-from ..source_extraction import SourceExtractionData
+from ..job import JobSchema, JobResultSchema
+from ..source_extraction import SourceExtractionDataSchema
 
 
 __all__ = [
-    'SourceMergeSettings', 'SourceMergeJobResult', 'SourceMergeJobSchema',
+    'SourceMergeSettingsSchema', 'SourceMergeJobResultSchema',
+    'SourceMergeJobSchema',
 ]
 
 
-class SourceMergeSettings(AfterglowSchema):
+class SourceMergeSettingsSchema(AfterglowSchema):
     pos_type = String(default='auto')  # type: str
     tol = Float(default=None)  # type: float
 
 
-class SourceMergeJobResult(JobResult):
-    data = List(Nested(SourceExtractionData), default=[])  # type: list
+class SourceMergeJobResultSchema(JobResultSchema):
+    data = List(Nested(SourceExtractionDataSchema),
+                default=[])  # type: TList[SourceExtractionDataSchema]
 
 
-class SourceMergeJobSchema(Job):
-    result = Nested(SourceMergeJobResult)  # type: SourceMergeJobResult
-    sources = List(Nested(SourceExtractionData))  # type: list
+class SourceMergeJobSchema(JobSchema):
+    result = Nested(
+        SourceMergeJobResultSchema)  # type: SourceMergeJobResultSchema
+    sources = List(Nested(
+        SourceExtractionDataSchema))  # type: TList[SourceExtractionDataSchema]
     settings = Nested(
-        SourceMergeSettings, default={})  # type: SourceMergeSettings
+        SourceMergeSettingsSchema,
+        default={})  # type: SourceMergeSettingsSchema

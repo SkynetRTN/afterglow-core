@@ -2,31 +2,36 @@
 Afterglow Core: batch data file import job schemas
 """
 
+from typing import List as TList
+
 from marshmallow.fields import String, Integer, List, Nested
 
 from .... import AfterglowSchema, Boolean
-from ..job import Job, JobResult
+from ..job import JobSchema, JobResultSchema
 
 
 __all__ = [
-    'BatchImportSettings', 'BatchImportJobResult', 'BatchImportJobSchema',
+    'BatchImportSettingsSchema', 'BatchImportJobResultSchema',
+    'BatchImportJobSchema',
 ]
 
 
-class BatchImportSettings(AfterglowSchema):
+class BatchImportSettingsSchema(AfterglowSchema):
     provider_id = String()  # type: str
     path = String()  # type: str
     duplicates = String(default='ignore')  # type: str
     recurse = Boolean(default=False)  # type: bool
 
 
-class BatchImportJobResult(JobResult):
-    file_ids = List(Integer(), default=[])  # type: list
+class BatchImportJobResultSchema(JobResultSchema):
+    file_ids = List(Integer(), default=[])  # type: TList[int]
 
 
-class BatchImportJobSchema(Job):
+class BatchImportJobSchema(JobSchema):
     result = Nested(
-        BatchImportJobResult, default={})  # type: BatchImportJobResult
-    settings = List(
-        Nested(BatchImportSettings, default={}), default=[])  # type: list
+        BatchImportJobResultSchema,
+        default={})  # type: BatchImportJobResultSchema
+    settings = List(Nested(
+        BatchImportSettingsSchema, default={}),
+        default=[])  # type: TList[BatchImportSettingsSchema]
     session_id = Integer(default=None)  # type: int

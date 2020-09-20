@@ -12,7 +12,7 @@ from astropy.units import arcmin, deg, hour
 from astroquery.vizier import Vizier
 
 from ... import app
-from ...schemas.api.v1 import CatalogSource, Mag
+from ...schemas.api.v1 import CatalogSourceSchema, MagSchema
 from . import Catalog
 
 
@@ -105,7 +105,7 @@ class VizierCatalog(Catalog):
         context = dict(numpy.__dict__)
 
         for row in table:
-            source = CatalogSource(catalog_name=self.name, mags={})
+            source = CatalogSourceSchema(catalog_name=self.name, mags={})
 
             # Map columns to CatalogObject attrs
             if self.col_mapping:
@@ -138,7 +138,7 @@ class VizierCatalog(Catalog):
                     try:
                         val = row[mag_col.replace("'", '_')]
                         if val and val < 99:
-                            m = Mag(value=val)
+                            m = MagSchema(value=val)
                             # noinspection PyBroadException
                             try:
                                 val = row[mag_err_col.replace("'", '_')]

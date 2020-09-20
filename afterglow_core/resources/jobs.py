@@ -37,7 +37,7 @@ from sqlalchemy.types import TypeDecorator
 from flask import Response, request
 
 from ..schemas.api.v1 import (
-    Job, JobResult, JobState, job_file_dir, job_file_path)
+    JobSchema, JobResultSchema, job_file_dir, job_file_path)
 from ..errors import AfterglowError, MissingFieldError, ValidationError
 from ..errors.job import (
     JobServerError, UnknownJobError, UnknownJobFileError, UnknownJobTypeError,
@@ -180,7 +180,7 @@ class RWLock(object):
 
 
 # Load job plugins
-job_types = plugins.load_plugins('job', 'resources.job_plugins', Job)
+job_types = plugins.load_plugins('job', 'resources.job_plugins', JobSchema)
 
 
 Base = declarative_base()
@@ -574,11 +574,11 @@ def subclass_from_schema(base_class, schema, plugin_name=None):
 
     :return: new db model class
     """
-    if schema.__class__ is JobResult:
+    if schema.__class__ is JobResultSchema:
         # Plugin does not define its own result schema; use job_results table
         return base_class
 
-    if isinstance(schema, Job):
+    if isinstance(schema, JobSchema):
         kind = 'jobs'
     else:
         kind = 'job_results'

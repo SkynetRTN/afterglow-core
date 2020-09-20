@@ -24,7 +24,7 @@ import astropy.io.fits as pyfits
 from flask import Response, request
 
 from .. import app, errors, json_response
-from ..schemas.api.v1 import DataFile
+from ..schemas.api.v1 import DataFileSchema
 from ..errors.data_file import (
     UnknownDataFileError, CannotCreateDataFileDirError)
 
@@ -322,7 +322,7 @@ def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
         if sqla_data_file is not None:
             if duplicates == 'ignore':
                 # Don't reimport existing data files
-                return DataFile(sqla_data_file)
+                return DataFileSchema(sqla_data_file)
 
             # Overwrite existing data file
             for attr, val in sqla_fields.items():
@@ -338,7 +338,7 @@ def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
 
     save_data_file(adb, root, sqla_data_file.id, data, hdr)
 
-    return DataFile(sqla_data_file)
+    return DataFileSchema(sqla_data_file)
 
 
 def remove_data_file(adb, root, id):

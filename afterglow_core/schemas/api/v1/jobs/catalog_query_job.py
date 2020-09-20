@@ -2,29 +2,33 @@
 Afterglow Core: catalog query job schemas
 """
 
+from typing import List as TList
+
 from marshmallow.fields import String, Integer, List, Nested, Dict
 
 from .... import Float
-from ..job import Job, JobResult
-from ..field_cal import CatalogSource
+from ..job import JobSchema, JobResultSchema
+from ..field_cal import CatalogSourceSchema
 
 
-__all__ = ['CatalogQueryJobResult', 'CatalogQueryJobSchema']
+__all__ = ['CatalogQueryJobResultSchema', 'CatalogQueryJobSchema']
 
 
-class CatalogQueryJobResult(JobResult):
-    data = List(Nested(CatalogSource), default=[])  # type: list
+class CatalogQueryJobResultSchema(JobResultSchema):
+    data = List(Nested(CatalogSourceSchema),
+                default=[])  # type: TList[CatalogSourceSchema]
 
 
-class CatalogQueryJobSchema(Job):
+class CatalogQueryJobSchema(JobSchema):
     result = Nested(
-        CatalogQueryJobResult, default={})  # type: CatalogQueryJobResult
-    catalogs = List(String(), default=[])  # type: list
+        CatalogQueryJobResultSchema,
+        default={})  # type: CatalogQueryJobResultSchema
+    catalogs = List(String(), default=[])  # type: TList[str]
     ra_hours = Float()  # type: float
     dec_degs = Float()  # type: float
     radius_arcmins = Float()  # type: float
     width_arcmins = Float()  # type: float
     height_arcmins = Float()  # type: float
-    file_ids = List(Integer())  # type: list
-    constraints = Dict(keys=String, values=String)
-    source_ids = List(String())  # type: list
+    file_ids = List(Integer())  # type: TList[int]
+    constraints = Dict(keys=String, values=String)  # type: dict
+    source_ids = List(String())  # type: TList[str]

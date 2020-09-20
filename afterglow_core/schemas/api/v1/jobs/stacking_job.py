@@ -2,16 +2,19 @@
 Afterglow Core: image stacking job schemas
 """
 
+from typing import List as TList
+
 from marshmallow.fields import List, Nested, String, Integer
 
 from .... import AfterglowSchema, Float
-from ..job import Job, JobResult
+from ..job import JobSchema, JobResultSchema
 
 
-__all__ = ['StackingSettings', 'StackingJobResult', 'StackingJobSchema']
+__all__ = ['StackingSettingsSchema', 'StackingJobResultSchema',
+           'StackingJobSchema']
 
 
-class StackingSettings(AfterglowSchema):
+class StackingSettingsSchema(AfterglowSchema):
     mode = String(default='average')  # type: str
     scaling = String(default=None)  # type: str
     rejection = String(default=None)  # type: str
@@ -20,14 +23,15 @@ class StackingSettings(AfterglowSchema):
     hi = Float(default=100)  # type: float
 
 
-class StackingJobResult(JobResult):
+class StackingJobResultSchema(JobResultSchema):
     file_id = Integer()  # type: int
 
 
-class StackingJobSchema(Job):
-    result = Nested(StackingJobResult, default={})  # type: StackingJobResult
-    file_ids = List(Integer(), default=[])  # type: list
+class StackingJobSchema(JobSchema):
+    result = Nested(
+        StackingJobResultSchema, default={})  # type: StackingJobResultSchema
+    file_ids = List(Integer(), default=[])  # type: TList[int]
     # alignment_settings = Nested(
     #     AlignmentSettings, default={})  # type: AlignmentSettings
     stacking_settings = Nested(
-        StackingSettings, default={})  # type: StackingSettings
+        StackingSettingsSchema, default={})  # type: StackingSettingsSchema

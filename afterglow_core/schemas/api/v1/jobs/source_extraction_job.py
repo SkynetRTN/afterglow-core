@@ -2,21 +2,23 @@
 Afterglow Core: source extraction job schemas
 """
 
+from typing import List as TList
+
 from marshmallow.fields import Integer, List, Nested
 
 from .... import AfterglowSchema, Boolean, Float
-from ..job import Job, JobResult
-from ..source_extraction import SourceExtractionData
-from .source_merge_job import SourceMergeSettings
+from ..job import JobSchema, JobResultSchema
+from ..source_extraction import SourceExtractionDataSchema
+from .source_merge_job import SourceMergeSettingsSchema
 
 
 __all__ = [
-    'SourceExtractionSettings', 'SourceExtractionJobResult',
+    'SourceExtractionSettingsSchema', 'SourceExtractionJobResultSchema',
     'SourceExtractionJobSchema',
 ]
 
 
-class SourceExtractionSettings(AfterglowSchema):
+class SourceExtractionSettingsSchema(AfterglowSchema):
     x = Integer(default=1)  # type: int
     y = Integer(default=1)  # type: int
     width = Integer(default=0)  # type: int
@@ -37,16 +39,20 @@ class SourceExtractionSettings(AfterglowSchema):
     limit = Integer(default=None)  # type: int
 
 
-class SourceExtractionJobResult(JobResult):
-    data = List(Nested(SourceExtractionData), default=[])  # type: list
+class SourceExtractionJobResultSchema(JobResultSchema):
+    data = List(Nested(SourceExtractionDataSchema),
+                default=[])  # type: TList[SourceExtractionDataSchema]
 
 
-class SourceExtractionJobSchema(Job):
+class SourceExtractionJobSchema(JobSchema):
     result = Nested(
-        SourceExtractionJobResult)  # type: SourceExtractionJobResult
-    file_ids = List(Integer(), default=[])  # type: list
+        SourceExtractionJobResultSchema
+    )  # type: SourceExtractionJobResultSchema
+    file_ids = List(Integer(), default=[])  # type: TList[int]
     source_extraction_settings = Nested(
-        SourceExtractionSettings, default={})  # type: SourceExtractionSettings
+        SourceExtractionSettingsSchema,
+        default={})  # type: SourceExtractionSettingsSchema
     merge_sources = Boolean(default=True)  # type: bool
     source_merge_settings = Nested(
-        SourceMergeSettings, default={})  # type: SourceMergeSettings
+        SourceMergeSettingsSchema,
+        default={})  # type: SourceMergeSettingsSchema

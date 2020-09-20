@@ -14,10 +14,11 @@ from ....errors import MethodNotImplementedError
 from ....errors.job import CannotCreateJobFileError
 from ... import AfterglowSchema, DateTime, Float, Resource
 
-__all__ = ['Job', 'JobResult', 'JobState', 'job_file_dir', 'job_file_path']
+__all__ = ['JobResultSchema', 'JobSchema', 'JobStateSchema',
+           'job_file_dir', 'job_file_path']
 
 
-class JobState(AfterglowSchema):
+class JobStateSchema(AfterglowSchema):
     """
     Job state structure
 
@@ -42,12 +43,12 @@ class JobState(AfterglowSchema):
         :param args: see :class:`afterglow_core.AfterglowSchema`
         :param kwargs: --//--
         """
-        super(JobState, self).__init__(*args, **kwargs)
+        super(JobStateSchema, self).__init__(*args, **kwargs)
 
         self.created_on = datetime.utcnow()
 
 
-class JobResult(AfterglowSchema):
+class JobResultSchema(AfterglowSchema):
     """
     Base class for job results
 
@@ -66,13 +67,13 @@ class JobResult(AfterglowSchema):
     warnings = List(String())  # type: list
 
     def __init__(self, *args, **kwargs):
-        super(JobResult, self).__init__(*args, **kwargs)
+        super(JobResultSchema, self).__init__(*args, **kwargs)
 
         self.errors = []
         self.warnings = []
 
 
-class Job(Resource):
+class JobSchema(Resource):
     """
     Base class for JSON-serializable job plugins
 
@@ -242,8 +243,8 @@ class Job(Resource):
     type = String()  # type: str
     user_id = Integer(default=None)  # type: int
     session_id = Integer(default=None)  # type: int
-    state = Nested(JobState)  # type: JobState
-    result = Nested(JobResult)  # type: JobResult
+    state = Nested(JobStateSchema)  # type: JobStateSchema
+    result = Nested(JobResultSchema)  # type: JobResultSchema
 
     _queue = None
 
@@ -258,7 +259,7 @@ class Job(Resource):
             job state updates to job server; unused when loading job plugins
         :param kwargs: job-specific parameters passed on job creation
         """
-        super(Job, self).__init__(**kwargs)
+        super(JobSchema, self).__init__(**kwargs)
 
         self._queue = queue
         self.type = self.name

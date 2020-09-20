@@ -4,7 +4,7 @@ Afterglow Core: USNO-B1.0 catalog accessed via VizieR
 
 from __future__ import absolute_import, division, print_function
 
-from ...schemas.api.v1 import Mag
+from ...schemas.api.v1 import MagSchema
 from .vizier_catalogs import VizierCatalog
 
 
@@ -48,7 +48,8 @@ class USNOB1Catalog(VizierCatalog):
             for m in ('B', 'R'):
                 m1, m2 = m + '1', m + '2'
                 try:
-                    mags[m] = Mag(value=(mags[m1].value + mags[m2].value)/2)
+                    mags[m] = MagSchema(
+                        value=(mags[m1].value + mags[m2].value)/2)
                 except (KeyError, ValueError):
                     try:
                         mags[m] = mags[m1]

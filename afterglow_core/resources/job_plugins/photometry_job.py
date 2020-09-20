@@ -12,7 +12,8 @@ from skylib.photometry import aperture_photometry
 from skylib.extraction.centroiding import centroid_sources
 
 from ...schemas.api.v1 import (
-    PhotometryData, PhotometryJobSchema, SourceExtractionData, sigma_to_fwhm)
+    PhotometryDataSchema, PhotometryJobSchema, SourceExtractionDataSchema,
+    sigma_to_fwhm)
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time)
 
@@ -120,7 +121,7 @@ def run_photometry_job(job, settings, job_file_ids, job_sources):
             datetime.utcnow().strftime('%Y%m%d%H%M%S'), job.id)
         sources = {
             file_id: [
-                SourceExtractionData(
+                SourceExtractionDataSchema(
                     source, file_id=file_id,
                     id=source.id if hasattr(source, 'id') and source.id
                     else prefix + str(i + 1))
@@ -209,7 +210,7 @@ def run_photometry_job(job, settings, job_file_ids, job_sources):
             source_table = aperture_photometry(data, source_table, **phot_kw)
 
             result_data += [
-                PhotometryData.from_phot_table(
+                PhotometryDataSchema.from_phot_table(
                     row, source,
                     time=epoch,
                     filter=flt,

@@ -10,10 +10,10 @@ from marshmallow.fields import Dict, Integer, List, String
 from ... import Boolean, DateTime, Resource
 
 
-__all__ = ['DataFile', 'Session']
+__all__ = ['DataFileSchema', 'SessionSchema']
 
 
-class DataFile(Resource):
+class DataFileSchema(Resource):
     """
     JSON-serializable data file class
 
@@ -73,10 +73,10 @@ class DataFile(Resource):
         if kw.get('asset_metadata') is not None:
             kw['asset_metadata'] = json.loads(kw['asset_metadata'])
 
-        super(DataFile, self).__init__(**kw)
+        super(DataFileSchema, self).__init__(**kw)
 
 
-class Session(Resource):
+class SessionSchema(Resource):
     """
     JSON-serializable Afterglow session class
 
@@ -119,4 +119,4 @@ class Session(Resource):
         # Extract data file IDs
         kw['data_file_ids'] = [data_file.id for data_file in _obj.data_files]
 
-        super(Session, self).__init__(**kw)
+        super(SessionSchema, self).__init__(**kw)

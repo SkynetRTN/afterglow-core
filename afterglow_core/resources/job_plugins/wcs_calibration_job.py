@@ -8,7 +8,8 @@ from datetime import datetime
 from skylib.astrometry import Solver, solve_field
 
 from ... import app
-from ...schemas.api.v1 import SourceExtractionSettings, WcsCalibrationJobSchema
+from ...schemas.api.v1 import (
+    SourceExtractionSettingsSchema, WcsCalibrationJobSchema)
 from ...errors import ValidationError
 from ..data_files import (
     create_data_file, get_data_file, get_data_file_db, get_root,
@@ -94,7 +95,7 @@ class WcsCalibrationJob(WcsCalibrationJobSchema):
             return
 
         source_extraction_settings = self.source_extraction_settings or \
-            SourceExtractionSettings()
+            SourceExtractionSettingsSchema()
         if settings.max_sources is not None:
             source_extraction_settings.limit = settings.max_sources
 

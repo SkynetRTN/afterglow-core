@@ -7,7 +7,7 @@ from datetime import datetime
 from numpy import asarray, cos, deg2rad, pi, sin, sqrt, transpose, zeros
 from scipy.spatial import cKDTree
 
-from ...schemas.api.v1 import SourceExtractionData, SourceMergeJobSchema
+from ...schemas.api.v1 import SourceExtractionDataSchema, SourceMergeJobSchema
 
 
 __all__ = ['SourceMergeJob', 'merge_sources']
@@ -35,7 +35,7 @@ def merge_sources(sources, settings, job_id=None):
     match tolerance is set by `settings`.tol
 
     :param list[SourceExtractionData] sources: list of sources to merge
-    :param SourceMergeSettings settings: merge settings
+    :param SourceMergeSettingsSchema settings: merge settings
     :param int job_id: optional job ID included in the merged source IDs
 
     :return: the same sources in the same order, with
@@ -44,7 +44,7 @@ def merge_sources(sources, settings, job_id=None):
     :rtype: list[SourceExtractionData]
     """
     # Set source ID to None before merging
-    merged_sources = [SourceExtractionData(source, id=None)
+    merged_sources = [SourceExtractionDataSchema(source, id=None)
                       for source in sources]
 
     # Split input sources by file ID; save the original source index

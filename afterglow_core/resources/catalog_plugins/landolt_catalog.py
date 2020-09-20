@@ -7,7 +7,7 @@ from __future__ import absolute_import, division, print_function
 
 from numpy import hypot, sqrt
 
-from ...schemas.api.v1 import Mag
+from ...schemas.api.v1 import MagSchema
 from .vizier_catalogs import VizierCatalog
 
 
@@ -55,24 +55,25 @@ class LandoltCatalog(VizierCatalog):
             mags = source.mags
             v, v_err = mags['V'].value, getattr(mags['V'], 'error', 0)
 
-            mags['B'] = Mag(value=v + mags['B_V'].value)
+            mags['B'] = MagSchema(value=v + mags['B_V'].value)
             err = hypot(v_err, getattr(mags['B_V'], 'error', 0))
             if err:
                 mags['B'].error = err
 
-            mags['U'] = Mag(value=mags['B'].value + mags['U_B'].value)
+            mags['U'] = MagSchema(value=mags['B'].value + mags['U_B'].value)
             err = hypot(getattr(mags['B'], 'error', 0),
                         getattr(mags['V_R'], 'error', 0))
             if err:
                 mags['U'].error = err
 
-            mags['R'] = Mag(value=v - mags['V_R'].value)
+            mags['R'] = MagSchema(value=v - mags['V_R'].value)
             err = hypot(v_err, getattr(mags['V_R'], 'error', 0))
             if err:
                 mags['R'].error = err
 
-            mags['I'] = Mag(value=(mags['R'].value - mags['R_I'].value +
-                                   v - mags['V_I'].value)/2)
+            mags['I'] = MagSchema(
+                value=(mags['R'].value - mags['R_I'].value +
+                       v - mags['V_I'].value)/2)
             err = sqrt((getattr(mags['R'], 'error', 0)**2 +
                         getattr(mags['R_I'], 'error', 0)**2 +
                         v_err**2 + getattr(mags['V_I'], 'error', 0)**2)/2)

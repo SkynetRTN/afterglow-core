@@ -2,7 +2,6 @@
 Afterglow Core: local disk data provider plugin
 """
 
-from __future__ import absolute_import, division, print_function
 import sys
 import os
 import shutil
@@ -31,7 +30,7 @@ except ImportError:
     exifread = None
 
 from ... import auth, errors
-from ...schemas.api.v1 import DataProviderAsset
+from ...schemas.api.v1 import DataProviderAssetSchema
 from ...errors.data_provider import (
     AssetNotFoundError, AssetAlreadyExistsError,
     CannotUpdateCollectionAssetError)
@@ -62,7 +61,7 @@ class LocalDiskDataProvider(DataProvider):
         search_fields['type']['enum'].append('RAW')
 
     peruser = Boolean(default=False)
-    root = String(default='.')
+    root = String(default='.')  # type: str
 
     @property
     def usage(self):
@@ -127,7 +126,7 @@ class LocalDiskDataProvider(DataProvider):
 
         if os.path.isdir(filename):
             # Collection asset
-            return DataProviderAsset(
+            return DataProviderAssetSchema(
                 name=name,
                 collection=True,
                 path=path,
@@ -280,7 +279,7 @@ class LocalDiskDataProvider(DataProvider):
             raise UnrecognizedDataFormatError()
 
         stat = os.stat(filename)
-        asset = DataProviderAsset(
+        asset = DataProviderAssetSchema(
             name=name,
             collection=False,
             path=path,
@@ -343,7 +342,7 @@ class LocalDiskDataProvider(DataProvider):
             raise AssetNotFoundError(path=path)
 
         # Return directory contents
-        return [DataProviderAsset(
+        return [DataProviderAssetSchema(
             name=os.path.basename(fn),
             collection=os.path.isdir(fn),
             path=fn.split(root + os.path.sep)[1].replace('\\', '/'),
