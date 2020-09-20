@@ -7,9 +7,7 @@ from datetime import datetime
 import numpy
 from astropy.wcs import WCS
 
-from ...models.jobs.field_cal_job import FieldCalJobSchema
-from ...models.field_cal import FieldCal, FieldCalResult
-from ...models.photometry import Mag
+from ...schemas.api.v1 import FieldCal, FieldCalJobSchema, FieldCalResult, Mag
 from ..data_files import get_data_file_fits, get_image_time
 from ..field_cals import get_field_cal
 from ..catalogs import catalogs as known_catalogs

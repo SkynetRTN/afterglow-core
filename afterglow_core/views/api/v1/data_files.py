@@ -17,7 +17,7 @@ from skylib.calibration.background import estimate_background
 from skylib.sonification import sonify_image
 
 from .... import app, json_response, auth, errors
-from ....models.data_file import DataFile, Session
+from ....schemas.api.v1 import DataFile, Session
 from ....errors.data_provider import UnknownDataProviderError
 from ....errors.data_file import (
     UnknownDataFileError, CannotImportFromCollectionAssetError)

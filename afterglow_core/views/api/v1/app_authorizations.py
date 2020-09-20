@@ -6,12 +6,12 @@ import json
 
 from flask import request
 
-from . import url_prefix
 from .... import app, json_response
 from ....auth import auth_required
 from ....oauth2 import oauth_clients
 from ....users import UserClient, db
 from ....errors.oauth2 import UnknownClientError, MissingClientIdError
+from . import url_prefix
 
 
 @app.route(url_prefix + 'app-authorizations', methods=['GET', 'POST'])

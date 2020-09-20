@@ -8,8 +8,7 @@ least its get_asset() and get_asset_data() methods.
 from __future__ import absolute_import, division, print_function
 
 from ... import app, errors
-from ...models.catalog import CatalogSchema
-from ...models.field_cal import CatalogSource
+from ...schemas.api.v1 import CatalogSchema
 
 __all__ = ['Catalog']
 

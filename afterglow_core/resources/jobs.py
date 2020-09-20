@@ -36,7 +36,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.types import TypeDecorator
 from flask import Response, request
 
-from ..models.jobs import Job, JobResult, JobState, job_file_dir, job_file_path
+from ..schemas.api.v1 import (
+    Job, JobResult, JobState, job_file_dir, job_file_path)
 from ..errors import AfterglowError, MissingFieldError, ValidationError
 from ..errors.job import (
     JobServerError, UnknownJobError, UnknownJobFileError, UnknownJobTypeError,

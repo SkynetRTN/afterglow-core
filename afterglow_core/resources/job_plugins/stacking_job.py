@@ -4,7 +4,7 @@ Afterglow Core: image stacking job plugin
 
 from skylib.combine.stacking import combine
 
-from ...models.jobs.stacking_job import StackingJobSchema
+from ...schemas.api.v1 import StackingJobSchema
 from ..data_files import (
     create_data_file, get_data_file, get_data_file_db, get_root)
 

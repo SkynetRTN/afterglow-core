@@ -6,13 +6,13 @@ import secrets
 
 from flask import request
 
-from . import url_prefix
 from .... import app, json_response
 from ....auth import auth_required
 from ....users import PersistentToken, db
-from ....models.user import TokenSchema
+from ....schemas.api.v1 import TokenSchema
 from ....errors import ValidationError
 from ....errors.auth import UnknownTokenError
+from . import url_prefix
 
 
 @app.route(url_prefix + 'tokens', methods=['GET', 'POST'])

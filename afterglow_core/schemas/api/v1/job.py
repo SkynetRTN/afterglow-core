@@ -1,5 +1,5 @@
 """
-Afterglow Core: job schemas
+Afterglow Core: common job schema defs
 """
 import os
 import sys
@@ -9,10 +9,10 @@ from datetime import datetime
 import errno
 from marshmallow.fields import Integer, List, Nested, String
 
-from ... import app
-from ...errors import MethodNotImplementedError
-from ...errors.job import CannotCreateJobFileError
-from .. import AfterglowSchema, DateTime, Float, Resource
+from .... import app
+from ....errors import MethodNotImplementedError
+from ....errors.job import CannotCreateJobFileError
+from ... import AfterglowSchema, DateTime, Float, Resource
 
 __all__ = ['Job', 'JobResult', 'JobState', 'job_file_dir', 'job_file_path']
 

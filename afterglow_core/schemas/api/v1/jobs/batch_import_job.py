@@ -4,8 +4,8 @@ Afterglow Core: batch data file import job schemas
 
 from marshmallow.fields import String, Integer, List, Nested
 
-from .. import AfterglowSchema, Boolean
-from . import Job, JobResult
+from .... import AfterglowSchema, Boolean
+from ..job import Job, JobResult
 
 
 __all__ = [

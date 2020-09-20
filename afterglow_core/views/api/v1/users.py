@@ -8,15 +8,15 @@ import shutil
 from flask_security.utils import hash_password
 from flask import request
 
-from . import url_prefix
 from .... import app, json_response
 from ....auth import auth_required
 from ....users import Role, User, db
-from ....models.user import UserSchema
+from ....schemas.api.v1 import UserSchema
 from ....errors import MissingFieldError, ValidationError
 from ....errors.auth import (
     AdminRequiredError, UnknownUserError, CannotDeactivateTheOnlyAdminError,
     DuplicateUsernameError, CannotDeleteCurrentUserError)
+from . import url_prefix
 
 
 def parse_user_fields():

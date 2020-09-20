@@ -6,7 +6,7 @@ from typing import Optional, Union
 
 from sqlalchemy import Column, Float, Integer, String
 
-from ..models.field_cal import FieldCal
+from ..schemas.api.v1 import FieldCal
 from ..errors.field_cal import UnknownFieldCalError
 from .data_files import Base, get_data_file_db
 

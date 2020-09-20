@@ -4,9 +4,9 @@ Afterglow Core: catalog query job schemas
 
 from marshmallow.fields import String, Integer, List, Nested, Dict
 
-from .. import Float
+from .... import Float
+from ..job import Job, JobResult
 from ..field_cal import CatalogSource
-from . import Job, JobResult
 
 
 __all__ = ['CatalogQueryJobResult', 'CatalogQueryJobSchema']

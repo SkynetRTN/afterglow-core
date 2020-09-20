@@ -7,8 +7,7 @@ from datetime import datetime
 from numpy import asarray, cos, deg2rad, pi, sin, sqrt, transpose, zeros
 from scipy.spatial import cKDTree
 
-from ...models.jobs.source_merge_job import SourceMergeJobSchema
-from ...models.source_extraction import SourceExtractionData
+from ...schemas.api.v1 import SourceExtractionData, SourceMergeJobSchema
 
 
 __all__ = ['SourceMergeJob', 'merge_sources']

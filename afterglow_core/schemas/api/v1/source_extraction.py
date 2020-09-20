@@ -7,7 +7,7 @@ from datetime import datetime
 from marshmallow.fields import Integer, String
 from numpy import sqrt, log, rad2deg
 
-from . import AfterglowSchema, DateTime, Float
+from ... import AfterglowSchema, DateTime, Float
 
 
 __all__ = [

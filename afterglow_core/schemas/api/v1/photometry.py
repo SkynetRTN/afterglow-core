@@ -4,8 +4,8 @@ Afterglow Core: photometry data structures
 
 from marshmallow.fields import String
 
-from . import AfterglowSchema, Float, Resource
 from .source_extraction import SourceExtractionData
+from ... import AfterglowSchema, Float, Resource
 
 
 __all__ = [

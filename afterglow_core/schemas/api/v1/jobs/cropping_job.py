@@ -4,8 +4,8 @@ Afterglow Core: image cropping job schemas
 
 from marshmallow.fields import Integer, List, Nested
 
-from .. import AfterglowSchema, Boolean
-from . import Job, JobResult
+from .... import AfterglowSchema, Boolean
+from ..job import Job, JobResult
 
 
 __all__ = ['CroppingSettings', 'CroppingJobResult', 'CroppingJobSchema']

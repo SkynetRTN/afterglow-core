@@ -12,7 +12,7 @@ from __future__ import absolute_import, division, print_function
 
 from ... import app
 from ...errors import MethodNotImplementedError
-from ...models.data_provider import DataProviderSchema
+from ...schemas.api.v1 import DataProviderSchema
 
 
 __all__ = ['DataProvider']

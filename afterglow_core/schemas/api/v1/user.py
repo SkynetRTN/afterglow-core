@@ -7,10 +7,10 @@ from typing import List as ListType
 
 from marshmallow.fields import Integer, List, Nested, String
 
-from . import AfterglowSchema, Boolean, Date, DateTime
+from ... import AfterglowSchema, Boolean, Date, DateTime
 
 
-__all__ = ['RoleSchema', 'UserSchema', 'TokenSchema', 'UserProfile']
+__all__ = ['RoleSchema', 'UserSchema', 'TokenSchema']
 
 
 class RoleSchema(AfterglowSchema):
@@ -42,19 +42,3 @@ class TokenSchema(AfterglowSchema):
     issued_at = Integer()  # type: int
     expires_in = Integer()  # type: int
     note = String()  # type: str
-
-
-class UserProfile(AfterglowSchema):
-    """User profile data retrieved from auth server"""
-    id = String(default=None)  # type: str
-    username = String(default=None)  # type: str
-    email = String(default=None)  # type: str
-    first_name = String(default=None)  # type: str
-    last_name = String(default=None)  # type: str
-    birth_date = Date(default=None)  # type: date
-
-    @property
-    def full_name(self):
-        return ' '.join(
-            ([self.first_name] if self.first_name else []) +
-            ([self.last_name] if self.last_name else []))

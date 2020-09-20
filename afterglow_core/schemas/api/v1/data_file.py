@@ -7,7 +7,7 @@ from datetime import datetime
 
 from marshmallow.fields import Dict, Integer, List, String
 
-from . import Boolean, DateTime, Resource
+from ... import Boolean, DateTime, Resource
 
 
 __all__ = ['DataFile', 'Session']

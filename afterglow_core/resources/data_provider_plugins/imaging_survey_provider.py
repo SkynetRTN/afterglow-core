@@ -10,7 +10,7 @@ from astropy import units as u
 from astropy.coordinates import Angle
 from astroquery.skyview import SkyView
 
-from ...models.data_provider import DataProviderAsset
+from ...schemas.api.v1 import DataProviderAsset
 from ...errors import MissingFieldError, ValidationError
 from ...errors.data_provider import AssetNotFoundError
 from ..imaging_surveys import survey_scales

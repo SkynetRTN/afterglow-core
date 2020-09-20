@@ -8,7 +8,7 @@ from numpy import array
 from skylib.photometry.aperture import aperture_photometry
 from skylib.extraction.centroiding import centroid_iraf
 
-from ..models.photometry import Photometry
+from ..schemas.api.v1 import Photometry
 
 
 __all__ = ['get_photometry']

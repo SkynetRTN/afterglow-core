@@ -12,8 +12,7 @@ from astropy.units import arcmin, deg, hour
 from astroquery.vizier import Vizier
 
 from ... import app
-from ...models.field_cal import CatalogSource
-from ...models.photometry import Mag
+from ...schemas.api.v1 import CatalogSource, Mag
 from . import Catalog
 
 

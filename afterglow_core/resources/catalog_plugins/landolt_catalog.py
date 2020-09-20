@@ -7,7 +7,7 @@ from __future__ import absolute_import, division, print_function
 
 from numpy import hypot, sqrt
 
-from ...models.photometry import Mag
+from ...schemas.api.v1 import Mag
 from .vizier_catalogs import VizierCatalog
 
 

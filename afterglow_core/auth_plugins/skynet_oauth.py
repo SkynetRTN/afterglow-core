@@ -8,7 +8,6 @@ from typing import Optional
 
 from .. import app
 from . import OAuthServerPluginBase, OAuthToken
-from ..models.user import UserProfile
 
 
 __all__ = ['SkynetOAuthPlugin']
@@ -60,7 +59,7 @@ class SkynetOAuthPlugin(OAuthServerPluginBase):
 
         self.base_url = base_url
 
-    def get_user(self, token: OAuthToken) -> UserProfile:
+    def get_user(self, token: OAuthToken) -> dict:
         """
         Return the user's Skynet username given the access token
 
@@ -74,17 +73,17 @@ class SkynetOAuthPlugin(OAuthServerPluginBase):
                 'Authorization': 'Bearer {}'.format(token.access),
             }, verify=False if app.config.get('DEBUG') else True).json()
 
-        pf = UserProfile(
+        pf = dict(
             id=user['id'],
             username=user['username'],
         )
         if user.get('firstName'):
-            pf.first_name = user['firstName']
+            pf['first_name'] = user['firstName']
         if user.get('lastName'):
-            pf.last_name = user['lastName']
+            pf['last_name'] = user['lastName']
         if user.get('email'):
-            pf.email = user['email']
+            pf['email'] = user['email']
         if user.get('birthdate'):
-            pf.birth_date = user['birthdate']
+            pf['birth_date'] = user['birthdate']
 
         return pf

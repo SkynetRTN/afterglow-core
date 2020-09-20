@@ -9,7 +9,7 @@ import numpy.fft
 import scipy.ndimage as ndimage
 import astropy.io.fits as pyfits
 
-from ...models.jobs.pixel_ops_job import PixelOpsJobSchema
+from ...schemas.api.v1 import PixelOpsJobSchema
 from ..data_files import (
     SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,
     save_data_file)

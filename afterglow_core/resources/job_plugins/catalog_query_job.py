@@ -8,9 +8,7 @@ from numpy import argmax, array, cos, deg2rad, r_, rad2deg, unwrap
 from numpy.ma import masked_array
 from astropy.wcs import WCS
 
-from ...models.jobs import Job
-from ...models.jobs.catalog_query_job import CatalogQueryJobSchema
-from ...models.field_cal import CatalogSource
+from ...schemas.api.v1 import CatalogQueryJobSchema, Job
 from ..catalogs import catalogs as known_catalogs
 from ..data_files import get_data_file_fits
 

@@ -162,7 +162,7 @@ class AfterglowSchema(Schema):
                          issubclass(field.container.nested, AfterglowSchema))
                         if hasattr(field, 'container')
                         else hasattr(field.inner, 'nested') and
-                        issubclass(field.inner.nested, AfterglowSchema)):
+                             issubclass(field.inner.nested, AfterglowSchema)):
                     klass = field.container.nested \
                         if hasattr(field, 'container') else field.inner.nested
                     value = [klass(item) for item in value]
@@ -240,7 +240,7 @@ class Resource(AfterglowSchema):
             for attr in ('id', 'name'):
                 if getattr(self, attr, None) is not None:
                     return url_for(self.__get_view__, _external=True) + '/' + \
-                        quote(str(getattr(self, attr)))
+                           quote(str(getattr(self, attr)))
         raise AttributeError('_uri')
 
     uri = fields.String(attribute='_uri')

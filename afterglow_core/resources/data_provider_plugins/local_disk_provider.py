@@ -31,7 +31,7 @@ except ImportError:
     exifread = None
 
 from ... import auth, errors
-from ...models.data_provider import DataProviderAsset
+from ...schemas.api.v1 import DataProviderAsset
 from ...errors.data_provider import (
     AssetNotFoundError, AssetAlreadyExistsError,
     CannotUpdateCollectionAssetError)

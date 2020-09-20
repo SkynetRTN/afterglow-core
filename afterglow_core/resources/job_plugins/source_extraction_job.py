@@ -8,10 +8,9 @@ from astropy.wcs import WCS
 
 from skylib.extraction import extract_sources
 
-from ...models.jobs import Job
-from ...models.jobs.source_extraction_job import (
-    SourceExtractionSettings, SourceExtractionJobSchema)
-from ...models.source_extraction import SourceExtractionData
+from ...schemas.api.v1 import (
+    Job, SourceExtractionData, SourceExtractionJobSchema,
+    SourceExtractionSettings)
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time, get_subframe)
 from .source_merge_job import merge_sources

@@ -4,8 +4,8 @@ Afterglow Core: image stacking job schemas
 
 from marshmallow.fields import List, Nested, String, Integer
 
-from .. import AfterglowSchema, Float
-from . import Job, JobResult
+from .... import AfterglowSchema, Float
+from ..job import Job, JobResult
 
 
 __all__ = ['StackingSettings', 'StackingJobResult', 'StackingJobSchema']

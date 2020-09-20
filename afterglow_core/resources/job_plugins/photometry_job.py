@@ -11,9 +11,8 @@ import sep
 from skylib.photometry import aperture_photometry
 from skylib.extraction.centroiding import centroid_sources
 
-from ...models.jobs.photometry_job import PhotometryJobSchema
-from ...models.photometry import PhotometryData
-from ...models.source_extraction import sigma_to_fwhm, SourceExtractionData
+from ...schemas.api.v1 import (
+    PhotometryData, PhotometryJobSchema, SourceExtractionData, sigma_to_fwhm)
 from ..data_files import (
     get_data_file, get_exp_length, get_gain, get_image_time)
 

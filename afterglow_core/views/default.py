@@ -12,7 +12,7 @@ from ..auth import (
     auth_required, clear_access_cookies, oauth_plugins, authenticate,
     set_access_cookies)
 from ..users import User, Role, db, Identity
-from ..models.user import UserSchema
+from ..schemas.api.v1 import UserSchema
 from ..errors import ValidationError, MissingFieldError
 from ..errors.auth import (
     HttpAuthFailedError, NotInitializedError, UnknownAuthMethodError,
@@ -104,7 +104,7 @@ def initialize():
 #     Confirm identity before proceeding
 #
 #     GET|POST /confirm_identity
-#         - confirm identity: verify that the client wantst to continue
+#         - confirm identity: verify that the client wants to continue
 #           as the currently authorized user or switch accounts
 #
 #     :return:
@@ -240,7 +240,7 @@ def oauth2_authorized(plugin_id):
 
     # Get the user from db
     identity = Identity.query\
-        .filter_by(auth_method=oauth_plugin.name, name=user_profile.id) \
+        .filter_by(auth_method=oauth_plugin.name, name=user_profile['id']) \
         .one_or_none()
     if identity is None and oauth_plugin.name == 'skynet':
         # A workaround for migrating the accounts of users registered in early
@@ -249,18 +249,20 @@ def oauth2_authorized(plugin_id):
         # some other user's Skynet user ID
         identity = Identity.query \
             .filter_by(auth_method=oauth_plugin.name,
-                       name=user_profile.username) \
+                       name=user_profile['username']) \
             .one_or_none()
         if identity is not None:
             # First login via Skynet after migration: replace Identity.name =
             # username with user ID to prevent a possible future account seizure
             try:
-                identity.name = user_profile.id
-                identity.data = user_profile.json()
-                identity.user.first_name = user_profile.first_name or None
-                identity.user.last_name = user_profile.last_name or None
-                identity.user.email = user_profile.email or None
-                identity.user.birth_date = user_profile.birth_date
+                identity.name = user_profile['id']
+                identity.data = json.dumps(user_profile)
+                identity.user.first_name = \
+                    user_profile.get('first_name') or None
+                identity.user.last_name = user_profile.get('last_name') or None
+                identity.user.email = user_profile.get('email') or None
+                identity.user.birth_date = \
+                    user_profile.get('birth_date') or None
                 db.session.commit()
             except Exception:
                 db.session.rollback()
@@ -282,10 +284,12 @@ def oauth2_authorized(plugin_id):
             # email, full name, and id
             username = None
             for username_candidate in (
-                    user_profile.username,
-                    user_profile.email,
-                    user_profile.full_name,
-                    user_profile.id):
+                    user_profile.get('username'),
+                    user_profile.get('email'),
+                    ' '.join(
+                        ([user_profile.get('first_name')] or []) +
+                        ([user_profile.get('last_name')] or [])),
+                    user_profile['id']):
                 if username_candidate and str(username_candidate).strip() and \
                         not User.query.filter(
                             db.func.lower(User.username) ==
@@ -294,19 +298,19 @@ def oauth2_authorized(plugin_id):
                     break
             user = User(
                 username=username or None,
-                first_name=user_profile.first_name or None,
-                last_name=user_profile.last_name or None,
-                email=user_profile.email or None,
-                birth_date=user_profile.birth_date,
+                first_name=user_profile.get('first_name') or None,
+                last_name=user_profile.get('last_name') or None,
+                email=user_profile.get('email') or None,
+                birth_date=user_profile.get('birth_date') or None,
                 roles=[Role.query.filter_by(name='user').one()],
             )
             db.session.add(user)
             db.session.flush()
             identity = Identity(
                 user_id=user.id,
-                name=user_profile.id,
+                name=user_profile['id'],
                 auth_method=oauth_plugin.name,
-                data=user_profile.json(),
+                data=json.dumps(user_profile),
             )
             db.session.add(identity)
             db.session.commit()

@@ -12,7 +12,7 @@ from marshmallow import missing
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
 from flask import Flask, Response
 
-from .models import AfterglowSchema
+from .schemas import AfterglowSchema
 
 if sys.version_info.major < 3:
     # noinspection PyCompatibility,PyUnresolvedReferences

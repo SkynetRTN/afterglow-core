@@ -24,7 +24,7 @@ import astropy.io.fits as pyfits
 from flask import Response, request
 
 from .. import app, errors, json_response
-from ..models.data_file import DataFile
+from ..schemas.api.v1 import DataFile
 from ..errors.data_file import (
     UnknownDataFileError, CannotCreateDataFileDirError)
 

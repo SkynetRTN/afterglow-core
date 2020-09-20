@@ -6,7 +6,7 @@ import json
 
 from marshmallow.fields import String, Integer, Dict, Nested, List
 
-from . import AfterglowSchema, Resource, Float
+from ... import AfterglowSchema, Resource, Float
 from .photometry import Mag, IPhotometry, PhotometryData
 from .source_extraction import IAstrometry
 

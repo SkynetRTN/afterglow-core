@@ -5,7 +5,7 @@ Afterglow Core: batch data file import job plugin
 import json
 from io import BytesIO
 
-from ...models.jobs.batch_import_job import BatchImportJobSchema
+from ...schemas.api.v1 import BatchImportJobSchema
 from ...errors.data_provider import UnknownDataProviderError
 from ...errors.data_file import CannotImportFromCollectionAssetError
 from ..data_providers import providers

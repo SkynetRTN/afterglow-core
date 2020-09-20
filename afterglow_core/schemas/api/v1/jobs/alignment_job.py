@@ -4,9 +4,9 @@ Afterglow Core: image alignment job schemas
 
 from marshmallow.fields import String, Integer, List, Nested
 
-from .. import AfterglowSchema, Boolean
+from .... import AfterglowSchema, Boolean
+from ..job import Job, JobResult
 from ..source_extraction import SourceExtractionData
-from . import Job, JobResult
 
 
 __all__ = ['AlignmentSettings', 'AlignmentJobResult', 'AlignmentJobSchema']

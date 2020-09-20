@@ -4,10 +4,10 @@ Afterglow Core: photometric calibration job schemas
 
 from marshmallow.fields import Integer, List, Nested
 
+from ..job import Job, JobResult
 from ..field_cal import FieldCal, FieldCalResult
 from ..photometry import PhotSettings
 from .source_extraction_job import SourceExtractionSettings
-from . import Job, JobResult
 
 
 __all__ = ['FieldCalJobResult', 'FieldCalJobSchema']

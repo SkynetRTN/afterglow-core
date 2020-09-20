@@ -4,9 +4,9 @@ Afterglow Core: source merge job schemas
 
 from marshmallow.fields import List, Nested, String
 
-from .. import AfterglowSchema, Float
+from .... import AfterglowSchema, Float
+from ..job import Job, JobResult
 from ..source_extraction import SourceExtractionData
-from . import Job, JobResult
 
 
 __all__ = [

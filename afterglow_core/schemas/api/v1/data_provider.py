@@ -4,7 +4,7 @@ Afterglow Core: data provider schemas
 
 from marshmallow.fields import Boolean, Dict, Integer, List, String
 
-from . import Resource
+from ... import Resource
 
 
 __all__ = ['DataProviderSchema', 'DataProviderAsset']

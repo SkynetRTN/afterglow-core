@@ -17,8 +17,7 @@ from marshmallow.fields import Dict, String
 from flask import url_for
 
 from .. import app, errors
-from ..models import Resource
-from ..models.user import UserProfile
+from ..schemas import Resource
 from ..errors.auth import NotAuthenticatedError
 
 
@@ -86,7 +85,7 @@ class HttpAuthPluginBase(AuthnPluginBase):
     """
     type = 'http'
 
-    def get_user(self, username: str, password: str) -> UserProfile:
+    def get_user(self, username: str, password: str) -> dict:
         """
         Provider-specific user getter; implemented by HTTP auth plugin that
         retrieves the user's profile based on the provided username and password
@@ -277,7 +276,7 @@ class OAuthServerPluginBase(AuthnPluginBase):
         except Exception as e:
             raise NotAuthenticatedError(error_msg=str(e))
 
-    def get_user(self, token: OAuthToken) -> UserProfile:
+    def get_user(self, token: OAuthToken) -> dict:
         """
         Provider-specific user getter; implemented by OAuth plugin that
         retrieves the user using the provider API and token

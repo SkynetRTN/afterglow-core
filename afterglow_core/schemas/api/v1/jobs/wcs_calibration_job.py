@@ -4,11 +4,11 @@ Afterglow Core: WCS calibration job schemas
 
 from typing import List as TList, Optional
 
-from marshmallow.fields import Float, String, Integer, List, Nested
+from marshmallow.fields import Float, Integer, List, Nested
 
-from .. import AfterglowSchema, Boolean
+from .... import AfterglowSchema, Boolean
+from ..job import Job, JobResult
 from .source_extraction_job import SourceExtractionSettings
-from . import Job, JobResult
 
 
 __all__ = [

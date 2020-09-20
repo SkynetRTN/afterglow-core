@@ -4,7 +4,7 @@ Afterglow Core: image cropping job plugin
 
 from numpy.ma import MaskedArray
 
-from ...models.jobs.cropping_job import CroppingJobSchema
+from ...schemas.api.v1 import CroppingJobSchema
 from ...errors import ValidationError
 from ..data_files import (
     SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,

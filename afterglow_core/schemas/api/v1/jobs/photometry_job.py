@@ -4,9 +4,9 @@ Afterglow Core: batch photometry job schemas
 
 from marshmallow.fields import Integer, List, Nested
 
+from ..job import Job, JobResult
 from ..photometry import PhotSettings, PhotometryData
 from ..source_extraction import SourceExtractionData
-from . import Job, JobResult
 
 
 __all__ = ['PhotometryJobResult', 'PhotometryJobSchema']

@@ -4,8 +4,8 @@ Afterglow Core: pixel operations job schemas
 
 from marshmallow.fields import Integer, List, Nested, String
 
-from .. import Boolean, Float
-from . import Job, JobResult
+from .... import Boolean, Float
+from ..job import Job, JobResult
 
 
 __all__ = ['PixelOpsJobResult', 'PixelOpsJobSchema']

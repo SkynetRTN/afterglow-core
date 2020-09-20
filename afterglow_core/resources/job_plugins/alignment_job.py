@@ -6,7 +6,7 @@ from astropy.wcs import WCS
 
 from skylib.combine.alignment import apply_transform_stars, apply_transform_wcs
 
-from ...models.jobs.alignment_job import AlignmentJobSchema
+from ...schemas.api.v1 import AlignmentJobSchema
 from ...errors import AfterglowError, ValidationError
 from ..data_files import (
     SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,
