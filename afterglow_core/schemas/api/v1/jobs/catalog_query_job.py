@@ -8,7 +8,7 @@ from marshmallow.fields import String, Integer, List, Nested, Dict
 
 from .... import Float
 from ..job import JobSchema, JobResultSchema
-from ..field_cal import CatalogSourceSchema
+from ..catalog import CatalogSourceSchema
 
 
 __all__ = ['CatalogQueryJobResultSchema', 'CatalogQueryJobSchema']
