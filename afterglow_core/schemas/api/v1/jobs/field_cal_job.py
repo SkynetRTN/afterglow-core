@@ -22,8 +22,6 @@ class FieldCalJobResultSchema(JobResultSchema):
 
 
 class FieldCalJobSchema(JobSchema):
-    name = 'field_cal'
-    description = 'Photometric Calibration'
     result = Nested(
         FieldCalJobResultSchema, default={})  # type: FieldCalJobResultSchema
     file_ids = List(Integer(), default=[])  # type: TList[int]
