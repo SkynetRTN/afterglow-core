@@ -617,7 +617,7 @@ class JobRequestHandler(BaseRequestHandler):
                         # Return all user's jobs for the given client session;
                         # hide user id/name and result
                         result = [
-                            Job(db_job, exclude=['user_id', 'result']).to_dict()
+                            Job(db_job, exclude=['result']).to_dict()
                             for db_job in session.query(DbJob).filter(
                                     DbJob.user_id == user_id,
                                     DbJob.session_id == msg.get('session_id'))
@@ -627,8 +627,7 @@ class JobRequestHandler(BaseRequestHandler):
                         db_job = session.query(DbJob).get(job_id)
                         if db_job is None or db_job.user_id != user_id:
                             raise UnknownJobError(id=job_id)
-                        result = Job(
-                            db_job, exclude=['user_id', 'result']).to_dict()
+                        result = Job(db_job, exclude=['result']).to_dict()
 
                 elif method == 'post':
                     # Submit a job
@@ -677,8 +676,6 @@ class JobRequestHandler(BaseRequestHandler):
                         session.flush()
                         result = Job(db_job).to_dict()
                         server.job_queue.put(result)
-                        result = dict(result)
-                        del result['user_id']
                         session.commit()
                     except Exception:
                         session.rollback()
