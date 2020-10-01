@@ -15,6 +15,6 @@ def settings_tokens() -> Response:
     Return token management page
 
     :return:
-        GET /settings/tokens: JSON object {"items": list of tokens}
+        GET /settings/tokens: list of tokens}
     """
     return render_template('settings/tokens.html.j2')

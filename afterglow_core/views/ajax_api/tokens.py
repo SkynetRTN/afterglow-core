@@ -35,7 +35,7 @@ def tokens() -> Response:
     Return or create personal access tokens
 
     :return:
-        GET /api/v1/tokens: JSON object {"items": list of tokens}
+        GET /api/v1/tokens: list of tokens
         POST /api/v1/tokens: token
     """
     if request.method == 'GET':
