@@ -22,10 +22,12 @@ class FieldCalJobResultSchema(JobResultSchema):
 
 
 class FieldCalJobSchema(JobSchema):
+    type = 'field_cal'
+
     result = Nested(
         FieldCalJobResultSchema, default={})  # type: FieldCalJobResultSchema
     file_ids = List(Integer(), default=[])  # type: TList[int]
-    field_cal = Nested(FieldCalResultSchema, default={})  # type: FieldCalSchema
+    field_cal = Nested(FieldCalSchema, default={})  # type: FieldCalSchema
     source_extraction_settings = Nested(
         SourceExtractionSettingsSchema,
         default=None)  # type: SourceExtractionSettingsSchema

@@ -36,6 +36,8 @@ class WcsCalibrationJobResultSchema(JobResultSchema):
 
 
 class WcsCalibrationJobSchema(JobSchema):
+    type = 'wcs_calibration'
+
     result = Nested(
         WcsCalibrationJobResultSchema,
         default={})  # type: WcsCalibrationJobResultSchema

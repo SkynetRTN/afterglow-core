@@ -52,8 +52,11 @@ def _init_oauth():
 
     :return: None
     """
-    from sqlalchemy import Column, Integer, String, Text, create_engine
+    import sqlite3
+    from sqlalchemy import Column, Integer, String, Text, create_engine, event
     import sqlalchemy.orm.session
+    # noinspection PyProtectedMember
+    from sqlalchemy.engine import Engine
     from sqlalchemy.ext.declarative import declarative_base
     from sqlalchemy.pool import StaticPool
     from authlib.oauth2.rfc6749 import ClientMixin
@@ -61,7 +64,7 @@ def _init_oauth():
     from authlib.integrations.sqla_oauth2 import (
         OAuth2AuthorizationCodeMixin, OAuth2TokenMixin, create_save_token_func)
     from authlib.integrations.flask_oauth2 import AuthorizationServer
-    from .users import User
+    from .resources.users import DbUser
 
     global Token, memory_engine, memory_session, oauth_server
 
@@ -121,18 +124,12 @@ def _init_oauth():
             if self.description is None:
                 self.description = self.name
 
-        def get_client_id(self):
-            """Return ID of the client
-
-            :rtype: str
-            """
+        def get_client_id(self) -> str:
+            """Return ID of the client"""
             return self.client_id
 
-        def get_default_redirect_uri(self):
-            """Return client default redirect_uri
-
-            :rtype: str
-            """
+        def get_default_redirect_uri(self) -> str:
+            """Return client default redirect_uri"""
             return self.redirect_uris[0]
 
         def get_allowed_scope(self, scope: str) -> str:
@@ -147,61 +144,53 @@ def _init_oauth():
             return ' '.join({s for s in scope.split()
                              if s in self.default_scopes})
 
-        def check_redirect_uri(self, redirect_uri):
+        def check_redirect_uri(self, redirect_uri: str) -> bool:
             """Validate redirect_uri parameter in authorization endpoints
 
-            :param str redirect_uri: URL string for redirecting.
+            :param redirect_uri: URL string for redirecting.
 
             :return: True if valid redirect URI
-            :rtype: bool
             """
             return redirect_uri in self.redirect_uris
 
-        def has_client_secret(self):
-            """Does the client has a secret?
-
-            :rtype: bool
-            """
+        def has_client_secret(self) -> bool:
+            """Does the client has a secret?"""
             return bool(self.client_secret)
 
-        def check_client_secret(self, client_secret):
+        def check_client_secret(self, client_secret: str) -> bool:
             """Validate client_secret
 
-            :param str client_secret: client secret
+            :param client_secret: client secret
 
             :return: True if client secret matches the stored value
-            :rtype: bool
             """
             return client_secret == self.client_secret
 
-        def check_token_endpoint_auth_method(self, method):
+        def check_token_endpoint_auth_method(self, method: str) -> bool:
             """Validate token endpoint auth method
 
-            :param str method: token endpoint auth method
+            :param method: token endpoint auth method
 
             :return: True if the given token endpoint auth method matches
                 the one for the server
-            :rtype: bool
             """
             return method == self.token_endpoint_auth_method
 
-        def check_response_type(self, response_type):
+        def check_response_type(self, response_type: str) -> bool:
             """Check that the client can handle the given response_type
 
-            :param str response_type: requested response_type
+            :param response_type: requested response_type
 
             :return: True if a valid response type
-            :rtype: bool
             """
             return response_type in ('code', 'token')
 
-        def check_grant_type(self, grant_type):
+        def check_grant_type(self, grant_type: str) -> bool:
             """Check that the client can handle the given grant_type
 
-            :param str grant_type: requested grant type
+            :param grant_type: requested grant type
 
             :return: True if grant type is supported by client
-            :rtype: bool
             """
             return grant_type in self.allowed_grant_types
 
@@ -215,8 +204,8 @@ def _init_oauth():
         user_id = Column(Integer, nullable=False)
 
         @property
-        def user(self):
-            return User.query.get(self.user_id)
+        def user(self) -> DbUser:
+            return DbUser.query.get(self.user_id)
 
     class _Token(Base, OAuth2TokenMixin):
         """
@@ -231,11 +220,11 @@ def _init_oauth():
         note = Column(Text, default='')
 
         @property
-        def user(self):
-            return User.query.get(self.user_id)
+        def user(self) -> DbUser:
+            return DbUser.query.get(self.user_id)
 
         @property
-        def active(self):
+        def active(self) -> bool:
             if self.revoked:
                 return False
             if not self.expires_in:
@@ -252,7 +241,7 @@ def _init_oauth():
     Token = _Token
 
     class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
-        def save_authorization_code(self, code, req):
+        def save_authorization_code(self, code, req) -> None:
             """Save authorization_code for later use"""
             try:
                 # noinspection PyArgumentList
@@ -268,13 +257,14 @@ def _init_oauth():
                 memory_session.rollback()
                 raise
 
-        def query_authorization_code(self, code, client):
+        def query_authorization_code(self, code, client) \
+                -> OAuth2AuthorizationCode:
             item = memory_session.query(OAuth2AuthorizationCode).filter_by(
                 code=code, client_id=client.client_id).first()
             if item and not item.is_expired():
                 return item
 
-        def delete_authorization_code(self, authorization_code):
+        def delete_authorization_code(self, authorization_code) -> None:
             try:
                 memory_session.delete(authorization_code)
                 memory_session.commit()
@@ -282,21 +272,21 @@ def _init_oauth():
                 memory_session.rollback()
                 raise
 
-        def authenticate_user(self, authorization_code):
-            return User.query.get(authorization_code.user_id)
+        def authenticate_user(self, authorization_code) -> DbUser:
+            return DbUser.query.get(authorization_code.user_id)
 
     class RefreshTokenGrant(grants.RefreshTokenGrant):
-        def authenticate_refresh_token(self, refresh_token):
+        def authenticate_refresh_token(self, refresh_token) -> Token:
             token = memory_session.query(Token) \
                 .filter_by(refresh_token=refresh_token) \
                 .first()
             if token and token.is_refresh_token_active():
                 return token
 
-        def authenticate_user(self, credential):
+        def authenticate_user(self, credential) -> DbUser:
             return credential.user
 
-        def revoke_old_credential(self, credential):
+        def revoke_old_credential(self, credential) -> None:
             credential.revoked = True
             try:
                 db.session.add(credential)
@@ -308,8 +298,16 @@ def _init_oauth():
     for client_def in app.config.get('OAUTH_CLIENTS', []):
         oauth_clients[client_def.get('client_id')] = OAuth2Client(**client_def)
 
+    @event.listens_for(Engine, 'connect')
+    def set_sqlite_pragma(dbapi_connection, _rec):
+        if isinstance(dbapi_connection, sqlite3.Connection):
+            cursor = dbapi_connection.cursor()
+            cursor.execute('PRAGMA foreign_keys=ON')
+            cursor.execute('PRAGMA journal_mode=WAL')
+            cursor.close()
     memory_engine = create_engine(
-        'sqlite://', connect_args=dict(check_same_thread=False),
+        'sqlite://',
+        connect_args=dict(check_same_thread=False, isolation_level=None),
         poolclass=StaticPool)
     Base.metadata.create_all(bind=memory_engine)
     memory_session = sqlalchemy.orm.scoped_session(

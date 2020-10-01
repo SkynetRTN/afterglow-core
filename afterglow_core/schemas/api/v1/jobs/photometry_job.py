@@ -20,6 +20,8 @@ class PhotometryJobResultSchema(JobResultSchema):
 
 
 class PhotometryJobSchema(JobSchema):
+    type = 'photometry'
+
     result = Nested(
         PhotometryJobResultSchema,
         default={})  # type: PhotometryJobResultSchema

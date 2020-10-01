@@ -3,12 +3,13 @@ Afterglow Core: API v1 imaging survey views
 """
 
 import sys
+from io import BytesIO
+from typing import Optional
 
 from astropy import units as u
 from astropy.coordinates import Angle
 from astroquery.skyview import SkyView
 from flask import Response, request
-from io import BytesIO
 
 from skylib.io.conversion import get_image
 
@@ -27,7 +28,7 @@ resource_prefix = url_prefix + 'imaging-surveys/'
 @app.route(resource_prefix[:-1])
 @app.route(resource_prefix + '<name>')
 @auth_required('user')
-def get_imaging_surveys(name=None):
+def get_imaging_surveys(name: Optional[str] = None) -> Response:
     """
     Return available image surveys or query SkyView for specific survey
 
@@ -57,7 +58,6 @@ def get_imaging_surveys(name=None):
 
     :return: binary or JSON response, depending on `fmt`, containing the image
         retrieved from the given survey
-    :rtype: flask.Response
     """
     if name is None:
         # List all surveys

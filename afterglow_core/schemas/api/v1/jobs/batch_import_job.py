@@ -28,6 +28,8 @@ class BatchImportJobResultSchema(JobResultSchema):
 
 
 class BatchImportJobSchema(JobSchema):
+    type = 'batch_import'
+
     result = Nested(
         BatchImportJobResultSchema,
         default={})  # type: BatchImportJobResultSchema

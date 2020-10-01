@@ -28,6 +28,8 @@ class SourceMergeJobResultSchema(JobResultSchema):
 
 
 class SourceMergeJobSchema(JobSchema):
+    type = 'source_merge'
+
     result = Nested(
         SourceMergeJobResultSchema)  # type: SourceMergeJobResultSchema
     sources = List(Nested(

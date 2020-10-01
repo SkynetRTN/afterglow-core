@@ -2,11 +2,12 @@
 Afterglow Core: data provider schemas
 """
 
-import json
 from datetime import datetime
+from typing import Optional
 
 from marshmallow.fields import Dict, Integer, List, String
 
+from ....models import Session
 from ... import Boolean, DateTime, Resource
 
 
@@ -34,6 +35,7 @@ class DataFileSchema(Resource):
         created_on: datetime.datetime of data file creation
         modified: True if the file was modified after creation
         modified_on: datetime.datetime of data file modification
+        session_id: ID of session owning the data file
     """
     __get_view__ = 'data_files'
 
@@ -47,33 +49,11 @@ class DataFileSchema(Resource):
     asset_metadata = Dict(default={})  # type: dict
     layer = String(default=None)  # type: str
     created_on = DateTime(
-        default=None, format='%Y-%m-%d %H:%M:%S')  # type: datetime
+        default=None, format='%Y-%m-%d %H:%M:%S.%f')  # type: datetime
     modified = Boolean(default=False)
     modified_on = DateTime(
-        default=None, format='%Y-%m-%d %H:%M:%S')  # type: datetime
+        default=None, format='%Y-%m-%d %H:%M:%S.%f')  # type: datetime
     session_id = Integer(default=None)  # type: int
-
-    def __init__(self, _obj=None, **kwargs):
-        """
-        Create a new data file schema
-
-        :param :class:`SqlaDataFile` _obj: SQLA data file returned by database
-            query
-        :param kwargs: if `_obj` is not set, initialize the data file fields
-            from the given keyword=value pairs
-        """
-        # Extract fields from SQLA object
-        kw = {name: getattr(_obj, name, None)
-              for name in self._declared_fields
-              if name not in getattr(Resource, '_declared_fields')}
-        kw.update(kwargs)
-
-        # Convert fields stored as strings in the db to their proper schema
-        # types
-        if kw.get('asset_metadata') is not None:
-            kw['asset_metadata'] = json.loads(kw['asset_metadata'])
-
-        super(DataFileSchema, self).__init__(**kw)
 
 
 class SessionSchema(Resource):
@@ -101,22 +81,17 @@ class SessionSchema(Resource):
     data = String()  # type: str
     data_file_ids = List(Integer(), default=[], dump_only=True)  # type: list
 
-    def __init__(self, _obj=None, **kwargs):
+    def __init__(self, _obj: Optional[Session] = None, **kwargs):
         """
-        Create a new session schema
+        Create a session schema from a session model (output) or request
+        arguments (input)
 
-        :param :class:`SqlaSession` _obj: SQLA session returned by database
-            query
-        :param kwargs: if `_obj` is not set, initialize the data file fields
-            from the given keyword=value pairs
+        :param _obj: session model (used on output)
+        :param kwargs: initialize fields from keyword=value pairs (input)
         """
-        # Extract fields from SQLA object
-        kw = {name: getattr(_obj, name, None)
-              for name in self._declared_fields
-              if name not in getattr(Resource, '_declared_fields')}
-        kw.update(kwargs)
+        if _obj is not None:
+            # Extract data file IDs if creating from a model
+            kwargs['data_file_ids'] = [data_file.id
+                                       for data_file in _obj.data_files]
 
-        # Extract data file IDs
-        kw['data_file_ids'] = [data_file.id for data_file in _obj.data_files]
-
-        super(SessionSchema, self).__init__(**kw)
+        super().__init__(_obj, **kwargs)

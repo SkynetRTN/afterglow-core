@@ -2,49 +2,54 @@
 Afterglow Core: source merge job plugin
 """
 
-from datetime import datetime
+from __future__ import annotations
 
-from numpy import asarray, cos, deg2rad, pi, sin, sqrt, transpose, zeros
+from datetime import datetime
+from typing import List as TList, Optional
+
+from marshmallow.fields import List, Nested, String
+from numpy import (
+    asarray, cos, deg2rad, ndarray, pi, sin, sqrt, transpose, zeros)
 from scipy.spatial import cKDTree
 
-from ...schemas.api.v1 import SourceExtractionDataSchema, SourceMergeJobSchema
+from ...models import Job, JobResult, SourceExtractionData
+from ...schemas import AfterglowSchema, Float
 
 
-__all__ = ['SourceMergeJob', 'merge_sources']
+__all__ = ['SourceMergeJob', 'SourceMergeSettings', 'merge_sources']
 
 
-def dcs2c(ra, dec):
+def dcs2c(ra: ndarray, dec: ndarray) -> ndarray:
     """
     Convert right ascension and declination to XYZ Cartesian coordinates
 
-    :param array_like ra: right ascension in hours
-    :param array_like dec: declination in degrees, same shape as `ra`
+    :param ra: right ascension in hours
+    :param dec: declination in degrees, same shape as `ra`
 
     :return: XYZ coordinate(s) of shape shape(ra) + (3,)
-    :rtype: array_like
     """
     ra, dec = asarray(ra)*pi/12, asarray(dec)*pi/180
     cd = cos(dec)
     return transpose([cos(ra)*cd, sin(ra)*cd, sin(dec)])
 
 
-def merge_sources(sources, settings, job_id=None):
+def merge_sources(sources: TList[SourceExtractionData],
+                  settings: SourceMergeSettings, job_id: Optional[int] = None):
     """
     Find matching sources in multiple images by doing a nearest neighbor match
     using either RA/Dec or XY coordinates, depending on `settings`.pos_type;
     match tolerance is set by `settings`.tol
 
-    :param list[SourceExtractionData] sources: list of sources to merge
-    :param SourceMergeSettingsSchema settings: merge settings
-    :param int job_id: optional job ID included in the merged source IDs
+    :param sources: list of sources to merge
+    :param settings: merge settings
+    :param job_id: optional job ID included in the merged source IDs
 
     :return: the same sources in the same order, with
         :class:`SourceExtractionData`.id field set to the same unique value for
         matching sources
-    :rtype: list[SourceExtractionData]
     """
     # Set source ID to None before merging
-    merged_sources = [SourceExtractionDataSchema(source, id=None)
+    merged_sources = [SourceExtractionData(source, id=None)
                       for source in sources]
 
     # Split input sources by file ID; save the original source index
@@ -122,6 +127,7 @@ def merge_sources(sources, settings, job_id=None):
         tol = deg2rad(settings.tol)/3600  # arcsecs for pos_type=sky
 
     # Create k-d trees for each file
+    # noinspection PyArgumentList
     trees = [cKDTree(c) for c in coords]
     chains = []
     for i in range(n):
@@ -163,9 +169,25 @@ def merge_sources(sources, settings, job_id=None):
     return merged_sources
 
 
-class SourceMergeJob(SourceMergeJobSchema):
-    name = 'source_merge'
+class SourceMergeSettings(AfterglowSchema):
+    pos_type = String(default='auto')  # type: str
+    tol = Float(default=None)  # type: float
+
+
+class SourceMergeJobResult(JobResult):
+    data = List(Nested(SourceExtractionData),
+                default=[])  # type: TList[SourceExtractionData]
+
+
+class SourceMergeJob(Job):
+    type = 'source_merge'
     description = 'Merge Sources from Multiple Images'
+
+    result = Nested(SourceMergeJobResult)  # type: SourceMergeJobResult
+    sources = List(Nested(
+        SourceExtractionData))  # type: TList[SourceExtractionData]
+    settings = Nested(
+        SourceMergeSettings, default={})  # type: SourceMergeSettings
 
     def run(self):
         self.result.data = merge_sources(self.sources, self.settings, self.id)

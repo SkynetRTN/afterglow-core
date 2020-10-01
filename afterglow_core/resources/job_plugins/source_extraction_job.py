@@ -4,25 +4,79 @@ Afterglow Core: source extraction job plugin
 
 from typing import List as TList
 
+from marshmallow.fields import Integer, List, Nested
 from astropy.wcs import WCS
 
 from skylib.extraction import extract_sources
 
-from ...schemas.api.v1 import (
-    JobSchema, SourceExtractionDataSchema, SourceExtractionJobSchema,
-    SourceExtractionSettingsSchema)
+from ...models import Job, JobResult, SourceExtractionData
+from ...schemas import AfterglowSchema, Boolean, Float
 from ..data_files import (
-    get_data_file, get_exp_length, get_gain, get_image_time, get_subframe)
-from .source_merge_job import merge_sources
+    get_data_file_data, get_exp_length, get_gain, get_image_time, get_subframe)
+from .source_merge_job import SourceMergeSettings, merge_sources
 
 
-__all__ = ['SourceExtractionJob', 'run_source_extraction_job']
+__all__ = [
+    'SourceExtractionJob', 'SourceExtractionSettings',
+    'run_source_extraction_job',
+]
 
 
-def run_source_extraction_job(job: JobSchema,
-                              settings: SourceExtractionSettingsSchema,
+class SourceExtractionSettings(AfterglowSchema):
+    x = Integer(default=1)  # type: int
+    y = Integer(default=1)  # type: int
+    width = Integer(default=0)  # type: int
+    height = Integer(default=0)  # type: int
+    threshold = Float(default=2.5)  # type: float
+    bk_size = Float(default=1/64)  # type: float
+    bk_filter_size = Integer(default=3)  # type: int
+    fwhm = Float(default=0)  # type: float
+    ratio = Float(default=1)  # type: float
+    theta = Float(default=0)  # type: float
+    min_pixels = Integer(default=3)  # type: int
+    deblend = Boolean(default=False)  # type: bool
+    deblend_levels = Integer(default=32)  # type: int
+    deblend_contrast = Float(default=0.005)  # type: float
+    gain = Float(default=None)  # type: float
+    clean = Float(default=1)  # type: float
+    centroid = Boolean(default=True)  # type: bool
+    limit = Integer(default=None)  # type: int
+
+
+class SourceExtractionJobResult(JobResult):
+    data = List(Nested(SourceExtractionData),
+                default=[])  # type: TList[SourceExtractionData]
+
+
+class SourceExtractionJob(Job):
+    type = 'source_extraction'
+    description = 'Extract Sources'
+
+    result = Nested(
+        SourceExtractionJobResult)  # type: SourceExtractionJobResult
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+    source_extraction_settings = Nested(
+        SourceExtractionSettings, default={})  # type: SourceExtractionSettings
+    merge_sources = Boolean(default=True)  # type: bool
+    source_merge_settings = Nested(
+        SourceMergeSettings,
+        default={})  # type: SourceMergeSettings
+
+    def run(self):
+        result_data = run_source_extraction_job(
+            self, self.source_extraction_settings, self.file_ids)
+
+        if self.file_ids and len(self.file_ids) > 1 and self.merge_sources:
+            result_data = merge_sources(
+                result_data, self.source_merge_settings, self.id)
+
+        self.result.data = result_data
+
+
+def run_source_extraction_job(job: Job,
+                              settings: SourceExtractionSettings,
                               job_file_ids: TList[int]) -> \
-        TList[SourceExtractionDataSchema]:
+        TList[SourceExtractionData]:
     """
     Batch photometry job body; also used during photometric calibration
 
@@ -57,7 +111,7 @@ def run_source_extraction_job(job: JobSchema,
                 job.user_id, id, settings.x, settings.y,
                 settings.width, settings.height)
 
-            hdr = get_data_file(job.user_id, id)[1]
+            hdr = get_data_file_data(job.user_id, id)[1]
 
             if settings.gain is None:
                 gain = get_gain(hdr)
@@ -88,7 +142,7 @@ def run_source_extraction_job(job: JobSchema,
                 wcs = None
 
             result_data += [
-                SourceExtractionDataSchema.from_source_table(
+                SourceExtractionData(
                     row=row,
                     x0=settings.x,
                     y0=settings.y,
@@ -105,18 +159,3 @@ def run_source_extraction_job(job: JobSchema,
             job.add_error('Data file ID {}: {}'.format(id, e))
 
     return result_data
-
-
-class SourceExtractionJob(SourceExtractionJobSchema):
-    name = 'source_extraction'
-    description = 'Extract Sources'
-
-    def run(self):
-        result_data = run_source_extraction_job(
-            self, self.source_extraction_settings, self.file_ids)
-
-        if self.file_ids and len(self.file_ids) > 1 and self.merge_sources:
-            result_data = merge_sources(
-                result_data, self.source_merge_settings, self.id)
-
-        self.result.data = result_data

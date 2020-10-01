@@ -17,7 +17,7 @@ from marshmallow.fields import Dict, String
 from flask import url_for
 
 from .. import app, errors
-from ..schemas import Resource
+from ..schemas import AfterglowSchema
 from ..errors.auth import NotAuthenticatedError
 
 
@@ -42,10 +42,11 @@ if app.config.get('DEBUG'):
     install_opener(build_opener(HTTPSHandler(context=ctx)))
 
 
-class AuthnPluginBase(Resource):
+class AuthnPluginBase(AfterglowSchema):
     """
     Base class for all authentication plugins
     """
+    __polymorphic_on__ = 'name'
 
     id = String(default=None)
     name = String(default=None)
@@ -57,7 +58,7 @@ class AuthnPluginBase(Resource):
     def __init__(self, id: Optional[str] = None,
                  description: Optional[str] = None, icon: Optional[str] = None,
                  register_users: Optional[bool] = None):
-        super(AuthnPluginBase, self).__init__()
+        super().__init__(_set_defaults=True)
 
         if id is None:
             self.id = self.name
@@ -154,7 +155,7 @@ class OAuthServerPluginBase(AuthnPluginBase):
         :param access_token_headers: additional headers for token exchange
         :param access_token_params: additional parameters for token exchange
         """
-        super(OAuthServerPluginBase, self).__init__(
+        super().__init__(
             id=id, description=description, icon=icon,
             register_users=register_users)
 

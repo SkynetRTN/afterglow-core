@@ -4,14 +4,14 @@ Afterglow Core: top-level and initialization routes
 
 import json
 
-from flask import request, render_template, redirect, url_for
+from flask import Response, request, render_template, redirect, url_for
 from flask_security.utils import hash_password, verify_password
 
 from .. import app, json_response
 from ..auth import (
     auth_required, clear_access_cookies, oauth_plugins, authenticate,
     set_access_cookies)
-from ..users import User, Role, db, Identity
+from ..resources.users import DbUser, DbRole, DbIdentity, db
 from ..schemas.api.v1 import UserSchema
 from ..errors import ValidationError, MissingFieldError
 from ..errors.auth import (
@@ -24,7 +24,7 @@ __all__ = []
 
 @app.route('/', methods=['GET'])
 @auth_required(allow_redirect=True)
-def default():
+def default() -> Response:
     """
     Homepage for Afterglow Core
 
@@ -32,13 +32,12 @@ def default():
         - Homepage/Dashboard
 
     :return: Afterglow Core homepage
-    :rtype: flask.Response
     """
     return render_template('index.html.j2', current_user=request.user)
 
 
 @app.route('/initialize', methods=['GET', 'POST'])
-def initialize():
+def initialize() -> Response:
     """
     Afterglow Core initialization
 
@@ -51,9 +50,8 @@ def initialize():
     :return::
         GET: initialization page HTML
         POST: JSON-serialized :class:`UserSchema`
-    :rtype: flask.Response
     """
-    if User.query.count() != 0:
+    if DbUser.query.count() != 0:
         raise InitPageNotAvailableError()
 
     if request.method == 'GET':
@@ -74,7 +72,7 @@ def initialize():
             raise MissingFieldError('email')
 
         try:
-            u = User(
+            u = DbUser(
                 username=username,
                 password=hash_password(password),
                 email=email,
@@ -83,8 +81,8 @@ def initialize():
                 birth_date=request.args.get('birth_date'),
                 active=True,
                 roles=[
-                    Role.query.filter_by(name='admin').one(),
-                    Role.query.filter_by(name='user').one(),
+                    DbRole.query.filter_by(name='admin').one(),
+                    DbRole.query.filter_by(name='user').one(),
                 ],
                 settings=request.args.get('settings'),
             )
@@ -99,7 +97,7 @@ def initialize():
 
 # @app.route('/confirm_identity', methods=['GET', 'POST'])
 # @auth_required(allow_redirect=True)
-# def confirm_identity():
+# def confirm_identity() -> Response:
 #     """
 #     Confirm identity before proceeding
 #
@@ -108,7 +106,6 @@ def initialize():
 #           as the currently authorized user or switch accounts
 #
 #     :return:
-#     :rtype: flask.Response
 #     """
 #     next_url = request.args.get('next')
 #     if not next_url:
@@ -141,7 +138,7 @@ def initialize():
 
 
 @app.route('/login', methods=['GET', 'POST'])
-def login():
+def login() -> Response:
     """
     Login to Afterglow
 
@@ -151,7 +148,6 @@ def login():
 
     :return: empty response with "afterglow_core_access_token" cookie
         if successfully logged in
-    :rtype: flask.Response
     """
     # TODO Ensure CORS is disabled for POSTS to this endpoint
     # TODO Allow additional domains for cookies to be specified in server config
@@ -168,7 +164,7 @@ def login():
             pass
 
     # Do not allow login if Afterglow Core has not yet been configured
-    if User.query.count() == 0:
+    if DbUser.query.count() == 0:
         return redirect(url_for('initialize'))
 
         # raise NotInitializedError()
@@ -186,7 +182,7 @@ def login():
     if not password:
         raise ValidationError('password', 'Password cannot be empty')
 
-    user = User.query.filter_by(username=username).one_or_none()
+    user = DbUser.query.filter_by(username=username).one_or_none()
     if user is None:
         raise HttpAuthFailedError()
 
@@ -200,15 +196,16 @@ def login():
 
 
 @app.route('/login/oauth2/<string:plugin_id>')
-def oauth2_authorized(plugin_id):
+def oauth2_authorized(plugin_id: str) -> Response:
     """
     OAuth2.0 authorization code granted redirect endpoint
 
+    :param plugin_id: OAuth2 plugin ID
+
     :return: redirect to original request URL
-    :rtype: flask.Response
     """
     # Do not allow login if Afterglow Core has not yet been configured
-    if User.query.count() == 0:
+    if DbUser.query.count() == 0:
         raise NotInitializedError()
 
     state = request.args.get('state')
@@ -239,7 +236,7 @@ def oauth2_authorized(plugin_id):
         raise NotAuthenticatedError(error_msg='No user profile data returned')
 
     # Get the user from db
-    identity = Identity.query\
+    identity = DbIdentity.query \
         .filter_by(auth_method=oauth_plugin.name, name=user_profile['id']) \
         .one_or_none()
     if identity is None and oauth_plugin.name == 'skynet':
@@ -247,7 +244,7 @@ def oauth2_authorized(plugin_id):
         # versions that used Skynet usernames instead of IDs; a potential
         # security issue is a Skynet user with a numeric username matching
         # some other user's Skynet user ID
-        identity = Identity.query \
+        identity = DbIdentity.query \
             .filter_by(auth_method=oauth_plugin.name,
                        name=user_profile['username']) \
             .one_or_none()
@@ -291,22 +288,22 @@ def oauth2_authorized(plugin_id):
                         ([user_profile.get('last_name')] or [])),
                     user_profile['id']):
                 if username_candidate and str(username_candidate).strip() and \
-                        not User.query.filter(
-                            db.func.lower(User.username) ==
+                        not DbUser.query.filter(
+                            db.func.lower(DbUser.username) ==
                             username_candidate.lower()).count():
                     username = username_candidate
                     break
-            user = User(
+            user = DbUser(
                 username=username or None,
                 first_name=user_profile.get('first_name') or None,
                 last_name=user_profile.get('last_name') or None,
                 email=user_profile.get('email') or None,
                 birth_date=user_profile.get('birth_date') or None,
-                roles=[Role.query.filter_by(name='user').one()],
+                roles=[DbRole.query.filter_by(name='user').one()],
             )
             db.session.add(user)
             db.session.flush()
-            identity = Identity(
+            identity = DbIdentity(
                 user_id=user.id,
                 name=user_profile['id'],
                 auth_method=oauth_plugin.name,
@@ -328,7 +325,7 @@ def oauth2_authorized(plugin_id):
 
 
 @app.route('/logout', methods=['GET', 'POST'])
-def logout():
+def logout() -> Response:
     """
     Logout from Afterglow
 
@@ -336,6 +333,5 @@ def logout():
         - log the current user out
 
     :return: empty JSON response
-    :rtype: flask.Response
     """
     return clear_access_cookies(redirect(url_for('login')))

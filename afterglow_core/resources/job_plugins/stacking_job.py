@@ -2,19 +2,45 @@
 Afterglow Core: image stacking job plugin
 """
 
+from typing import List as TList
+
+from marshmallow.fields import Integer, List, Nested, String
+
 from skylib.combine.stacking import combine
 
-from ...schemas.api.v1 import StackingJobSchema
+from ...models import Job, JobResult
+from ...schemas import AfterglowSchema, Float
 from ..data_files import (
-    create_data_file, get_data_file, get_data_file_db, get_root)
+    create_data_file, get_data_file_data, get_data_file_db, get_root)
 
 
 __all__ = ['StackingJob']
 
 
-class StackingJob(StackingJobSchema):
-    name = 'stacking'
+class StackingSettings(AfterglowSchema):
+    mode = String(default='average')  # type: str
+    scaling = String(default=None)  # type: str
+    rejection = String(default=None)  # type: str
+    percentile = Integer(default=50)  # type: int
+    lo = Float(default=0)  # type: float
+    hi = Float(default=100)  # type: float
+
+
+class StackingJobResult(JobResult):
+    file_id = Integer()  # type: int
+
+
+class StackingJob(Job):
+    type = 'stacking'
     description = 'Stack Images'
+
+    result = Nested(
+        StackingJobResult, default={})  # type: StackingJobResult
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+    # alignment_settings = Nested(
+    #     AlignmentSettings, default={})  # type: AlignmentSettings
+    stacking_settings = Nested(
+        StackingSettings, default={})  # type: StackingSettings
 
     def run(self):
         settings = self.stacking_settings
@@ -63,7 +89,7 @@ class StackingJob(StackingJobSchema):
         # Load data files
         if not self.file_ids:
             return
-        data_files = [get_data_file(self.user_id, file_id)
+        data_files = [get_data_file_data(self.user_id, file_id)
                       for file_id in self.file_ids]
 
         # Check data dimensions

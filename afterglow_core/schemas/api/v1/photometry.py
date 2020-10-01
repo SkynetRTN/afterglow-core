@@ -1,11 +1,11 @@
 """
-Afterglow Core: photometry data structures
+Afterglow Core: photometry-related schemas
 """
 
 from marshmallow.fields import String
 
-from .source_extraction import SourceExtractionData
-from ... import AfterglowSchema, Float, Resource
+from .source_extraction import SourceExtractionDataSchema
+from ... import AfterglowSchema, Float
 
 
 __all__ = [
@@ -52,49 +52,15 @@ class PhotSettingsSchema(AfterglowSchema):
     zero_point = Float(default=0)  # type: float
 
 
-class PhotometryDataSchema(SourceExtractionData, IPhotometrySchema,
+class PhotometryDataSchema(SourceExtractionDataSchema, IPhotometrySchema,
                            IApertureSchema):
     """
     Description of object returned by batch photometry
     """
-    @classmethod
-    def from_phot_table(cls, row, source, **kwargs):
-        """
-        Create photometry data class instance from a source extraction object
-        and a photometry table row
-
-        :param numpy.void row: photometry table row
-        :param SourceExtractionData source: input source object
-        :param kwargs: see :meth:`from_source_table`; extra kwargs:
-            - zero_point: apply the optional zero point to instrumental mag
-        """
-        m0 = kwargs.pop('zero_point', 0)
-
-        data = cls(source, **kwargs)
-
-        data.x = row['x']
-        data.y = row['y']
-        data.flux = row['flux']
-        data.flux_error = row['flux_err']
-        data.mag = row['mag'] + m0
-        data.mag_error = row['mag_err']
-
-        if row['aper_a']:
-            data.aper_a = row['aper_a']
-            data.aper_b = row['aper_b']
-            data.aper_theta = row['aper_theta']
-            data.annulus_a_in = row['aper_a_in']
-            data.annulus_b_in = \
-                row['aper_a_in']*row['aper_b_out']/row['aper_a_out']
-            data.annulus_theta_in = data.annulus_theta_out = \
-                row['aper_theta_out']
-            data.annulus_a_out = row['aper_a_out']
-            data.annulus_b_out = row['aper_b_out']
-
-        return data
+    pass
 
 
-class PhotometrySchema(Resource):
+class PhotometrySchema(AfterglowSchema):
     """
     JSON-serializable photometry results
 

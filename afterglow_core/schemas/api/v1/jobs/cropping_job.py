@@ -26,6 +26,8 @@ class CroppingJobResultSchema(JobResultSchema):
 
 
 class CroppingJobSchema(JobSchema):
+    type = 'cropping'
+
     result = Nested(
         CroppingJobResultSchema, default={})  # type: CroppingJobResultSchema
     file_ids = List(Integer(), default=[])  # type: TList[int]

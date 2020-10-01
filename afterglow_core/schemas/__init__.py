@@ -4,7 +4,7 @@ Afterglow Core: custom marshmallow schemas for API objects
 
 import datetime
 from math import isinf, isnan
-from typing import Union
+from typing import Any, Dict as TDict, Optional, Set, Sequence, Union
 from urllib.parse import quote
 
 from flask import url_for
@@ -51,7 +51,7 @@ class Date(fields.Date):
     def _serialize(self, value, attr, obj, **__):
         if isinstance(value, str) or isinstance(value, type(u'')):
             return value
-        return super(Date, self)._serialize(value, attr, obj)
+        return super()._serialize(value, attr, obj)
 
 
 class Time(fields.Time):
@@ -62,7 +62,7 @@ class Time(fields.Time):
     def _serialize(self, value, attr, obj, **__):
         if isinstance(value, str) or isinstance(value, type(u'')):
             return value
-        return super(Time, self)._serialize(value, attr, obj)
+        return super()._serialize(value, attr, obj)
 
 
 class Float(fields.Float):
@@ -86,7 +86,7 @@ class Float(fields.Float):
         except TypeError:
             pass
 
-        return super(Float, self)._serialize(value, attr, obj)
+        return super()._serialize(value, attr, obj)
 
 
 class AfterglowSchema(Schema):
@@ -95,57 +95,104 @@ class AfterglowSchema(Schema):
     object or keyword arguments and explicitly assigns default values to all
     uninitialized fields. Serves as a self-contained schema that can both hold
     field values and dump itself to a dict or a JSON string.
+
+    :class:`AfterglowSchema` supports polymorphic schemas. If the special
+    attribute `__polymorphic_on__` is set to the name of one of the attributes,
+    AfterglowSchema(...) , instead of returning the base class instance, will
+    return an instance of one of its immediate subclasses that has the value
+    of the corresponding attribute equal to the value provided on creation,
+    either in the initializer object or in the keyword arguments (see
+    :meth:`__init__`).
     """
-    def __init__(self, _obj=None, only=None, **kwargs):
+    __polymorphic_on__ = None
+
+    _remove_nulls = False  # remove null-valued fields on dump
+
+    def __new__(cls, _obj: Any = None, **kwargs):
+        # Handle polymorphism
+        poly_attr = cls.__polymorphic_on__
+        if poly_attr is not None:
+            # Find the appropriate subclass to instantiate based
+            # on the polymorphic identity provided in _obj or kwargs
+            try:
+                poly_identity = getattr(_obj, poly_attr)
+            except AttributeError:
+                try:
+                    poly_identity = kwargs[poly_attr]
+                except KeyError:
+                    poly_identity = None
+            if poly_identity is not None:
+                for subclass in cls.__subclasses__():
+                    if getattr(subclass, poly_attr, None) == poly_identity:
+                        cls = subclass
+                        break
+
+        # Instantiate the class
+        return super().__new__(cls)
+
+    def __init__(self, _obj: Any = None,
+                 only: Optional[Union[Sequence[str], Set[str]]] = None,
+                 exclude: Union[Sequence[str], Set[str]] = (),
+                 _set_defaults: bool = False, _remove_nulls: bool = False,
+                 **kwargs):
         """
-        Create a resource class instance
+        Create an Afterglow schema class instance
 
-        resource = MyResource(field1=value1, ...)
+        schema = MySchema(field1=value1, ...)
             or
-        resource = MyResource(sqla_object)
+        schema = MySchema(object)
 
-        :param _obj: initialize fields from the given object (usually an SQLA
-            declarative instance)
-        :param only: see :class:`Schema`
+        :param _obj: initialize fields from the given object (usually a data
+            model object defined in :mod:`afterglow_core.models`, an SQLA
+            database object defined in :mod:`afterglow_core.resources`),
+            or a public API schema defined in :mode:`afterglow_core.schemas.api`
+        :param only: whitelist of the fields to include in the instantiated
+            schema
+        :param exclude: blacklist of the fields to exclude
+            from the instantiated schema
+        :param _set_defaults: initialize fields missing from both `_obj` and
+            keyword arguments to their defaults, if any
+        :param _remove_nulls: if set, don't dump fields with null values
         :param kwargs: keyword arguments are assigned to the corresponding
             instance attributes, including fields
         """
-        super(AfterglowSchema, self).__init__(only=only)
+        self._remove_nulls = _remove_nulls
+        super().__init__(partial=True, only=only, exclude=exclude)
 
-        if _obj is not None:
-            for name, val in self.dump(_obj).items():
-                try:
-                    if isinf(val) or isnan(val):
-                        # Convert floating-point NaNs/Infs to string
-                        val = str(val)
-                except TypeError:
-                    pass
+        if _obj is None:
+            kw = kwargs
+        else:
+            kw = dict(self.dump(_obj).items())
+            kw.update(kwargs)
 
-                if val is not None:
-                    setattr(self, name, val)
+        for name, val in kw.items():
+            try:
+                if isinf(val) or isnan(val):
+                    # Convert floating-point NaNs/Infs to string
+                    val = str(val)
+            except TypeError:
+                pass
 
-        for name, val in kwargs.items():
-            if name in self._declared_fields and val is not None:
-                setattr(self, name, val)
+            setattr(self, name, val)
 
-        # Initialize the missing fields with their defaults
-        for name, f in self.fields.items():
-            if not hasattr(self, name) and f.default != fields.missing_:
-                try:
-                    setattr(self, name, f.default)
-                except AttributeError:
-                    # Possibly missing attribute with a default in the base
-                    # class was turned into a read-only property in a subclass
-                    pass
+        if _set_defaults:
+            # Initialize the missing fields with their defaults
+            for name, f in self.fields.items():
+                if not hasattr(self, name) and f.default != fields.missing_:
+                    try:
+                        setattr(self, name, f.default)
+                    except AttributeError:
+                        # Possibly missing attribute with a default in the base
+                        # class was turned into a read-only property
+                        # in a subclass
+                        pass
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name: str, value: Any) -> None:
         """
         Deserialize fields on assignment
 
-        :param str name: attribute name
+        :param name: attribute name
         :param value: attribute value
-
-        :return: None
         """
         if value is not None:
             try:
@@ -153,7 +200,6 @@ class AfterglowSchema(Schema):
             except (AttributeError, KeyError):
                 pass
             else:
-                # noinspection PyTypeChecker
                 if hasattr(field, 'nested') and \
                         issubclass(field.nested, AfterglowSchema):
                     value = field.nested(value)
@@ -162,7 +208,7 @@ class AfterglowSchema(Schema):
                          issubclass(field.container.nested, AfterglowSchema))
                         if hasattr(field, 'container')
                         else hasattr(field.inner, 'nested') and
-                             issubclass(field.inner.nested, AfterglowSchema)):
+                        issubclass(field.inner.nested, AfterglowSchema)):
                     klass = field.container.nested \
                         if hasattr(field, 'container') else field.inner.nested
                     value = [klass(item) for item in value]
@@ -182,27 +228,35 @@ class AfterglowSchema(Schema):
                             value = field.deserialize(str(value))
                         else:
                             raise
-        super(AfterglowSchema, self).__setattr__(name, value)
+        super().__setattr__(name, value)
 
     @post_dump
-    def remove_nones(self, data, **__):
+    def remove_nones(self, data: TDict[str, Any], **__) -> TDict[str, Any]:
         """
-        Don't dump fields containing None
+        Don't dump None-valued fields
 
         :param data: serialized schema
 
         :return: input data with Non-valued fields stripped
-        :rtype: dict
         """
-        return {key: value for key, value in data.items() if value is not None}
+        if self._remove_nulls:
+            return {key: value for key, value in data.items()
+                    if value is not None}
+        return data
 
-    def json(self):
+    def to_dict(self) -> TDict[str, Any]:
+        """
+        Serialize resource class instance to dictionary
+
+        :return: dictionary containing all resource fields
+        """
+        return self.dump(self)
+
+    def json(self) -> str:
         """
         Serialize resource class instance to JSON
 
-        :return: JSON string containing all resource fields plus its URI if
-            the resource has ID
-        :rtype: str
+        :return: JSON string containing all resource fields
         """
         return self.dumps(self)
 

@@ -2,12 +2,14 @@
 Afterglow Core: data provider schemas
 """
 
-from marshmallow.fields import Dict, Integer, List, String
+from marshmallow.fields import Dict, Integer, List, Nested, String
 
-from ... import Resource
+from ... import AfterglowSchema, Resource
+from .photometry import MagSchema, IPhotometrySchema
+from .source_extraction import IAstrometrySchema
 
 
-__all__ = ['CatalogSchema']
+__all__ = ['CatalogSchema', 'CatalogSourceSchema', 'ICatalogSourceSchema']
 
 
 class CatalogSchema(Resource):
@@ -32,6 +34,7 @@ class CatalogSchema(Resource):
             aliases for non-standard catalog magnitude names), e.g. {'Open':
             '(3*B + 5*R)/8', "r'": 'rprime'}; used by field cal job
     """
+    __polymorphic_on__ = 'name'
     __get_view__ = 'get_catalogs'
 
     name = String(default=None)
@@ -39,3 +42,22 @@ class CatalogSchema(Resource):
     num_sources = Integer()
     mags = Dict(keys=String, values=List(String()), default={})
     filter_lookup = Dict(keys=String, values=String)
+
+
+class ICatalogSourceSchema(AfterglowSchema):
+    """
+    Generic catalog source definition without astrometry
+    """
+    id = String()  # type: str
+    file_id = Integer()  # type: int
+    label = String()  # type: str
+    catalog_name = String()  # type: str
+    mags = Dict(keys=String, values=Nested(MagSchema))  # type: dict
+
+
+class CatalogSourceSchema(ICatalogSourceSchema, IAstrometrySchema,
+                          IPhotometrySchema):
+    """
+    Catalog source definition for field calibration
+    """
+    pass

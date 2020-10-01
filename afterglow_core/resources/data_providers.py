@@ -6,7 +6,7 @@ DATA_PROVIDERS configuration variable.
 """
 
 from .. import app, plugins
-from . import data_provider_plugins
+from ..models import DataProvider
 
 
 __all__ = ['providers']
@@ -15,4 +15,4 @@ __all__ = ['providers']
 # Load data provider plugins
 providers = plugins.load_plugins(
     'data provider', 'resources.data_provider_plugins',
-    data_provider_plugins.DataProvider, app.config.get('DATA_PROVIDERS', []))
+    DataProvider, app.config.get('DATA_PROVIDERS', []))

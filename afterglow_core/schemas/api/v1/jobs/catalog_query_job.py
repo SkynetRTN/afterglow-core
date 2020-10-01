@@ -20,6 +20,8 @@ class CatalogQueryJobResultSchema(JobResultSchema):
 
 
 class CatalogQueryJobSchema(JobSchema):
+    type = 'catalog_query'
+
     result = Nested(
         CatalogQueryJobResultSchema,
         default={})  # type: CatalogQueryJobResultSchema

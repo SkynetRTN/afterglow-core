@@ -25,6 +25,8 @@ class AlignmentJobResultSchema(JobResultSchema):
 
 
 class AlignmentJobSchema(JobSchema):
+    type = 'alignment'
+
     result = Nested(
         AlignmentJobResultSchema, default={})  # type: AlignmentJobResultSchema
     file_ids = List(Integer(), default=[])  # type: TList[int]

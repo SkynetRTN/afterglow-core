@@ -28,6 +28,8 @@ class StackingJobResultSchema(JobResultSchema):
 
 
 class StackingJobSchema(JobSchema):
+    type = 'stacking'
+
     result = Nested(
         StackingJobResultSchema, default={})  # type: StackingJobResultSchema
     file_ids = List(Integer(), default=[])  # type: TList[int]

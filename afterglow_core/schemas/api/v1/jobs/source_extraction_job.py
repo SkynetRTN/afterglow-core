@@ -45,6 +45,8 @@ class SourceExtractionJobResultSchema(JobResultSchema):
 
 
 class SourceExtractionJobSchema(JobSchema):
+    type = 'source_extraction'
+
     result = Nested(
         SourceExtractionJobResultSchema
     )  # type: SourceExtractionJobResultSchema

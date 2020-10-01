@@ -2,10 +2,13 @@
 Afterglow Core: error system
 """
 
-from __future__ import absolute_import, division, print_function
 import sys
 import traceback
+from typing import Optional
+
+from flask import Response
 from werkzeug import exceptions
+
 from .. import app, json_response
 
 
@@ -15,17 +18,16 @@ __all__ = [
 ]
 
 
-def afterglow_error_handler(e):
+def afterglow_error_handler(e: Exception) -> Response:
     """
     Error handling function for all Afterglow Core errors
 
     Automatically installed for all `AfterglowError` subclasses via
     `AfterglowErrorMeta`
 
-    :param Exception e: exception instance
+    :param e: exception instance
 
     :return: JSON response object
-    :rtype: :class:`flask.Response`
     """
     if hasattr(e, 'payload') and e.payload:
         payload = dict(e.payload)
@@ -54,14 +56,13 @@ def afterglow_error_handler(e):
 
 
 @app.errorhandler(401)
-def unauthorized_error_handler(e):
+def unauthorized_error_handler(e: Exception) -> Response:
     """
     Error handling function for HTTP 401 (UNAUTHORIZED)
 
-    :param Exception e: exception instance
+    :param e: exception instance
 
     :return: JSON response object
-    :rtype: :class:`flask.Response`
     """
     # noinspection PyUnresolvedReferences
     return json_response(
@@ -73,14 +74,13 @@ def unauthorized_error_handler(e):
 
 
 @app.errorhandler(403)
-def forbidden_error_handler(e):
+def forbidden_error_handler(e: Exception) -> Response:
     """
     Error handling function for HTTP 403 (FORBIDDEN)
 
-    :param Exception e: exception instance
+    :param e: exception instance
 
     :return: JSON response object
-    :rtype: :class:`flask.Response`
     """
     # noinspection PyUnresolvedReferences
     return json_response(
@@ -92,15 +92,14 @@ def forbidden_error_handler(e):
 
 
 @app.errorhandler(404)
-def not_found_error_handler(e):
+def not_found_error_handler(e: Exception) -> Response:
     """
     Error handling function for HTTP 404 (NOT FOUND); raised when a nonexistent
     resource is requested
 
-    :param Exception e: exception instance
+    :param e: exception instance
 
     :return: JSON response object
-    :rtype: :class:`flask.Response`
     """
     # noinspection PyUnresolvedReferences
     return json_response(
@@ -112,14 +111,13 @@ def not_found_error_handler(e):
 
 
 @app.errorhandler(500)
-def internal_server_error_handler(e):
+def internal_server_error_handler(e: Exception) -> Response:
     """
     Error handling function for HTTP 500 (INTERNAL SERVER ERROR)
 
-    :param Exception e: exception instance
+    :param e: exception instance
 
     :return: JSON response object
-    :rtype: :class:`flask.Response`
     """
     # noinspection PyUnresolvedReferences
     return json_response(
@@ -176,13 +174,12 @@ class AfterglowError(exceptions.HTTPException, metaclass=AfterglowErrorMeta):
             self.description = self.__doc__
         self.payload = kwargs
 
-    def __str__(self):
+    def __str__(self) -> str:
         """
         Return a string representation of an Afterglow error showing both error
         message and payload
 
         :return: stringified Afterglow error
-        :rtype: str
         """
         msg = self.message
         if self.payload:
@@ -218,7 +215,8 @@ class ValidationError(AfterglowError):
     subcode = 2
     message = 'Validation failed'
 
-    def __init__(self, field, message=None, code=400):
+    def __init__(self, field: str, message: Optional[str] = None,
+                 code: Optional[int] = 400):
         super(ValidationError, self).__init__(field=field)
         if message:
             self.message = message

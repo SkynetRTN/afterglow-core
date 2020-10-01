@@ -3,11 +3,12 @@ Afterglow Core: Landolt catalog of UBVRI photometric standards accessed
 via VizieR
 """
 
-from __future__ import absolute_import, division, print_function
+from typing import List as TList, Union
 
 from numpy import hypot, sqrt
+from astropy.table import Table
 
-from ...schemas.api.v1 import MagSchema
+from ...models import CatalogSource, Mag
 from .vizier_catalogs import VizierCatalog
 
 
@@ -37,41 +38,40 @@ class LandoltCatalog(VizierCatalog):
         '(1 - 2*(DEJ2000.strip().startswith("-")))',
     }
 
-    def table_to_sources(self, table):
+    def table_to_sources(self, table: Union[list, Table]) \
+            -> TList[CatalogSource]:
         """
-        Return a list of CatalogSource objects from an Astropy table
+        Return a list of :class:`CatalogSource` objects from an Astropy table
 
         Converts color indices to magnitudes.
 
-        :param list | astropy.table.Table table: table of sources returned
-            by astroquery
+        :param table: table of sources returned by astroquery
 
         :return: list of catalog objects
-        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
         """
-        sources = super(LandoltCatalog, self).table_to_sources(table)
+        sources = super().table_to_sources(table)
 
         for source in sources:
             mags = source.mags
             v, v_err = mags['V'].value, getattr(mags['V'], 'error', 0)
 
-            mags['B'] = MagSchema(value=v + mags['B_V'].value)
+            mags['B'] = Mag(value=v + mags['B_V'].value)
             err = hypot(v_err, getattr(mags['B_V'], 'error', 0))
             if err:
                 mags['B'].error = err
 
-            mags['U'] = MagSchema(value=mags['B'].value + mags['U_B'].value)
+            mags['U'] = Mag(value=mags['B'].value + mags['U_B'].value)
             err = hypot(getattr(mags['B'], 'error', 0),
                         getattr(mags['V_R'], 'error', 0))
             if err:
                 mags['U'].error = err
 
-            mags['R'] = MagSchema(value=v - mags['V_R'].value)
+            mags['R'] = Mag(value=v - mags['V_R'].value)
             err = hypot(v_err, getattr(mags['V_R'], 'error', 0))
             if err:
                 mags['R'].error = err
 
-            mags['I'] = MagSchema(
+            mags['I'] = Mag(
                 value=(mags['R'].value - mags['R_I'].value +
                        v - mags['V_I'].value)/2)
             err = sqrt((getattr(mags['R'], 'error', 0)**2 +

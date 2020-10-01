@@ -4,8 +4,6 @@ Afterglow Core: job resources
 Job types are defined in afterglow_core.job_plugins.
 """
 
-from __future__ import absolute_import, division, print_function
-
 import sys
 import os
 import traceback
@@ -20,43 +18,34 @@ import cProfile
 from datetime import datetime
 from glob import glob
 from multiprocessing import Event, Process, Queue
+from socketserver import BaseRequestHandler, ThreadingTCPServer
+from typing import Any, Dict as TDict
 import threading
 import sqlite3
 
 # noinspection PyProtectedMember
-from marshmallow import (
-    Schema, fields, missing, __version_info__ as marshmallow_version)
+from marshmallow import Schema, fields, missing
 from sqlalchemy import (
     Boolean, Column, Float, ForeignKey, Integer, String, Text, create_engine,
-    event, text, types)
+    event, text)
 # noinspection PyProtectedMember
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.types import TypeDecorator
-from flask import Response, request
 
-from ..schemas.api.v1 import (
-    JobSchema, JobResultSchema, job_file_dir, job_file_path)
-from ..errors import AfterglowError, MissingFieldError, ValidationError
+from .. import app, auth, plugins
+from ..models import Job, JobState, JobResult, job_file_dir, job_file_path
+from ..resources.base import Date, DateTime, JSONType, Time
+from ..resources.data_files import get_session
+from ..resources.users import DbUser
+from ..schemas import (
+    AfterglowSchema, Boolean as BooleanField, Date as DateField,
+    DateTime as DateTimeField, Float as FloatField, Time as TimeField)
+from ..errors import AfterglowError, MissingFieldError
 from ..errors.job import (
     JobServerError, UnknownJobError, UnknownJobFileError, UnknownJobTypeError,
     InvalidMethodError, CannotSetJobStatusError, CannotCancelJobError,
     CannotDeleteJobError)
-from ..users import User
-from .. import (
-    AfterglowSchemaEncoder, app, auth, json_response, plugins)
-from .data_files import SqlaSession, get_data_file_db
-
-if sys.version_info.major < 3:
-    # noinspection PyUnresolvedReferences,PyCompatibility
-    from SocketServer import BaseRequestHandler, ThreadingTCPServer
-else:
-    # noinspection PyUnresolvedReferences,PyCompatibility
-    from socketserver import BaseRequestHandler, ThreadingTCPServer
-
-    # noinspection PyShadowingBuiltins
-    unicode = str
 
 # Encryption imports
 try:
@@ -158,7 +147,7 @@ class RWLock(object):
             self.readers_ok.notifyAll()
             self.readers_ok.release()
 
-    def __enter__(self):
+    def __enter__(self) -> None:
         """
         Context manager protocol support, called after acquiring the lock on
         either read or write
@@ -167,88 +156,25 @@ class RWLock(object):
         """
         pass
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
         """
         Context manager protocol support, called after acquiring the lock on
         either read or write
 
         :return: False if exception is raised within the "with" block
-        :rtype: bool
         """
         self.release()
         return exc_type is None
 
 
 # Load job plugins
-job_types = plugins.load_plugins('job', 'resources.job_plugins', JobSchema)
+job_types = plugins.load_plugins('job', 'resources.job_plugins', Job)
 
 
-Base = declarative_base()
+JobBase = declarative_base()
 
 
-# noinspection PyAbstractClass
-class JSONType(TypeDecorator):
-    """
-    Text column that contains a JSON data structure; a simplified version of
-    :class:`sqlalchemy_utils.types.json.JSONType`
-    """
-    impl = types.UnicodeText
-
-    def process_bind_param(self, value, dialect):
-        if value is not None:
-            value = unicode(json.dumps(value, cls=AfterglowSchemaEncoder))
-        return value
-
-    def process_result_value(self, value, dialect):
-        if value is not None:
-            value = json.loads(value)
-        return value
-
-
-# noinspection PyAbstractClass
-class DateTime(TypeDecorator):
-    """
-    DateTime column that can be assigned an ISO-formatted string
-    """
-    impl = types.DateTime
-
-    def process_bind_param(self, value, dialect):
-        if value is not None and not isinstance(value, datetime):
-            value = datetime.strptime(value, '%Y-%m-%d %H:%M:%S.%f')
-        return value
-
-
-# noinspection PyAbstractClass
-class Date(TypeDecorator):
-    """
-    Date column that can be assigned an ISO-formatted string
-    """
-    impl = types.Date
-
-    def process_bind_param(self, value, dialect):
-        if isinstance(value, datetime):
-            value = value.date()
-        elif value is not None and not isinstance(value, datetime):
-            value = datetime.strptime(value, '%Y-%m-%d')
-        return value
-
-
-# noinspection PyAbstractClass
-class Time(TypeDecorator):
-    """
-    Time column that can be assigned an ISO-formatted string
-    """
-    impl = types.Time
-
-    def process_bind_param(self, value, dialect):
-        if isinstance(value, datetime):
-            value = value.time()
-        elif value is not None and not isinstance(value, datetime):
-            value = datetime.strptime(value, '%H:%M:%S.%f')
-        return value
-
-
-class DbJobState(Base):
+class DbJobState(JobBase):
     __tablename__ = 'job_states'
 
     id = Column(
@@ -260,7 +186,7 @@ class DbJobState(Base):
     progress = Column(Float, nullable=False, default=0)
 
 
-class DbJobResult(Base):
+class DbJobResult(JobBase):
     __tablename__ = 'job_results'
 
     id = Column(
@@ -272,7 +198,7 @@ class DbJobResult(Base):
     __mapper_args__ = {'polymorphic_on': type, 'polymorphic_identity': None}
 
 
-class DbJobFile(Base):
+class DbJobFile(JobBase):
     __tablename__ = 'job_files'
 
     id = Column(Integer, primary_key=True, nullable=False)
@@ -283,7 +209,7 @@ class DbJobFile(Base):
     headers = Column(JSONType, default=None)
 
 
-class DbJob(Base):
+class DbJob(JobBase):
     __tablename__ = 'jobs'
 
     id = Column(Integer, primary_key=True, nullable=False)
@@ -309,28 +235,26 @@ job_server_key = b''
 job_server_iv = b''
 
 
-def encrypt(msg):
+def encrypt(msg: bytes) -> bytes:
     """
     Encrypt a job server communication message
 
     :param bytes msg: message to encrypt
 
     :return: encrypted message or original message if encryption is not enabled
-    :rtype: bytes
     """
     if not job_server_key:
         return msg
     return AES.new(job_server_key, AES.MODE_CFB, job_server_iv).encrypt(msg)
 
 
-def decrypt(msg):
+def decrypt(msg: bytes) -> bytes:
     """
     Decrypt a job server communication message
 
     :param bytes msg: message to decrypt
 
     :return: decrypted message or original message if encryption is not enabled
-    :rtype: bytes
     """
     if not job_server_key:
         return msg
@@ -416,8 +340,8 @@ class JobWorkerProcess(Process):
                 # contain at least type, ID, and user ID, and the corresponding
                 # job plugin is guaranteed to exist
                 try:
-                    job = job_types[job_descr['type']].__class__(
-                        result_queue, **job_descr)
+                    job = Job(
+                        _queue=result_queue, _set_defaults=True, **job_descr)
                 except Exception as e:
                     # Report job creation error to job server
                     app.logger.warn(
@@ -430,7 +354,7 @@ class JobWorkerProcess(Process):
                     continue
 
                 # Set auth.current_user to the actual db user
-                auth.current_user = User.query.get(job.user_id)
+                auth.current_user = DbUser.query.get(job.user_id)
 
                 # Clear the possible cancel request
                 if WINDOWS:
@@ -443,7 +367,7 @@ class JobWorkerProcess(Process):
                     if app.config.get('PROFILE'):
                         # Profile the job if enabled
                         print('{}\nProfiling job "{}" (ID {})'.format(
-                            '-'*80, job.name, job.id))
+                            '-'*80, job.type, job.id))
                         cProfile.runctx(
                             'job.run()', {}, {'job': job}, sort='time')
                         print('-'*80)
@@ -554,6 +478,11 @@ db_field_type_mapping = {
     fields.TimeDelta: Integer,
     fields.UUID: Text,
     fields.Url: Text,
+    BooleanField: Boolean,
+    DateField: Date,
+    DateTimeField: DateTime,
+    FloatField: Float,
+    TimeField: Time,
 }
 
 try:
@@ -564,7 +493,8 @@ except AttributeError:
     pass
 
 
-def subclass_from_schema(base_class, schema, plugin_name=None):
+def db_from_schema(base_class, schema: AfterglowSchema,
+                   plugin_name: str = None):
     """
     Create a subclass of DbJob or DbJobResult for the given job plugin
 
@@ -574,11 +504,11 @@ def subclass_from_schema(base_class, schema, plugin_name=None):
 
     :return: new db model class
     """
-    if schema.__class__ is JobResultSchema:
+    if schema.__class__ is JobResult:
         # Plugin does not define its own result schema; use job_results table
         return base_class
 
-    if isinstance(schema, JobSchema):
+    if isinstance(schema, Job):
         kind = 'jobs'
     else:
         kind = 'job_results'
@@ -686,25 +616,19 @@ class JobRequestHandler(BaseRequestHandler):
                     if job_id is None:
                         # Return all user's jobs for the given client session;
                         # hide user id/name and result
-                        result = []
-                        for job in session.query(DbJob).filter(
-                                DbJob.user_id == user_id,
-                                DbJob.session_id == msg.get('session_id')):
-                            res = job_types[job.type].__class__(
-                                exclude=['user_id', 'result']
-                            ).dump(job)
-                            if marshmallow_version < (3, 0):
-                                res = res[0]
-                            result.append(res)
+                        result = [
+                            Job(db_job, exclude=['user_id', 'result']).to_dict()
+                            for db_job in session.query(DbJob).filter(
+                                    DbJob.user_id == user_id,
+                                    DbJob.session_id == msg.get('session_id'))
+                        ]
                     else:
                         # Return the given job
-                        job = session.query(DbJob).get(job_id)
-                        if job is None or job.user_id != user_id:
+                        db_job = session.query(DbJob).get(job_id)
+                        if db_job is None or db_job.user_id != user_id:
                             raise UnknownJobError(id=job_id)
-                        result = job_types[job.type].__class__(
-                            exclude=['user_id', 'result']).dump(job)
-                        if marshmallow_version < (3, 0):
-                            result = result[0]
+                        result = Job(
+                            db_job, exclude=['user_id', 'result']).to_dict()
 
                 elif method == 'post':
                     # Submit a job
@@ -713,14 +637,12 @@ class JobRequestHandler(BaseRequestHandler):
                     except KeyError:
                         raise MissingFieldError(field='type')
                     if job_type not in server.db_job_types:
-                        raise UnknownJobTypeError(type=msg['type'])
+                        raise UnknownJobTypeError(type=job_type)
 
+                    # Check that the specified session exists
                     session_id = msg.get('session_id')
-                    if session_id is not None and get_data_file_db(user_id).\
-                            query(SqlaSession).get(session_id) is None:
-                        raise ValidationError(
-                            'session_id',
-                            'Unknown session "{}"'.format(session_id), 404)
+                    if session_id is not None:
+                        get_session(user_id, session_id)
 
                     # Need an extra worker?
                     with server.pool_lock.acquire_read():
@@ -742,29 +664,18 @@ class JobRequestHandler(BaseRequestHandler):
                                     server.job_queue, server.result_queue))
 
                     try:
-                        job = server.db_job_types[job_type](
+                        # Convert message arguments to polymorphic job model
+                        # and create an appropriate db job class instance
+                        job_args = Job(_set_defaults=True, **msg).to_dict()
+                        del job_args['state'], job_args['result']
+                        db_job = server.db_job_types[job_type](
                             state=DbJobState(),
-                            result=server.db_job_result_types[job_type]()
+                            result=server.db_job_result_types[job_type](),
+                            **job_args
                         )
-                        for name, val in msg.items():
-                            # noinspection PyBroadException
-                            try:
-                                # JSONType fields are not automatically
-                                # converted on assignment; deserialize if a JSON
-                                # string was passed in request arguments instead
-                                # of a value (e.g. list)
-                                if isinstance(
-                                        getattr(job.__class__, name).property.
-                                        columns[0].type, JSONType):
-                                    val = json.loads(val)
-                            except Exception:
-                                pass
-                            setattr(job, name, val)
-                        session.add(job)
+                        session.add(db_job)
                         session.flush()
-                        result = job_types[job_type].dump(job)
-                        if marshmallow_version < (3, 0):
-                            result = result[0]
+                        result = Job(db_job).to_dict()
                         server.job_queue.put(result)
                         result = dict(result)
                         del result['user_id']
@@ -782,15 +693,15 @@ class JobRequestHandler(BaseRequestHandler):
                     except KeyError:
                         raise MissingFieldError(field='id')
 
-                    job = session.query(DbJob).get(job_id)
-                    if job is None or job.user_id != user_id:
+                    db_job = session.query(DbJob).get(job_id)
+                    if db_job is None or db_job.user_id != user_id:
                         raise UnknownJobError(id=job_id)
 
-                    if job.state.status not in ('completed', 'canceled'):
-                        raise CannotDeleteJobError(status=job.state.status)
+                    if db_job.state.status not in ('completed', 'canceled'):
+                        raise CannotDeleteJobError(status=db_job.state.status)
 
                     # Delete job files
-                    for jf in job.files:
+                    for jf in db_job.files:
                         try:
                             os.unlink(
                                 job_file_path(user_id, job_id, jf.file_id))
@@ -818,27 +729,26 @@ class JobRequestHandler(BaseRequestHandler):
                 except KeyError:
                     raise MissingFieldError(field='id')
 
-                job = session.query(DbJob).get(job_id)
-                if job is None or job.user_id != user_id:
+                db_job = session.query(DbJob).get(job_id)
+                if db_job is None or db_job.user_id != user_id:
                     raise UnknownJobError(id=job_id)
 
                 if method == 'get':
                     # Return job state
-                    result = JobState().dump(job.state)
-                    if marshmallow_version < (3, 0):
-                        result = result[0]
+                    result = JobState(db_job.state).to_dict()
 
                 elif method == 'put':
                     # Cancel job
-                    try:
-                        if msg['status'] != 'canceled':
-                            raise CannotSetJobStatusError(status=msg['status'])
-                    except KeyError:
+                    status = getattr(
+                        JobState(_set_defaults=True, **msg), 'status', None)
+                    if status is None:
                         raise MissingFieldError(field='status')
+                    if status != 'canceled':
+                        raise CannotSetJobStatusError(status=msgstatus)
 
                     # Find worker process that is currently running the job
-                    if job.state.status != 'in_progress':
-                        raise CannotCancelJobError(status=job.state.status)
+                    if db_job.state.status != 'in_progress':
+                        raise CannotCancelJobError(status=db_job.state.status)
 
                     # Send abort signal to worker process running the given job.
                     # If no such process found, this means that the job either
@@ -851,9 +761,7 @@ class JobRequestHandler(BaseRequestHandler):
                                 break
 
                     # Return the current job state
-                    result = JobState().dump(job.state)
-                    if marshmallow_version < (3, 0):
-                        result = result[0]
+                    result = JobState(db_job.state).to_dict()
 
                 else:
                     raise InvalidMethodError(
@@ -867,14 +775,16 @@ class JobRequestHandler(BaseRequestHandler):
                     except KeyError:
                         raise MissingFieldError(field='id')
 
-                    job = session.query(DbJob).get(job_id)
-                    if job is None or job.user_id != user_id:
+                    db_job = session.query(DbJob).get(job_id)
+                    if db_job is None or db_job.user_id != user_id:
                         raise UnknownJobError(id=job_id)
 
-                    result = job_types[job.type].fields['result'].schema.dump(
-                        job.result)
-                    if marshmallow_version < (3, 0):
-                        result = result[0]
+                    # Deduce the polymorphic job result type from the parent
+                    # job model; add job type info for the /jobs/[id]/result
+                    # view to be able to find the appropriate schema as well
+                    result = job_types[db_job.type].fields['result'].nested(
+                        db_job.result).to_dict()
+                    result['type'] = db_job.type
 
                 else:
                     raise InvalidMethodError(
@@ -1011,11 +921,11 @@ def job_server(notify_queue, key, iv):
         # schema fields
         db_job_types, db_job_result_types = {}, {}
         for job_type, job_schema in job_types.items():
-            db_job_types[job_type] = subclass_from_schema(
+            db_job_types[job_type] = db_from_schema(
                 DbJob, job_schema)
-            db_job_result_types[job_type] = subclass_from_schema(
+            db_job_result_types[job_type] = db_from_schema(
                 DbJobResult, job_schema.fields['result'].nested(),
-                job_schema.name)
+                job_schema.type)
 
         # Enable foreign keys in sqlite; required for ON DELETE CASCADE to work
         # when deleting jobs; set journal mode to WAL to allow concurrent access
@@ -1041,7 +951,7 @@ def job_server(notify_queue, key, iv):
             'sqlite:///{}'.format(db_path),
             connect_args={'check_same_thread': False, 'isolation_level': None},
         )
-        Base.metadata.create_all(bind=engine)
+        JobBase.metadata.create_all(bind=engine)
         session_factory = scoped_session(sessionmaker(bind=engine))
 
         # Erase old job files
@@ -1223,25 +1133,23 @@ def init_jobs():
             reason='Invalid job server initialization message "{}"'.format(msg))
 
 
-def job_server_request(resource, **args):
+def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
     """
     Make a request to job server and return response
 
-    :param str resource: resource ID: "jobs", "jobs/state", "jobs/result",
+    :param resource: resource ID: "jobs", "jobs/state", "jobs/result",
         "jobs/result/files"
-    :param args: extra request arguments
+    :param method: request method: "get", "post", "put", or "delete"
+    :param args: extra request-specific arguments
 
-    :return: Flask response object
-    :rtype: flask.Response
+    :return: response message
     """
     try:
         # Prepare server message
-        msg = request.args.to_dict()
-        if args:
-            msg.update(args)
+        msg = dict(args)
         msg.update(dict(
             resource=resource,
-            method=request.method,
+            method=method,
             user_id=auth.current_user.id,
         ))
         msg = encrypt(json.dumps(msg).encode('utf8'))
@@ -1284,19 +1192,4 @@ def job_server_request(resource, **args):
     except Exception:
         raise JobServerError(reason='JSON structure expected')
 
-    # Parse job server response and create Flask response
-    try:
-        response = json_response(
-            msg['json'], msg.get('status', 200 if msg['json'] else 204),
-            headers=msg.get('headers'))
-    except KeyError:
-        try:
-            response = Response(
-                msg['body'],
-                status=msg.get('status', 200 if msg['body'] else 204),
-                headers=msg.get('headers'),
-                mimetype=msg.get('mimetype', 'application/octet-stream'),
-            )
-        except KeyError:
-            response = json_response()
-    return response
+    return msg

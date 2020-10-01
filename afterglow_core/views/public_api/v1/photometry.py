@@ -2,28 +2,29 @@
 Afterglow Core: API v1 photometry views
 """
 
-from flask import request
+from flask import Response, request
 
 from numpy import array
 from astropy.wcs import WCS
 
 from .... import app, auth, errors, json_response
-from ....resources.data_files import get_exp_length, get_gain, get_data_file
+from ....resources.data_files import get_exp_length, get_gain, get_data_file_data
 from ....resources.photometry import get_photometry
+from ....schemas.api.v1 import PhotometrySchema
 from ....errors.data_file import MissingWCSError
 from . import url_prefix
 
 
 @app.route(url_prefix + 'data-files/<int:id>/photometry')
 @auth.auth_required('user')
-def data_file_photometry(id):
+def data_file_photometry(id: int) -> Response:
     """
     Photometer the given aperture, with optional local background subtraction
 
     GET /data-files/[id]/photometry?param=value...
         - return Photometry object
 
-    :param int id: data file ID
+    :param id: data file ID
 
     Request parameters::
         x: X position or a comma-separated list of positions of aperture
@@ -61,7 +62,6 @@ def data_file_photometry(id):
 
     :return: JSON response containing serialized Photometry object (single xy
         or RA/Dec value) or a list of PHotometry objects otherwise
-    :rtype: `flask.Response`
     """
     # Get request parameters
     try:
@@ -224,7 +224,7 @@ def data_file_photometry(id):
         centroid_radius = None
 
     # Get image data
-    data, hdr = get_data_file(auth.current_user.id, id)
+    data, hdr = get_data_file_data(auth.current_user.id, id)
 
     if ra is not None and dec is not None:
         # Convert RA/Dec to XY if we have astrometric calibration
@@ -239,6 +239,6 @@ def data_file_photometry(id):
             a_out, b_out, theta_out, centroid_radius=centroid_radius)
         for _x, _y in zip(x, y)]
 
-    if not multiple:
-        res = res[0]
-    return json_response(res)
+    if multiple:
+        return json_response([PhotometrySchema(phot) for phot in res])
+    return json_response(PhotometrySchema(res[0]))

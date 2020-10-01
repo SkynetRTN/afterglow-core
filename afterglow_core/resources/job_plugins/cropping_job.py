@@ -2,27 +2,31 @@
 Afterglow Core: image cropping job plugin
 """
 
+from typing import List as TList, Tuple
+
+from marshmallow.fields import Integer, List, Nested
+from numpy import ndarray
 from numpy.ma import MaskedArray
 
-from ...schemas.api.v1 import CroppingJobSchema
+from ...models import Job, JobResult
+from ...schemas import AfterglowSchema, Boolean
 from ...errors import ValidationError
 from ..data_files import (
-    SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,
+    create_data_file, get_data_file_data, get_data_file_db, get_root,
     save_data_file)
 
 
 __all__ = ['CroppingJob']
 
 
-def max_rectangle(histogram):
+def max_rectangle(histogram: ndarray) -> Tuple[int, int, int]:
     """
     Find left/right boundaries and height of the largest rectangle that fits
     entirely under the histogram; see https://gist.github.com/zed/776423
 
-    :param array_like histogram: 1D non-negative integer array
+    :param histogram: 1D non-negative integer array
 
     :return: left X coordinate, right X coordinate, and height of rectangle
-    :rtype: tuple[int, int, int]
     """
     stack = []
     left = right = height = pos = 0
@@ -46,7 +50,8 @@ def max_rectangle(histogram):
     return left, right, height
 
 
-def get_auto_crop(user_id, file_ids):
+def get_auto_crop(user_id: int, file_ids: TList[int]) \
+        -> Tuple[float, float, float, float]:
     """
     Calculate optimal cropping margins for a set of masked images, e.g. after
     alignment
@@ -55,14 +60,13 @@ def get_auto_crop(user_id, file_ids):
     :param list file_ids: list of data file IDs
 
     :return: cropping margins (left, right, top, bottom)
-    :rtype: tuple[float]
     """
     left = right = top = bottom = 0
     width = height = mask = None
 
     # Obtain the combined mask
     for file_id in file_ids:
-        data = get_data_file(user_id, file_id)[0]
+        data = get_data_file_data(user_id, file_id)[0]
         if width is None:
             height, width = data.shape
         elif data.shape != (height, width):
@@ -100,12 +104,28 @@ def get_auto_crop(user_id, file_ids):
     return left, right, top, bottom
 
 
-class CroppingJob(CroppingJobSchema):
+class CroppingSettings(AfterglowSchema):
+    left = Integer(default=0)  # type: int
+    right = Integer(default=0)  # type: int
+    top = Integer(default=0)  # type: int
+    bottom = Integer(default=0)  # type: int
+
+
+class CroppingJobResult(JobResult):
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+
+
+class CroppingJob(Job):
     """
     Image cropping job
     """
-    name = 'cropping'
+    type = 'cropping'
     description = 'Crop Images'
+
+    result = Nested(CroppingJobResult, default={})  # type: CroppingJobResult
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+    settings = Nested(CroppingSettings, default={})  # type: CroppingSettings
+    inplace = Boolean(default=False)  # type: bool
 
     def run(self):
         if not getattr(self, 'file_ids'):
@@ -156,7 +176,7 @@ class CroppingJob(CroppingJobSchema):
         # Crop all data files and adjust WCS
         for i, file_id in enumerate(self.file_ids):
             try:
-                data, hdr = get_data_file(self.user_id, file_id)
+                data, hdr = get_data_file_data(self.user_id, file_id)
                 if any([left, right, top, bottom]):
                     if auto_crop and isinstance(data, MaskedArray):
                         # Automatic cropping guarantees that there are no masked
@@ -184,13 +204,6 @@ class CroppingJob(CroppingJobSchema):
                             # Overwrite the original data file
                             save_data_file(
                                 adb, get_root(self.user_id), file_id, data, hdr)
-
-                            # Update image dimensions in the database
-                            data_file = adb.query(SqlaDataFile).get(file_id)
-                            shape = data.shape
-                            if shape != [data_file.height, data_file.width]:
-                                data_file.height, data_file.width = shape
-
                             adb.commit()
                         except Exception:
                             adb.rollback()

@@ -7,10 +7,10 @@ from typing import List as ListType
 
 from marshmallow.fields import Integer, List, Nested, String
 
-from ... import AfterglowSchema, Boolean, Date, DateTime
+from ... import AfterglowSchema, Boolean, Date, DateTime, Resource
 
 
-__all__ = ['RoleSchema', 'UserSchema', 'TokenSchema']
+__all__ = ['RoleSchema', 'UserSchema']
 
 
 class RoleSchema(AfterglowSchema):
@@ -19,7 +19,9 @@ class RoleSchema(AfterglowSchema):
     description = String()  # type: str
 
 
-class UserSchema(AfterglowSchema):
+class UserSchema(Resource):
+    __get_view__ = 'users'
+
     id = Integer()  # type: int
     username = String()  # type: str
     email = String()  # type: str
@@ -32,13 +34,3 @@ class UserSchema(AfterglowSchema):
     roles = List(
         Nested(RoleSchema, only=['name']))  # type: ListType[RoleSchema]
     settings = String()  # type: str
-
-
-class TokenSchema(AfterglowSchema):
-    id = Integer()  # type: int
-    user_id = Integer()  # type: int
-    token_type = String()  # type: str
-    access_token = String()  # type: str
-    issued_at = Integer()  # type: int
-    expires_in = Integer()  # type: int
-    note = String()  # type: str

@@ -49,6 +49,7 @@ class DataProviderSchema(Resource):
         usage: current usage of the data provider storage, in bytes, if
             applicable
     """
+    __polymorphic_on__ = 'name'
     __get_view__ = 'data_providers'
 
     id = Integer(default=None)

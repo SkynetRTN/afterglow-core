@@ -1,11 +1,10 @@
 """
-Afterglow Core: source extraction data structures
+Afterglow Core: source extraction schemas
 """
 
 from datetime import datetime
 
 from marshmallow.fields import Integer, String
-from numpy import sqrt, log, rad2deg
 
 from ... import AfterglowSchema, DateTime, Float
 
@@ -13,11 +12,7 @@ from ... import AfterglowSchema, DateTime, Float
 __all__ = [
     'IAstrometrySchema', 'IFwhmSchema', 'ISourceIdSchema', 'ISourceMetaSchema',
     'SourceExtractionDataSchema',
-    'sigma_to_fwhm'
 ]
-
-
-sigma_to_fwhm = 2.0*sqrt(2*log(2))
 
 
 class ISourceMetaSchema(AfterglowSchema):
@@ -56,37 +51,4 @@ class SourceExtractionDataSchema(ISourceMetaSchema, IAstrometrySchema,
     """
     Description of object returned by source extraction
     """
-    @classmethod
-    def from_source_table(cls, row, x0, y0, wcs, **kwargs):
-        """
-        Create source extraction data class instance from a source table row
-
-        :param numpy.void row: source table row
-        :param int x0: X offset to convert from source table coordinates to
-            global image coordinates
-        :param int y0: Y offset to convert from source table coordinates to
-            global image coordinates
-        :param astropy.wcs.WCS wcs: optional WCS structure; if present, compute
-            RA/Dec
-        :param kwargs::
-            file_id: data file ID
-            time: exposure start time
-            filter: filter name
-            telescope: telescope name
-            exp_length: exposure length in seconds
-        """
-        data = cls(**kwargs)
-
-        data.x = row['x'] + x0
-        data.y = row['y'] + y0
-        data.fwhm_x = row['a']*sigma_to_fwhm
-        data.fwhm_y = row['b']*sigma_to_fwhm
-        data.theta = rad2deg(row['theta'])
-        data.flux = row['flux']
-
-        if wcs is not None:
-            # Apply astrometric calibration
-            data.ra_hours, data.dec_degs = wcs.all_pix2world(data.x, data.y, 1)
-            data.ra_hours /= 15
-
-        return data
+    pass

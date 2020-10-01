@@ -4,33 +4,44 @@ Afterglow Core: settings routes
 
 import secrets
 
-from flask import request
+from flask import Response, request
+from marshmallow.fields import Integer, String
 
-from .... import app, json_response
-from ....auth import auth_required
-from ....users import PersistentToken, db
-from ....schemas.api.v1 import TokenSchema
-from ....errors import ValidationError
-from ....errors.auth import UnknownTokenError
+from ... import app, json_response
+from ...auth import auth_required
+from ...resources.users import DbPersistentToken, db
+from ...schemas import Resource
+from ...errors import ValidationError
+from ...errors.auth import UnknownTokenError
 from . import url_prefix
+
+
+class TokenSchema(Resource):
+    __get_view__ = 'tokens'
+
+    id = Integer()  # type: int
+    user_id = Integer()  # type: int
+    token_type = String()  # type: str
+    access_token = String()  # type: str
+    issued_at = Integer()  # type: int
+    expires_in = Integer()  # type: int
+    note = String()  # type: str
 
 
 @app.route(url_prefix + 'tokens', methods=['GET', 'POST'])
 @auth_required
-def tokens():
+def tokens() -> Response:
     """
-    Return/Create personal access tokens
+    Return or create personal access tokens
 
     :return:
         GET /api/v1/tokens: JSON object {"items": list of tokens}
         POST /api/v1/tokens: token
-    :rtype: flask.Response
     """
     if request.method == 'GET':
-        return json_response({
-            'items': TokenSchema(only=('id', 'note')).dump(
-                request.user.tokens, many=True)
-        })
+        return json_response(
+            [TokenSchema(tok, only=('id', 'note'))
+             for tok in request.user.tokens])
     if request.method == 'POST':
         note = request.args.get('note')
         if not note or note == '':
@@ -38,7 +49,7 @@ def tokens():
 
         access_token = secrets.token_hex(20)
 
-        personal_token = PersistentToken(
+        personal_token = DbPersistentToken(
             access_token=access_token,
             user_id=request.user.id,
             note=note,
@@ -54,21 +65,20 @@ def tokens():
                 pass
             raise
 
-        return json_response(TokenSchema().dump(personal_token), 201)
+        return json_response(TokenSchema(personal_token), 201)
 
 
 @app.route(url_prefix + 'tokens/<int:token_id>', methods=['DELETE'])
 @auth_required
-def token(token_id: int = None):
+def token(token_id: int) -> Response:
     """
-    Delete personal access tokens
+    Delete personal access token
 
     :return:
-        DELETE /settings/tokens/[token id]: empty response
-    :rtype: flask.Response
+        DELETE /api/v1/tokens/[token id]: empty response
     """
     if request.method == 'DELETE':
-        personal_token = PersistentToken.query\
+        personal_token = DbPersistentToken.query \
             .filter_by(
                 token_type='personal',
                 user_id=request.user.id,

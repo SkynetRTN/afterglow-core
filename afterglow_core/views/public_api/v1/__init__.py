@@ -8,10 +8,5 @@ url_prefix = '/api/v{0}/'.format(__version__[0])
 
 from . import (
     catalogs, data_files, data_providers, field_cals, imaging_surveys, jobs,
-    photometry
+    photometry, users,
 )
-
-from .... import app
-if app.config.get('AUTH_ENABLED'):
-    from . import users, tokens, app_authorizations
-del app

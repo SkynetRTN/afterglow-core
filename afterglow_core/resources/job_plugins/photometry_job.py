@@ -3,7 +3,9 @@ Afterglow Core: batch photometry job plugin
 """
 
 from datetime import datetime
+from typing import List as TList, Tuple
 
+from marshmallow.fields import Integer, List, Nested
 from numpy import clip, cos, deg2rad, isfinite, sin, vstack, zeros
 from astropy.wcs import WCS
 import sep
@@ -11,27 +13,27 @@ import sep
 from skylib.photometry import aperture_photometry
 from skylib.extraction.centroiding import centroid_sources
 
-from ...schemas.api.v1 import (
-    PhotometryDataSchema, PhotometryJobSchema, SourceExtractionDataSchema,
+from ...models import (
+    Job, JobResult, SourceExtractionData, PhotSettings, PhotometryData,
     sigma_to_fwhm)
 from ..data_files import (
-    get_data_file, get_exp_length, get_gain, get_image_time)
+    get_data_file_data, get_exp_length, get_gain, get_image_time)
 
 
 __all__ = ['PhotometryJob', 'get_source_xy', 'run_photometry_job']
 
 
-def get_source_xy(source, epoch, wcs):
+def get_source_xy(source: SourceExtractionData, epoch: datetime, wcs: WCS) \
+        -> Tuple[float, float]:
     """
     Calculate XY coordinates of a source in the current image, possibly taking
     proper motion into account
 
-    :param SourceExtractionData source: source definition
-    :param datetime.datetime epoch: exposure start time
-    :param astropy.wcs.WCS wcs: WCS structure from image header
+    :param source: source definition
+    :param epoch: exposure start time
+    :param wcs: WCS structure from image header
 
     :return: XY coordinates of the source, 1-based
-    :rtype: tuple(float, float)
     """
     if None not in (getattr(source, 'ra_hours', None),
                     getattr(source, 'dec_degs', None), wcs):
@@ -58,18 +60,19 @@ def get_source_xy(source, epoch, wcs):
     return source.x, source.y
 
 
-def run_photometry_job(job, settings, job_file_ids, job_sources):
+def run_photometry_job(job: Job, settings: PhotSettings,
+                       job_file_ids: TList[int],
+                       job_sources: TList[SourceExtractionData]) \
+        -> TList[PhotometryData]:
     """
     Batch photometry job body; also used during photometric calibration
 
-    :param Job job: job class instance
-    :param afterglow_core.models.photometry.PhotSettings settings: photometry
-        settings
-    :param list job_file_ids: data file IDs to process
-    :param list job_sources: list of SourceExtractionData-compatible source defs
+    :param job: job class instance
+    :param settings: photometry settings
+    :param job_file_ids: data file IDs to process
+    :param job_sources: list of SourceExtractionData-compatible source defs
 
     :return: list of photometry results
-    :rtype: list[PhotometryData]
     """
     if not job_sources:
         return []
@@ -121,7 +124,7 @@ def run_photometry_job(job, settings, job_file_ids, job_sources):
             datetime.utcnow().strftime('%Y%m%d%H%M%S'), job.id)
         sources = {
             file_id: [
-                SourceExtractionDataSchema(
+                SourceExtractionData(
                     source, file_id=file_id,
                     id=source.id if hasattr(source, 'id') and source.id
                     else prefix + str(i + 1))
@@ -143,7 +146,7 @@ def run_photometry_job(job, settings, job_file_ids, job_sources):
     result_data = []
     for file_no, file_id in enumerate(file_ids):
         try:
-            data, hdr = get_data_file(job.user_id, file_id)
+            data, hdr = get_data_file_data(job.user_id, file_id)
 
             if settings.gain is None:
                 gain = get_gain(hdr)
@@ -210,7 +213,7 @@ def run_photometry_job(job, settings, job_file_ids, job_sources):
             source_table = aperture_photometry(data, source_table, **phot_kw)
 
             result_data += [
-                PhotometryDataSchema.from_phot_table(
+                PhotometryData(
                     row, source,
                     time=epoch,
                     filter=flt,
@@ -229,9 +232,24 @@ def run_photometry_job(job, settings, job_file_ids, job_sources):
     return result_data
 
 
-class PhotometryJob(PhotometryJobSchema):
-    name = 'photometry'
+class PhotometryJobResult(JobResult):
+    data = List(Nested(PhotometryData),
+                default=[])  # type: TList[PhotometryData]
+
+
+class PhotometryJob(Job):
+    type = 'photometry'
     description = 'Photometer Sources'
+
+    result = Nested(
+        PhotometryJobResult,
+        default={})  # type: PhotometryJobResult
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+    sources = List(
+        Nested(SourceExtractionData),
+        default=[])  # type: TList[SourceExtractionData]
+    settings = Nested(
+        PhotSettings, default={})  # type: PhotSettings
 
     def run(self):
         self.result.data = run_photometry_job(

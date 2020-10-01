@@ -2,13 +2,15 @@
 Afterglow Core: catalog query job plugin
 """
 
-from typing import Dict as DictType, List as ListType
+from typing import Dict as TDict, List as TList, Optional
 
+from marshmallow.fields import String, Integer, List, Nested, Dict
 from numpy import argmax, array, cos, deg2rad, r_, rad2deg, unwrap
 from numpy.ma import masked_array
 from astropy.wcs import WCS
 
-from ...schemas.api.v1 import CatalogQueryJobSchema, JobSchema
+from ...models import Job, JobResult, CatalogSource
+from ...schemas import Float
 from ..catalogs import catalogs as known_catalogs
 from ..data_files import get_data_file_fits
 
@@ -16,41 +18,41 @@ from ..data_files import get_data_file_fits
 __all__ = ['CatalogQueryJob', 'run_catalog_query_job']
 
 
-def run_catalog_query_job(job: JobSchema, catalogs: ListType[str],
-                          ra_hours: float = None, dec_degs: float = None,
-                          radius_arcmins: float = None,
-                          width_arcmins: float = None,
-                          height_arcmins: float = None,
-                          file_ids: ListType[int] = None,
-                          constraints: DictType = None,
-                          source_ids: ListType[str] = None):
+def run_catalog_query_job(job: Job, catalogs: TList[str],
+                          ra_hours: Optional[float] = None,
+                          dec_degs: Optional[float] = None,
+                          radius_arcmins: Optional[float] = None,
+                          width_arcmins: Optional[float] = None,
+                          height_arcmins: Optional[float] = None,
+                          file_ids: Optional[TList[int]] = None,
+                          constraints: Optional[TDict[str, str]] = None,
+                          source_ids: Optional[TList[str]] = None) \
+        -> TList[CatalogSource]:
     """
     Catalog query job body; also used during photometric calibration
 
-    :param Job job: job class instance
-    :param list catalogs: list of catalog IDs to query
-    :param float ra_hours: query field centered at this RA; requires `dec_degs`
-    :param float dec_degs: query field centered at this Dec; requires `ra_hours`
-    :param float radius_arcmins: query circular area of the given radius
-        centered at (`ra_hours`, `dec_degs`); mutually exclusive with
-        `width_arcmins` and `height_arcmins`
-    :param float width_arcmins: query rectangular area of the given width
-        centered at (`ra_hours`, `dec_degs`); mutually exclusive with
-        `radius_arcmins`
-    :param float height_arcmins: query rectangular area of the given height
-        centered at (`ra_hours`, `dec_degs`); if omitted, assumed same as
+    :param job: job class instance
+    :param catalogs: list of catalog IDs to query
+    :param ra_hours: query field centered at this RA; requires `dec_degs`
+    :param dec_degs: query field centered at this Dec; requires `ra_hours`
+    :param radius_arcmins: query circular area of the given radius centered
+        at (`ra_hours`, `dec_degs`); mutually exclusive with `width_arcmins`
+        and `height_arcmins`
+    :param width_arcmins: query rectangular area of the given width centered
+        at (`ra_hours`, `dec_degs`); mutually exclusive with `radius_arcmins`
+    :param height_arcmins: query rectangular area of the given height centered
+        at (`ra_hours`, `dec_degs`); if omitted, assumed same as
         `width_arcmins`; mutually exclusive with `radius_arcmins`
-    :param list file_ids: data file IDs to process; if specified, those sources
+    :param file_ids: data file IDs to process; if specified, those sources
         are returned that fall into any of the given image FOVs; mutually
         exclusive with the above parameters (`ra_hours`, `dec_degs`,
         `radius_arcmins`, `width_arcmins`, and `height_arcmins`)
-    :param dict constraints: optional catalog-specific constraints in the form
+    :param constraints: optional catalog-specific constraints in the form
         {"column": "constraint expression", ...}
-    :param list source_ids: return specific sources; mutually exclusive with all
+    :param source_ids: return specific sources; mutually exclusive with all
         other query parameters
 
     :return: list of catalog sources
-    :rtype: list[CatalogSource]
     """
     # Check consistency of query parameters
     if not catalogs:
@@ -301,9 +303,26 @@ def run_catalog_query_job(job: JobSchema, catalogs: ListType[str],
     return final_sources
 
 
-class CatalogQueryJob(CatalogQueryJobSchema):
-    name = 'catalog_query'
+class CatalogQueryJobResult(JobResult):
+    data = List(Nested(CatalogSource),
+                default=[])  # type: TList[CatalogSource]
+
+
+class CatalogQueryJob(Job):
+    type = 'catalog_query'
     description = 'Catalog Query'
+
+    result = Nested(
+        CatalogQueryJobResult, default={})  # type: CatalogQueryJobResult
+    catalogs = List(String(), default=[])  # type: TList[str]
+    ra_hours = Float()  # type: float
+    dec_degs = Float()  # type: float
+    radius_arcmins = Float()  # type: float
+    width_arcmins = Float()  # type: float
+    height_arcmins = Float()  # type: float
+    file_ids = List(Integer())  # type: TList[int]
+    constraints = Dict(keys=String, values=String)  # type: dict
+    source_ids = List(String())  # type: TList[str]
 
     def run(self):
         self.result.data = run_catalog_query_job(

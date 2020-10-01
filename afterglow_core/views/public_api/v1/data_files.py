@@ -2,49 +2,110 @@
 Afterglow Core: API v1 data file views
 """
 
-import json
 import astropy.io.fits as pyfits
 import os
 import tempfile
 import subprocess
 import shutil
+import gzip
 from io import BytesIO
+from typing import Union
 
 import numpy
-from flask import request, Response
+from flask import Response, request
 from astropy.wcs import WCS
 from skylib.calibration.background import estimate_background
 from skylib.sonification import sonify_image
 
 from .... import app, json_response, auth, errors
+from ....models import DataFile, Session
+from ....errors.data_file import UnknownDataFileError
+from ....resources.data_files import *
 from ....schemas.api.v1 import DataFileSchema, SessionSchema
-from ....errors.data_provider import UnknownDataProviderError
-from ....errors.data_file import (
-    UnknownDataFileError, CannotImportFromCollectionAssetError)
-from ....resources import data_providers
-from ....resources.data_files import (
-    SqlaSession, SqlaDataFile, get_data_file_db, get_root, get_session_id,
-    create_data_file, import_data_file, remove_data_file, get_data_file,
-    get_data_file_path, get_subframe, get_data_file_data, make_data_response)
 from . import url_prefix
 
 
 resource_prefix = url_prefix + 'data-files/'
 
 
-@app.route(resource_prefix[:-1], methods=['GET', 'POST'])
-@app.route(resource_prefix + '<int:id>', methods=['GET', 'PUT', 'DELETE'])
-@auth.auth_required('user')
-def data_files(id=None):
+def make_data_response(data: Union[bytes, numpy.ndarray],
+                       status_code: int = 200) -> Response:
     """
-    Return, create, update, or delete data file(s)
+    Initialize a Flask response object returning the binary data array
+
+    Depending on the request headers (Accept and Accept-Encoding), the data are
+    returned either as an optionally gzipped binary stream or as a JSON list.
+
+    :param data: data to send to the client
+    :param status_code: optional HTTP status code; defaults to 200 - OK
+
+    :return: Flask response object
+    """
+    # Figure out how to transfer pixel data to the client
+    is_array = isinstance(data, numpy.ndarray)
+    accepted_mimetypes = request.headers['Accept']
+    if accepted_mimetypes:
+        allow_json = allow_bin = False
+        for mt in accepted_mimetypes.split(','):
+            mtype, subtype = mt.split(';')[0].strip().lower().split('/')
+            if mtype in ('application', '*'):
+                if subtype == 'json' and is_array:
+                    allow_json = True
+                elif subtype == 'octet-stream':
+                    allow_bin = True
+                elif subtype == '*':
+                    allow_json = is_array
+                    allow_bin = True
+    else:
+        # Accept header not specified, assume all types are allowed
+        allow_json = is_array
+        allow_bin = True
+
+    allow_gzip = False
+    # accepted_encodings = request.headers['Accept-Encoding']
+    # if accepted_encodings is not None:
+    #     for enc in accepted_encodings.split(','):
+    #         if enc.split(';')[0].strip().lower() == 'gzip':
+    #             allow_gzip = True
+
+    if allow_bin:
+        if is_array:
+            # Make sure data are in little-endian byte order before sending over
+            # the net
+            if data.dtype.byteorder == '>' or \
+                    data.dtype.byteorder == '=' and sys.byteorder == 'big':
+                data = data.byteswap()
+            data = data.tobytes()
+            mimetype = 'application/octet-stream'
+        else:
+            # Sending FITS file
+            mimetype = 'image/fits'
+        if allow_gzip:
+            s = BytesIO()
+            with gzip.GzipFile(fileobj=s, mode='wb') as f:
+                f.write(data)
+            data = s.getvalue()
+            headers = [('Content-Encoding', 'gzip')]
+        else:
+            headers = None
+        return Response(data, status_code, headers, mimetype)
+
+    if allow_json and is_array:
+        return json_response(data.tolist(), status_code)
+
+    # Could not send data in any of the formats supported by the client
+    raise errors.NotAcceptedError(accepted_mimetypes=accepted_mimetypes)
+
+
+@app.route(resource_prefix[:-1], methods=['GET', 'POST'])
+@auth.auth_required('user')
+def data_files() -> Response:
+    """
+    Return or create data files
 
     GET /data-files?session_id=...
         - return a list of all user's data files associated with the given
           session or with the default anonymous session if unspecified
-
-    GET /data-files/[id]
-        - return a single data file with the given ID
 
     POST /data-files?name=...&width=...&height=...&pixel_value=...session_id=...
         - create a single data file of the given width and height, with data
@@ -66,231 +127,109 @@ def data_files(id=None):
           "append" = always create a new data file; multiple asset paths can
           be passed as a JSON list
 
+    :return:
+        GET: JSON response containing the list of serialized data file objects
+            matching the given parameters
+        POST: JSON-serialized list of the new data file(s)
+    """
+    if request.method == 'GET':
+        # List all data files for the given session
+        return json_response([
+            DataFileSchema(df)
+            for df in query_data_files(
+                auth.current_user.id, request.args.get('session_id'))])
+
+    if request.method == 'POST':
+        # Create data file(s)
+        res = [
+            DataFileSchema(df)
+            for df in import_data_files(
+                auth.current_user.id, **request.args.to_dict())]
+
+        return json_response(res, 201 if res else 200)
+
+
+@app.route(resource_prefix + '<int:id>', methods=['GET', 'PUT', 'DELETE'])
+@auth.auth_required('user')
+def data_file(id: int) -> Response:
+    """
+    Return, update, or delete data file
+
+    GET /data-files/[id]
+        - return a single data file with the given ID
+
     PUT /data-files/[id]?name=...&session_id=...
         - rename data file or reassign to different session
 
     DELETE /data-files/[id]
         - delete the given data file
 
-    :param int id: data file ID for GET and DELETE requests
+    :param id: data file ID
 
     :return:
-        GET: JSON response containing either the list of serialized data file
-            objects when no id supplied or a single data file otherwise
-        POST: JSON-serialized list of the new data files
-        PUT: JSON-serialized updated data file
+        GET, PUT: JSON-serialized data file
         DELETE: empty response
-    :rtype: flask.Response | str
     """
-    root = get_root(auth.current_user.id)
-    adb = get_data_file_db(auth.current_user.id)
-
-    if id is not None:
-        # When getting, updating, or deleting a data file, check that it
-        # exists
-        data_file = adb.query(SqlaDataFile).get(id)
-        if data_file is None:
-            raise UnknownDataFileError(id=id)
-    else:
-        data_file = None
-
     if request.method == 'GET':
-        if id is None:
-            # List all data files for the given session
-            return json_response([
-                    DataFileSchema(data_file)
-                    for data_file in adb.query(SqlaDataFile).filter(
-                        SqlaDataFile.session_id == get_session_id(adb))])
-
         # Return specific data file resource
-        return json_response(DataFileSchema(data_file))
-
-    if request.method == 'POST':
-        # Create data file(s)
-        all_data_files = []
-
-        try:
-            session_id = get_session_id(adb)
-
-            import_params = request.args.to_dict()
-            provider_id = import_params.pop('provider_id', None)
-            duplicates = import_params.pop('duplicates', 'ignore')
-            files = request.files
-
-            if provider_id is None and not files:
-                # Create an empty image data file
-                try:
-                    width = int(import_params['width'])
-                    if width < 1:
-                        raise errors.ValidationError(
-                            'width', 'Width must be positive', 422)
-                except KeyError:
-                    raise errors.MissingFieldError('width')
-                except ValueError:
-                    raise errors.ValidationError(
-                        'width', 'Width must be a positive integer')
-                try:
-                    height = int(import_params['height'])
-                    if height < 1:
-                        raise errors.ValidationError(
-                            'height', 'Height must be positive', 422)
-                except KeyError:
-                    raise errors.MissingFieldError('height')
-                except ValueError:
-                    raise errors.ValidationError(
-                        'width', 'Width must be a positive integer')
-
-                data = numpy.zeros([height, width], dtype=numpy.float32)
-                if import_params.get('pixel_value') is not None:
-                    try:
-                        pixel_value = float(import_params['pixel_value'])
-                    except ValueError:
-                        raise errors.ValidationError(
-                            'pixel_value', 'Pixel value must be a number')
-                    else:
-                        # noinspection PyPropertyAccess
-                        data += pixel_value
-
-                all_data_files.append(create_data_file(
-                    adb, import_params.get('name'), root, data,
-                    duplicates='append', session_id=session_id))
-            elif provider_id is None:
-                # Data file upload: get from multipart/form-data; use filename
-                # for the 2nd and subsequent files or if the "name" parameter
-                # is not provided
-                for i, (name, file) in enumerate(files.items()):
-                    all_data_files += import_data_file(
-                        adb, root, None, None, import_params,
-                        BytesIO(file.read()),
-                        name if i else import_params.get('name') or name,
-                        duplicates='append', session_id=session_id)
-            else:
-                # Import data file
-                import_params = request.args.to_dict()
-                provider_id = import_params.pop('provider_id', None)
-                duplicates = import_params.pop('duplicates', 'ignore')
-                if provider_id is None:
-                    # Data file upload: get data from request body
-                    all_data_files += import_data_file(
-                        adb, root, None, None, import_params,
-                        BytesIO(request.data),
-                        import_params.get('name'),
-                        duplicates, session_id=session_id)
-                else:
-                    # Import data from the given data provider
-                    try:
-                        asset_path = import_params.pop('path')
-                    except KeyError:
-                        raise errors.MissingFieldError('path')
-
-                    try:
-                        provider = data_providers.providers[provider_id]
-                    except KeyError:
-                        raise UnknownDataProviderError(id=provider_id)
-                    provider_id = provider.id
-
-                    recurse = import_params.pop('recurse', False)
-
-                    def recursive_import(path, depth=0):
-                        asset = provider.get_asset(path)
-                        if asset.collection:
-                            if not provider.browseable:
-                                raise CannotImportFromCollectionAssetError(
-                                    provider_id=provider_id, path=path)
-                            if not recurse and depth:
-                                return []
-                            return sum(
-                                [recursive_import(child_asset.path, depth + 1)
-                                 for child_asset in provider.get_child_assets(
-                                    asset.path)], [])
-                        return import_data_file(
-                            adb, root, provider_id, asset.path, asset.metadata,
-                            BytesIO(provider.get_asset_data(asset.path)),
-                            asset.name, duplicates, session_id=session_id)
-
-                    if not isinstance(asset_path, list):
-                        try:
-                            asset_path = json.loads(asset_path)
-                        except ValueError:
-                            pass
-                        if not isinstance(asset_path, list):
-                            asset_path = [asset_path]
-                    all_data_files += sum(
-                        [recursive_import(p) for p in asset_path], [])
-
-            if all_data_files:
-                adb.commit()
-        except Exception:
-            adb.rollback()
-            raise
-
-        return json_response(all_data_files, 201 if all_data_files else 200)
+        return json_response(DataFileSchema(get_data_file(
+            auth.current_user.id, id)))
 
     if request.method == 'PUT':
         # Update data file
-        name = request.args.get('name')
-        session_id = get_session_id(adb)
-        if name and name != data_file.name or \
-                session_id != data_file.session_id:
-            try:
-                if name:
-                    data_file.name = name
-                data_file.session_id = session_id
-                data_file.modified = True
-                adb.commit()
-            except Exception:
-                adb.rollback()
-                raise
-
-        return json_response(DataFileSchema(data_file))
+        return json_response(DataFileSchema(update_data_file(
+            auth.current_user.id, id,
+            DataFile(DataFileSchema(**request.args.to_dict())))))
 
     if request.method == 'DELETE':
         # Delete data file
-        try:
-            remove_data_file(adb, root, id)
-            adb.commit()
-        except Exception:
-            adb.rollback()
-            raise
-
+        delete_data_file(auth.current_user.id, id)
         return json_response()
 
 
 @app.route(resource_prefix + '<int:id>/header', methods=['GET', 'PUT'])
 @auth.auth_required('user')
-def data_files_header(id):
+def data_files_header(id: int) -> Response:
     """
     Return or update data file header
 
     GET /data-files/[id]/header
 
-    PUT /data-files/[id]/header?keyword=value...
+    PUT /data-files/[id]/header?keyword=value&keyword=[value, "comment"]...
 
-    :param int id: data file ID
+    :param id: data file ID
 
     :return: JSON-serialized structure
         [{"key": key, "value": value, "comment": comment}, ...]
         containing the data file header cards in the order they appear in the
         underlying FITS file header
-    :rtype: flask.Response
     """
     if request.method == 'GET':
-        hdr = get_data_file(auth.current_user.id, id)[1]
+        hdr = get_data_file_data(auth.current_user.id, id)[1]
     else:
         with pyfits.open(get_data_file_path(auth.current_user.id, id),
                          'update') as fits:
             hdr = fits[0].header
+            modified = False
             for name, val in request.args.items():
-                hdr[name] = val
+                if val is None:
+                    try:
+                        del hdr[name]
+                    except KeyError:
+                        pass
+                    else:
+                        modified = True
+                else:
+                    if hasattr(val, '__len__'):
+                        if hdr.get(name) != val[0]:
+                            hdr[name] = tuple(val)
+                            modified = True
+                    elif hdr.get(name) != val:
+                        hdr[name] = val
+                        modified = True
 
-        adb = get_data_file_db(auth.current_user.id)
-        try:
-            data_file = adb.query(SqlaDataFile).get(id)
-            data_file.modified = True
-            adb.commit()
-        except Exception:
-            adb.rollback()
-            raise
+        if modified:
+            update_data_file(auth.current_user.id, id, DataFile(), force=True)
 
     return json_response([
         dict(key=key, value=value, comment=hdr.comments[i])
@@ -299,7 +238,7 @@ def data_files_header(id):
 
 @app.route(resource_prefix + '<int:id>/wcs', methods=['GET', 'PUT'])
 @auth.auth_required('user')
-def data_files_wcs(id):
+def data_files_wcs(id: int) -> Response:
     """
     Return or update data file WCS
 
@@ -309,29 +248,40 @@ def data_files_wcs(id):
         - must contain all relevant WCS info; the previous WCS (CDn_m, PCn_m,
           CDELTn, and CROTAn) is removed
 
-    :param int id: data file ID
+    :param id: data file ID
 
     :return: JSON-serialized structure
         [{"key": key, "value": value, "comment": comment}, ...]
         containing the data file header cards pertaining to the WCS in the order
         they are returned by WCSLib; empty if the existing or updated FITS
         header has no valid WCS info
-    :rtype: flask.Response
     """
     if request.method == 'GET':
-        hdr = get_data_file(auth.current_user.id, id)[1]
+        hdr = get_data_file_data(auth.current_user.id, id)[1]
     else:
         with pyfits.open(get_data_file_path(auth.current_user.id, id),
                          'update') as fits:
             hdr = fits[0].header
+            modified = False
             for name, val in request.args.items():
                 if val is None:
                     try:
                         del hdr[name]
                     except KeyError:
                         pass
+                    else:
+                        modified = True
                 else:
-                    hdr[name] = val
+                    if hasattr(val, '__len__'):
+                        if hdr.get(name) != val[0]:
+                            hdr[name] = tuple(val)
+                            modified = True
+                    elif hdr.get(name) != val:
+                        hdr[name] = val
+                        modified = True
+
+        if modified:
+            update_data_file(auth.current_user.id, id, DataFile(), force=True)
 
     wcs_hdr = None
     # noinspection PyBroadException
@@ -342,15 +292,6 @@ def data_files_wcs(id):
     except Exception:
         pass
 
-    adb = get_data_file_db(auth.current_user.id)
-    try:
-        data_file = adb.query(SqlaDataFile).get(id)
-        data_file.modified = True
-        adb.commit()
-    except Exception:
-        adb.rollback()
-        raise
-
     if wcs_hdr:
         return json_response([
             dict(key=key, value=value, comment=wcs_hdr.comments[i])
@@ -359,9 +300,12 @@ def data_files_wcs(id):
     return json_response([])
 
 
-@app.route(resource_prefix + '<int:id>/phot_cal', methods=['GET', 'PUT'])
+PHOT_CAL_MAPPING = [('PHOT_M0', 'm0'), ('PHOT_M0E', 'm0_err')]
+
+
+@app.route(resource_prefix + '<int:id>/phot-cal', methods=['GET', 'PUT'])
 @auth.auth_required('user')
-def data_files_phot_cal(id):
+def data_files_phot_cal(id: int) -> Response:
     """
     Return or update data file photometric calibration (zero point and error)
 
@@ -369,41 +313,38 @@ def data_files_phot_cal(id):
 
     PUT /data-files/[id]/phot_cal?m0=...[&m0_err=...]
 
-    :param int id: data file ID
+    :param id: data file ID
 
     :return: JSON-serialized structure {"m0": ..., "m0_err": ...} containing
         photometric zero point and its error, if any; empty structure means
         no calibration data available
-    :rtype: flask.Response
     """
     if request.method == 'GET':
         phot_cal = {}
         with pyfits.open(get_data_file_path(auth.current_user.id, id),
                          'readonly') as fits:
             hdr = fits[0].header
-            try:
-                phot_cal['m0'] = float(hdr['PHOT_M0'])
-            except (KeyError, ValueError):
-                pass
-
-            try:
-                phot_cal['m0_err'] = float(hdr['PHOT_M0E'])
-            except (KeyError, ValueError):
-                pass
+            for field, name in PHOT_CAL_MAPPING:
+                try:
+                    phot_cal[name] = float(hdr[field])
+                except (KeyError, ValueError):
+                    pass
     else:
         with pyfits.open(get_data_file_path(auth.current_user.id, id),
                          'update') as fits:
             phot_cal = {}
             try:
-                phot_cal['m0'] = float(request.args['m0'])
+                phot_cal['m0'] = (float(request.args['m0']),
+                                  'Photometric zero point')
             except KeyError:
                 pass
             except ValueError:
                 raise errors.ValidationError(
                     'm0', 'Floating-point m0 expected')
             try:
-                phot_cal['m0_err'] = float(request.args['m0_err'])
-                if phot_cal['m0_err'] <= 0:
+                phot_cal['m0_err'] = (float(request.args['m0_err']),
+                                      'Photometric zero point error')
+                if phot_cal['m0_err'][0] <= 0:
                     raise ValueError()
             except KeyError:
                 pass
@@ -412,36 +353,29 @@ def data_files_phot_cal(id):
                     'm0_err', 'Positive floating-point m0_err expected')
 
             hdr = fits[0].header
-            try:
-                hdr['PHOT_M0'] = phot_cal['m0']
-            except KeyError:
+            modified = False
+            for field, name in PHOT_CAL_MAPPING:
                 try:
-                    del hdr['PHOT_M0']
+                    if hdr.get(field) != phot_cal[name][0]:
+                        hdr[field] = phot_cal[name]
+                        modified = True
                 except KeyError:
-                    pass
-            try:
-                hdr['PHOT_M0E'] = phot_cal['m0_err']
-            except KeyError:
-                try:
-                    del hdr['PHOT_M0E']
-                except KeyError:
-                    pass
+                    try:
+                        del hdr[field]
+                    except KeyError:
+                        pass
+                    else:
+                        modified = True
 
-        adb = get_data_file_db(auth.current_user.id)
-        try:
-            data_file = adb.query(SqlaDataFile).get(id)
-            data_file.modified = True
-            adb.commit()
-        except Exception:
-            adb.rollback()
-            raise
+        if modified:
+            update_data_file(auth.current_user.id, id, DataFile(), force=True)
 
     return json_response(phot_cal)
 
 
 @app.route(resource_prefix + '<int:id>/hist')
 @auth.auth_required('user')
-def data_files_hist(id):
+def data_files_hist(id: int) -> Response:
     """
     Return the data file histogram
 
@@ -453,13 +387,12 @@ def data_files_hist(id):
     adequately represent the data; see
     `https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html`_
 
-    :param int id: data file ID
+    :param id: data file ID
 
     :return: JSON-serialized structure
         {"data": [value, value, ...], "min_bin": min_bin, "max_bin": max_bin}
         containing the integer-valued histogram data array and the
         floating-point left and right histogram limits set from the data
-    :rtype: flask.Response
     """
     root = get_root(auth.current_user.id)
 
@@ -475,7 +408,7 @@ def data_files_hist(id):
     except Exception:
         # Cached histogram not found, calculate and return
         try:
-            data = get_data_file(auth.current_user.id, id)[0]
+            data = get_data_file_data(auth.current_user.id, id)[0]
             min_bin, max_bin = float(data.min()), float(data.max())
             bins = app.config['HISTOGRAM_BINS']
             if isinstance(bins, int) and not (data % 1).any():
@@ -513,7 +446,7 @@ def data_files_hist(id):
 
 @app.route(resource_prefix + '<int:id>/pixels')
 @auth.auth_required('user')
-def data_files_pixels(id):
+def data_files_pixels(id: int) -> Response:
     """
     Return image data within the given rectangle or the whole image
 
@@ -550,16 +483,20 @@ def data_files_pixels(id):
     Binary data are returned in the little-endian byte order (LSB first, Intel)
     by row, i.e. in C format, from bottom to top.
 
-    :param int id: data file ID
+    :param id: data file ID
 
     :return: depending on the Accept and Accept-Encoding HTTP headers (see
         above), either the gzipped binary data (application/octet-stream) or
         a JSON list of rows, each one being, in turn, a list of data values
         within the row
-    :rtype: flask.Response
     """
     try:
-        return make_data_response(get_subframe(auth.current_user.id, id))
+        return make_data_response(get_subframe(
+            auth.current_user.id, id,
+            x0=request.args.get('x', 1),
+            y0=request.args.get('y', 1),
+            w=request.args.get('width'),
+            h=request.args.get('height')))
     except errors.AfterglowError:
         raise
     except Exception:
@@ -568,7 +505,7 @@ def data_files_pixels(id):
 
 @app.route(resource_prefix + '<int:id>/fits')
 @auth.auth_required('user')
-def data_files_fits(id):
+def data_files_fits(id: int) -> Response:
     """
     Return the whole data file as a FITS file
 
@@ -587,18 +524,17 @@ def data_files_fits(id):
     Content-Type: image/fits
     Content-Encoding: gzip
 
-    :param int id: data file ID
+    :param id: data file ID
 
     :return: depending on the Accept and Accept-Encoding HTTP headers (see
         above), either the gzipped or uncompressed FITS file data
-    :rtype: flask.Response
     """
-    return make_data_response(get_data_file_data(auth.current_user.id, id))
+    return make_data_response(get_data_file_bytes(auth.current_user.id, id))
 
 
 @app.route(resource_prefix + '<int:id>/sonification')
 @auth.auth_required('user')
-def data_files_sonification(id):
+def data_files_sonification(id: int) -> Response:
     """
     Sonify the image or its part and return the waveform data
 
@@ -630,11 +566,10 @@ def data_files_sonification(id):
     -> MP3
     Content-Type: audio/x-mpeg-3
 
-    :param int id: data file ID
+    :param id: data file ID
 
     :return: depending on the Accept HTTP header (see above), either WAV file
         data or MP3 file data
-    :rtype: flask.Response
     """
     try:
         pixels = get_subframe(auth.current_user.id, id)
@@ -655,8 +590,7 @@ def data_files_sonification(id):
     for arg in ('width', 'height', 'bkg', 'rms', 'bkg_scale'):
         args.pop(arg, None)
 
-    adb = get_data_file_db(auth.current_user.id)
-    df = adb.query(SqlaDataFile).get(id)
+    df = get_data_file(auth.current_user.id, id)
     height, width = pixels.shape
     if width != df.width or height != df.height:
         # Sonifying a subimage; estimate background from the whole image first,
@@ -665,7 +599,7 @@ def data_files_sonification(id):
             bkg_scale = float(args.pop('bkg_scale', 1/64))
         except ValueError:
             bkg_scale = 1/64
-        full_img = get_data_file(auth.current_user.id, id)[0]
+        full_img = get_data_file_data(auth.current_user.id, id)[0]
         bkg, rms = estimate_background(full_img, size=bkg_scale)
         bkg = bkg[y0:y0+height, x0:x0+width]
         rms = rms[y0:y0+height, x0:x0+width]
@@ -720,20 +654,43 @@ def data_files_sonification(id):
 
 
 @app.route(url_prefix + 'sessions', methods=['GET', 'POST'])
-@app.route(url_prefix + 'sessions/<id>', methods=['GET', 'PUT', 'DELETE'])
 @auth.auth_required('user')
-def sessions(id=None):
+def sessions() -> Response:
     """
-    Return, create, update, or delete session(s)
+    Return or create session(s)
 
     GET /sessions
         - return all user's sessions
 
-    GET /sessions/[id]
-        - return the given session info by ID or name
-
     POST /sessions?name=...&data=...
         - create a new session with the given name and optional user data
+
+    :return:
+        GET: JSON response containing the list of serialized session objects
+        POST: JSON-serialized new session object
+    """
+    if request.method == 'GET':
+        # List all sessions
+        return json_response(
+            [SessionSchema(sess)
+             for sess in query_sessions(auth.current_user.id)])
+
+    if request.method == 'POST':
+        # Create session
+        return json_response(SessionSchema(create_session(
+            auth.current_user.id,
+            Session(SessionSchema(_set_defaults=True, **request.args.to_dict()),
+                    _set_defaults=True))), 201)
+
+
+@app.route(url_prefix + 'sessions/<id>', methods=['GET', 'PUT', 'DELETE'])
+@auth.auth_required('user')
+def session(id: Union[int, str]) -> Response:
+    """
+    Return, update, or delete session
+
+    GET /sessions/[id]
+        - return the given session info by ID or name
 
     PUT /sessions/[id]?name=...&data=...
         - rename session with the given ID or name or change session data
@@ -741,7 +698,7 @@ def sessions(id=None):
     DELETE /sessions/[id]
         - delete the given session
 
-    :param int | str id: session ID or name
+    :param id: session ID or name
 
     :return:
         GET: JSON response containing the list of serialized session objects
@@ -749,66 +706,22 @@ def sessions(id=None):
         POST: JSON-serialized new session object
         PUT: JSON-serialized updated session object
         DELETE: empty response
-    :rtype: flask.Response | str
     """
-    adb = get_data_file_db(auth.current_user.id)
-
-    if id is not None:
-        # When getting, updating, or deleting specific session, check that it
-        # exists
-        session = adb.query(SqlaSession).get(id)
-        if session is None:
-            session = adb.query(SqlaSession).filter(
-                SqlaSession.name == id).one_or_none()
-        if session is None:
-            raise errors.ValidationError(
-                'id', 'Unknown session "{}"'.format(id), 404)
-    else:
-        session = None
+    # When getting, updating, or deleting specific session, check that it
+    # exists
+    sess = get_session(auth.current_user.id, id)
 
     if request.method == 'GET':
-        if session is None:
-            # List all sessions
-            return json_response(
-                [SessionSchema(session) for session in adb.query(SqlaSession)])
-
         # Return specific session resource
-        return json_response(SessionSchema(session))
-
-    if request.method == 'POST':
-        # Create session
-        if not request.args.get('name'):
-            raise errors.MissingFieldError('name')
-        try:
-            session = SqlaSession(**request.args.to_dict())
-            adb.add(session)
-            adb.commit()
-        except Exception:
-            adb.rollback()
-            raise
-        return json_response(SessionSchema(session), 201)
+        return json_response(SessionSchema(sess))
 
     if request.method == 'PUT':
-        # Rename session
-        try:
-            for name, val in request.args.items():
-                setattr(session, name, val)
-            adb.commit()
-        except Exception:
-            adb.rollback()
-            raise
-        return json_response(SessionSchema(session))
+        # Update data file
+        return json_response(DataFileSchema(update_session(
+            auth.current_user.id, id,
+            Session(SessionSchema(**request.args.to_dict())))))
 
     if request.method == 'DELETE':
-        # Delete session and all its data files
-        root = get_root(auth.current_user.id)
-        try:
-            for file_id in [data_file.id for data_file in session.data_files]:
-                remove_data_file(adb, root, file_id)
-            adb.query(SqlaSession).filter(
-                SqlaSession.id == session.id).delete()
-            adb.commit()
-        except Exception:
-            adb.rollback()
-            raise
+        # Delete data file
+        delete_session(auth.current_user.id, id)
         return json_response()

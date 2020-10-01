@@ -3,15 +3,18 @@ Afterglow Core: pixel operations job plugin
 """
 
 from types import ModuleType
+from typing import List as TList
 
+from marshmallow.fields import Integer, List, Nested, String
 import numpy
 import numpy.fft
 import scipy.ndimage as ndimage
 import astropy.io.fits as pyfits
 
-from ...schemas.api.v1 import PixelOpsJobSchema
+from ...models import Job, JobResult
+from ...schemas import Boolean, Float
 from ..data_files import (
-    SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,
+    create_data_file, get_data_file_data, get_data_file_db, get_root,
     save_data_file)
 
 
@@ -31,7 +34,12 @@ for _name in ['fft', 'ifft', 'rfft', 'irfft', 'hfft', 'ihfft', 'rfftn',
     context[_name] = getattr(numpy.fft, _name)
 
 
-class PixelOpsJob(PixelOpsJobSchema):
+class PixelOpsJobResult(JobResult):
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+    data = List(Float(), default=[])  # type: TList[float]
+
+
+class PixelOpsJob(Job):
     """
     Pixel operations job plugin class
 
@@ -65,8 +73,14 @@ class PixelOpsJob(PixelOpsJobSchema):
     auxiliary image/header is also available via "aux_img" and "aux_hdr"
     variables.
     """
-    name = 'pixel_ops'
+    type = 'pixel_ops'
     description = 'Pixel Operations'
+
+    result = Nested(PixelOpsJobResult)  # type: PixelOpsJobResult
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+    op = String(default=None)  # type: str
+    inplace = Boolean(default=False)  # type: bool
+    aux_file_ids = List(Integer(), default=[])  # type: TList[int]
 
     def run(self):
         # Deduce the type of result by analyzing the user-supplied expression
@@ -77,7 +91,7 @@ class PixelOpsJob(PixelOpsJobSchema):
         co = compile(expr, '<op>', 'eval')
 
         # Load data files
-        data_files = [get_data_file(self.user_id, file_id)
+        data_files = [get_data_file_data(self.user_id, file_id)
                       for file_id in self.file_ids]
 
         local_vars = {}
@@ -85,7 +99,7 @@ class PixelOpsJob(PixelOpsJobSchema):
         # Load optional auxiliary data files
         if getattr(self, 'aux_file_ids', None):
             local_vars['aux_imgs'], local_vars['aux_hdrs'] = tuple(zip(*[
-                get_data_file(self.user_id, file_id)
+                get_data_file_data(self.user_id, file_id)
                 for file_id in self.aux_file_ids]))
             local_vars['aux_img'] = local_vars['aux_imgs'][0]
             local_vars['aux_hdr'] = local_vars['aux_hdrs'][0]
@@ -159,20 +173,13 @@ class PixelOpsJob(PixelOpsJobSchema):
 
             res = numpy.asarray(res).astype(numpy.float32)
             if self.inplace:
-                hdr = get_data_file(self.user_id, file_id)[1]
+                hdr = get_data_file_data(self.user_id, file_id)[1]
                 hdr.add_history(
                     'Updated by evaluating expression "{}"'.format(expr))
 
                 try:
                     save_data_file(
                         adb, get_root(self.user_id), file_id, res, hdr)
-
-                    # May need to update the image size
-                    data_file = adb.query(SqlaDataFile).get(file_id)
-                    shape = numpy.shape(res)
-                    if shape != [data_file.height, data_file.width]:
-                        data_file.height, data_file.width = shape
-
                     adb.commit()
                 except Exception:
                     adb.rollback()
@@ -183,7 +190,7 @@ class PixelOpsJob(PixelOpsJobSchema):
                     hdr.add_history(
                         'Created by evaluating expression "{}"'.format(expr))
                 else:
-                    hdr = get_data_file(self.user_id, file_id)[1]
+                    hdr = get_data_file_data(self.user_id, file_id)[1]
                     hdr.add_history(
                         'Created from data file {:d} by evaluating expression '
                         '"{}"'.format(file_id, expr))

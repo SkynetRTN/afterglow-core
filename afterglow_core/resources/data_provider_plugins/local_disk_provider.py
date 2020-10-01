@@ -10,8 +10,8 @@ import bz2
 from errno import EEXIST
 from datetime import datetime
 from glob import glob
+from typing import List as TList, Optional, Union
 
-from marshmallow.fields import Boolean, String
 import astropy.io.fits as pyfits
 
 try:
@@ -30,13 +30,12 @@ except ImportError:
     exifread = None
 
 from ... import auth, errors
-from ...schemas.api.v1 import DataProviderAssetSchema
+from ...models import DataProvider, DataProviderAsset
 from ...errors.data_provider import (
     AssetNotFoundError, AssetAlreadyExistsError,
     CannotUpdateCollectionAssetError)
 from ...errors.data_provider_local_disk import (
     AssetOutsideRootError, UnrecognizedDataFormatError, FilesystemError)
-from . import DataProvider
 
 
 __all__ = ['LocalDiskDataProvider']
@@ -60,16 +59,15 @@ class LocalDiskDataProvider(DataProvider):
     if rawpy is not None:
         search_fields['type']['enum'].append('RAW')
 
-    peruser = Boolean(default=False)
-    root = String(default='.')  # type: str
+    peruser = False  # type: bool
+    root = '.'  # type: str
 
     @property
-    def usage(self):
+    def usage(self) -> int:
         """
         Return disk space usage
 
         :return: number of bytes within the data root directory
-        :rtype: int
         """
         total_size = 0
         for dirpath, dirnames, filenames in os.walk(self.abs_root):
@@ -78,12 +76,11 @@ class LocalDiskDataProvider(DataProvider):
         return total_size
 
     @property
-    def abs_root(self):
+    def abs_root(self) -> str:
         """
         Return the absolute path to the local disk data provider root directory
 
         :return: local root directory path
-        :rtype: str
         """
         p = os.path.abspath(os.path.expanduser(self.root))
         if self.peruser:
@@ -110,23 +107,22 @@ class LocalDiskDataProvider(DataProvider):
         return p
 
     @staticmethod
-    def _get_asset(path, filename):
+    def _get_asset(path: str, filename: str) -> DataProviderAsset:
         """
         Return an asset at the given path with no extra checks; used by
         other class methods and is not meant for external use
 
-        :param str path: asset path
-        :param str filename: full filesystem path to asset
+        :param path: asset path
+        :param filename: full filesystem path to asset
 
         :return: asset object
-        :rtype: DataProviderAsset
         """
         path = path.replace('\\', '/')
         name = os.path.basename(filename)
 
         if os.path.isdir(filename):
             # Collection asset
-            return DataProviderAssetSchema(
+            return DataProviderAsset(
                 name=name,
                 collection=True,
                 path=path,
@@ -279,7 +275,7 @@ class LocalDiskDataProvider(DataProvider):
             raise UnrecognizedDataFormatError()
 
         stat = os.stat(filename)
-        asset = DataProviderAssetSchema(
+        asset = DataProviderAsset(
             name=name,
             collection=False,
             path=path,
@@ -301,14 +297,13 @@ class LocalDiskDataProvider(DataProvider):
 
         return asset
 
-    def get_asset(self, path):
+    def get_asset(self, path: str) -> DataProviderAsset:
         """
         Return an asset at the given path
 
-        :param str path: asset path
+        :param path: asset path
 
         :return: asset object
-        :rtype: DataProviderAsset
         """
         root = self.abs_root
         filename = os.path.abspath(os.path.join(root, path))
@@ -322,14 +317,13 @@ class LocalDiskDataProvider(DataProvider):
 
         return self._get_asset(path, filename)
 
-    def get_child_assets(self, path):
+    def get_child_assets(self, path: str) -> TList[DataProviderAsset]:
         """
         Return child assets of a collection asset at the given path
 
-        :param str path: asset path; must identify a collection asset
+        :param path: asset path; must identify a collection asset
 
         :return: list of :class:`DataProviderAsset` objects for child assets
-        :rtype: list[DataProviderAsset]
         """
         root = self.abs_root
         filename = os.path.abspath(os.path.join(root, path))
@@ -342,7 +336,7 @@ class LocalDiskDataProvider(DataProvider):
             raise AssetNotFoundError(path=path)
 
         # Return directory contents
-        return [DataProviderAssetSchema(
+        return [DataProviderAsset(
             name=os.path.basename(fn),
             collection=os.path.isdir(fn),
             path=fn.split(root + os.path.sep)[1].replace('\\', '/'),
@@ -351,26 +345,30 @@ class LocalDiskDataProvider(DataProvider):
             )
         ) for fn in glob(os.path.join(filename, '*'))]
 
-    def find_assets(self, path=None, name=None, type=None, collection=None,
-                    width=None, height=None):
+    def find_assets(self, path: Optional[str] = None,
+                    name: Optional[str] = None,
+                    type: Optional[str] = None,
+                    collection: Optional[Union[str, int, bool]] = None,
+                    width: Optional[Union[str, int]] = None,
+                    height: Optional[Union[str, int]] = None) \
+            -> TList[DataProviderAsset]:
         """
         Return a list of assets matching the given parameters
 
-        :param str path: optional path to the collection asset to search in;
+        :param path: optional path to the collection asset to search in;
             by default, search in the data provider root
-        :param str name: only return assets matching the given name; may include
+        :param name: only return assets matching the given name; may include
             wildcards
-        :param str type: comma-separated list of data types ("FITS", "JPEG",
-            etc.); if specified, the query will match only data files of
-            the given type(s)
-        :param str collection: if specified, match only the given asset type
+        :param type: comma-separated list of data types ("FITS", "JPEG", etc.);
+            if specified, the query will match only data files of the given
+            type(s)
+        :param collection: if specified, match only the given asset type
             (True | "1" = directories, False | "0" = files)
-        :param str width: match only images of the given width
-        :param str height: match only images of the given height
+        :param width: match only images of the given width
+        :param height: match only images of the given height
 
         :return: list of :class:`DataProviderAsset` objects for assets matching
             the search query parameters
-        :rtype: list[DataProviderAsset]
         """
         # Set up filters
         if type:
@@ -458,14 +456,13 @@ class LocalDiskDataProvider(DataProvider):
 
         return assets
 
-    def get_asset_data(self, path):
+    def get_asset_data(self, path: str) -> bytes:
         """
         Return data for a non-collection asset at the given path
 
-        :param str path: asset path; must identify a non-collection asset
+        :param path: asset path; must identify a non-collection asset
 
         :return: asset data
-        :rtype: str
         """
         root = self.abs_root
         filename = os.path.abspath(os.path.join(root, path))
@@ -496,16 +493,15 @@ class LocalDiskDataProvider(DataProvider):
                 else ', '.join(str(arg) for arg in e.args) if e.args
                 else str(e))
 
-    def create_asset(self, path, data=None, **kwargs):
+    def create_asset(self, path: str, data: Optional[bytes] = None, **kwargs) \
+            -> DataProviderAsset:
         """
         Create an asset at the given path
 
-        :param str path: path at which to create the asset
-        :param bytes data: FITS image data; if omitted, create a collection
-            asset
+        :param path: path at which to create the asset
+        :param data: FITS image data; if omitted, create a collection asset
 
         :return: new data provider asset object
-        :rtype: :class:`DataProviderAsset`
         """
         # Check that the given path does not exist
         root = self.abs_root
@@ -542,14 +538,12 @@ class LocalDiskDataProvider(DataProvider):
 
         return self._get_asset(path, filename)
 
-    def update_asset(self, path, data, **kwargs):
+    def update_asset(self, path: str, data: bytes, **kwargs) -> None:
         """
         Update an asset at the given path
 
-        :param str path: path of the asset to update
-        :param bytes data: FITS file data
-
-        :return: None
+        :param path: path of the asset to update
+        :param data: FITS file data
         """
         # Check that the given path exists and is not a directory
         root = self.abs_root
@@ -572,13 +566,11 @@ class LocalDiskDataProvider(DataProvider):
                 else ', '.join(str(arg) for arg in e.args) if e.args
                 else str(e))
 
-    def delete_asset(self, path, **kwargs):
+    def delete_asset(self, path: str, **kwargs) -> None:
         """
         Delete an asset at the given path
 
-        :param str path: path of the asset to delete
-
-        :return: None
+        :param path: path of the asset to delete
         """
         # Check that the given path exists
         root = self.abs_root

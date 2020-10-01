@@ -19,6 +19,8 @@ class PixelOpsJobResultSchema(JobResultSchema):
 
 
 class PixelOpsJobSchema(JobSchema):
+    type = 'pixel_ops'
+
     result = Nested(PixelOpsJobResultSchema)  # type: PixelOpsJobResultSchema
     file_ids = List(Integer(), default=[])  # type: TList[int]
     op = String(default=None)  # type: str

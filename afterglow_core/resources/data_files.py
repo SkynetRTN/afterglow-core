@@ -7,13 +7,13 @@ import os
 from glob import glob
 from datetime import datetime
 import json
-import gzip
 import sqlite3
 from threading import Lock
 from io import BytesIO
+from typing import Dict as TDict, List as TList, Optional, Tuple, Union
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, String,
+    Boolean, CheckConstraint, Column, ForeignKey, Integer, String,
     create_engine, event)
 from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -21,12 +21,16 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import Engine
 import numpy
 import astropy.io.fits as pyfits
-from flask import Response, request
 
-from .. import app, errors, json_response
-from ..schemas.api.v1 import DataFileSchema
+from .. import app, errors
+from ..models import DataFile, Session
 from ..errors.data_file import (
-    UnknownDataFileError, CannotCreateDataFileDirError)
+    UnknownDataFileError, CannotCreateDataFileDirError,
+    CannotImportFromCollectionAssetError, UnknownSessionError,
+    DuplicateSessionNameError)
+from ..errors.data_provider import UnknownDataProviderError
+from . import data_providers
+from .base import DateTime, JSONType
 
 try:
     from PIL import Image as PILImage, ExifTags
@@ -53,19 +57,22 @@ except ImportError:
 
 
 __all__ = [
-    'Base', 'SqlaDataFile', 'SqlaSession', 'make_data_response',
-    'data_files_engine', 'data_files_engine_lock', 'create_data_file',
-    'save_data_file', 'get_data_file', 'remove_data_file', 'get_data_file_data',
-    'get_data_file_db', 'get_data_file_fits', 'get_data_file_path',
+    'DataFileBase',
+    'data_files_engine', 'data_files_engine_lock', 'get_data_file_db',
+    'create_data_file', 'save_data_file', 'get_data_file_data',
+    'get_data_file_bytes', 'get_data_file_fits', 'get_data_file_path',
     'get_exp_length', 'get_gain', 'get_image_time', 'get_root', 'get_subframe',
-    'import_data_file', 'get_session_id', 'convert_exif_field',
+    'import_data_file', 'convert_exif_field', 'get_data_file',
+    'query_data_files', 'import_data_files', 'update_data_file',
+    'delete_data_file', 'get_session', 'query_sessions', 'create_session',
+    'update_session', 'delete_session',
 ]
 
 
-Base = declarative_base()
+DataFileBase = declarative_base()
 
 
-class SqlaDataFile(Base):
+class DbDataFile(DataFileBase):
     __tablename__ = 'data_files'
     __table_args__ = dict(sqlite_autoincrement=True)
 
@@ -76,7 +83,7 @@ class SqlaDataFile(Base):
     height = Column(Integer)
     data_provider = Column(String)
     asset_path = Column(String)
-    asset_metadata = Column(String)
+    asset_metadata = Column(JSONType)
     layer = Column(String)
     created_on = Column(DateTime, default=datetime.utcnow)
     modified = Column(Boolean, default=False)
@@ -87,7 +94,7 @@ class SqlaDataFile(Base):
         nullable=True, index=True)
 
 
-class SqlaSession(Base):
+class DbSession(DataFileBase):
     __tablename__ = 'sessions'
     __table_args__ = dict(sqlite_autoincrement=True)
 
@@ -99,18 +106,18 @@ class SqlaSession(Base):
         String, CheckConstraint('data is null or length(data) <= 1048576'),
         nullable=True, server_default='')
 
-    data_files = relationship('SqlaDataFile', backref='session')  # type: list
+    data_files = relationship(
+        'DbDataFile', backref='session')  # type: TList[DbDataFile]
 
 
-def get_root(user_id):
+def get_root(user_id: Optional[int]) -> str:
     """
     Return the absolute path to the current authenticated user's data storage
     root directory
 
-    :param int | None user_id: current user ID (None if user auth is disabled)
+    :param user_id: current user ID (None if user auth is disabled)
 
     :return: user's data storage path
-    :rtype: str
     """
     root = app.config['DATA_FILE_ROOT']
     if user_id:
@@ -123,12 +130,12 @@ data_files_engine = {}
 data_files_engine_lock = Lock()
 
 
-def get_data_file_db(user_id):
+def get_data_file_db(user_id: Optional[int]):
     """
     Initialize the given user's data file storage directory and database as
     needed and return the database object; thread-safe
 
-    :param int | None user_id: current user ID (None if user auth is disabled)
+    :param user_id: current user ID (None if user auth is disabled)
 
     :return: SQLAlchemy session object
     """
@@ -163,7 +170,7 @@ def get_data_file_db(user_id):
                 # Create data_files table
                 if alembic_config is None:
                     # Alembic not available, create table from SQLA metadata
-                    Base.metadata.create_all(bind=engine)
+                    DataFileBase.metadata.create_all(bind=engine)
                 else:
                     # Create/upgrade table via Alembic
                     cfg = alembic_config.Config()
@@ -199,20 +206,21 @@ def get_data_file_db(user_id):
             else ', '.join(str(arg) for arg in e.args) if e.args else str(e))
 
 
-def save_data_file(adb, root, file_id, data, hdr):
+def save_data_file(adb, root: str, file_id: int, data: numpy.ndarray, hdr,
+                   modified: bool = True) \
+        -> None:
     """
     Save data file to the user's data file directory as a single (image) or
     double (image + mask) HDU FITS or a primary + table HDU FITS, depending on
     whether the input HDU contains an image or a table
 
-    :param sqlalchemy.orm.session.Session adb: SQLA database session
-    :param str root: user's data file storage root directory
-    :param int file_id: data file ID
-    :param array_like data: image or table data; image data can be a masked
-        array
-    :param astropy.io.fits.Header hdr: FITS header
-
-    :return: None
+    :param adb: SQLA database session
+    :param root: user's data file storage root directory
+    :param file_id: data file ID
+    :param data: image or table data; image data can be a masked array
+    :param hdr: FITS header
+    :param modified: if True, set the file modification flag; not set on initial
+        creation
     """
     # Initialize header
     if hdr is None:
@@ -247,41 +255,47 @@ def save_data_file(adb, root, file_id, data, hdr):
         os.path.join(root, '{}.fits'.format(file_id)),
         'silentfix', overwrite=True)
 
-    # Update file modification timestamp
-    data_file = adb.query(SqlaDataFile).get(file_id)
-    data_file.modified = True
+    # Update image dimensions and file modification timestamp
+    db_data_file = adb.query(DbDataFile).get(file_id)
+    if data.dtype.fields is None:
+        # Image: get image dimensions from array shape
+        db_data_file.height, db_data_file.width = data.shape
+    else:
+        # Table: width = number of columns, height = number of rows
+        db_data_file.width = len(data.dtype.fields)
+        db_data_file.height = len(data)
+    if modified:
+        db_data_file.modified = True
 
 
-def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
-                     metadata=None, layer=None, duplicates='ignore',
-                     session_id=None):
+def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
+                     hdr=None, provider: str = None, path: str = None,
+                     metadata: dict = None, layer: str = None,
+                     duplicates: str = 'ignore',
+                     session_id: Optional[int] = None) -> DbDataFile:
     """
     Create a database entry for a new data file and save it to data file
     directory as an single (image) or double (image + mask) HDU FITS or
     a primary + table HDU FITS, depending on whether the input HDU contains
     an image or a table
 
-    :param sqlalchemy.orm.session.Session adb: SQLA database session
-    :param str | None name: data file name
-    :param str root: user's data file storage root directory
-    :param array_like data: image or table data; image data can be a masked
-        array
-    :param astropy.io.fits.Header | None hdr: FITS header
-    :param str provider: data provider ID/name if not creating an empty data
-        file
-    :param str path: path of the data provider asset the file was imported from
-    :param dict metadata: data provider asset metadata
-    :param str layer: optional layer ID for multiple-layer assets
-    :param str duplicates: optional duplicate handling mode used if the data
-        file with the same `provider`, `path`, and `layer` was already imported
+    :param adb: SQLA database session
+    :param name: data file name
+    :param root: user's data file storage root directory
+    :param data: image or table data; image data can be a masked array
+    :param hdr: FITS header
+    :param provider: data provider ID/name if not creating an empty data file
+    :param path: path of the data provider asset the file was imported from
+    :param metadata: data provider asset metadata
+    :param layer: optional layer ID for multiple-layer assets
+    :param duplicates: optional duplicate handling mode used if the data file
+        with the same `provider`, `path`, and `layer` was already imported
         before: "ignore" (default) = don't re-import the existing data file,
         "overwrite" = re-import the file and replace the existing data file,
         "append" = always import as a new data file
-    :param int | None session_id: optional user session ID; defaults to
-        anonymous session
+    :param session_id: optional user session ID; defaults to anonymous session
 
     :return: data file instance
-    :rtype: afterglow_core.models.data_file.DataFile
     """
     if data.dtype.fields is None:
         # Image HDU; get image dimensions from array shape
@@ -314,82 +328,57 @@ def create_data_file(adb, name, root, data, hdr=None, provider=None, path=None,
 
     if duplicates in ('ignore', 'overwrite'):
         # Look for an existing data file with the same import parameters
-        sqla_data_file = adb.query(SqlaDataFile).filter_by(
+        db_data_file = adb.query(DbDataFile).filter_by(
             data_provider=provider, asset_path=path, layer=layer,
             session_id=session_id,
         ).one_or_none()
 
-        if sqla_data_file is not None:
+        if db_data_file is not None:
             if duplicates == 'ignore':
                 # Don't reimport existing data files
-                return DataFileSchema(sqla_data_file)
+                return db_data_file
 
             # Overwrite existing data file
             for attr, val in sqla_fields.items():
-                setattr(sqla_data_file, attr, val)
+                setattr(db_data_file, attr, val)
     else:
-        sqla_data_file = None
+        db_data_file = None
 
-    if sqla_data_file is None:
+    if db_data_file is None:
         # Add a database row and obtain its ID
-        sqla_data_file = SqlaDataFile(**sqla_fields)
-        adb.add(sqla_data_file)
+        db_data_file = DbDataFile(**sqla_fields)
+        adb.add(db_data_file)
         adb.flush()  # obtain the new row ID by flushing db
 
-    save_data_file(adb, root, sqla_data_file.id, data, hdr)
+    save_data_file(adb, root, db_data_file.id, data, hdr, modified=False)
 
-    return DataFileSchema(sqla_data_file)
-
-
-def remove_data_file(adb, root, id):
-    """
-    Remove the given data file from database and delete all associated disk
-    files
-
-    :param sqlalchemy.orm.session.Session adb: SQLA database session
-    :param str root: user's data file storage root directory
-    :param int id: data file ID
-
-    :return: None
-    """
-    adb.query(SqlaDataFile).filter(SqlaDataFile.id == id).delete()
-    for filename in glob(os.path.join(root, '{}.*'.format(id))):
-        try:
-            os.remove(filename)
-        except Exception as e:
-            # noinspection PyUnresolvedReferences
-            app.logger.warn(
-                'Error removing data file "%s" (ID %d) [%s]',
-                filename, id,
-                e.message if hasattr(e, 'message') and e.message
-                else ', '.join(str(arg) for arg in e.args) if e.args
-                else e)
+    return db_data_file
 
 
-def import_data_file(adb, root, provider_id, asset_path, asset_metadata, fp,
-                     name, duplicates='ignore', session_id=None):
+def import_data_file(adb, root: str, provider_id: Optional[str],
+                     asset_path: Optional[str], asset_metadata: dict, fp,
+                     name: Optional[str], duplicates: str = 'ignore',
+                     session_id: Optional[int] = None) -> TList[DbDataFile]:
     """
     Create data file(s) from a (possibly multi-layer) non-collection data
     provider asset or from an uploaded file
 
-    :param sqlalchemy.orm.session.Session adb: SQLA database session
-    :param str root: user's data file storage root directory
-    :param str | None provider_id: data provider ID/name
-    :param str | None asset_path: data provider asset path
-    :param dict asset_metadata: data provider asset metadata
+    :param adb: SQLA database session
+    :param root: user's data file storage root directory
+    :param provider_id: data provider ID/name
+    :param asset_path: data provider asset path
+    :param asset_metadata: data provider asset metadata
     :param fp: file-like object containing the asset data, should be opened for
         reading
-    :param str | None name: data file name
-    :param str duplicates: optional duplicate handling mode used if the data
-        file with the same `provider`, `path`, and `layer` was already imported
+    :param name: data file name
+    :param duplicates: optional duplicate handling mode used if the data file
+        with the same `provider`, `path`, and `layer` was already imported
         before: "ignore" (default) = don't re-import the existing data file,
         "overwrite" = re-import the file and replace the existing data file,
         "append" = always import as a new data file
-    :param int | None session_id: optional user session ID; defaults to
-        anonymous session
+    :param session_id: optional user session ID; defaults to anonymous session
 
-    :return: list of DataFile instances created/updated
-    :rtype: list[DataFile]
+    :return: list of DbDataFile instances created/updated
     """
     all_data_files = []
 
@@ -428,7 +417,7 @@ def import_data_file(adb, root, provider_id, asset_path, asset_metadata, fp,
                 if name and len(fits) > 1 + int(
                         isinstance(hdu, pyfits.TableHDU.__base__)):
                     # When importing multiple HDUs, append a unique suffix to
-                    # DataFile.name (e.g. filter name)
+                    # DbDataFile.name (e.g. filter name)
                     layer = hdu.header.get('FILTER')
                     if layer:
                         # Check that the filter is unique among other HDUs
@@ -621,24 +610,26 @@ def convert_exif_field(val):
     return str(val)
 
 
-def get_subframe(user_id, file_id, x0=None, y0=None, w=None, h=None):
+def get_subframe(user_id: Optional[int], file_id: int,
+                 x0: Optional[int] = None, y0: Optional[int] = None,
+                 w: Optional[int] = None, h: Optional[int] = None) \
+        -> numpy.ndarray:
     """
     Return pixel data for the given image data file ID within a rectangle
     defined by the optional request parameters "x", "y", "width", and "height";
     XY are in the FITS system with (1,1) at the bottom left corner of the image
 
-    :param int | None user_id: current user ID (None if user auth is disabled)
-    :param int file_id: data file ID
-    :param int x0: optional subframe origin X coordinate (1-based)
-    :param int y0: optional subframe origin Y coordinate (1-based)
-    :param int w: optional subframe width
-    :param int h: optional subframe height
+    :param user_id: current user ID (None if user auth is disabled)
+    :param file_id: data file ID
+    :param x0: optional subframe origin X coordinate (1-based)
+    :param y0: optional subframe origin Y coordinate (1-based)
+    :param w: optional subframe width
+    :param h: optional subframe height
 
     :return: NumPy float32 array containing image data within the specified
         region
-    :rtype: `numpy.ndarray`
     """
-    data = get_data_file(user_id, file_id)[0]
+    data = get_data_file_data(user_id, file_id)[0]
     is_image = data.dtype.fields is None
     if is_image:
         height, width = data.shape
@@ -648,7 +639,7 @@ def get_subframe(user_id, file_id, x0=None, y0=None, w=None, h=None):
         height = len(data)
 
     if x0 is None:
-        x0 = request.args.get('x', 1)
+        x0 = 1
     try:
         x0 = int(x0) - 1
         if x0 < 0 or x0 >= width:
@@ -658,7 +649,7 @@ def get_subframe(user_id, file_id, x0=None, y0=None, w=None, h=None):
         raise errors.ValidationError('x', 'X must be a positive integer')
 
     if y0 is None:
-        y0 = request.args.get('y', 1)
+        y0 = 1
     try:
         y0 = int(y0) - 1
         if y0 < 0 or y0 >= height:
@@ -668,9 +659,7 @@ def get_subframe(user_id, file_id, x0=None, y0=None, w=None, h=None):
     except ValueError:
         raise errors.ValidationError('y', 'Y must be a positive integer')
 
-    if w is None:
-        w = request.args.get('width', width - x0)
-    elif not w:
+    if not w:
         w = width - x0
     try:
         w = int(w)
@@ -683,9 +672,7 @@ def get_subframe(user_id, file_id, x0=None, y0=None, w=None, h=None):
         raise errors.ValidationError(
             'width', 'Width must be a positive integer')
 
-    if h is None:
-        h = request.args.get('height', height - y0)
-    elif not h:
+    if not h:
         h = height - y0
     try:
         h = int(h)
@@ -707,7 +694,7 @@ def get_subframe(user_id, file_id, x0=None, y0=None, w=None, h=None):
     return data[list(data.dtype.names[x0:x0+w])][y0:y0+h]
 
 
-def get_data_file_path(user_id, file_id):
+def get_data_file_path(user_id: Optional[int], file_id: int) -> str:
     """
     Return data file path on disk
 
@@ -715,22 +702,20 @@ def get_data_file_path(user_id, file_id):
     :param int file_id: data file ID
 
     :return: path to data file
-    :rtype: str
     """
     return os.path.join(get_root(user_id), '{}.fits'.format(file_id))
 
 
-def get_data_file_fits(user_id, file_id, mode='readonly'):
+def get_data_file_fits(user_id: Optional[int], file_id: int,
+                       mode: str = 'readonly') -> pyfits.HDUList:
     """
     Return FITS file given the data file ID
 
-    :param int | None user_id: current user ID (None if user auth is disabled)
-    :param int file_id: data file ID
-    :param str mode: optional FITS file open mode: "readonly" (default)
-        or "update"
+    :param user_id: current user ID (None if user auth is disabled)
+    :param file_id: data file ID
+    :param mode: optional FITS file open mode: "readonly" (default) or "update"
 
     :return: FITS file object
-    :rtype: astropy.io.fits.HDUList
     """
     try:
         return pyfits.open(get_data_file_path(user_id, file_id), mode)
@@ -738,18 +723,18 @@ def get_data_file_fits(user_id, file_id, mode='readonly'):
         raise UnknownDataFileError(id=file_id)
 
 
-def get_data_file(user_id, file_id):
+def get_data_file_data(user_id: Optional[int], file_id: int) \
+        -> Tuple[numpy.ndarray, pyfits.Header]:
     """
     Return FITS file data and header for a data file with the given ID; handles
     masked images
 
-    :param int | None user_id: current user ID (None if user auth is disabled)
-    :param int file_id: data file ID
+    :param user_id: current user ID (None if user auth is disabled)
+    :param file_id: data file ID
 
     :return: tuple (data, hdr); if the underlying FITS file contains a mask in
         an extra image HDU, it is converted into a :class:`numpy.ma.MaskedArray`
         instance
-    :rtype: tuple(array_like, astropy.io.fits.Header)
     """
     fits = get_data_file_fits(user_id, file_id)
 
@@ -771,15 +756,14 @@ def get_data_file(user_id, file_id):
     return data, fits[0].header
 
 
-def get_data_file_data(user_id, file_id):
+def get_data_file_bytes(user_id: Optional[int], file_id: int) -> bytes:
     """
     Return FITS file data for data file with the given ID
 
-    :param int | None user_id: current user ID (None if user auth is disabled)
-    :param int file_id: data file ID
+    :param user_id: current user ID (None if user auth is disabled)
+    :param file_id: data file ID
 
     :return: data file bytes
-    :rtype: bytes
     """
     try:
         with open(get_data_file_path(user_id, file_id), 'rb') as f:
@@ -788,14 +772,13 @@ def get_data_file_data(user_id, file_id):
         raise UnknownDataFileError(id=file_id)
 
 
-def get_image_time(hdr):
+def get_image_time(hdr: pyfits.Header) -> Optional[datetime]:
     """
     Get exposure start time from FITS header
 
-    :param astropy.io.fits.Header hdr: FITS file header
+    :param hdr: FITS file header
 
     :return: exposure start time; None if unknown
-    :rtype: datetime.datetime | None
     """
     try:
         dateobs = hdr['DATE-OBS']
@@ -814,22 +797,21 @@ def get_image_time(hdr):
             dateobs += 'T' + timeobs
 
     try:
-        return datetime.strptime(dateobs, '%Y-%m-%dT%H:%M:%S.%f')
+        return datetime.strptime(dateobs, '%Y-%m-%dT%H:%M:%S')
     except ValueError:
         try:
-            return datetime.strptime(dateobs, '%Y-%m-%dT%H:%M:%S')
+            return datetime.strptime(dateobs, '%Y-%m-%dT%H:%M:%S.%f')
         except ValueError:
             return None
 
 
-def get_exp_length(hdr):
+def get_exp_length(hdr: pyfits.Header) -> float:
     """
     Get exposure length from FITS header
 
-    :param `astropy.io.fits.Header` hdr: FITS file header
+    :param hdr: FITS file header
 
     :return: exposure length in seconds; None if unknown
-    :rtype: float
     """
     # noinspection PyUnusedLocal
     texp = None
@@ -843,14 +825,13 @@ def get_exp_length(hdr):
     return texp
 
 
-def get_gain(hdr):
+def get_gain(hdr: pyfits.Header) -> float:
     """
     Get effective gain from FITS header
 
-    :param `astropy.io.fits.Header` hdr: FITS file header
+    :param hdr: FITS file header
 
     :return: effective gain in e-/ADU; None if unknown
-    :rtype: float
     """
     # noinspection PyUnusedLocal
     gain = None
@@ -864,95 +845,398 @@ def get_gain(hdr):
     return gain
 
 
-def make_data_response(data, status_code=200):
+def get_data_file(user_id: Optional[int], file_id: int) -> DataFile:
     """
-    Initialize a Flask response object returning the binary data array
+    Return data file object for the given ID
 
-    Depending on the request headers (Accept and Accept-Encoding), the data are
-    returned either as an optionally gzipped binary stream or as a JSON list.
+    :param user_id: current user ID (None if user auth is disabled)
+    :param file_id: data file ID
 
-    :param bytes | array_like data: data to send to the client
-    :param int status_code: optional HTTP status code; defaults to 200 - OK
-
-    :return: Flask response object
-    :rtype: flask.Response
+    :return: data file object
     """
-    # Figure out how to transfer pixel data to the client
-    is_array = isinstance(data, numpy.ndarray)
-    accepted_mimetypes = request.headers['Accept']
-    if accepted_mimetypes:
-        allow_json = allow_bin = False
-        for mt in accepted_mimetypes.split(','):
-            mtype, subtype = mt.split(';')[0].strip().lower().split('/')
-            if mtype in ('application', '*'):
-                if subtype == 'json' and is_array:
-                    allow_json = True
-                elif subtype == 'octet-stream':
-                    allow_bin = True
-                elif subtype == '*':
-                    allow_json = is_array
-                    allow_bin = True
-    else:
-        # Accept header not specified, assume all types are allowed
-        allow_json = is_array
-        allow_bin = True
+    adb = get_data_file_db(user_id)
 
-    allow_gzip = False
-    # accepted_encodings = request.headers['Accept-Encoding']
-    # if accepted_encodings is not None:
-    #     for enc in accepted_encodings.split(','):
-    #         if enc.split(';')[0].strip().lower() == 'gzip':
-    #             allow_gzip = True
+    try:
+        db_data_file = adb.query(DbDataFile).get(int(file_id))
+    except ValueError:
+        db_data_file = None
+    if db_data_file is None:
+        raise UnknownDataFileError(id=file_id)
 
-    if allow_bin:
-        if is_array:
-            # Make sure data are in little-endian byte order before sending over
-            # the net
-            if data.dtype.byteorder == '>' or \
-                    data.dtype.byteorder == '=' and sys.byteorder == 'big':
-                data = data.byteswap()
-            data = data.tobytes()
-            mimetype = 'application/octet-stream'
+    # Convert to data model object
+    return DataFile(db_data_file)
+
+
+def query_data_files(user_id: Optional[int], session_id: Optional[int]) \
+        -> TList[DataFile]:
+    """
+    Return data file objects matching the given criteria
+
+    :param user_id: current user ID (None if user auth is disabled)
+    :param session_id: only return data files belonging to the given session
+
+    :return: list of data file objects
+    """
+    adb = get_data_file_db(user_id)
+
+    if session_id is not None:
+        session = adb.query(Session).get(session_id)
+        if session is None:
+            session = adb.query(Session).filter(
+                Session.name == session_id).one_or_none()
+        if session is None:
+            raise errors.ValidationError(
+                'session_id', 'Unknown session "{}"'.format(session_id),
+                404)
+        session_id = session.id
+
+    return [DataFile(db_data_file)
+            for db_data_file in adb.query(DbDataFile).filter(
+            DbDataFile.session_id == session_id)]
+
+
+def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
+                      provider_id: Union[int, str] = None,
+                      path: Optional[Union[TList[str], str]] = None,
+                      name: Optional[str] = None,
+                      duplicates: str = 'ignore',
+                      recurse: bool = False,
+                      width: Optional[int] = None, height: Optional[int] = None,
+                      pixel_value: float = 0,
+                      files: Optional[TDict[str, bytes]] = None) \
+        -> TList[DataFile]:
+    """
+    Create, import, or upload data files defined by request parameters:
+        `provider_id` = None:
+            `files` = None: create empty data file defined by `width`, `height`,
+                and `pixel_value`
+            `files` != None: upload data files specified by `files`
+        `provider_id` != None: import data files from `path` in the given
+            provider
+
+    :param user_id: current user ID (None if user auth is disabled)
+    :param session_id: import data files to the given session
+    :param provider_id: optional data provider ID to import from
+    :param path: asset path(s) within the data provider, JSON or Python list;
+        used if `provider_id` != None
+    :param name: data file name; if omitted, obtained from asset metadata
+        on import, filename on upload, or automatically generated otherwise
+    :param width: new image width; ignored unless `provider_id` or `files`
+        are provided
+    :param height: new image height; ignored unless `provider_id` or `files`
+        are provided
+    :param pixel_value: new image counts; ignored unless `provider_id` or
+        `files` are provided
+    :param duplicates: optional duplicate handling mode used if the data file
+        with the same provider, path, and layer was already imported before:
+        "ignore" (default) = don't re-import the existing data file,
+        "overwrite" = re-import the file and replace the existing data file,
+        "append" = always import as a new data file;
+        ignored if `provider_id` = None
+    :param recurse: recursively import collection assets; ignored unless
+        `provider_id` != None
+    :param files: files to upload {name: data, ...}
+
+    :return: list of imported data files
+    """
+    adb = get_data_file_db(user_id)
+    root = get_root(user_id)
+
+    all_data_files = []
+
+    try:
+        if provider_id is None and not files:
+            # Create an empty image data file
+            if width is None:
+                raise errors.MissingFieldError('width')
+            try:
+                width = int(width)
+                if width < 1:
+                    raise errors.ValidationError(
+                        'width', 'Width must be positive', 422)
+            except ValueError:
+                raise errors.ValidationError(
+                    'width', 'Width must be a positive integer')
+            if height is None:
+                raise errors.MissingFieldError('height')
+            try:
+                height = int(height)
+                if height < 1:
+                    raise errors.ValidationError(
+                        'height', 'Height must be positive', 422)
+            except ValueError:
+                raise errors.ValidationError(
+                    'width', 'Width must be a positive integer')
+
+            data = numpy.zeros([height, width], dtype=numpy.float32)
+            if pixel_value is not None:
+                try:
+                    pixel_value = float(pixel_value)
+                except ValueError:
+                    raise errors.ValidationError(
+                        'pixel_value', 'Pixel value must be a number')
+                else:
+                    # noinspection PyPropertyAccess
+                    data += pixel_value
+
+            all_data_files.append(create_data_file(
+                adb, name, root, data, duplicates='append',
+                session_id=session_id))
+        elif provider_id is None:
+            # Data file upload: get from multipart/form-data; use filename
+            # for the 2nd and subsequent files or if the "name" parameter
+            # is not provided
+            for i, (filename, file) in enumerate(files.items()):
+                all_data_files += import_data_file(
+                    adb, root, None, None, {}, BytesIO(file.read()),
+                    filename if i else name or filename,
+                    duplicates='append', session_id=session_id)
         else:
-            # Sending FITS file
-            mimetype = 'image/fits'
-        if allow_gzip:
-            s = BytesIO()
-            with gzip.GzipFile(fileobj=s, mode='wb') as f:
-                f.write(data)
-            data = s.getvalue()
-            headers = [('Content-Encoding', 'gzip')]
-        else:
-            headers = None
-        return Response(data, status_code, headers, mimetype)
+            # Import data file
+            if path is None:
+                raise errors.MissingFieldError('path')
 
-    if allow_json and is_array:
-        return json_response(data.tolist(), status_code)
+            try:
+                provider = data_providers.providers[provider_id]
+            except KeyError:
+                raise UnknownDataProviderError(id=provider_id)
+            provider_id = provider.id
 
-    # Could not send data in any of the formats supported by the client
-    raise errors.NotAcceptedError(accepted_mimetypes=accepted_mimetypes)
+            def recursive_import(_path, depth=0):
+                asset = provider.get_asset(_path)
+                if asset.collection:
+                    if not provider.browseable:
+                        raise CannotImportFromCollectionAssetError(
+                            provider_id=provider_id, path=_path)
+                    if not recurse and depth:
+                        return []
+                    return sum(
+                        [recursive_import(child_asset.path, depth + 1)
+                         for child_asset in provider.get_child_assets(
+                            asset.path)], [])
+                return import_data_file(
+                    adb, root, provider_id, asset.path, asset.metadata,
+                    BytesIO(provider.get_asset_data(asset.path)),
+                    asset.name, duplicates, session_id=session_id)
+
+            if not isinstance(path, list):
+                try:
+                    path = json.loads(path)
+                except ValueError:
+                    pass
+                if not isinstance(path, list):
+                    path = [path]
+            all_data_files += sum([recursive_import(p) for p in path], [])
+
+        if all_data_files:
+            adb.commit()
+    except Exception:
+        adb.rollback()
+        raise
+
+    return [DataFile(f) for f in all_data_files]
 
 
-def get_session_id(adb):
+def update_data_file(user_id: Optional[int], data_file_id: int,
+                     data_file: DataFile, force: bool = False) -> DataFile:
     """
-    Helper function used by resource handlers to retrieve session ID from
-    request arguments and check that the session (if any) exists
+    Update the existing data file parameters
 
-    :param sqlalchemy.orm.session.Session adb: SQLA database session
+    :param user_id: current user ID (None if user auth is disabled)
+    :param data_file_id: data file ID to update
+    :param data_file: data_file object containing updated parameters
+    :param force: if set, flag the data file as modified even if no fields were
+        changed
 
-    :return: session ID or None if none supplied
-    :rtype: int | None
+    :return: updated field cal object
     """
-    session_id = request.args.get('session_id')
-    if session_id is None:
-        return
+    adb = get_data_file_db(user_id)
 
-    session = adb.query(SqlaSession).get(session_id)
-    if session is None:
-        session = adb.query(SqlaSession).filter(
-            SqlaSession.name == session_id).one_or_none()
-    if session is None:
-        raise errors.ValidationError(
-            'session_id', 'Unknown session "{}"'.format(session_id),
-            404)
-    return session.id
+    db_data_file = adb.query(DbDataFile).get(data_file_id)
+    if db_data_file is None:
+        raise UnknownDataFileError(id=data_file_id)
+
+    modified = force
+    for key, val in data_file.to_dict().items():
+        if key not in ('name', 'session_id'):
+            # Don't allow changing fields other than name and session ID
+            continue
+        if val != getattr(db_data_file, key):
+            setattr(db_data_file, key, val)
+            modified = True
+    if modified:
+        try:
+            db_data_file.modified = True
+            adb.flush()
+            data_file = DataFile(db_data_file)
+            adb.commit()
+        except Exception:
+            adb.rollback()
+            raise
+
+    return data_file
+
+
+def delete_data_file(user_id: Optional[int], id: int) -> None:
+    """
+    Remove the given data file from database and delete all associated disk
+    files
+
+    :param user_id: current user ID (None if user auth is disabled)
+    :param id: data file ID
+    """
+    adb = get_data_file_db(user_id)
+    root = get_root(user_id)
+
+    db_data_file = adb.query(DbDataFile).get(id)
+    if db_data_file is None:
+        raise UnknownDataFileError(id=id)
+    try:
+        adb.delete(db_data_file)
+        adb.commit()
+    except Exception:
+        adb.rollback()
+        raise
+
+    for filename in glob(os.path.join(root, '{}.*'.format(id))):
+        try:
+            os.remove(filename)
+        except Exception as e:
+            # noinspection PyUnresolvedReferences
+            app.logger.warn(
+                'Error removing data file "%s" (ID %d) [%s]',
+                filename, id,
+                e.message if hasattr(e, 'message') and e.message
+                else ', '.join(str(arg) for arg in e.args) if e.args
+                else e)
+
+
+def get_session(user_id: Optional[int], session_id: Union[int, str]) -> Session:
+    """
+    Return session object with the given ID or name
+
+    :param user_id: current user ID (None if user auth is disabled)
+    :param session_id: session ID
+
+    :return: session object
+    """
+    adb = get_data_file_db(user_id)
+
+    db_session = adb.query(DbSession).get(session_id)
+    if db_session is None:
+        db_session = adb.query(DbSession).filter(
+            DbSession.name == session_id).one_or_none()
+    if db_session is None:
+        raise UnknownSessionError(id=session_id)
+
+    # Convert to data model object
+    return Session(db_session)
+
+
+def query_sessions(user_id: Optional[int]) -> TList[Session]:
+    """
+    Return all user's sessions
+
+    :param user_id: current user ID (None if user auth is disabled)
+
+    :return: list of session objects
+    """
+    adb = get_data_file_db(user_id)
+    return [Session(db_session) for db_session in adb.query(DbSession)]
+
+
+def create_session(user_id: Optional[int], session: Session) -> Session:
+    """
+    Create a new session with the given parameters
+
+    :param user_id: current user ID (None if user auth is disabled)
+    :param session: session object containing all relevant parameters
+
+    :return: new session object
+    """
+    adb = get_data_file_db(user_id)
+
+    if adb.query(DbSession).filter(DbSession.name == session.name).count():
+        raise DuplicateSessionNameError(name=session.name)
+
+    # Ignore session ID if provided
+    kw = session.to_dict()
+    try:
+        del kw['id']
+    except KeyError:
+        pass
+
+    if not kw.get('name'):
+        raise errors.MissingFieldError('name')
+
+    # Create new db session object
+    try:
+        db_session = DbSession(**kw)
+        adb.add(db_session)
+        adb.flush()
+        session = Session(db_session)
+        adb.commit()
+    except Exception:
+        adb.rollback()
+        raise
+
+    return session
+
+
+def update_session(user_id: Optional[int], session_id: int,
+                   session: Session) -> Session:
+    """
+    Update the existing session
+
+    :param user_id: current user ID (None if user auth is disabled)
+    :param session_id: session ID to update
+    :param session: session object containing updated parameters
+
+    :return: updated session object
+    """
+    adb = get_data_file_db(user_id)
+
+    db_session = adb.query(DbSession).get(session_id)
+    if db_session is None:
+        raise UnknownSessionError(id=session_id)
+
+    for key, val in session.to_dict().items():
+        if key == 'id':
+            # Don't allow changing session ID
+            continue
+        if key == 'name' and val != db_session.name and adb.query(
+                DbSession).filter(DbSession.name == val).count():
+            raise DuplicateSessionNameError(name=val)
+        setattr(db_session, key, val)
+    try:
+        session = Session(db_session)
+        adb.commit()
+    except Exception:
+        adb.rollback()
+        raise
+
+    return session
+
+
+def delete_session(user_id: Optional[int], session_id: int) -> None:
+    """
+    Delete session with the given ID
+
+    :param user_id: current user ID (None if user auth is disabled)
+    :param session_id: session ID to delete
+    """
+    adb = get_data_file_db(user_id)
+
+    db_session = adb.query(DbSession).get(session_id)
+    if db_session is None:
+        raise UnknownSessionError(id=session_id)
+
+    try:
+        for file_id in [data_file.id for data_file in db_session.data_files]:
+            delete_data_file(user_id, file_id)
+
+        adb.delete(db_session)
+        adb.commit()
+    except Exception:
+        adb.rollback()
+        raise

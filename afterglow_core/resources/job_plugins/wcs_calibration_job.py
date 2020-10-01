@@ -4,17 +4,21 @@ Afterglow Core: image alignment job plugin
 
 import re
 from datetime import datetime
+from typing import List as TList, Optional
+
+from marshmallow.fields import Integer, List, Nested
 
 from skylib.astrometry import Solver, solve_field
 
 from ... import app
-from ...schemas.api.v1 import (
-    SourceExtractionSettingsSchema, WcsCalibrationJobSchema)
+from ...models import Job, JobResult
+from ...schemas import AfterglowSchema, Boolean, Float
 from ...errors import ValidationError
 from ..data_files import (
-    create_data_file, get_data_file, get_data_file_db, get_root,
+    create_data_file, get_data_file_data, get_data_file_db, get_root,
     save_data_file)
-from .source_extraction_job import run_source_extraction_job
+from .source_extraction_job import (
+    SourceExtractionSettings, run_source_extraction_job)
 
 
 __all__ = ['WcsCalibrationJob']
@@ -60,12 +64,40 @@ WCS_REGEX = re.compile(
 )
 
 
-class WcsCalibrationJob(WcsCalibrationJobSchema):
+class WcsCalibrationSettings(AfterglowSchema):
+    ra_hours = Float(default=0)  # type: float
+    dec_degs = Float(default=0)  # type: float
+    radius = Float(default=180)  # type: float
+    min_scale = Float(default=0.1)  # type: float
+    max_scale = Float(default=60)  # type: float
+    parity = Boolean(
+        truthy={True, 1, 'negative'},
+        falsy={False, 0, 'positive'}, default=None)  # type: Optional[bool]
+    sip_order = Integer(default=3)  # type: int
+    crpix_center = Boolean(default=True)  # type: bool
+    max_sources = Integer(default=100)  # type: Optional[int]
+
+
+class WcsCalibrationJobResult(JobResult):
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+
+
+class WcsCalibrationJob(Job):
     """
     Astrometric calibration job
     """
-    name = 'wcs_calibration'
+    type = 'wcs_calibration'
     description = 'Plate-solve Images'
+
+    result = Nested(
+        WcsCalibrationJobResult, default={})  # type: WcsCalibrationJobResult
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+    settings = Nested(
+        WcsCalibrationSettings, default={})  # type: WcsCalibrationSettings
+    source_extraction_settings = Nested(
+        SourceExtractionSettings,
+        default=None)  # type: SourceExtractionSettings
+    inplace = Boolean(default=False)  # type: bool
 
     def run(self):
         settings = self.settings
@@ -95,7 +127,7 @@ class WcsCalibrationJob(WcsCalibrationJobSchema):
             return
 
         source_extraction_settings = self.source_extraction_settings or \
-            SourceExtractionSettingsSchema()
+            SourceExtractionSettings()
         if settings.max_sources is not None:
             source_extraction_settings.limit = settings.max_sources
 
@@ -106,7 +138,7 @@ class WcsCalibrationJob(WcsCalibrationJobSchema):
 
         for i, file_id in enumerate(self.file_ids):
             try:
-                data, hdr = get_data_file(self.user_id, file_id)
+                data, hdr = get_data_file_data(self.user_id, file_id)
 
                 # Extract sources
                 sources = run_source_extraction_job(

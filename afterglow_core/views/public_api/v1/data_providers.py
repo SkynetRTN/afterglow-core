@@ -2,11 +2,14 @@
 Afterglow Core: API v1 data provider views
 """
 
-from flask import request
+from typing import Optional, Union
+
+from flask import Response, request
 
 from .... import app, errors, json_response
 from ....auth import auth_required, current_user
 from ....resources.data_providers import providers
+from ....schemas.api.v1 import DataProviderAssetSchema, DataProviderSchema
 from ....errors.auth import NotAuthenticatedError
 from ....errors.data_provider import (
     UnknownDataProviderError, ReadOnlyDataProviderError,
@@ -60,7 +63,7 @@ def check_provider_auth(provider):
 @app.route(resource_prefix[:-1])
 @app.route(resource_prefix + '<id>')
 @auth_required('user')
-def data_providers(id=None):
+def data_providers(id: Optional[Union[int, str]] = None) -> Response:
     """
     Return data provider(s)
 
@@ -70,11 +73,10 @@ def data_providers(id=None):
     GET /data-providers/[id]
         - return a single data provider with the given ID or name
 
-    :param int | str id: data provider ID (int or str) or name
+    :param id: data provider ID (int or str) or name
 
     :return: JSON response containing the list of serialized data provider
         objects when no ID supplied or a single provider otherwise
-    :rtype: flask.Response
     """
     if id is None:
         # List only data providers allowed for the current user's auth method
@@ -87,7 +89,8 @@ def data_providers(id=None):
                 pass
             else:
                 allowed_providers.append(provider)
-        return json_response(allowed_providers)
+        return json_response(
+            [DataProviderSchema(provider) for provider in allowed_providers])
 
     try:
         provider = providers[id]
@@ -101,13 +104,13 @@ def data_providers(id=None):
     # user is authenticated with any of these methods
     check_provider_auth(provider)
 
-    return json_response(provider)
+    return json_response(DataProviderSchema(provider))
 
 
 @app.route(resource_prefix + '<id>/assets',
            methods=('GET', 'POST', 'PUT', 'DELETE'))
 @auth_required('user')
-def data_providers_assets(id):
+def data_providers_assets(id: Union[int, str]) -> Response:
     """
     Return, create, update, or delete data provider assets
 
@@ -135,11 +138,10 @@ def data_providers_assets(id):
           writeable; adding "force" recursively deletes non-empty collection
           assets
 
-    :param int | str id: data provider ID (int or str) or name for which the
-        assets are managed
+    :param id: data provider ID (int or str) or name for which the assets
+        are managed
 
     :return: request-dependent JSON response, see above
-    :rtype: flask.Response
     """
     try:
         provider = providers[id]
@@ -166,7 +168,9 @@ def data_providers_assets(id):
             if path is not None and not provider.get_asset(path).collection:
                 raise CannotSearchInNonCollectionError()
 
-            return json_response(provider.find_assets(path=path, **params))
+            return json_response(
+                [DataProviderAssetSchema(asset)
+                 for asset in provider.find_assets(path=path, **params)])
 
         # "Get" request; assume empty path by default
         if path is None:
@@ -177,7 +181,7 @@ def data_providers_assets(id):
             if not provider.browseable:
                 raise NonBrowseableDataProviderError(id=id)
             return json_response(provider.get_child_assets(path))
-        return json_response([asset])
+        return json_response([DataProviderAssetSchema(asset)])
 
     # POST/PUT/DELETE always work with asset(s) at the given path
     if path is None:
@@ -188,8 +192,8 @@ def data_providers_assets(id):
     if request.method in ('POST', 'PUT'):
         data_file_id = params.pop('data_file_id', None)
         if data_file_id is not None:
-            from .data_files import get_data_file_data
-            data = get_data_file_data(current_user.id, data_file_id)
+            from .data_files import get_data_file_bytes
+            data = get_data_file_bytes(current_user.id, data_file_id)
         elif request.method == 'PUT':
             raise errors.MissingFieldError(field='data_file_id')
 
@@ -212,11 +216,13 @@ def data_providers_assets(id):
         else:
             raise AssetAlreadyExistsError()
 
-        return json_response(provider.create_asset(path, data, **params), 201)
+        return json_response(DataProviderAssetSchema(provider.create_asset(
+            path, data, **params)), 201)
 
     if request.method == 'PUT':
         # Check that the asset at the given path exists and is not a collection
-        return json_response(provider.update_asset(path, data, **params))
+        return json_response(DataProviderAssetSchema(provider.update_asset(
+            path, data, **params)))
 
     if request.method == 'DELETE':
         force = 'force' in params
