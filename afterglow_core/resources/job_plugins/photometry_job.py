@@ -125,7 +125,7 @@ def run_photometry_job(job: Job, settings: PhotSettings,
         sources = {
             file_id: [
                 SourceExtractionData(
-                    source, file_id=file_id,
+                    source=source, file_id=file_id,
                     id=source.id if hasattr(source, 'id') and source.id
                     else prefix + str(i + 1))
                 for i, source in enumerate(job_sources)
@@ -214,7 +214,8 @@ def run_photometry_job(job: Job, settings: PhotSettings,
 
             result_data += [
                 PhotometryData(
-                    row, source,
+                    source=source,
+                    row=row,
                     time=epoch,
                     filter=flt,
                     telescope=scope,

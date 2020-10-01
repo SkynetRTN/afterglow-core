@@ -2,6 +2,8 @@
 Afterglow Core: photometry data models
 """
 
+from typing import Optional
+
 from marshmallow.fields import Float, String
 import numpy
 
@@ -57,44 +59,46 @@ class PhotometryData(SourceExtractionData, IPhotometry, IAperture):
     """
     Description of object returned by batch photometry
     """
-    def __init__(self, row: numpy.void, source: SourceExtractionData,
+    def __init__(self, source: Optional[SourceExtractionData] = None,
+                 row: Optional[numpy.void] = None,
                  zero_point: float = 0, **kwargs):
         """
         Create photometry data class instance from a source extraction object
         and a photometry table row
 
-        :param row: photometry table row
         :param source: input source object
+        :param row: photometry table row
         :param zero_point: apply the optional zero point to instrumental mag
         :param kwargs: see :class:`SourceExtractionData`
         """
         # Defaults from SourceExtractionData
         super().__init__(source, **kwargs)
 
-        # Override certain SourceExtractionData fields with photometry-specific
-        # values
-        self.x = row['x']
-        self.y = row['y']
-        self.flux = row['flux']
+        if row is not None:
+            # Override certain SourceExtractionData fields
+            # with photometry-specific values
+            self.x = row['x']
+            self.y = row['y']
+            self.flux = row['flux']
 
-        # IPhotometry
-        self.flux = row['flux']
-        self.flux_error = row['flux_err']
-        self.mag = row['mag'] + zero_point
-        self.mag_error = row['mag_err']
+            # IPhotometry
+            self.flux = row['flux']
+            self.flux_error = row['flux_err']
+            self.mag = row['mag'] + zero_point
+            self.mag_error = row['mag_err']
 
-        # IAperture
-        if row['aper_a']:
-            self.aper_a = row['aper_a']
-            self.aper_b = row['aper_b']
-            self.aper_theta = row['aper_theta']
-            self.annulus_a_in = row['aper_a_in']
-            self.annulus_b_in = \
-                row['aper_a_in']*row['aper_b_out']/row['aper_a_out']
-            self.annulus_theta_in = self.annulus_theta_out = \
-                row['aper_theta_out']
-            self.annulus_a_out = row['aper_a_out']
-            self.annulus_b_out = row['aper_b_out']
+            # IAperture
+            if row['aper_a']:
+                self.aper_a = row['aper_a']
+                self.aper_b = row['aper_b']
+                self.aper_theta = row['aper_theta']
+                self.annulus_a_in = row['aper_a_in']
+                self.annulus_b_in = \
+                    row['aper_a_in']*row['aper_b_out']/row['aper_a_out']
+                self.annulus_theta_in = self.annulus_theta_out = \
+                    row['aper_theta_out']
+                self.annulus_a_out = row['aper_a_out']
+                self.annulus_b_out = row['aper_b_out']
 
 
 class Photometry(AfterglowSchema):

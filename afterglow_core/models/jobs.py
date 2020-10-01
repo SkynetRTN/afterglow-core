@@ -47,7 +47,8 @@ class JobState(AfterglowSchema):
         """
         super().__init__(*args, **kwargs)
 
-        self.created_on = datetime.utcnow()
+        if not hasattr(self, 'created_on'):
+            self.created_on = datetime.utcnow()
 
 
 class JobResult(AfterglowSchema):
@@ -77,8 +78,10 @@ class JobResult(AfterglowSchema):
         """
         super().__init__(*args, **kwargs)
 
-        self.errors = []
-        self.warnings = []
+        if not hasattr(self, 'errors'):
+            self.errors = []
+        if not hasattr(self, 'warnings'):
+            self.warnings = []
 
 
 class Job(AfterglowSchema):
@@ -271,10 +274,12 @@ class Job(AfterglowSchema):
         self._queue = _queue
 
         # Initialize to default state and result
-        # noinspection PyTypeChecker
-        self.state = {}
-        # noinspection PyTypeChecker
-        self.result = {}
+        if not hasattr(self, 'state'):
+            # noinspection PyTypeChecker
+            self.state = {}
+        if not hasattr(self, 'result'):
+            # noinspection PyTypeChecker
+            self.result = {}
 
     def run(self) -> None:
         """

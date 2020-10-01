@@ -86,12 +86,13 @@ class SourceExtractionData(ISourceMeta, IAstrometry, IFwhm, ISourceId):
         """
         super().__init__(source, **kwargs)
 
-        self.x = row['x'] + x0
-        self.y = row['y'] + y0
-        self.fwhm_x = row['a']*sigma_to_fwhm
-        self.fwhm_y = row['b']*sigma_to_fwhm
-        self.theta = rad2deg(row['theta'])
-        self.flux = row['flux']
+        if row is not None:
+            self.x = row['x'] + x0
+            self.y = row['y'] + y0
+            self.fwhm_x = row['a']*sigma_to_fwhm
+            self.fwhm_y = row['b']*sigma_to_fwhm
+            self.theta = rad2deg(row['theta'])
+            self.flux = row['flux']
 
         if wcs is not None:
             # Apply astrometric calibration

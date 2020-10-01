@@ -49,7 +49,7 @@ def merge_sources(sources: TList[SourceExtractionData],
         matching sources
     """
     # Set source ID to None before merging
-    merged_sources = [SourceExtractionData(source, id=None)
+    merged_sources = [SourceExtractionData(source=source, id=None)
                       for source in sources]
 
     # Split input sources by file ID; save the original source index
