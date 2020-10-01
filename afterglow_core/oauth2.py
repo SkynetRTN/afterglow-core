@@ -243,33 +243,36 @@ def _init_oauth():
     class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
         def save_authorization_code(self, code, req) -> None:
             """Save authorization_code for later use"""
+            sess = memory_session()
             try:
                 # noinspection PyArgumentList
-                memory_session.add(OAuth2AuthorizationCode(
+                sess.add(OAuth2AuthorizationCode(
                     code=code,
                     client_id=req.client.client_id,
                     redirect_uri=req.redirect_uri,
                     scope=req.scope,
                     user_id=req.user.id,
                 ))
-                memory_session.commit()
+                sess.commit()
             except Exception:
-                memory_session.rollback()
+                sess.rollback()
                 raise
 
         def query_authorization_code(self, code, client) \
                 -> OAuth2AuthorizationCode:
-            item = memory_session.query(OAuth2AuthorizationCode).filter_by(
+            sess = memory_session()
+            item = sess.query(OAuth2AuthorizationCode).filter_by(
                 code=code, client_id=client.client_id).first()
             if item and not item.is_expired():
                 return item
 
         def delete_authorization_code(self, authorization_code) -> None:
+            sess = memory_session()
             try:
-                memory_session.delete(authorization_code)
-                memory_session.commit()
+                sess.delete(authorization_code)
+                sess.commit()
             except Exception:
-                memory_session.rollback()
+                sess.rollback()
                 raise
 
         def authenticate_user(self, authorization_code) -> DbUser:
@@ -277,7 +280,8 @@ def _init_oauth():
 
     class RefreshTokenGrant(grants.RefreshTokenGrant):
         def authenticate_refresh_token(self, refresh_token) -> Token:
-            token = memory_session.query(Token) \
+            sess = memory_session()
+            token = sess.query(Token) \
                 .filter_by(refresh_token=refresh_token) \
                 .first()
             if token and token.is_refresh_token_active():
@@ -311,7 +315,7 @@ def _init_oauth():
         poolclass=StaticPool)
     Base.metadata.create_all(bind=memory_engine)
     memory_session = sqlalchemy.orm.scoped_session(
-        sqlalchemy.orm.session.sessionmaker(bind=memory_engine))()
+        sqlalchemy.orm.session.sessionmaker(bind=memory_engine))
 
     def access_token_generator(*_):
         return secrets.token_hex(20)

@@ -232,6 +232,7 @@ def _init_auth() -> None:
         :return: Flask response
         """
         expires_in = app.config.get('COOKIE_TOKEN_EXPIRES_IN', 86400)
+        sess = memory_session()
         if not access_token:
             # Generate a temporary in-memory token
             token = Token(
@@ -239,11 +240,10 @@ def _init_auth() -> None:
                 access_token=secrets.token_hex(20),
                 user_id=request.user.id,
             )
-            memory_session.add(token)
-            memory_session.flush()
+            sess.add(token)
         else:
             # Check that the token provided by the user exists and not expired
-            token = memory_session.query(Token)\
+            token = sess.query(Token)\
                 .filter_by(
                     access_token=access_token,
                     user_id=request.user.id,
@@ -255,7 +255,7 @@ def _init_auth() -> None:
 
         token.expires_in = expires_in
         token.issued_at = time.time()
-        memory_session.commit()
+        sess.commit()
 
         response.set_cookie(
             'afterglow_core_access_token', value=token.access_token,
@@ -313,6 +313,7 @@ def _init_auth() -> None:
 
         user = None
         error_msgs = []
+        sess = memory_session()
         for token_type, access_token in tokens:
             try:
                 if token_type == 'personal':
@@ -321,7 +322,7 @@ def _init_auth() -> None:
                         access_token=access_token,
                         token_type=token_type).one_or_none()
                 else:
-                    token = memory_session.query(Token).filter_by(
+                    token = sess.query(Token).filter_by(
                         access_token=access_token,
                         # token_type=token_type,
                         revoked=False).one_or_none()
