@@ -8,7 +8,7 @@ from flask import Response, request
 
 from .... import app, auth, json_response
 from ....resources.jobs import job_server_request
-from ....schemas.api.v1 import JobSchema, JobStateSchema, JobResultSchema
+from ....schemas.api.v1 import JobSchema, JobStateSchema
 from . import url_prefix
 
 
@@ -149,9 +149,13 @@ def jobs_result(id: Union[int, str]) -> Response:
 
     # Find the appropriate job result type from the job schema's "result" field
     job_type = msg['json'].pop('type')
+    try:
+        job_schema = [j for j in JobSchema.__subclasses__()
+                      if j.type == job_type][0]
+    except IndexError:
+        job_schema = JobSchema
     return json_response(
-        [j for j in JobSchema.__subclasses__()
-         if j.type == job_type][0]().fields['result'].nested(**msg['json']))
+        job_schema().fields['result'].nested(**msg['json']))
 
 
 @app.route(resource_prefix + '<int:id>/result/files/<file_id>')
