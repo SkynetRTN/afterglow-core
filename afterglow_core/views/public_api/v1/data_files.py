@@ -4,9 +4,6 @@ Afterglow Core: API v1 data file views
 
 import astropy.io.fits as pyfits
 import os
-import tempfile
-import subprocess
-import shutil
 import gzip
 from io import BytesIO
 from typing import Union
@@ -14,8 +11,6 @@ from typing import Union
 import numpy
 from flask import Response, request
 from astropy.wcs import WCS
-from skylib.calibration.background import estimate_background
-from skylib.sonification import sonify_image
 
 from .... import app, json_response, auth, errors
 from ....models import DataFile, Session
@@ -530,127 +525,6 @@ def data_files_fits(id: int) -> Response:
         above), either the gzipped or uncompressed FITS file data
     """
     return make_data_response(get_data_file_bytes(auth.current_user.id, id))
-
-
-@app.route(resource_prefix + '<int:id>/sonification')
-@auth.auth_required('user')
-def data_files_sonification(id: int) -> Response:
-    """
-    Sonify the image or its part and return the waveform data
-
-    GET /data-files/[id]/sonification?x=...&y=...&width=...&height=...
-        &param=value...
-
-    By default, x and y are set to 1, width = image width - (x - 1), height =
-    image height - (y - 1). Other parameters are sent to the sonification
-    procedure (see skylib.sonification.sonify_image).
-
-    Depending on the Accept request header, the sonification data are returned
-    as either WAV or MP3.
-
-    [Accept: audio/wav]
-    [Accept: audio/x-wav]
-    [Accept: */wav]
-    [Accept: */x-wav]
-    [Accept: audio/*]
-    [Accept: */*]
-    -> WAV
-    Content-Type: audio/x-wav
-
-    [Accept: audio/mpeg]
-    [Accept: audio/mpeg3]
-    [Accept: audio/x-mpeg-3]
-    [Accept: */mpeg]
-    [Accept: */mpeg3]
-    [Accept: */x-mpeg-3]
-    -> MP3
-    Content-Type: audio/x-mpeg-3
-
-    :param id: data file ID
-
-    :return: depending on the Accept HTTP header (see above), either WAV file
-        data or MP3 file data
-    """
-    try:
-        pixels = get_subframe(auth.current_user.id, id)
-    except errors.AfterglowError:
-        raise
-    except Exception:
-        raise UnknownDataFileError(id=id)
-
-    args = request.args.to_dict()
-    try:
-        x0 = int(args.pop('x', 1)) - 1
-    except ValueError:
-        x0 = 0
-    try:
-        y0 = int(args.pop('y', 1)) - 1
-    except ValueError:
-        y0 = 0
-    for arg in ('width', 'height', 'bkg', 'rms', 'bkg_scale'):
-        args.pop(arg, None)
-
-    df = get_data_file(auth.current_user.id, id)
-    height, width = pixels.shape
-    if width != df.width or height != df.height:
-        # Sonifying a subimage; estimate background from the whole image first,
-        # then supply a cutout of background and RMS to sonify_image()
-        try:
-            bkg_scale = float(args.pop('bkg_scale', 1/64))
-        except ValueError:
-            bkg_scale = 1/64
-        full_img = get_data_file_data(auth.current_user.id, id)[0]
-        bkg, rms = estimate_background(full_img, size=bkg_scale)
-        bkg = bkg[y0:y0+height, x0:x0+width]
-        rms = rms[y0:y0+height, x0:x0+width]
-    else:
-        # When sonifying the whole image, sonify_image() will estimate
-        # background automatically
-        bkg = rms = None
-
-    data = BytesIO()
-    sonify_image(pixels, data, bkg=bkg, rms=rms, **args)
-    data = data.getvalue()
-
-    # Figure out how to transfer sonification to the client
-    accepted_mimetypes = request.headers['Accept']
-    if accepted_mimetypes:
-        allow_wav = allow_mp3 = False
-        for mt in accepted_mimetypes.split(','):
-            mtype, subtype = mt.split(';')[0].strip().lower().split('/')
-            if mtype in ('audio', '*'):
-                if subtype in ('wav', 'x-wav'):
-                    allow_wav = True
-                elif subtype in ('mpeg', 'mpeg3', 'x-mpeg-3'):
-                    allow_mp3 = True
-                elif subtype == '*':
-                    allow_wav = allow_mp3 = True
-    else:
-        # Accept header not specified, assume all types are allowed
-        allow_wav = allow_mp3 = True
-
-    # Prefer sending a gzipped wav
-    if allow_wav:
-        return Response(data, mimetype='audio/x-wav')
-
-    if allow_mp3:
-        # Use ffmpeg to convert wav to mp3
-        temp_dir = tempfile.mkdtemp(prefix='ffmpeg-')
-        try:
-            wav_file = os.path.join(temp_dir, 'in.wav')
-            mp3_file = os.path.join(temp_dir, 'out.mp3')
-            with open(wav_file, 'wb') as f:
-                f.write(data)
-            subprocess.check_call(['ffmpeg', '-i', wav_file, mp3_file])
-            with open(mp3_file, 'rb') as f:
-                data = f.read()
-        finally:
-            shutil.rmtree(temp_dir)
-
-        return Response(data, mimetype='audio/x-mpeg-3')
-
-    # Could not send sonification in any of the formats supported by the client
-    raise errors.NotAcceptedError(accepted_mimetypes=accepted_mimetypes)
 
 
 @app.route(url_prefix + 'sessions', methods=['GET', 'POST'])
