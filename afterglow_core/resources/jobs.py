@@ -15,6 +15,7 @@ import json
 import struct
 import socket
 import cProfile
+import base64
 from datetime import datetime
 from glob import glob
 from multiprocessing import Event, Process, Queue
@@ -864,8 +865,9 @@ class JobRequestHandler(BaseRequestHandler):
         # Format response message, encrypt and send back to Flask
         msg = {}
         if binary_result:
-            # Data (e.g. job file) to be sent in the HTTP response
-            msg['body'] = result
+            # Data (e.g. job file) to be sent in the HTTP response; encode
+            # in Base64 to be able to serialize into JSON
+            msg['body'] = base64.b64encode(result).decode('ascii')
             if mimetype:
                 msg['mimetype'] = mimetype
         else:
@@ -1186,6 +1188,13 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
         msg = json.loads(decrypt(msg))
         if not isinstance(msg, dict):
             raise Exception()
+
+        try:
+            # The optional message body was sent encoded in Base64,
+            # decode it back
+            msg['body'] = base64.b64decode(msg['body'])
+        except KeyError:
+            pass
     except Exception:
         raise JobServerError(reason='JSON structure expected')
 
