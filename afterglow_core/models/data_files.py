@@ -35,6 +35,8 @@ class DataFile(AfterglowSchema):
         modified: True if the file was modified after creation
         modified_on: datetime.datetime of data file modification
         session_id: ID of session if the data file is associated with a session
+        group_id: GUID of the data file group
+        group_order: 0-based order of the data file in the group
     """
     id = Integer(default=None)  # type: int
     type = String(default=None)  # type: str
@@ -51,6 +53,8 @@ class DataFile(AfterglowSchema):
     modified_on = DateTime(
         default=None, format='%Y-%m-%d %H:%M:%S.%f')  # type: datetime
     session_id = Integer(default=None)  # type: int
+    group_id = String(default=None)  # type: str
+    group_order = Integer(default=0)  # type: int
 
 
 class Session(AfterglowSchema):

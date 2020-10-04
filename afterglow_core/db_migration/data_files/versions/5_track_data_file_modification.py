@@ -1,4 +1,4 @@
-"""Add field cals"""
+"""Track data file modification"""
 from datetime import datetime
 from alembic import op
 import sqlalchemy as sa

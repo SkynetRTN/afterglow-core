@@ -36,6 +36,8 @@ class DataFileSchema(Resource):
         modified: True if the file was modified after creation
         modified_on: datetime.datetime of data file modification
         session_id: ID of session owning the data file
+        group_id: GUID of the data file group
+        group_order: 0-based order of the data file in the group
     """
     __get_view__ = 'data_files'
 
@@ -54,6 +56,8 @@ class DataFileSchema(Resource):
     modified_on = DateTime(
         default=None, format='%Y-%m-%d %H:%M:%S.%f')  # type: datetime
     session_id = Integer(default=None)  # type: int
+    group_id = String(default=None)  # type: str
+    group_order = Integer(default=0)  # type: int
 
 
 class SessionSchema(Resource):

@@ -8,6 +8,7 @@ from glob import glob
 from datetime import datetime
 import json
 import sqlite3
+import uuid
 from threading import Lock
 from io import BytesIO
 from typing import Dict as TDict, List as TList, Optional, Tuple, Union
@@ -92,6 +93,10 @@ class DbDataFile(DataFileBase):
         Integer,
         ForeignKey('sessions.id', name='fk_sessions_id', ondelete='cascade'),
         nullable=True, index=True)
+    group_id = Column(
+        String, CheckConstraint('length(group_id) = 36'), nullable=False,
+        index=True)
+    group_order = Column(Integer, nullable=False, server_default='0')
 
 
 class DbSession(DataFileBase):
@@ -272,7 +277,9 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
                      hdr=None, provider: str = None, path: str = None,
                      metadata: dict = None, layer: str = None,
                      duplicates: str = 'ignore',
-                     session_id: Optional[int] = None) -> DbDataFile:
+                     session_id: Optional[int] = None,
+                     group_id: Optional[str] = None,
+                     group_order: Optional[int] = 0) -> DbDataFile:
     """
     Create a database entry for a new data file and save it to data file
     directory as an single (image) or double (image + mask) HDU FITS or
@@ -294,6 +301,8 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
         "overwrite" = re-import the file and replace the existing data file,
         "append" = always import as a new data file
     :param session_id: optional user session ID; defaults to anonymous session
+    :param group_id: optional GUID of the file group; default: auto-generate
+    :param group_order: 0-based order of the file in the group
 
     :return: data file instance
     """
@@ -313,6 +322,10 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
             pass
         name = 'file_{}'.format(name)
 
+    if group_id is None:
+        # Auto-generate group ID
+        group_id = str(uuid.uuid4())
+
     # Create/update a database row
     sqla_fields = dict(
         type='image' if data.dtype.fields is None else 'table',
@@ -321,9 +334,11 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
         height=height,
         data_provider=provider,
         asset_path=path,
-        asset_metadata=json.dumps(metadata) if metadata is not None else None,
+        asset_metadata=metadata,
         layer=layer,
         session_id=session_id,
+        group_id=group_id,
+        group_order=group_order,
     )
 
     if duplicates in ('ignore', 'overwrite'):
@@ -397,6 +412,9 @@ def import_data_file(adb, root: str, provider_id: Optional[str],
                 except KeyError:
                     pass
 
+            # Generate group ID for all HDUs
+            group_id = str(uuid.uuid4())
+
             # Import each HDU as a separate data file
             for i, hdu in enumerate(fits):
                 if isinstance(hdu, pyfits.ImageHDU.__base__):
@@ -445,14 +463,15 @@ def import_data_file(adb, root: str, provider_id: Optional[str],
 
                 all_data_files.append(create_data_file(
                     adb, fullname, root, hdu.data, hdu.header, provider_id,
-                    asset_path, asset_metadata, layer, duplicates, session_id))
+                    asset_path, asset_metadata, layer, duplicates, session_id,
+                    group_id=group_id, group_order=i))
 
     except errors.AfterglowError:
         raise
     except Exception:
         # Non-FITS file; try importing all color planes with Pillow and rawpy
         exif = None
-        channels = {}
+        channels = []
 
         if PILImage is not None:
             # noinspection PyBroadException
@@ -466,9 +485,9 @@ def import_data_file(adb, root: str, provider_id: Optional[str],
                     else:
                         bands = (im,)
                     channels = {
-                        band_name: numpy.fromstring(
+                        (band_name, numpy.fromstring(
                             band.tobytes(), numpy.uint8).reshape(
-                            [height, width])
+                            [height, width]))
                         for band_name, band in zip(band_names, bands)}
                     if exifread is None:
                         exif = {
@@ -490,7 +509,7 @@ def import_data_file(adb, root: str, provider_id: Optional[str],
                 finally:
                     sys.stderr = save_stderr
                 r, g, b = numpy.rollaxis(im.postprocess(output_bps=16), 2)
-                channels = {'R': r, 'G': g, 'B': b}
+                channels = [('R', r), ('G', g), ('B', b)]
             except Exception:
                 pass
 
@@ -562,7 +581,8 @@ def import_data_file(adb, root: str, provider_id: Optional[str],
             except Exception:
                 pass
 
-        for channel, data in channels.items():
+        group_id = str(uuid.uuid4())
+        for i, (channel, data) in enumerate(channels):
             if channel:
                 hdr['FILTER'] = (channel, 'Filter name')
 
@@ -576,7 +596,8 @@ def import_data_file(adb, root: str, provider_id: Optional[str],
             # Store FITS image bottom to top
             all_data_files.append(create_data_file(
                 adb, fullname, root, data[::-1], hdr, provider_id, asset_path,
-                asset_metadata, layer, duplicates, session_id))
+                asset_metadata, layer, duplicates, session_id,
+                group_id=group_id, group_order=i))
 
     return all_data_files
 
@@ -1058,8 +1079,7 @@ def update_data_file(user_id: Optional[int], data_file_id: int,
 
     modified = force
     for key, val in data_file.to_dict().items():
-        if key not in ('name', 'session_id'):
-            # Don't allow changing fields other than name and session ID
+        if key not in ('name', 'session_id', 'group_id', 'group_order'):
             continue
         if val != getattr(db_data_file, key):
             setattr(db_data_file, key, val)
