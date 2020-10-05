@@ -1,4 +1,4 @@
-"""Add field cals"""
+"""Track data file modification"""
 from datetime import datetime
 from alembic import op
 import sqlalchemy as sa
@@ -12,21 +12,12 @@ depends_on = None
 
 
 def upgrade():
-    with op.batch_alter_table(
-            'data_files',
-            table_args=(sa.CheckConstraint('length(name) <= 1024'),),
-            table_kwargs=dict(sqlite_autoincrement=True)) as batch_op:
-        batch_op.add_column(sa.Column('modified', sa.Boolean(), default=False))
-        batch_op.add_column(sa.Column(
-            'modified_on', sa.DateTime(),
-            default=lambda ctx: ctx.get_current_parameters()['created_on'],
-            onupdate=datetime.utcnow))
+    op.add_column(
+        'data_files', sa.Column('modified', sa.Boolean(), server_default='0'))
+    op.add_column('data_files', sa.Column(
+        'modified_on', sa.DateTime(), onupdate=datetime.utcnow))
 
 
 def downgrade():
-    with op.batch_alter_table(
-            'data_files',
-            table_args=(sa.CheckConstraint('length(name) <= 1024'),),
-            table_kwargs=dict(sqlite_autoincrement=True)) as batch_op:
-        batch_op.drop_column('modified')
-        batch_op.drop_column('modified_on')
+    op.drop_column('data_files', 'modified')
+    op.drop_column('data_files', 'modified_on')

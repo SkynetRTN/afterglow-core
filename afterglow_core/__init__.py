@@ -2,24 +2,17 @@
 Afterglow Core: main app package
 """
 
-import sys
 import datetime
 import json
 import os
+from typing import Any, Dict as TDict, Optional
 
 from flask_cors import CORS
 from marshmallow import missing
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
 from flask import Flask, Response
 
-from .models import AfterglowSchema
-
-if sys.version_info.major < 3:
-    # noinspection PyCompatibility,PyUnresolvedReferences
-    from urllib import quote
-else:
-    # noinspection PyCompatibility,PyUnresolvedReferences
-    from urllib.parse import quote
+from .schemas import AfterglowSchema
 
 
 __all__ = ['app', 'json_response']
@@ -54,7 +47,8 @@ class AfterglowSchemaEncoder(json.JSONEncoder):
         return super(AfterglowSchemaEncoder, self).default(obj)
 
 
-def json_response(obj='', status_code=None, headers=None):
+def json_response(obj: Any = '', status_code: Optional[int] = None,
+                  headers: Optional[TDict[str, str]] = None) -> Response:
     """
     Serialize a Python object to a JSON-type flask.Response
 
@@ -64,7 +58,6 @@ def json_response(obj='', status_code=None, headers=None):
     :param dict headers: optional extra HTTP headers
 
     :return: Flask response object with mimetype set to application/json
-    :rtype: `flask.Response`
     """
     if obj == '' or status_code == 204:
         resp = Response('', 204, headers=headers)
@@ -98,7 +91,7 @@ if app.config.get('OAUTH2_ALLOW_HTTP') or app.config.get('DEBUG'):
 
 
 @app.before_request
-def resolve_request_body():
+def resolve_request_body() -> None:
     """
     Before every request, combine `request.form` and `request.get_json()` into
     `request.args`

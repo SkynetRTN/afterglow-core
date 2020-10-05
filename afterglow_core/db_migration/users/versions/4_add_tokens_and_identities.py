@@ -26,9 +26,8 @@ def upgrade():
 
     # Create an auth_method='skynet' Identity for each existing user
     # with User.auth_methods containing 'skynet'
-    conn = op.get_bind()
     # noinspection SqlResolve
-    users = conn.execute(
+    users = op.execute(
         'select id, username, email, first_name, last_name, auth_methods '
         'from users').fetchall()
     identities = [
@@ -112,9 +111,8 @@ def downgrade():
     # Set User.auth_methods='skynet_oauth' for all users having
     # Identity.auth_method='skynet'; use subquery since sqlite does not support
     # JOIN in UPDATE
-    conn = op.get_bind()
     # noinspection SqlResolve
-    conn.execute(
+    op.execute(
         "update users set auth_methods = 'skynet_oauth' "
         "where id in (select user_id from identities "
         "where auth_method = 'skynet')")

@@ -22,12 +22,14 @@ import errno
 from datetime import timedelta
 from functools import wraps
 import time
+from typing import Callable, Optional, Sequence, Union
 
-from flask import request, make_response, redirect, url_for
+from flask import Response, request, make_response, redirect, url_for
 
 from . import app
 from .errors.auth import NotAuthenticatedError
-from .users import AnonymousUser, PersistentToken, user_datastore
+from .resources.users import (
+    AnonymousUser, DbPersistentToken, DbUser, user_datastore)
 from .oauth2 import Token, memory_session
 
 
@@ -72,7 +74,8 @@ USER_REALM = 'Registered Afterglow Users Only'
 
 
 # noinspection PyUnusedLocal
-def authenticate(roles=None):
+def authenticate(roles: Optional[Union[str, Sequence[str]]] = None) \
+        -> AnonymousUser:
     """
     Perform user authentication and return a User object
 
@@ -80,12 +83,11 @@ def authenticate(roles=None):
 
     :return: database object for the authenticated user; raises
         :class:`AuthError` on authentication error
-    :rtype: afterglow_core.users.User
     """
     return anonymous_user
 
 
-def _doublewrap(fn):
+def _doublewrap(fn: Callable) -> Callable:
     """
     A decorator decorator, allowing the decorator to be used as:
         @decorator(with, arguments, and=kwargs)
@@ -105,7 +107,7 @@ def _doublewrap(fn):
 
 
 @_doublewrap
-def auth_required(fn, *roles, **kwargs):
+def auth_required(fn, *roles, **kwargs) -> Callable:
     """
     Decorator for resources that need authentication
 
@@ -120,7 +122,7 @@ def auth_required(fn, *roles, **kwargs):
     or
         @auth_required(allow_redirect=True)
 
-    :param callable fn: function being decorated
+    :param fn: function being decorated
     :param roles: one or multiple user role ID(s)
     :param kwargs::
         allow_redirect=True: redirect to login page if not authenticated
@@ -176,33 +178,32 @@ def auth_required(fn, *roles, **kwargs):
 
 
 # noinspection PyUnusedLocal
-def set_access_cookies(response, access_token=None):
+def set_access_cookies(response: Response, access_token: Optional[str] = None) \
+        -> Response:
     """
     Set access cookies for browser access
 
-    :param flask.Response response: original Flask response object
-    :param str | None access_token: encoded access token; if None, create
-        access token automatically
+    :param response: original Flask response object
+    :param access_token: encoded access token; if None, create access token
+        automatically
 
     :return: modified Flask response
-    :rtype: flask.response
     """
     return response
 
 
-def clear_access_cookies(response, **__):
+def clear_access_cookies(response: Response, **__) -> Response:
     """
     Clear access cookies for browser access
 
-    :param flask.Response response: original Flask response object
+    :param response: original Flask response object
 
     :return: modified Flask response
-    :rtype: flask.response
     """
     return response
 
 
-def _init_auth():
+def _init_auth() -> None:
     """Initialize multi-user mode with authentication plugins"""
     # To reduce dependencies, only import marshmallow, flask-security, and
     # flask-sqlalchemy if user auth is enabled
@@ -219,7 +220,8 @@ def _init_auth():
 
     current_user = _current_user
 
-    def _set_access_cookies(response, access_token=None):
+    def _set_access_cookies(response: Response,
+                            access_token: Optional[str] = None) -> Response:
         """
         Adds session authorization cookie.
 
@@ -228,9 +230,9 @@ def _init_auth():
             by the client; if None, create access token automatically
 
         :return: Flask response
-        :rtype: flask.Response
         """
         expires_in = app.config.get('COOKIE_TOKEN_EXPIRES_IN', 86400)
+        sess = memory_session()
         if not access_token:
             # Generate a temporary in-memory token
             token = Token(
@@ -238,11 +240,10 @@ def _init_auth():
                 access_token=secrets.token_hex(20),
                 user_id=request.user.id,
             )
-            memory_session.add(token)
-            memory_session.flush()
+            sess.add(token)
         else:
             # Check that the token provided by the user exists and not expired
-            token = memory_session.query(Token)\
+            token = sess.query(Token)\
                 .filter_by(
                     access_token=access_token,
                     user_id=request.user.id,
@@ -254,7 +255,7 @@ def _init_auth():
 
         token.expires_in = expires_in
         token.issued_at = time.time()
-        memory_session.commit()
+        sess.commit()
 
         response.set_cookie(
             'afterglow_core_access_token', value=token.access_token,
@@ -265,7 +266,7 @@ def _init_auth():
 
     set_access_cookies = _set_access_cookies
 
-    def _clear_access_cookies(response):
+    def _clear_access_cookies(response: Response) -> Response:
         """
         Clears the access cookies
 
@@ -275,7 +276,6 @@ def _init_auth():
         :param response: Flask response
 
         :return: Flask response with access token removed from cookies
-        :rtype: flask.Response
         """
         response.set_cookie('afterglow_core_access_token', '', expires=0)
 
@@ -283,16 +283,15 @@ def _init_auth():
 
     clear_access_cookies = _clear_access_cookies
 
-    def _authenticate(roles=None):
+    def _authenticate(roles: Optional[Union[str, Sequence[str]]] = None) \
+            -> DbUser:
         """
         Authenticate the user
 
-        :param str | list[str] roles: list of authenticated user role IDs
-            or a single role ID
+        :param roles: list of authenticated user role IDs or a single role ID
 
         :return: database object for the authenticated user; raises
             :class:`AuthError` on authentication error
-        :rtype: afterglow_core.users.User
         """
         # If access token in HTTP Authorization header, verify and authorize.
         # otherwise, attempt to reconstruct token from cookies
@@ -314,15 +313,16 @@ def _init_auth():
 
         user = None
         error_msgs = []
+        sess = memory_session()
         for token_type, access_token in tokens:
             try:
                 if token_type == 'personal':
                     # Should be an existing permanent token
-                    token = PersistentToken.query.filter_by(
+                    token = DbPersistentToken.query.filter_by(
                         access_token=access_token,
                         token_type=token_type).one_or_none()
                 else:
-                    token = memory_session.query(Token).filter_by(
+                    token = sess.query(Token).filter_by(
                         access_token=access_token,
                         # token_type=token_type,
                         revoked=False).one_or_none()

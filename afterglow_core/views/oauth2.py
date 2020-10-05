@@ -8,7 +8,7 @@ from ..errors import MissingFieldError
 from ..errors.oauth2 import UnknownClientError
 from ..auth import auth_required
 from ..oauth2 import oauth_clients, oauth_server
-from ..users import UserClient
+from ..resources.users import DbUserClient
 
 
 @app.route('/oauth2/authorize', methods=['GET'])
@@ -19,7 +19,7 @@ def oauth2_authorize():
         raise MissingFieldError('client_id')
 
     # Check that the user allowed the client
-    if not UserClient.query.filter_by(
+    if not DbUserClient.query.filter_by(
             user_id=request.user.id, client_id=client_id).count():
         # Redirect users to consent page if the client was not confirmed yet
         return redirect(url_for(

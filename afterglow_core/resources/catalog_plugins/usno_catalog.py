@@ -2,9 +2,11 @@
 Afterglow Core: USNO-B1.0 catalog accessed via VizieR
 """
 
-from __future__ import absolute_import, division, print_function
+from typing import List as TList, Union
 
-from ...models.photometry import Mag
+from astropy.table import Table
+
+from ...models import CatalogSource, Mag
 from .vizier_catalogs import VizierCatalog
 
 
@@ -29,17 +31,16 @@ class USNOB1Catalog(VizierCatalog):
         'id': 'USNO-B1.0', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
     }
 
-    def table_to_sources(self, table):
+    def table_to_sources(self, table: Union[list, Table]) \
+            -> TList[CatalogSource]:
         """
         Return a list of CatalogSource objects from an Astropy table
 
         Adds the standard B and R magnitudes based on B1, B2 and R1, R2.
 
-        :param list | astropy.table.Table table: table of sources returned
-            by astroquery
+        :param table: table of sources returned by astroquery
 
         :return: list of catalog objects
-        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
         """
         sources = super(USNOB1Catalog, self).table_to_sources(table)
 

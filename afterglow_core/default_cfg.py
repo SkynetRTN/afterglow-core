@@ -28,9 +28,6 @@ AUTH_PLUGINS = []
 # database; auth plugin option "register_users" overrides this
 REGISTER_AUTHENTICATED_USERS = True
 
-# Allow remote admin access with HTTP user auth enabled
-REMOTE_ADMIN = False
-
 # OAuth2 bearer token expiration time in seconds
 OAUTH2_PROVIDER_TOKEN_EXPIRES_IN = 3600
 
@@ -96,6 +93,13 @@ CATALOG_OPTIONS = {}
 #     ...
 # ]
 CUSTOM_VIZIER_CATALOGS = []
+
+# Path or list of paths to Astrometry.net index files used for plate solving
+# ANET_INDEX_PATH = '/usr/local/astrometry-net/data'
+# or
+# ANET_INDEX_PATH = ['C:\\Astrometry.net\\data\\Tycho-2',
+#                    'C:\\Astrometry.net\\Data\\2MASS']
+ANET_INDEX_PATH = []
 
 
 ################################################################################

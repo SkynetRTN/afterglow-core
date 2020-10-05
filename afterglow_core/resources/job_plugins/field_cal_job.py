@@ -3,45 +3,61 @@ Afterglow Core: photometric calibration job plugin
 """
 
 from datetime import datetime
+from typing import List as TList
 
+from marshmallow.fields import Integer, List, Nested
 import numpy
 from astropy.wcs import WCS
 
-from ...models.jobs.field_cal_job import FieldCalJobSchema
-from ...models.field_cal import FieldCal, FieldCalResult
-from ...models.photometry import Mag
+from ...models import (
+    Job, JobResult, FieldCal, FieldCalResult, Mag, PhotSettings)
 from ..data_files import get_data_file_fits, get_image_time
 from ..field_cals import get_field_cal
 from ..catalogs import catalogs as known_catalogs
 from .catalog_query_job import run_catalog_query_job
-from .source_extraction_job import run_source_extraction_job
+from .source_extraction_job import (
+    SourceExtractionSettings, run_source_extraction_job)
 from .photometry_job import get_source_xy, run_photometry_job
 
 
 __all__ = ['FieldCalJob']
 
 
-class FieldCalJob(FieldCalJobSchema):
-    name = 'field_cal'
+class FieldCalJobResult(JobResult):
+    data = List(
+        Nested(FieldCalResult), default=[])  # type: TList[FieldCalResult]
+
+
+class FieldCalJob(Job):
+    type = 'field_cal'
     description = 'Photometric Calibration'
+
+    result = Nested(FieldCalJobResult, default={})  # type: FieldCalJobResult
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+    field_cal = Nested(FieldCal, default={})  # type: FieldCal
+    source_extraction_settings = Nested(
+        SourceExtractionSettings,
+        default=None)  # type: SourceExtractionSettings
+    photometry_settings = Nested(
+        PhotSettings, default=None)  # type: PhotSettings
 
     def run(self):
         if not getattr(self, 'file_ids', None):
             return
 
-        # If only ID or name is supplied for the field cal,
-        # this is a reference to a stored field cal; dynamically update
-        # from the user's field cal table
+        # If ID or name is supplied for the field cal, this is a reference
+        # to a stored field cal; get it from the user's field cal table and
+        # optionally override fields that were explicitly set by the user
         field_cal = self.field_cal
-        # noinspection PyProtectedMember
-        if all(getattr(field_cal, name, None) is None
-               for name in FieldCal._declared_fields
-               if name not in ('id', 'name')):
-            id_or_name = getattr(field_cal, 'id', None)
-            if id_or_name is None:
-                id_or_name = getattr(field_cal, 'name', None)
-            if id_or_name is not None:
-                field_cal = get_field_cal(self.user_id, id_or_name)
+        id_or_name = getattr(field_cal, 'id', None)
+        if id_or_name is None:
+            id_or_name = getattr(field_cal, 'name', None)
+        if id_or_name is not None:
+            stored_field_cal = get_field_cal(self.user_id, id_or_name)
+            for name, val in field_cal.to_dict().items():
+                if name not in ('id', 'name'):
+                    setattr(stored_field_cal, name, val)
+            field_cal = stored_field_cal
 
         catalog_sources = getattr(field_cal, 'catalog_sources', None)
         if not catalog_sources and not getattr(field_cal, 'catalogs', None):

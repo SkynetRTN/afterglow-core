@@ -8,6 +8,7 @@ from . import AfterglowError
 __all__ = [
     'CannotCreateDataFileDirError', 'CannotImportFromCollectionAssetError',
     'MissingWCSError', 'UnknownDataFileError', 'UnrecognizedDataFileError',
+    'UnknownSessionError', 'DuplicateSessionNameError',
 ]
 
 
@@ -71,3 +72,26 @@ class MissingWCSError(AfterglowError):
     code = 400
     subcode = 2004
     message = 'Missing WCS info'
+
+
+class UnknownSessionError(AfterglowError):
+    """
+    Requested session with unknown ID or name
+
+    Extra attributes::
+        id: session ID or name
+    """
+    code = 404
+    subcode = 2005
+    message = 'Unknown session'
+
+
+class DuplicateSessionNameError(AfterglowError):
+    """
+    Session with the given name already exists
+
+    Extra attributes::
+        name: session name
+    """
+    subcode = 2006
+    message = 'Duplicate session name'

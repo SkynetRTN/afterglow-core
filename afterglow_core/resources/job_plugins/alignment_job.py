@@ -2,26 +2,47 @@
 Afterglow Core: image alignment job plugin
 """
 
+from typing import List as TList
+
+from marshmallow.fields import String, Integer, List, Nested
 from astropy.wcs import WCS
 
 from skylib.combine.alignment import apply_transform_stars, apply_transform_wcs
 
-from ...models.jobs.alignment_job import AlignmentJobSchema
+from ...models import Job, JobResult, SourceExtractionData
+from ...schemas import AfterglowSchema, Boolean
 from ...errors import AfterglowError, ValidationError
 from ..data_files import (
-    SqlaDataFile, create_data_file, get_data_file, get_data_file_db, get_root,
+    create_data_file, get_data_file_data, get_data_file_db, get_root,
     save_data_file)
 
 
 __all__ = ['AlignmentJob']
 
 
-class AlignmentJob(AlignmentJobSchema):
+class AlignmentSettings(AfterglowSchema):
+    ref_image = String(default='central')  # type: str
+    wcs_grid_points = Integer(default=0)  # type: int
+
+
+class AlignmentJobResult(JobResult):
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+
+
+class AlignmentJob(Job):
     """
     Image alignment job
     """
-    name = 'alignment'
+    type = 'alignment'
     description = 'Align Images'
+
+    result = Nested(AlignmentJobResult, default={})  # type: AlignmentJobResult
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+    settings = Nested(AlignmentSettings, default={})  # type: AlignmentSettings
+    sources = List(
+        Nested(SourceExtractionData),
+        default=[])  # type: TList[SourceExtractionData]
+    inplace = Boolean(default=False)  # type: bool
 
     def run(self):
         settings = self.settings
@@ -86,7 +107,7 @@ class AlignmentJob(AlignmentJobSchema):
             ref_stars = {}
 
         # Load data and extract WCS for reference image
-        ref_data, ref_hdr = get_data_file(self.user_id, ref_file_id)
+        ref_data, ref_hdr = get_data_file_data(self.user_id, ref_file_id)
         # noinspection PyBroadException
         try:
             ref_wcs = WCS(ref_hdr)
@@ -102,7 +123,7 @@ class AlignmentJob(AlignmentJobSchema):
                 if i != ref_image:
                     # Load and transform the current image based on either star
                     # coordinates or WCS
-                    data, hdr = get_data_file(self.user_id, file_id)
+                    data, hdr = get_data_file_data(self.user_id, file_id)
                     if ref_stars:
                         # Extract current image sources that are also present
                         # in the reference image
@@ -201,13 +222,6 @@ class AlignmentJob(AlignmentJobSchema):
                     try:
                         save_data_file(
                             adb, get_root(self.user_id), file_id, data, hdr)
-
-                        # May need to update the image size
-                        data_file = adb.query(SqlaDataFile).get(file_id)
-                        shape = data.shape
-                        if shape != [data_file.height, data_file.width]:
-                            data_file.height, data_file.width = shape
-
                         adb.commit()
                     except Exception:
                         adb.rollback()

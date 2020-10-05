@@ -2,7 +2,7 @@
 Afterglow Core: imaging survey data provider plugin
 """
 
-from __future__ import absolute_import, division, print_function
+from typing import List as TList, Optional, Tuple
 
 from io import BytesIO
 
@@ -10,11 +10,10 @@ from astropy import units as u
 from astropy.coordinates import Angle
 from astroquery.skyview import SkyView
 
-from ...models.data_provider import DataProviderAsset
+from ...models import DataProvider, DataProviderAsset
 from ...errors import MissingFieldError, ValidationError
 from ...errors.data_provider import AssetNotFoundError
 from ..imaging_surveys import survey_scales
-from . import DataProvider
 
 
 __all__ = ['ImagingSurveyDataProvider']
@@ -51,16 +50,15 @@ class ImagingSurveyDataProvider(DataProvider):
     allow_multiple_instances = False
 
     @staticmethod
-    def _get_asset_params(path):
+    def _get_asset_params(path: str) -> Tuple[str, str, float, float]:
         r"""
         Decompose asset path into SkyView-specific parameters: survey name,
         position/coordinates, and field width/height in arcminutes
 
-        :param str path: asset path in the form
+        :param path: asset path in the form
             <survey>\<position>\<width>,<height>
 
         :return: tuple (survey, position, width, height)
-        :rtype: tuple[str, str, float, float]
         """
         try:
             survey, position, size = path.split('\\')
@@ -74,17 +72,17 @@ class ImagingSurveyDataProvider(DataProvider):
         return survey, position, width, height
 
     @staticmethod
-    def _get_asset(survey, position, width, height):
+    def _get_asset(survey: str, position: str, width: float, height: float) \
+            -> DataProviderAsset:
         """
         Return image survey data provider asset for the given parameters
 
-        :param str survey: survey name
-        :param str position: field center coordinates or object name
-        :param float width: field width in arcminutes
-        :param float height: field height in arcminutes
+        :param survey: survey name
+        :param position: field center coordinates or object name
+        :param width: field width in arcminutes
+        :param height: field height in arcminutes
 
         :return: asset object
-        :rtype: DataProviderAsset
         """
         if width == height:
             size = str(width)
@@ -102,16 +100,15 @@ class ImagingSurveyDataProvider(DataProvider):
         )
 
     @staticmethod
-    def _get_query_args(survey, width, height):
+    def _get_query_args(survey: str, width: float, height: float) -> dict:
         """
         Return extra astroquery.skyview query arguments for the given field size
 
-        :param str survey: survey name
-        :param float width:  field width in arcminutes
-        :param float height: field height in arcminutes
+        :param survey: survey name
+        :param width:  field width in arcminutes
+        :param height: field height in arcminutes
 
         :return: query arguments
-        :rtype: dict
         """
         # General query parameters
         kwargs = {
@@ -141,30 +138,33 @@ class ImagingSurveyDataProvider(DataProvider):
         return kwargs
 
     # noinspection PyShadowingBuiltins
-    def find_assets(self, path=None, survey='DSS', ra_hours=None, dec_degs=None,
-                    object=None, width=None, height=None):
+    def find_assets(self, path: Optional[str] = None, survey: str = 'DSS',
+                    ra_hours: Optional[float] = None,
+                    dec_degs: Optional[float] = None,
+                    object: Optional[str] = None,
+                    width: Optional[float] = None,
+                    height: Optional[float] = None) \
+            -> TList[DataProviderAsset]:
         """
         Return a list of assets matching the given parameters
 
         Returns an empty list if survey is unknown or no imaging data at the
         given FOV; otherwise, returns a single asset
 
-        :param str path: path to the collection asset to search in; ignored
-        :param str survey: survey name; should be one of those returned by
+        :param path: path to the collection asset to search in; ignored
+        :param survey: survey name; should be one of those returned by
             the /imaging-surveys resource; default: DSS
-        :param float ra_hours: RA of image center in hours; used in conjunction
+        :param ra_hours: RA of image center in hours; used in conjunction
             with `dec_degs` and is mutually exclusive with `object`
-        :param float dec_degs: Dec of image center in degrees; used in
-            conjunction with `ra_hours` and is mutually exclusive with `object`
-        :param str object: object name resolvable by SIMBAD or NED or
-            coordinates like "01 23 45.6, +12 34 56.7"
-        :param float width: image width in arcminutes
-        :param float height: image height in arcminutes; default: same as
-            `width`
+        :param dec_degs: Dec of image center in degrees; used in conjunction
+            with `ra_hours` and is mutually exclusive with `object`
+        :param object: object name resolvable by SIMBAD or NED or coordinates
+            like "01 23 45.6, +12 34 56.7"
+        :param width: image width in arcminutes
+        :param height: image height in arcminutes; default: same as `width`
 
         :return: list of 0 ro 1 :class:`DataProviderAsset` objects for assets
             matching the query parameters
-        :rtype: list[DataProviderAsset]
         """
         if all(item is None for item in (ra_hours, dec_degs, object)):
             raise MissingFieldError('ra_hours,dec_degs|object')
@@ -236,26 +236,24 @@ class ImagingSurveyDataProvider(DataProvider):
             return []
         return [self._get_asset(survey, object, width, height)]
 
-    def get_asset(self, path):
+    def get_asset(self, path: str) -> DataProviderAsset:
         r"""
         Return an asset at the given path
 
-        :param str path: asset path in the form
+        :param path: asset path in the form
             <survey>\<position>\<width>,<height>
 
         :return: asset object
-        :rtype: DataProviderAsset
         """
         return self._get_asset(*self._get_asset_params(path))
 
-    def get_asset_data(self, path):
+    def get_asset_data(self, path: str) -> bytes:
         """
         Return data for a non-collection asset at the given path
 
-        :param str path: asset path; must identify a non-collection asset
+        :param path: asset path; must identify a non-collection asset
 
         :return: asset data
-        :rtype: str
         """
         survey, position, width, height = self._get_asset_params(path)
         try:

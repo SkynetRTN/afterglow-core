@@ -3,11 +3,12 @@ Afterglow Core: Landolt catalog of UBVRI photometric standards accessed
 via VizieR
 """
 
-from __future__ import absolute_import, division, print_function
+from typing import List as TList, Union
 
 from numpy import hypot, sqrt
+from astropy.table import Table
 
-from ...models.photometry import Mag
+from ...models import CatalogSource, Mag
 from .vizier_catalogs import VizierCatalog
 
 
@@ -37,19 +38,18 @@ class LandoltCatalog(VizierCatalog):
         '(1 - 2*(DEJ2000.strip().startswith("-")))',
     }
 
-    def table_to_sources(self, table):
+    def table_to_sources(self, table: Union[list, Table]) \
+            -> TList[CatalogSource]:
         """
-        Return a list of CatalogSource objects from an Astropy table
+        Return a list of :class:`CatalogSource` objects from an Astropy table
 
         Converts color indices to magnitudes.
 
-        :param list | astropy.table.Table table: table of sources returned
-            by astroquery
+        :param table: table of sources returned by astroquery
 
         :return: list of catalog objects
-        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
         """
-        sources = super(LandoltCatalog, self).table_to_sources(table)
+        sources = super().table_to_sources(table)
 
         for source in sources:
             mags = source.mags
@@ -71,8 +71,9 @@ class LandoltCatalog(VizierCatalog):
             if err:
                 mags['R'].error = err
 
-            mags['I'] = Mag(value=(mags['R'].value - mags['R_I'].value +
-                                   v - mags['V_I'].value)/2)
+            mags['I'] = Mag(
+                value=(mags['R'].value - mags['R_I'].value +
+                       v - mags['V_I'].value)/2)
             err = sqrt((getattr(mags['R'], 'error', 0)**2 +
                         getattr(mags['R_I'], 'error', 0)**2 +
                         v_err**2 + getattr(mags['V_I'], 'error', 0)**2)/2)

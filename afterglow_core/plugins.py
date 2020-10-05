@@ -7,7 +7,7 @@ from __future__ import absolute_import, division, print_function
 import os
 import zipfile
 import zipimport
-from typing import Any, Dict, List, Union
+from typing import Any, Dict as TDict, List as TList, Union
 
 from . import app
 
@@ -26,7 +26,7 @@ except ImportError:
 __all__ = ['load_plugins']
 
 
-def add_plugin(plugins: Dict[Union[str, int], Any], descr: str, instance: Any,
+def add_plugin(plugins: TDict[Union[str, int], Any], descr: str, instance: Any,
                default_id: int = None) -> None:
     """
     Add a plugin instance to the plugin dictionary, with the possible alias for
@@ -50,12 +50,12 @@ def add_plugin(plugins: Dict[Union[str, int], Any], descr: str, instance: Any,
 
     if not hasattr(instance, 'display_name') or \
             not instance.display_name:
-        instance.display_name = instance.name
+        instance.display_name = getattr(instance, instance.__polymorphic_on__)
 
     if hasattr(instance, 'id') and instance.id is not None:
         id = instance.id
     else:
-        id = instance.name
+        id = getattr(instance, instance.__polymorphic_on__)
         # noinspection PyBroadException
         try:
             instance.id = id
@@ -77,8 +77,8 @@ def add_plugin(plugins: Dict[Union[str, int], Any], descr: str, instance: Any,
 
 
 def load_plugins(descr: str, package: str, plugin_class: Any,
-                 specs: List[Dict[str, Any]] = None) -> \
-        Dict[Union[str, int], Any]:
+                 specs: TList[TDict[str, Any]] = None) -> \
+        TDict[Union[str, int], Any]:
     """
     Load and initialize plugins from the given directory
 
@@ -151,12 +151,16 @@ def load_plugins(descr: str, package: str, plugin_class: Any,
                 try:
                     if issubclass(item, plugin_class) and \
                             item is not plugin_class and \
-                            hasattr(item, 'name') and \
-                            isinstance(item.name, str) and \
+                            getattr(item, '__polymorphic_on__', None) and \
+                            hasattr(item, item.__polymorphic_on__) and \
+                            isinstance(getattr(item, item.__polymorphic_on__),
+                                       str) and \
                             item.__module__ == m.__name__:
-                        plugin_classes[item.name] = item
+                        plugin_classes[getattr(item,
+                                               item.__polymorphic_on__)] = item
                         app.logger.debug(
-                            'Found %s plugin "%s"', descr, item.name)
+                            'Found %s plugin "%s"', descr,
+                            getattr(item, item.__polymorphic_on__))
                 except TypeError:
                     pass
         except Exception:
@@ -168,9 +172,14 @@ def load_plugins(descr: str, package: str, plugin_class: Any,
     if specs is None:
         # Initialize all available plugins without any options
         for name, klass in plugin_classes.items():
-            # Initialize plugin instance
+            # Initialize plugin instance; provide the polymorphic field equal
+            # to plugin name to instantiate the appropriate subclass instead
+            # of the base plugin class
             try:
-                instance = klass()
+                instance = klass(
+                    _set_defaults=True,
+                    **{klass.__polymorphic_on__:
+                       getattr(klass, klass.__polymorphic_on__)})
             except Exception:
                 app.logger.exception(
                     'Error loading %s plugin "%s"', descr, name)

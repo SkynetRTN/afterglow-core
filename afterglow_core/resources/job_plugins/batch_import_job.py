@@ -4,8 +4,12 @@ Afterglow Core: batch data file import job plugin
 
 import json
 from io import BytesIO
+from typing import List as TList
 
-from ...models.jobs.batch_import_job import BatchImportJobSchema
+from marshmallow.fields import String, Integer, List, Nested
+
+from ...models import Job, JobResult
+from ...schemas import AfterglowSchema, Boolean
 from ...errors.data_provider import UnknownDataProviderError
 from ...errors.data_file import CannotImportFromCollectionAssetError
 from ..data_providers import providers
@@ -15,12 +19,30 @@ from ..data_files import get_data_file_db, get_root, import_data_file
 __all__ = ['BatchImportJob']
 
 
-class BatchImportJob(BatchImportJobSchema):
+class BatchImportSettings(AfterglowSchema):
+    provider_id = String()  # type: str
+    path = String()  # type: str
+    duplicates = String(default='ignore')  # type: str
+    recurse = Boolean(default=False)  # type: bool
+
+
+class BatchImportJobResult(JobResult):
+    file_ids = List(Integer(), default=[])  # type: TList[int]
+
+
+class BatchImportJob(Job):
     """
     Batch data file import job
     """
-    name = 'batch_import'
+    type = 'batch_import'
     description = 'Batch Data File Import'
+
+    result = Nested(
+        BatchImportJobResult, default={})  # type: BatchImportJobResult
+    settings = List(Nested(
+        BatchImportSettings, default={}),
+        default=[])  # type: TList[BatchImportSettings]
+    session_id = Integer(default=None)  # type: int
 
     def run(self):
         adb = get_data_file_db(self.user_id)

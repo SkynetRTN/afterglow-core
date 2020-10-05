@@ -2,19 +2,17 @@
 Afterglow Core: VizieR catalog plugins
 """
 
-from __future__ import absolute_import, division, print_function
-
 import re
+from typing import Dict as TDict, List as TList, Optional, Union
 
 import numpy
 from astropy.coordinates import SkyCoord
+from astropy.table import Table
 from astropy.units import arcmin, deg, hour
 from astroquery.vizier import Vizier
 
 from ... import app
-from ...models.field_cal import CatalogSource
-from ...models.photometry import Mag
-from . import Catalog
+from ...models import Catalog, CatalogSource, Mag
 
 
 __all__ = ['VizierCatalog']
@@ -45,16 +43,15 @@ class VizierCatalog(Catalog):
 
     _columns = None
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, **kwargs):
         """
         Create a Catalog instance
 
-        :param args: see :class:`afterglow_core.Resource`
-        :param kwargs: see :class:`afterglow_core.Resource`
+        :param kwargs: catalog plugin initialization parameters
         """
         kwargs.setdefault('vizier_server', app.config.get(
             'VIZIER_SERVER', 'http://vizier.cfa.harvard.edu/viz-bin/VizieR-4'))
-        super(Catalog, self).__init__(*args, **kwargs)
+        super().__init__(**kwargs)
 
         # Save the list of VizieR column names derived from column mapping
         # expressions and magnitude defs
@@ -91,15 +88,14 @@ class VizierCatalog(Catalog):
                     if mag_err_col:
                         self._columns.append(mag_err_col)
 
-    def table_to_sources(self, table):
+    def table_to_sources(self, table: Union[TList, Table]) \
+            -> TList[CatalogSource]:
         """
         Return a list of CatalogSource objects from an Astropy table
 
-        :param list | astropy.table.Table table: table of sources returned
-            by astroquery
+        :param table: table of sources returned by astroquery
 
         :return: list of catalog objects
-        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
         """
         sources = []
 
@@ -157,14 +153,13 @@ class VizierCatalog(Catalog):
 
         return sources
 
-    def query_objects(self, names):
+    def query_objects(self, names: TList[str]) -> TList[CatalogSource]:
         """
         Return a list of VizieR catalog objects with the specified names
 
-        :param list[str] names: object names
+        :param names: object names
 
-        :return: list of catalog objects
-        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
+        :return: list of catalog objects with the given names
         """
         viz = Vizier(
             vizier_server=self.vizier_server, catalog=self.vizier_catalog,
@@ -176,19 +171,19 @@ class VizierCatalog(Catalog):
                 rows.append(resp[0][0])
         return self.table_to_sources(rows)
 
-    def query_region(self, ra_hours, dec_degs, constraints=None, limit=None,
-                     **region):
+    def query_region(self, ra_hours: float, dec_degs: float,
+                     constraints: Optional[TDict[str, str]] = None,
+                     limit: int = None, **region) -> TList[CatalogSource]:
         """
         Return VizieR catalog objects within the specified region
 
-        :param float ra_hours: right ascension of region center in hours
-        :param float dec_degs: declination of region center in degrees
-        :param dict constraints: optional constraints on the column values
-        :param int limit: maximum number of rows to return
-        :param dict region: keywords defining the query region
+        :param ra_hours: right ascension of region center in hours
+        :param dec_degs: declination of region center in degrees
+        :param constraints: optional constraints on the column values
+        :param limit: maximum number of rows to return
+        :param region: keywords defining the query region
 
-        :return: list of catalog objects
-        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
+        :return: list of catalog objects within the specified region
         """
         viz = Vizier(
             vizier_server=self.vizier_server, catalog=self.vizier_catalog,
@@ -204,40 +199,42 @@ class VizierCatalog(Catalog):
             return self.table_to_sources(resp[0])
         return []
 
-    def query_box(self, ra_hours, dec_degs, width_arcmins, height_arcmins=None,
-                  constraints=None, limit=None):
+    def query_box(self, ra_hours: float, dec_degs: float, width_arcmins: float,
+                  height_arcmins: float = None,
+                  constraints: Optional[TDict[str, str]] = None,
+                  limit: Optional[int] = None) -> TList[CatalogSource]:
         """
         Return VizieR catalog objects within the specified rectangular region
 
-        :param float ra_hours: right ascension of region center in hours
-        :param float dec_degs: declination of region center in degrees
-        :param float width_arcmins: width of region in arcminutes
-        :param float height_arcmins: height of region in arcminutes; defaults
-            to `width`
-        :param dict constraints: optional constraints on the column values
-        :param int limit: maximum number of rows to return
+        :param ra_hours: right ascension of region center in hours
+        :param dec_degs: declination of region center in degrees
+        :param width_arcmins: width of region in arcminutes
+        :param height_arcmins: optional height of region in arcminutes; defaults
+            to `width_arcmins`
+        :param constraints: optional constraints on the column values
+        :param limit: maximum number of rows to return
 
-        :return: list of catalog objects
-        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
+        :return: list of catalog objects within the specified rectangular region
         """
         return self.query_region(
             ra_hours, dec_degs, constraints, limit,
             width=width_arcmins*arcmin,
             height=(height_arcmins if height_arcmins else width_arcmins)*arcmin)
 
-    def query_circ(self, ra_hours, dec_degs, radius_arcmins, constraints=None,
-                   limit=None):
+    def query_circ(self, ra_hours: float, dec_degs: float,
+                   radius_arcmins: float,
+                   constraints: Optional[TDict[str, str]] = None,
+                   limit: Optional[int] = None) -> TList[CatalogSource]:
         """
         Return catalog objects within the specified circular region
 
-        :param float ra_hours: right ascension of region center in hours
-        :param float dec_degs: declination of region center in degrees
-        :param float radius_arcmins: region radius in arcminutes
-        :param dict constraints: optional constraints on the column values
-        :param int limit: maximum number of rows to return
+        :param ra_hours: right ascension of region center in hours
+        :param dec_degs: declination of region center in degrees
+        :param radius_arcmins: region radius in arcminutes
+        :param constraints: optional constraints on the column values
+        :param limit: maximum number of rows to return
 
-        :return: list of catalog objects
-        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
+        :return: list of catalog objects within the specified circular region
         """
         return self.query_region(
             ra_hours, dec_degs, constraints, limit,

@@ -122,28 +122,37 @@ if __name__ == '__main__':
         url += 'api/v{}/'.format(args.api_version)
     url += args.resource
     print('\n{} {}'.format(method, url), file=sys.stderr)
-    if headers:
-        print('\n'.join('{}: {}'.format(h, v) for h, v in headers.items()),
-              file=sys.stderr)
-    if data and headers.get('Content-Type') == 'application/json':
-        print(data, file=sys.stderr)
 
     params = dict(item.split('=', 1) for item in args.params)
-    files = None
+    for name, val in params.items():
+        try:
+            params[name] = json.loads(val)
+        except ValueError:
+            pass
+    files = json_data = None
     if method not in ('GET', 'HEAD', 'OPTIONS') and params:
-        # For requests other than GET, we must pass parameters form-encoded
-        # in request body
+        # For requests other than GET, we must pass parameters as JSON
         if data:
             # Also passing raw data; use multipart/form-data, guess filename
             # from args
             files = {'data': (params.get('name', 'data'), data,
                               'application/octet-stream')}
-        params, data = None, params
+        params, data, json_data = None, None, params
+        # headers['Content-Type'] = 'application/json'
+    if headers:
+        print('\n'.join('{}: {}'.format(h, v) for h, v in headers.items()),
+              file=sys.stderr)
+    if params:
+        print(params, file=sys.stderr)
+    if json_data:
+        print(json.dumps(json_data), file=sys.stderr)
+    if data and headers.get('Content-Type') == 'application/json':
+        print(json.dumps(data), file=sys.stderr)
 
     warnings.filterwarnings('ignore', 'Unverified HTTPS request is being made')
     r = requests.request(
         method, url, verify=False, params=params, headers=headers, data=data,
-        files=files, auth=auth)
+        json=json_data, files=files, auth=auth)
 
     print('\nHTTP {:d} - {}'.format(
         r.status_code,

@@ -9,7 +9,6 @@ from typing import Optional
 import requests
 
 from . import OAuthServerPluginBase, OAuthToken
-from ..models.user import UserProfile
 
 
 class GoogleOAuthPlugin(OAuthServerPluginBase):
@@ -52,7 +51,7 @@ class GoogleOAuthPlugin(OAuthServerPluginBase):
             client_id=client_id,
             client_secret=client_secret)
 
-    def get_user(self, token: OAuthToken) -> UserProfile:
+    def get_user(self, token: OAuthToken) -> dict:
         """
         Return the user's Google profile given the access token
 
@@ -62,7 +61,7 @@ class GoogleOAuthPlugin(OAuthServerPluginBase):
         """
         # Decode the access token (which is a JWT) and extract the email
         s = token.access[:token.access.rfind('.')]
-        s = base64.decodebytes(s + '='*((4 - len(s) % 4) % 4))
+        s = base64.decodebytes(s.encode('ascii') + b'='*((4 - len(s) % 4) % 4))
 
         # Decode header
         i = 1
@@ -90,9 +89,7 @@ class GoogleOAuthPlugin(OAuthServerPluginBase):
                 'Authorization': 'Bearer {}'.format(token.access),
             }).json()
 
-        pf = UserProfile(
+        return dict(
             id=user['email'],
             email=user['email'],
         )
-
-        return pf

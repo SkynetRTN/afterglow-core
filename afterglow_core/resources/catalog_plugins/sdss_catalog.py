@@ -2,12 +2,13 @@
 Afterglow Core: SDSS catalog
 """
 
-from __future__ import absolute_import, division, print_function
+from typing import Dict as TDict, List as TList, Optional
 
 from astropy.coordinates import SkyCoord
 from astropy.units import deg, hour
 from astroquery.sdss import SDSS
 
+from ...models import CatalogSource
 from .vizier_catalogs import VizierCatalog
 
 
@@ -42,14 +43,13 @@ class SDSSCatalog(VizierCatalog):
         'I': 'i - 0.378*(i - z) - 0.3974'
     }
 
-    def query_objects(self, names):
+    def query_objects(self, names: TList[str]) -> TList[CatalogSource]:
         """
         Return a list of SDSS catalog objects with the specified names
 
-        :param list[str] names: object names
+        :param names: object names
 
-        :return: list of catalog objects
-        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
+        :return: list of catalog objects with the specified names
         """
         sdss = SDSS()
         rows = []
@@ -59,19 +59,20 @@ class SDSSCatalog(VizierCatalog):
                 cache=False)[0])
         return self.table_to_sources(rows)
 
-    def query_region(self, ra_hours, dec_degs, constraints=None, limit=None,
-                     **region):
+    def query_region(self, ra_hours: float, dec_degs: float,
+                     constraints: Optional[TDict[str, str]] = None,
+                     limit: Optional[int] = None,
+                     **region) -> TList[CatalogSource]:
         """
         Return SDSS catalog objects within the specified rectangular region
 
-        :param float ra_hours: right ascension of region center in hours
-        :param float dec_degs: declination of region center in degrees
-        :param dict constraints: optional constraints on the column values
-        :param int limit: maximum number of rows to return
-        :param dict region: keywords defining the query region
+        :param ra_hours: right ascension of region center in hours
+        :param dec_degs: declination of region center in degrees
+        :param constraints: optional constraints on the column values
+        :param limit: maximum number of rows to return
+        :param region: keywords defining the query region
 
-        :return: list of catalog objects
-        :rtype: list[afterglow_core.models.field_cal.CatalogSource]
+        :return: list of catalog objects within the specified rectangular region
         """
         sdss = SDSS()
         return self.table_to_sources(sdss.query_region(

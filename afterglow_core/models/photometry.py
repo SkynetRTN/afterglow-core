@@ -1,10 +1,13 @@
 """
-Afterglow Core: photometry data structures
+Afterglow Core: photometry data models
 """
 
-from marshmallow.fields import String
+from typing import Optional
 
-from . import AfterglowSchema, Float, Resource
+from marshmallow.fields import Float, String
+import numpy
+
+from ..schemas import AfterglowSchema
 from .source_extraction import SourceExtractionData
 
 
@@ -15,8 +18,8 @@ __all__ = [
 
 
 class Mag(AfterglowSchema):
-    value = Float()
-    error = Float()
+    value = Float()  # type: float
+    error = Float()  # type: float
 
 
 class IPhotometry(AfterglowSchema):
@@ -52,50 +55,55 @@ class PhotSettings(AfterglowSchema):
     zero_point = Float(default=0)  # type: float
 
 
-class PhotometryData(SourceExtractionData, IPhotometry):
+class PhotometryData(SourceExtractionData, IPhotometry, IAperture):
     """
     Description of object returned by batch photometry
     """
-    @classmethod
-    def from_phot_table(cls, row, source, **kwargs):
+    def __init__(self, source: Optional[SourceExtractionData] = None,
+                 row: Optional[numpy.void] = None,
+                 zero_point: float = 0, **kwargs):
         """
         Create photometry data class instance from a source extraction object
         and a photometry table row
 
-        :param numpy.void row: photometry table row
-        :param SourceExtractionData source: input source object
-        :param kwargs: see :meth:`from_source_table`; extra kwargs:
-            - zero_point: apply the optional zero point to instrumental mag
+        :param source: input source object
+        :param row: photometry table row
+        :param zero_point: apply the optional zero point to instrumental mag
+        :param kwargs: see :class:`SourceExtractionData`
         """
-        m0 = kwargs.pop('zero_point', 0)
+        # Defaults from SourceExtractionData
+        super().__init__(source, **kwargs)
 
-        data = cls(source, **kwargs)
+        if row is not None:
+            # Override certain SourceExtractionData fields
+            # with photometry-specific values
+            self.x = row['x']
+            self.y = row['y']
+            self.flux = row['flux']
 
-        data.x = row['x']
-        data.y = row['y']
-        data.flux = row['flux']
-        data.flux_error = row['flux_err']
-        data.mag = row['mag'] + m0
-        data.mag_error = row['mag_err']
+            # IPhotometry
+            self.flux = row['flux']
+            self.flux_error = row['flux_err']
+            self.mag = row['mag'] + zero_point
+            self.mag_error = row['mag_err']
 
-        if row['aper_a']:
-            data.aper_a = row['aper_a']
-            data.aper_b = row['aper_b']
-            data.aper_theta = row['aper_theta']
-            data.annulus_a_in = row['aper_a_in']
-            data.annulus_b_in = \
-                row['aper_a_in']*row['aper_b_out']/row['aper_a_out']
-            data.annulus_theta_in = data.annulus_theta_out = \
-                row['aper_theta_out']
-            data.annulus_a_out = row['aper_a_out']
-            data.annulus_b_out = row['aper_b_out']
-
-        return data
+            # IAperture
+            if row['aper_a']:
+                self.aper_a = row['aper_a']
+                self.aper_b = row['aper_b']
+                self.aper_theta = row['aper_theta']
+                self.annulus_a_in = row['aper_a_in']
+                self.annulus_b_in = \
+                    row['aper_a_in']*row['aper_b_out']/row['aper_a_out']
+                self.annulus_theta_in = self.annulus_theta_out = \
+                    row['aper_theta_out']
+                self.annulus_a_out = row['aper_a_out']
+                self.annulus_b_out = row['aper_b_out']
 
 
-class Photometry(Resource):
+class Photometry(AfterglowSchema):
     """
-    JSON-serializable photometry results
+    Photometry results
 
     Attributes::
         flux: flux within the aperture in ADUs; mean background within the
