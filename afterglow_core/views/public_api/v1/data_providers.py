@@ -123,15 +123,43 @@ def data_providers_assets(id: Union[int, str]) -> Response:
           defines a collection asset to search in; data provider must be
           searchable
 
-    POST /data-providers/[id]/assets?path=...[&data_file_id=...]
-        - create a new non-collection asset at the given path from data file or
-          a collection asset if data_file_id is omitted; data provider must be
-          writeable
+    POST /data-providers/[id]/assets?path=
+        - create a new collection asset at the given path if request body
+          is empty; otherwise, create a non-collection asset from a data file
+          uploaded as multipart/form-data; data provider must be writeable
 
-    PUT /data-providers/[id]/assets?path=...&data_file_id=...
+    POST /data-providers/[id]/assets?path=...&data_file_id=...[&fmt=...]
+        - create a new non-collection asset at the given path from data file
+          using the specified file format (by default, FITS); data provider must
+          be writeable; if exporting in formats other than FITS, "fmt" must
+          be supported by Pillow
+
+    POST /data-providers/[id]/assets?path=...&group_id=...[&fmt=...&mode=...]
+        - create a new non-collection asset at the given path from data file
+          group using the specified file format (by default, FITS); data
+          provider must be writeable; if exporting in formats other than FITS,
+          "fmt" must be supported by Pillow, and "mode" is required and must be
+          one of the supported modes (see
+          https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
+
+    PUT /data-providers/[id]/assets?path=...
         - update an existing non-collection asset at the given path by
-          overwriting it with the given data file; data provider must be
-          writeable
+          overwriting it with the data uploaded as multipart/form-data; data
+          provider must be writeable
+
+    PUT /data-providers/[id]/assets?path=...&data_file_id=...[&fmt=...]
+        - update an existing non-collection asset at the given path by
+          overwriting it with the given data file in the specified format
+          (by default, FITS); data provider must be writeable
+
+    PUT /data-providers/[id]/assets?path=...&group_id=...[&fmt=...&mode=...]
+        - update an existing non-collection asset at the given path by
+          overwriting it with the given data file group combined into a single
+          file in the specified format (by default, FITS); data provider must
+          be writeable; if exporting in formats other than FITS, "fmt" must be
+          supported by Pillow, and "mode" is required and must be one of
+          the supported modes (see
+          https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
 
     DELETE /data-providers/[id]/assets?path=...[&force]
         - delete the existing asset at the given path; data provider must be
@@ -190,12 +218,32 @@ def data_providers_assets(id: Union[int, str]) -> Response:
     # Get data file; optional for POST
     data = None
     if request.method in ('POST', 'PUT'):
+        group_id = params.pop('group_id', None)
         data_file_id = params.pop('data_file_id', None)
-        if data_file_id is not None:
+        fmt = params.pop('fmt', 'FITS')
+        mode = params.pop('mode', None)
+        if group_id is not None:
+            # Exporting data file group using the given format and mode
+            if data_file_id is not None:
+                raise errors.ValidationError(
+                    'data_file_id',
+                    '"group_id" and "data_file_id" are mutually exclusive')
+            from .data_files import get_data_file_group_bytes
+            data = get_data_file_group_bytes(
+                current_user.id, group_id, fmt=fmt, mode=mode)
+        elif data_file_id is not None:
+            # Exporting single data file in the given format
             from .data_files import get_data_file_bytes
-            data = get_data_file_bytes(current_user.id, data_file_id)
-        elif request.method == 'PUT':
-            raise errors.MissingFieldError(field='data_file_id')
+            data = get_data_file_bytes(current_user.id, data_file_id, fmt=fmt)
+        else:
+            # Creating collection asset or creating/updating from uploaded data;
+            # in the second case, use only the first multipart/form-data file
+            try:
+                data = list(request.files.values())[0].read()
+            except (AttributeError, IndexError):
+                data = None
+            if data is None and request.method == 'PUT':
+                raise errors.MissingFieldError(field='data_file_id|group_id')
 
         # Check quota
         quota = provider.quota
@@ -203,6 +251,8 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             usage, size = provider.usage, len(data) if data is not None else 0
             if usage is None:
                 usage = 0
+            if request.method == 'PUT':
+                usage -= provider.get_asset(path).metadata.get('size', 0)
             if usage + size > quota:
                 raise QuotaExceededError(quota=quota, usage=usage, size=size)
 

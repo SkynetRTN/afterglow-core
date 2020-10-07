@@ -28,7 +28,8 @@ from ..models import DataFile, Session
 from ..errors.data_file import (
     UnknownDataFileError, CannotCreateDataFileDirError,
     CannotImportFromCollectionAssetError, UnknownSessionError,
-    DuplicateSessionNameError)
+    DuplicateSessionNameError, UnrecognizedDataFormatError,
+    UnknownDataFileGroupError, DataFileExportError)
 from ..errors.data_provider import UnknownDataProviderError
 from . import data_providers
 from .base import DateTime, JSONType
@@ -58,15 +59,24 @@ except ImportError:
 
 
 __all__ = [
-    'DataFileBase',
-    'data_files_engine', 'data_files_engine_lock', 'get_data_file_db',
-    'create_data_file', 'save_data_file', 'get_data_file_data',
-    'get_data_file_bytes', 'get_data_file_fits', 'get_data_file_path',
-    'get_exp_length', 'get_gain', 'get_image_time', 'get_root', 'get_subframe',
-    'import_data_file', 'convert_exif_field', 'get_data_file',
-    'query_data_files', 'import_data_files', 'update_data_file',
-    'delete_data_file', 'get_session', 'query_sessions', 'create_session',
-    'update_session', 'delete_session',
+    # Data file db
+    'DataFileBase', 'data_files_engine',
+    'data_files_engine_lock', 'get_data_file_db',
+    # Paths
+    'get_root', 'get_data_file_path',
+    # Metadata
+    'convert_exif_field', 'get_exp_length', 'get_gain', 'get_image_time',
+    # Data/metadata retrieval
+    'get_data_file_bytes', 'get_data_file_data', 'get_data_file_fits',
+    'get_data_file_group_bytes', 'get_subframe',
+    # Data file creation
+    'create_data_file', 'import_data_file', 'save_data_file',
+    # API endpoint interface
+    'delete_data_file', 'get_data_file', 'import_data_files',
+    'query_data_files', 'update_data_file',
+    # Sessions
+    'get_session', 'query_sessions', 'create_session', 'update_session',
+    'delete_session',
 ]
 
 
@@ -461,6 +471,8 @@ def import_data_file(adb, root: str, provider_id: Optional[str],
                                 pass
                     hdu.header.update(h)
 
+                asset_metadata['type'] = 'FITS'
+
                 all_data_files.append(create_data_file(
                     adb, fullname, root, hdu.data, hdu.header, provider_id,
                     asset_path, asset_metadata, layer, duplicates, session_id,
@@ -478,8 +490,11 @@ def import_data_file(adb, root: str, provider_id: Optional[str],
             try:
                 fp.seek(0)
                 with PILImage.open(fp) as im:
+                    asset_metadata['type'] = im.format
+                    asset_metadata['image_mode'] = im.mode
                     width, height = im.size
                     band_names = im.getbands()
+                    asset_metadata['layers'] = len(band_names)
                     if len(band_names) > 1:
                         bands = im.split()
                     else:
@@ -492,7 +507,7 @@ def import_data_file(adb, root: str, provider_id: Optional[str],
                     if exifread is None:
                         exif = {
                             ExifTags.TAGS[key]: convert_exif_field(val)
-                            for key, val in getattr(im, '_getexif')()
+                            for key, val in im.getexif().items()
                         }
             except Exception:
                 pass
@@ -508,12 +523,21 @@ def import_data_file(adb, root: str, provider_id: Optional[str],
                     im = rawpy.imread(fp)
                 finally:
                     sys.stderr = save_stderr
-                r, g, b = numpy.rollaxis(im.postprocess(output_bps=16), 2)
+                try:
+                    asset_metadata['type'] = str(im.raw_type)
+                    asset_metadata['image_mode'] = im.color_desc.decode('ascii')
+                    asset_metadata['layers'] = im.num_colors
+                    r, g, b = numpy.rollaxis(im.postprocess(output_bps=16), 2)
+                finally:
+                    im.close()
                 channels = [('R', r), ('G', g), ('B', b)]
             except Exception:
                 pass
 
-        if channels and exifread is not None:
+        if not channels:
+            raise UnrecognizedDataFormatError()
+
+        if exifread is not None:
             # noinspection PyBroadException
             try:
                 # Use ExifRead when available; remove "EXIF " etc. prefixes
@@ -546,10 +570,10 @@ def import_data_file(adb, root: str, provider_id: Optional[str],
                         t = None
             if t:
                 try:
-                    t = datetime.strptime(str(t), '%Y:%m:%d %H:%M:%S')
+                    t = datetime.strptime(str(t), '%Y:%m:%d %H:%M:%S.%f')
                 except ValueError:
                     try:
-                        t = datetime.strptime(str(t), '%Y:%m:%d %H:%M:%S.%f')
+                        t = datetime.strptime(str(t), '%Y:%m:%d %H:%M:%S')
                     except ValueError:
                         t = None
             if t:
@@ -777,20 +801,120 @@ def get_data_file_data(user_id: Optional[int], file_id: int) \
     return data, fits[0].header
 
 
-def get_data_file_bytes(user_id: Optional[int], file_id: int) -> bytes:
+def get_data_file_uint8(user_id: Optional[int], file_id: int) -> numpy.ndarray:
+    """
+    Return image file data array scaled to 8-bit unsigned integer format
+    suitable for exporting to PNG, JPEG, etc.
+
+    :param user_id: current user ID (None if user auth is disabled)
+    :param file_id: data file ID
+
+    :return: uint8 image data; masked values are set to 0
+    """
+    data = get_data_file_data(user_id, file_id)[0]
+    if data.dtype.fields is not None:
+        raise DataFileExportError(reason='Cannot export non-image data files')
+    mn, mx = data.min(), data.max()
+    if mn >= mx:
+        return numpy.zeros(data.shape, numpy.uint8)
+    data = ((data - mn)/(mx - mn)*255 + 0.5).astype(numpy.uint8)
+    if isinstance(data, numpy.ma.MaskedArray) and data.mask is not None:
+        data = numpy.where(data.mask, 0, data.data)
+    return data
+
+
+def get_data_file_bytes(user_id: Optional[int], file_id: int,
+                        fmt: str = 'FITS') -> bytes:
     """
     Return FITS file data for data file with the given ID
 
     :param user_id: current user ID (None if user auth is disabled)
     :param file_id: data file ID
+    :param fmt: image export format: FITS (default) or any supported by Pillow
 
     :return: data file bytes
     """
+    if fmt == 'FITS':
+        try:
+            with open(get_data_file_path(user_id, file_id), 'rb') as f:
+                return f.read()
+        except Exception:
+            raise UnknownDataFileError(id=file_id)
+
+    if PILImage is None:
+        raise DataFileExportError(reason='Server does not support image export')
+
+    # Export image via Pillow using the specified mode
+    data = get_data_file_uint8(user_id, file_id)
+    buf = BytesIO()
     try:
-        with open(get_data_file_path(user_id, file_id), 'rb') as f:
-            return f.read()
-    except Exception:
-        raise UnknownDataFileError(id=file_id)
+        PILImage.fromarray(data).save(buf, format=fmt)
+    except Exception as e:
+        raise DataFileExportError(reason=str(e))
+    return buf.getvalue()
+
+
+def get_data_file_group_bytes(user_id: Optional[int], group_id: str,
+                              fmt: str = 'FITS',
+                              mode: Optional[str] = None) -> bytes:
+    """
+    Return data combined from a data file group in the original format, suitable
+    for exporting to data provider
+
+    :param user_id: current user ID (None if user auth is disabled)
+    :param group_id: data file group ID
+    :param fmt: image export format: FITS (default) or any supported by Pillow
+    :param mode: for non-FITS formats, Pillow image mode
+        (https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
+
+    :return: data file bytes
+    """
+    data_files = [(df.id, df.type)
+                  for df in get_data_file_db(user_id).query(DbDataFile)
+                  .filter(DbDataFile.group_id == group_id)
+                  .order_by(DbDataFile.group_order)]
+    if not data_files:
+        raise UnknownDataFileGroupError(id=group_id)
+
+    buf = BytesIO()
+    if fmt == 'FITS':
+        # Assemble individual single-HDU data files into a single multi-HDU FITS
+        fits = pyfits.HDUList()
+        for file_id, hdu_type in data_files:
+            with open(get_data_file_path(user_id, file_id), 'rb') as f:
+                data = f.read()
+            if hdu_type == 'image':
+                fits.append(pyfits.ImageHDU.fromstring(data))
+            else:
+                fits.append(pyfits.BinTableHDU.fromstring(data))
+        fits.writeto(buf, output_verify='silentfix')
+    elif PILImage is None:
+        raise DataFileExportError(reason='Server does not support image export')
+    else:
+        # Export image via Pillow using the specified mode
+        if not mode:
+            raise errors.MissingFieldError(field='pixel_format')
+        if mode not in PILImage.MODES:
+            raise DataFileExportError(
+                reason='Unsupported image export mode "{}"'.format(mode))
+        if any(hdu_type != 'image' for _, hdu_type in data_files):
+            raise DataFileExportError(
+                reason='Cannot export non-image data files')
+        try:
+            if len(data_files) > 1:
+                im = PILImage.merge(
+                    mode,
+                    [PILImage.fromarray(get_data_file_uint8(user_id, file_id))
+                     for file_id, _ in data_files])
+            else:
+                im = PILImage.fromarray(get_data_file_uint8(
+                    user_id, data_files[0][0]))
+            im.save(buf, format=fmt)
+        except errors.AfterglowError:
+            raise
+        except Exception as e:
+            raise DataFileExportError(reason=str(e))
+    return buf.getvalue()
 
 
 def get_image_time(hdr: pyfits.Header) -> Optional[datetime]:
