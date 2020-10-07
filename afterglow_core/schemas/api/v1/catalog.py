@@ -2,6 +2,8 @@
 Afterglow Core: data provider schemas
 """
 
+from typing import Dict as TDict
+
 from marshmallow.fields import Dict, Integer, List, Nested, String
 
 from ... import AfterglowSchema, Resource
@@ -48,11 +50,11 @@ class ICatalogSourceSchema(AfterglowSchema):
     """
     Generic catalog source definition without astrometry
     """
-    id = String()  # type: str
-    file_id = Integer()  # type: int
-    label = String()  # type: str
-    catalog_name = String()  # type: str
-    mags = Dict(keys=String, values=Nested(MagSchema))  # type: dict
+    id: str = String()
+    file_id: int = Integer()
+    label: str = String()
+    catalog_name: str = String()
+    mags: TDict[str, MagSchema] = Dict(keys=String, values=Nested(MagSchema))
 
 
 class CatalogSourceSchema(ICatalogSourceSchema, IAstrometrySchema,

@@ -105,14 +105,14 @@ def get_auto_crop(user_id: int, file_ids: TList[int]) \
 
 
 class CroppingSettings(AfterglowSchema):
-    left = Integer(default=0)  # type: int
-    right = Integer(default=0)  # type: int
-    top = Integer(default=0)  # type: int
-    bottom = Integer(default=0)  # type: int
+    left: int = Integer(default=0)
+    right: int = Integer(default=0)
+    top: int = Integer(default=0)
+    bottom: int = Integer(default=0)
 
 
 class CroppingJobResult(JobResult):
-    file_ids = List(Integer(), default=[])  # type: TList[int]
+    file_ids: TList[int] = List(Integer(), default=[])
 
 
 class CroppingJob(Job):
@@ -122,10 +122,10 @@ class CroppingJob(Job):
     type = 'cropping'
     description = 'Crop Images'
 
-    result = Nested(CroppingJobResult, default={})  # type: CroppingJobResult
-    file_ids = List(Integer(), default=[])  # type: TList[int]
-    settings = Nested(CroppingSettings, default={})  # type: CroppingSettings
-    inplace = Boolean(default=False)  # type: bool
+    result: CroppingJobResult = Nested(CroppingJobResult, default={})
+    file_ids: TList[int] = List(Integer(), default=[])
+    settings: CroppingSettings = Nested(CroppingSettings, default={})
+    inplace: bool = Boolean(default=False)
 
     def run(self):
         if not getattr(self, 'file_ids'):

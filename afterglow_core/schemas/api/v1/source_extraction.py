@@ -16,34 +16,34 @@ __all__ = [
 
 
 class ISourceMetaSchema(AfterglowSchema):
-    file_id = Integer()  # type: int
-    time = DateTime()  # type: datetime
-    filter = String()  # type: str
-    telescope = String()  # type: str
-    exp_length = Float()  # type: float
+    file_id: int = Integer()
+    time: datetime = DateTime()
+    filter: str = String()
+    telescope: str = String()
+    exp_length: float = Float()
 
 
 class IAstrometrySchema(AfterglowSchema):
-    ra_hours = Float()  # type: float
-    dec_degs = Float()  # type: float
-    pm_sky = Float()  # type: float
-    pm_pos_angle_sky = Float()  # type: float
-    x = Float()  # type: float
-    y = Float()  # type: float
-    pm_pixel = Float()  # type: float
-    pm_pos_angle_pixel = Float()  # type: float
-    pm_epoch = DateTime()  # type: datetime
-    flux = Float()  # type: float
+    ra_hours: float = Float()
+    dec_degs: float = Float()
+    pm_sky: float = Float()
+    pm_pos_angle_sky: float = Float()
+    x: float = Float()
+    y: float = Float()
+    pm_pixel: float = Float()
+    pm_pos_angle_pixel: float = Float()
+    pm_epoch: datetime = DateTime()
+    flux: float = Float()
 
 
 class IFwhmSchema(AfterglowSchema):
-    fwhm_x = Float()  # type: float
-    fwhm_y = Float()  # type: float
-    theta = Float()  # type: float
+    fwhm_x: float = Float()
+    fwhm_y: float = Float()
+    theta: float = Float()
 
 
 class ISourceIdSchema(AfterglowSchema):
-    id = String()  # type: str
+    id: str = String()
 
 
 class SourceExtractionDataSchema(ISourceMetaSchema, IAstrometrySchema,

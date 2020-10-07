@@ -3,7 +3,7 @@ Afterglow Core: common job schema defs
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import List as TList, Optional
 
 from marshmallow.fields import Integer, List, Nested, String
 
@@ -26,10 +26,10 @@ class JobStateSchema(AfterglowSchema):
         completed_on: time of completion or cancellation
         progress: current job progress, a number from 0 to 100
     """
-    status = String(default='in_progress')  # type: str
-    created_on = DateTime()  # type: datetime
-    completed_on = DateTime()  # type: datetime
-    progress = Float(default=0)  # type: float
+    status: str = String(default='in_progress')
+    created_on: datetime = DateTime()
+    completed_on: datetime = DateTime()
+    progress: float = Float(default=0)
 
 
 class JobResultSchema(AfterglowSchema):
@@ -40,8 +40,8 @@ class JobResultSchema(AfterglowSchema):
         errors: list of error messages
         warnings: list of warnings issued by :meth:`Job.run`
     """
-    errors = List(String(), default=[])  # type: list
-    warnings = List(String(), default=[])  # type: list
+    errors: TList[str] = List(String(), default=[])
+    warnings: TList[str] = List(String(), default=[])
 
 
 class JobSchema(Resource):
@@ -61,9 +61,9 @@ class JobSchema(Resource):
     __polymorphic_on__ = 'type'
     __get_view__ = 'jobs'
 
-    id = Integer(default=None)  # type: int
-    type = String()  # type: str
-    user_id = Integer(default=None)  # type: int
-    session_id = Integer(default=None)  # type: Optional[int]
-    state = Nested(JobStateSchema, default={})  # type: JobStateSchema
-    result = Nested(JobResultSchema, default={})  # type: JobResultSchema
+    id: int = Integer(default=None)
+    type: str = String()
+    user_id: int = Integer(default=None)
+    session_id: Optional[int] = Integer(default=None)
+    state: JobStateSchema = Nested(JobStateSchema, default={})
+    result: JobResultSchema = Nested(JobResultSchema, default={})

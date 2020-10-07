@@ -304,25 +304,24 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
 
 
 class CatalogQueryJobResult(JobResult):
-    data = List(Nested(CatalogSource),
-                default=[])  # type: TList[CatalogSource]
+    data: TList[CatalogSource] = List(Nested(CatalogSource), default=[])
 
 
 class CatalogQueryJob(Job):
     type = 'catalog_query'
     description = 'Catalog Query'
 
-    result = Nested(
-        CatalogQueryJobResult, default={})  # type: CatalogQueryJobResult
-    catalogs = List(String(), default=[])  # type: TList[str]
-    ra_hours = Float()  # type: float
-    dec_degs = Float()  # type: float
-    radius_arcmins = Float()  # type: float
-    width_arcmins = Float()  # type: float
-    height_arcmins = Float()  # type: float
-    file_ids = List(Integer())  # type: TList[int]
-    constraints = Dict(keys=String, values=String)  # type: dict
-    source_ids = List(String())  # type: TList[str]
+    result: CatalogQueryJobResult = Nested(
+        CatalogQueryJobResult, default={})
+    catalogs: TList[str] = List(String(), default=[])
+    ra_hours: float = Float()
+    dec_degs: float = Float()
+    radius_arcmins: float = Float()
+    width_arcmins: float = Float()
+    height_arcmins: float = Float()
+    file_ids: TList[int] = List(Integer())
+    constraints: TDict[str, str] = Dict(keys=String, values=String)
+    source_ids: TList[str] = List(String())
 
     def run(self):
         self.result.data = run_catalog_query_job(

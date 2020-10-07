@@ -20,14 +20,14 @@ __all__ = ['BatchImportJob']
 
 
 class BatchImportSettings(AfterglowSchema):
-    provider_id = String()  # type: str
-    path = String()  # type: str
-    duplicates = String(default='ignore')  # type: str
-    recurse = Boolean(default=False)  # type: bool
+    provider_id: str = String()
+    path: str = String()
+    duplicates: str = String(default='ignore')
+    recurse: bool = Boolean(default=False)
 
 
 class BatchImportJobResult(JobResult):
-    file_ids = List(Integer(), default=[])  # type: TList[int]
+    file_ids: TList[int] = List(Integer(), default=[])
 
 
 class BatchImportJob(Job):
@@ -37,12 +37,10 @@ class BatchImportJob(Job):
     type = 'batch_import'
     description = 'Batch Data File Import'
 
-    result = Nested(
-        BatchImportJobResult, default={})  # type: BatchImportJobResult
-    settings = List(Nested(
-        BatchImportSettings, default={}),
-        default=[])  # type: TList[BatchImportSettings]
-    session_id = Integer(default=None)  # type: int
+    result: BatchImportJobResult = Nested(BatchImportJobResult, default={})
+    settings: TList[BatchImportSettings] = List(Nested(
+        BatchImportSettings, default={}), default=[])
+    session_id: int = Integer(default=None)
 
     def run(self):
         adb = get_data_file_db(self.user_id)

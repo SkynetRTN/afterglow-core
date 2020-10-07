@@ -59,8 +59,8 @@ class LocalDiskDataProvider(DataProvider):
     if rawpy is not None:
         search_fields['type']['enum'].append('RAW')
 
-    peruser = False  # type: bool
-    root = '.'  # type: str
+    peruser: bool = False
+    root: str = '.'
 
     @property
     def usage(self) -> int:

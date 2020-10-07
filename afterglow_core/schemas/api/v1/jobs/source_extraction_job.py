@@ -19,42 +19,39 @@ __all__ = [
 
 
 class SourceExtractionSettingsSchema(AfterglowSchema):
-    x = Integer(default=1)  # type: int
-    y = Integer(default=1)  # type: int
-    width = Integer(default=0)  # type: int
-    height = Integer(default=0)  # type: int
-    threshold = Float(default=2.5)  # type: float
-    bk_size = Float(default=1/64)  # type: float
-    bk_filter_size = Integer(default=3)  # type: int
-    fwhm = Float(default=0)  # type: float
-    ratio = Float(default=1)  # type: float
-    theta = Float(default=0)  # type: float
-    min_pixels = Integer(default=3)  # type: int
-    deblend = Boolean(default=False)  # type: bool
-    deblend_levels = Integer(default=32)  # type: int
-    deblend_contrast = Float(default=0.005)  # type: float
-    gain = Float(default=None)  # type: float
-    clean = Float(default=1)  # type: float
-    centroid = Boolean(default=True)  # type: bool
-    limit = Integer(default=None)  # type: int
+    x: int = Integer(default=1)
+    y: int = Integer(default=1)
+    width: int = Integer(default=0)
+    height: int = Integer(default=0)
+    threshold: float = Float(default=2.5)
+    bk_size: float = Float(default=1/64)
+    bk_filter_size: int = Integer(default=3)
+    fwhm: float = Float(default=0)
+    ratio: float = Float(default=1)
+    theta: float = Float(default=0)
+    min_pixels: int = Integer(default=3)
+    deblend: bool = Boolean(default=False)
+    deblend_levels: int = Integer(default=32)
+    deblend_contrast: float = Float(default=0.005)
+    gain: float = Float(default=None)
+    clean: float = Float(default=1)
+    centroid: bool = Boolean(default=True)
+    limit: int = Integer(default=None)
 
 
 class SourceExtractionJobResultSchema(JobResultSchema):
-    data = List(Nested(SourceExtractionDataSchema),
-                default=[])  # type: TList[SourceExtractionDataSchema]
+    data: TList[SourceExtractionDataSchema] = List(
+        Nested(SourceExtractionDataSchema), default=[])
 
 
 class SourceExtractionJobSchema(JobSchema):
     type = 'source_extraction'
 
-    result = Nested(
-        SourceExtractionJobResultSchema
-    )  # type: SourceExtractionJobResultSchema
-    file_ids = List(Integer(), default=[])  # type: TList[int]
-    source_extraction_settings = Nested(
-        SourceExtractionSettingsSchema,
-        default={})  # type: SourceExtractionSettingsSchema
-    merge_sources = Boolean(default=True)  # type: bool
-    source_merge_settings = Nested(
-        SourceMergeSettingsSchema,
-        default={})  # type: SourceMergeSettingsSchema
+    result: SourceExtractionJobResultSchema = Nested(
+        SourceExtractionJobResultSchema)
+    file_ids: TList[int] = List(Integer(), default=[])
+    source_extraction_settings: SourceExtractionSettingsSchema = Nested(
+        SourceExtractionSettingsSchema, default={})
+    merge_sources: bool = Boolean(default=True)
+    source_merge_settings: SourceMergeSettingsSchema = Nested(
+        SourceMergeSettingsSchema, default={})

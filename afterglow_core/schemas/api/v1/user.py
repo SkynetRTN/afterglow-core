@@ -14,23 +14,22 @@ __all__ = ['RoleSchema', 'UserSchema']
 
 
 class RoleSchema(AfterglowSchema):
-    id = Integer()  # type: int
-    name = String()  # type: str
-    description = String()  # type: str
+    id: int = Integer()
+    name: str = String()
+    description: str = String()
 
 
 class UserSchema(Resource):
     __get_view__ = 'users'
 
-    id = Integer()  # type: int
-    username = String()  # type: str
-    email = String()  # type: str
-    first_name = String()  # type: str
-    last_name = String()  # type: str
-    birth_date = Date()  # type: date
-    active = Boolean()  # type: bool
-    created_at = DateTime()  # type: datetime
-    modified_at = DateTime()  # type: datetime
-    roles = List(
-        Nested(RoleSchema, only=['name']))  # type: ListType[RoleSchema]
-    settings = String()  # type: str
+    id: int = Integer()
+    username: str = String()
+    email: str = String()
+    first_name: str = String()
+    last_name: str = String()
+    birth_date: date = Date()
+    active: bool = Boolean()
+    created_at: datetime = DateTime()
+    modified_at: datetime = DateTime()
+    roles: ListType[RoleSchema] = List(Nested(RoleSchema, only=['name']))
+    settings: str = String()

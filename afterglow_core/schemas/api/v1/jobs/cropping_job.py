@@ -15,22 +15,22 @@ __all__ = ['CroppingSettingsSchema', 'CroppingJobResultSchema',
 
 
 class CroppingSettingsSchema(AfterglowSchema):
-    left = Integer(default=0)  # type: int
-    right = Integer(default=0)  # type: int
-    top = Integer(default=0)  # type: int
-    bottom = Integer(default=0)  # type: int
+    left: int = Integer(default=0)
+    right: int = Integer(default=0)
+    top: int = Integer(default=0)
+    bottom: int = Integer(default=0)
 
 
 class CroppingJobResultSchema(JobResultSchema):
-    file_ids = List(Integer(), default=[])  # type: TList[int]
+    file_ids: TList[int] = List(Integer(), default=[])
 
 
 class CroppingJobSchema(JobSchema):
     type = 'cropping'
 
-    result = Nested(
-        CroppingJobResultSchema, default={})  # type: CroppingJobResultSchema
-    file_ids = List(Integer(), default=[])  # type: TList[int]
-    settings = Nested(
-        CroppingSettingsSchema, default={})  # type: CroppingSettingsSchema
-    inplace = Boolean(default=False)  # type: bool
+    result: CroppingJobResultSchema = Nested(
+        CroppingJobResultSchema, default={})
+    file_ids: TList[int] = List(Integer(), default=[])
+    settings: CroppingSettingsSchema = Nested(
+        CroppingSettingsSchema, default={})
+    inplace: bool = Boolean(default=False)

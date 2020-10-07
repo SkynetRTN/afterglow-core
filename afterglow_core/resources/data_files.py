@@ -121,8 +121,8 @@ class DbSession(DataFileBase):
         String, CheckConstraint('data is null or length(data) <= 1048576'),
         nullable=True, server_default='')
 
-    data_files = relationship(
-        'DbDataFile', backref='session')  # type: TList[DbDataFile]
+    data_files: TList[DbDataFile] = relationship(
+        'DbDataFile', backref='session')
 
 
 def get_root(user_id: Optional[int]) -> str:

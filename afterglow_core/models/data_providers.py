@@ -27,10 +27,10 @@ class DataProviderAsset(AfterglowSchema):
         metadata: extra asset metadata (e.g. data format, image dimensions,
             etc.)
     """
-    name = String(default=None)  # type: str
-    collection = Boolean(default=False)  # type: bool
-    path = String(default=None)  # type: str
-    metadata = Dict(default={})  # type: TDict[str, Any]
+    name: str = String(default=None)
+    collection: bool = Boolean(default=False)
+    path: str = String(default=None)
+    metadata: TDict[str, Any] = Dict(default={})
 
 
 class DataProvider(AfterglowSchema):
@@ -112,21 +112,21 @@ class DataProvider(AfterglowSchema):
     """
     __polymorphic_on__ = 'name'
 
-    id = Integer(default=None)  # type: int
-    name = String(default=None)  # type: str
-    auth_methods = List(String(), default=None)  # type: Optional[TList[str]]
-    display_name = String(default=None)  # type: str
-    icon = String(default=None)  # type: str
-    description = String(default=None)  # type: str
-    columns = List(Dict(), default=[])  # type: TList[TDict[str, Any]]
-    sort_by = String(default=None)  # type: str
-    sort_asc = Boolean(default=True)  # type: bool
-    browseable = Boolean(default=False)  # type: bool
-    searchable = Boolean(default=False)  # type: bool
-    search_fields = Dict(default={})  # type: TDict[str, TDict[str, Any]]
-    readonly = Boolean(default=True)  # type: bool
-    quota = Integer(default=None)  # type: int
-    usage = Integer(default=None)  # type: int
+    id: int = Integer(default=None)
+    name: str = String(default=None)
+    auth_methods: Optional[TList[str]] = List(String(), default=None)
+    display_name: str = String(default=None)
+    icon: str = String(default=None)
+    description: str = String(default=None)
+    columns: TList[TDict[str, Any]] = List(Dict(), default=[])
+    sort_by: str = String(default=None)
+    sort_asc: bool = Boolean(default=True)
+    browseable: bool = Boolean(default=False)
+    searchable: bool = Boolean(default=False)
+    search_fields: TDict[str, TDict[str, Any]] = Dict(default={})
+    readonly: bool = Boolean(default=True)
+    quota: int = Integer(default=None)
+    usage: int = Integer(default=None)
 
     def __init__(self, **kwargs):
         """

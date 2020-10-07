@@ -21,12 +21,12 @@ __all__ = ['AlignmentJob']
 
 
 class AlignmentSettings(AfterglowSchema):
-    ref_image = String(default='central')  # type: str
-    wcs_grid_points = Integer(default=0)  # type: int
+    ref_image: str = String(default='central')
+    wcs_grid_points: int = Integer(default=0)
 
 
 class AlignmentJobResult(JobResult):
-    file_ids = List(Integer(), default=[])  # type: TList[int]
+    file_ids: TList[int] = List(Integer(), default=[])
 
 
 class AlignmentJob(Job):
@@ -36,13 +36,12 @@ class AlignmentJob(Job):
     type = 'alignment'
     description = 'Align Images'
 
-    result = Nested(AlignmentJobResult, default={})  # type: AlignmentJobResult
-    file_ids = List(Integer(), default=[])  # type: TList[int]
-    settings = Nested(AlignmentSettings, default={})  # type: AlignmentSettings
-    sources = List(
-        Nested(SourceExtractionData),
-        default=[])  # type: TList[SourceExtractionData]
-    inplace = Boolean(default=False)  # type: bool
+    result: AlignmentJobResult = Nested(AlignmentJobResult, default={})
+    file_ids: TList[int] = List(Integer(), default=[])
+    settings: AlignmentSettings = Nested(AlignmentSettings, default={})
+    sources: TList[SourceExtractionData] = List(
+        Nested(SourceExtractionData), default=[])
+    inplace: bool = Boolean(default=False)
 
     def run(self):
         settings = self.settings

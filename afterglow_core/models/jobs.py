@@ -33,10 +33,10 @@ class JobState(AfterglowSchema):
         completed_on: time of completion or cancellation
         progress: current job progress, a number from 0 to 100
     """
-    status = String(default='in_progress')  # type: str
-    created_on = DateTime()  # type: datetime
-    completed_on = DateTime()  # type: datetime
-    progress = Float(default=0)  # type: float
+    status: str = String(default='in_progress')
+    created_on: datetime = DateTime()
+    completed_on: datetime = DateTime()
+    progress: float = Float(default=0)
 
     def __init__(self, *args, **kwargs):
         """
@@ -66,8 +66,8 @@ class JobResult(AfterglowSchema):
         value1 = fields.Integer()
         value2 = fields.Float()
     """
-    errors = List(String())  # type: TList[str]
-    warnings = List(String())  # type: TList[str]
+    errors: TList[str] = List(String())
+    warnings: TList[str] = List(String())
 
     def __init__(self, *args, **kwargs):
         """
@@ -250,12 +250,12 @@ class Job(AfterglowSchema):
     """
     __polymorphic_on__ = 'type'
 
-    id = Integer(default=None)  # type: int
-    type = String()  # type: str
-    user_id = Integer(default=None)  # type: int
-    session_id = Integer(default=None)  # type: int
-    state = Nested(JobState)  # type: JobState
-    result = Nested(JobResult)  # type: JobResult
+    id: int = Integer(default=None)
+    type: str = String()
+    user_id: int = Integer(default=None)
+    session_id: int = Integer(default=None)
+    state: JobState = Nested(JobState)
+    result: JobResult = Nested(JobResult)
 
     _queue = None
 

@@ -3,7 +3,7 @@ Afterglow Core: data file and session models
 """
 
 from datetime import datetime
-from typing import List as TList
+from typing import Any, Dict as TDict, List as TList, Optional
 
 from marshmallow.fields import Dict, Integer, List, Nested, String
 
@@ -38,23 +38,23 @@ class DataFile(AfterglowSchema):
         group_id: GUID of the data file group
         group_order: 0-based order of the data file in the group
     """
-    id = Integer(default=None)  # type: int
-    type = String(default=None)  # type: str
-    name = String(default=None)  # type: str
-    width = Integer(default=None)  # type: int
-    height = Integer(default=None)  # type: int
-    data_provider = String(default=None)  # type: str
-    asset_path = String(default=None)  # type: str
-    asset_metadata = Dict(default={})  # type: dict
-    layer = String(default=None)  # type: str
-    created_on = DateTime(
-        default=None, format='%Y-%m-%d %H:%M:%S.%f')  # type: datetime
-    modified = Boolean(default=False)
-    modified_on = DateTime(
-        default=None, format='%Y-%m-%d %H:%M:%S.%f')  # type: datetime
-    session_id = Integer(default=None)  # type: int
-    group_id = String(default=None)  # type: str
-    group_order = Integer(default=0)  # type: int
+    id: int = Integer(default=None)
+    type: str = String(default=None)
+    name: str = String(default=None)
+    width: int = Integer(default=None)
+    height: int = Integer(default=None)
+    data_provider: str = String(default=None)
+    asset_path: str = String(default=None)
+    asset_metadata: TDict[str, Any] = Dict(default={})
+    layer: str = String(default=None)
+    created_on: datetime = DateTime(
+        default=None, format='%Y-%m-%d %H:%M:%S.%f')
+    modified: bool = Boolean(default=False)
+    modified_on: datetime = DateTime(
+        default=None, format='%Y-%m-%d %H:%M:%S.%f')
+    session_id: Optional[int] = Integer(default=None)
+    group_id: str = String(default=None)
+    group_order: int = Integer(default=0)
 
 
 class Session(AfterglowSchema):
@@ -75,8 +75,8 @@ class Session(AfterglowSchema):
         data: arbitrary user data associated with the session
         data_files: list of data file objects associated with the session
     """
-    id = Integer(default=None)  # type: int
-    name = String(default=None)  # type: str
-    data = String()  # type: str
-    data_files = List(
-        Nested(DataFile), default=[], dump_only=True)  # type: TList[DataFile]
+    id: int = Integer(default=None)
+    name: str = String(default=None)
+    data: str = String()
+    data_files: TList[DataFile] = List(
+        Nested(DataFile), default=[], dump_only=True)
