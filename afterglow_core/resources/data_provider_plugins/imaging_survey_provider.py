@@ -264,5 +264,5 @@ class ImagingSurveyDataProvider(DataProvider):
         if not res:
             raise AssetNotFoundError(path=path)
         buf = BytesIO()
-        res[0].writeto(buf)
+        res[0].writeto(buf, output_verify='silentfix')
         return buf.getvalue()
