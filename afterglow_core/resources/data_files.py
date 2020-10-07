@@ -892,11 +892,12 @@ def get_data_file_group_bytes(user_id: Optional[int], group_id: str,
         raise DataFileExportError(reason='Server does not support image export')
     else:
         # Export image via Pillow using the specified mode
-        if not mode:
-            raise errors.MissingFieldError(field='pixel_format')
-        if mode not in PILImage.MODES:
-            raise DataFileExportError(
-                reason='Unsupported image export mode "{}"'.format(mode))
+        if len(data_files) > 1:
+            if not mode:
+                raise errors.MissingFieldError(field='mode')
+            if mode not in PILImage.MODES:
+                raise DataFileExportError(
+                    reason='Unsupported image export mode "{}"'.format(mode))
         if any(hdu_type != 'image' for _, hdu_type in data_files):
             raise DataFileExportError(
                 reason='Cannot export non-image data files')
