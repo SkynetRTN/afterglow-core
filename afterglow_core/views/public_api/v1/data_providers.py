@@ -126,18 +126,18 @@ def data_providers_assets(id: Union[int, str]) -> Response:
     POST /data-providers/[id]/assets?path=
         - create a new collection asset at the given path if request body
           is empty; otherwise, create a non-collection asset from a data file
-          uploaded as multipart/form-data; data provider must be writeable
+          uploaded as multipart/form-data; data provider must be writable
 
     POST /data-providers/[id]/assets?path=...&data_file_id=...[&fmt=...]
         - create a new non-collection asset at the given path from data file
           using the specified file format (by default, FITS); data provider must
-          be writeable; if exporting in formats other than FITS, "fmt" must
+          be writable; if exporting in formats other than FITS, "fmt" must
           be supported by Pillow
 
     POST /data-providers/[id]/assets?path=...&group_id=...[&fmt=...&mode=...]
         - create a new non-collection asset at the given path from data file
           group using the specified file format (by default, FITS); data
-          provider must be writeable; if exporting in formats other than FITS,
+          provider must be writable; if exporting in formats other than FITS,
           "fmt" must be supported by Pillow, and "mode" is required and must be
           one of the supported modes (see
           https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
@@ -145,25 +145,25 @@ def data_providers_assets(id: Union[int, str]) -> Response:
     PUT /data-providers/[id]/assets?path=...
         - update an existing non-collection asset at the given path by
           overwriting it with the data uploaded as multipart/form-data; data
-          provider must be writeable
+          provider must be writable
 
     PUT /data-providers/[id]/assets?path=...&data_file_id=...[&fmt=...]
         - update an existing non-collection asset at the given path by
           overwriting it with the given data file in the specified format
-          (by default, FITS); data provider must be writeable
+          (by default, FITS); data provider must be writable
 
     PUT /data-providers/[id]/assets?path=...&group_id=...[&fmt=...&mode=...]
         - update an existing non-collection asset at the given path by
           overwriting it with the given data file group combined into a single
           file in the specified format (by default, FITS); data provider must
-          be writeable; if exporting in formats other than FITS, "fmt" must be
+          be writable; if exporting in formats other than FITS, "fmt" must be
           supported by Pillow, and "mode" is required and must be one of
           the supported modes (see
           https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
 
     DELETE /data-providers/[id]/assets?path=...[&force]
         - delete the existing asset at the given path; data provider must be
-          writeable; adding "force" recursively deletes non-empty collection
+          writable; adding "force" recursively deletes non-empty collection
           assets
 
     :param id: data provider ID (int or str) or name for which the assets

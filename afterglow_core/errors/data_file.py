@@ -28,7 +28,7 @@ class UnknownDataFileError(AfterglowError):
 class CannotCreateDataFileDirError(AfterglowError):
     """
     Initializing the user data file storage failed (e.g. directory not
-    writeable or database creation error)
+    writable or database creation error)
 
     Extra attributes::
         reason: error message describing the reason why the operation has failed
