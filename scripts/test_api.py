@@ -129,7 +129,7 @@ if __name__ == '__main__':
             params[name] = json.loads(val)
         except ValueError:
             pass
-    files = json_data = None
+    files = None
     if method not in ('GET', 'HEAD', 'OPTIONS') and params:
         # For requests other than GET, we must pass parameters as JSON
         if data:
@@ -137,22 +137,20 @@ if __name__ == '__main__':
             # from args
             files = {'data': (params.get('name', 'data'), data,
                               'application/octet-stream')}
-        params, data, json_data = None, None, params
+        params, data = None, params
         # headers['Content-Type'] = 'application/json'
     if headers:
         print('\n'.join('{}: {}'.format(h, v) for h, v in headers.items()),
               file=sys.stderr)
     if params:
         print(params, file=sys.stderr)
-    if json_data:
-        print(json.dumps(json_data), file=sys.stderr)
-    if data and headers.get('Content-Type') == 'application/json':
+    if data and isinstance(data, dict):
         print(json.dumps(data), file=sys.stderr)
 
     warnings.filterwarnings('ignore', 'Unverified HTTPS request is being made')
     r = requests.request(
         method, url, verify=False, params=params, headers=headers, data=data,
-        json=json_data, files=files, auth=auth)
+        files=files, auth=auth)
 
     print('\nHTTP {:d} - {}'.format(
         r.status_code,
