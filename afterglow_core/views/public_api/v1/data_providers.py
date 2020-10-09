@@ -17,6 +17,7 @@ from ....errors.data_provider import (
     AssetNotFoundError, AssetAlreadyExistsError,
     CannotSearchInNonCollectionError, CannotDeleteNonEmptyCollectionAssetError,
     QuotaExceededError)
+from ....errors.data_file import UnknownDataFileGroupError
 from . import url_prefix
 
 
@@ -147,19 +148,24 @@ def data_providers_assets(id: Union[int, str]) -> Response:
           overwriting it with the data uploaded as multipart/form-data; data
           provider must be writable
 
-    PUT /data-providers/[id]/assets?path=...&data_file_id=...[&fmt=...]
+    PUT /data-providers/[id]/assets?[path=...&]data_file_id=...[&fmt=...]
         - update an existing non-collection asset at the given path by
           overwriting it with the given data file in the specified format
-          (by default, FITS); data provider must be writable
+          (by default, FITS); data provider must be writable; if no path
+          provided, the original asset path of the data file previously imported
+          from this data provider is used
 
-    PUT /data-providers/[id]/assets?path=...&group_id=...[&fmt=...&mode=...]
+    PUT /data-providers/[id]/assets?[path=...&]group_id=...[&fmt=...&mode=...]
         - update an existing non-collection asset at the given path by
           overwriting it with the given data file group combined into a single
-          file in the specified format (by default, FITS); data provider must
-          be writable; if exporting in formats other than FITS, "fmt" must be
-          supported by Pillow, and "mode" is required and must be one of
-          the supported modes (see
-          https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
+          file in the specified format (by default, FITS);
+          * data provider must be writable;
+          * if no path provided, the original asset path of the data file group
+            previously imported from this data provider is used
+          * if exporting in formats other than FITS, "fmt" must be supported by
+            Pillow, and "mode" is required and must be one of the supported
+            modes (see
+            https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
 
     DELETE /data-providers/[id]/assets?path=...[&force]
         - delete the existing asset at the given path; data provider must be
@@ -211,9 +217,31 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             return json_response(provider.get_child_assets(path))
         return json_response([DataProviderAssetSchema(asset)])
 
-    # POST/PUT/DELETE always work with asset(s) at the given path
+    # POST/PUT/DELETE always work with asset(s) at the given path; when PUTting
+    # from a data file or a data file group, and the target path is not set,
+    # save to the original path if available and matches the data provider ID
     if path is None:
-        raise errors.MissingFieldError(field='path')
+        if request.method != 'PUT':
+            raise errors.MissingFieldError(field='path')
+        if params.get('group_id'):
+            from .data_files import get_data_file_group
+            group = get_data_file_group(current_user.id, params['group_id'])
+            if not group:
+                UnknownDataFileGroupError(id=params['group_id'])
+            try:
+                path = [df for df in group
+                        if getattr(df, 'data_provider', None) == str(id) and
+                        getattr(df, 'asset_path', None)][0].asset_path
+            except IndexError:
+                # No original asset path in the group for the current provider
+                pass
+        elif params.get('data_file_id'):
+            from .data_files import get_data_file
+            df = get_data_file(current_user.id, params['data_file_id'])
+            if getattr(df, 'data_provider', None) == str(id):
+                path = getattr(df, 'asset_path', None)
+        if path is None:
+            raise errors.MissingFieldError(field='path')
 
     # Get data file; optional for POST
     data = None

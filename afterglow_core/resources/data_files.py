@@ -72,8 +72,8 @@ __all__ = [
     # Data file creation
     'create_data_file', 'import_data_file', 'save_data_file',
     # API endpoint interface
-    'delete_data_file', 'get_data_file', 'import_data_files',
-    'query_data_files', 'update_data_file',
+    'delete_data_file', 'get_data_file', 'get_data_file_group',
+    'import_data_files', 'query_data_files', 'update_data_file',
     # Sessions
     'get_session', 'query_sessions', 'create_session', 'update_session',
     'delete_session',
@@ -1011,6 +1011,24 @@ def get_data_file(user_id: Optional[int], file_id: int) -> DataFile:
 
     # Convert to data model object
     return DataFile(db_data_file)
+
+
+def get_data_file_group(user_id: Optional[int], group_id: str) \
+        -> TList[DataFile]:
+    """
+    Return data file objects belonging to the given group
+
+    :param user_id: current user ID (None if user auth is disabled)
+    :param group_id: data file group ID
+
+    :return: data file objects sorted by group_order
+    """
+    adb = get_data_file_db(user_id)
+
+    return [DataFile(db_data_file)
+            for db_data_file in adb.query(DbDataFile)
+            .filter(DbDataFile.group_id == group_id)
+            .order_by(DbDataFile.group_order)]
 
 
 def query_data_files(user_id: Optional[int], session_id: Optional[int]) \
