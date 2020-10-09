@@ -363,6 +363,7 @@ class JobWorkerProcess(Process):
 
                 # Notify the job server that the job is running and run it
                 result_queue.put(dict(id=job_descr['id'], pid=self.ident))
+                job.state.status = 'in_progress'
                 job.update()
                 try:
                     if app.config.get('PROFILE'):
