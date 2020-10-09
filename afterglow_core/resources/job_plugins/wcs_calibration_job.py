@@ -152,7 +152,7 @@ class WcsCalibrationJob(Job):
                     # Guess starting RA and Dec from WCS in the image header
                     # noinspection PyBroadException
                     try:
-                        wcs = WCS(hdr)
+                        wcs = WCS(hdr, relax=True)
                         if wcs.has_celestial:
                             ra_hours, dec_degs = wcs.all_pix2world(
                                 (width - 1)/2, (height - 1)/2, 0)
