@@ -18,8 +18,8 @@ __all__ = [
 
 
 class WcsCalibrationSettingsSchema(AfterglowSchema):
-    ra_hours: float = Float(default=0)
-    dec_degs: float = Float(default=0)
+    ra_hours: Optional[float] = Float(default=None)
+    dec_degs: Optional[float] = Float(default=None)
     radius: float = Float(default=180)
     min_scale: float = Float(default=0.1)
     max_scale: float = Float(default=60)
