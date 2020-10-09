@@ -126,7 +126,7 @@ class WcsCalibrationJob(Job):
             return
 
         source_extraction_settings = self.source_extraction_settings or \
-            SourceExtractionSettings()
+            SourceExtractionSettings(_set_defaults=True)
         if settings.max_sources is not None:
             source_extraction_settings.limit = settings.max_sources
 
