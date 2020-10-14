@@ -52,9 +52,12 @@ def check_provider_auth(provider):
             continue
 
         # For non-HTTP methods, check identities
-        for identity in current_user.identities:
-            if identity.auth_method == required_method:
-                return
+        try:
+            for identity in current_user.identities:
+                if identity.auth_method == required_method:
+                    return
+        except AttributeError:
+            pass
 
     raise NotAuthenticatedError(
         error_msg='Data provider "{}" requires authentication with either of '
