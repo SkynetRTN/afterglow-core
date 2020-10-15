@@ -140,7 +140,6 @@ class LocalDiskDataProvider(DataProvider):
         # noinspection PyBroadException
         try:
             with pyfits.open(filename, 'readonly') as f:
-                imtype = 'FITS'
                 layers = len(f)
                 imwidth = f[0].header['NAXIS1']
                 imheight = f[0].header['NAXIS2']
@@ -182,6 +181,8 @@ class LocalDiskDataProvider(DataProvider):
                                     pass
                 except KeyError:
                     pass
+
+            imtype = 'FITS'
         except Exception:
             pass
 
