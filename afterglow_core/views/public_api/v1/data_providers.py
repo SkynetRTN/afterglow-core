@@ -2,9 +2,10 @@
 Afterglow Core: API v1 data provider views
 """
 
+from io import BytesIO
 from typing import Optional, Union
 
-from flask import Response, request
+from flask import Response, request, send_file
 
 from .... import app, errors, json_response
 from ....auth import auth_required, current_user
@@ -14,11 +15,15 @@ from ....errors.auth import NotAuthenticatedError
 from ....errors.data_provider import (
     UnknownDataProviderError, ReadOnlyDataProviderError,
     NonBrowseableDataProviderError, NonSearchableDataProviderError,
-    AssetNotFoundError, AssetAlreadyExistsError,
     CannotSearchInNonCollectionError, CannotDeleteNonEmptyCollectionAssetError,
     QuotaExceededError)
 from ....errors.data_file import UnknownDataFileGroupError
 from . import url_prefix
+
+try:
+    from PIL import Image as PILImage
+except ImportError:
+    PILImage = None
 
 
 resource_prefix = url_prefix + 'data-providers/'
@@ -116,59 +121,26 @@ def data_providers(id: Optional[Union[int, str]] = None) -> Response:
 @auth_required('user')
 def data_providers_assets(id: Union[int, str]) -> Response:
     """
-    Return, create, update, or delete data provider assets
+    Return data provider asset metadata, create collection assets, rename
+    or delete assets
 
     GET /data-providers/[id]/assets?path=...
-        - return a one-element list containing asset at the given path
+        - return a one-element list containing metadata for the asset
+          at the given path
 
     GET /data-providers/[id]/assets?[path=...&]param=value...
-        - return a list of data provider assets matching the given parameters;
+        - return metadata for the assets matching the given parameters;
           for data providers that have collection assets, the optional path
           defines a collection asset to search in; data provider must be
           searchable
 
     POST /data-providers/[id]/assets?path=
-        - create a new collection asset at the given path if request body
-          is empty; otherwise, create a non-collection asset from a data file
-          uploaded as multipart/form-data; data provider must be writable
+        - create a new empty collection asset at the given path; data provider
+          must be writable
 
-    POST /data-providers/[id]/assets?path=...&data_file_id=...[&fmt=...]
-        - create a new non-collection asset at the given path from data file
-          using the specified file format (by default, FITS); data provider must
-          be writable; if exporting in formats other than FITS, "fmt" must
-          be supported by Pillow
-
-    POST /data-providers/[id]/assets?path=...&group_id=...[&fmt=...&mode=...]
-        - create a new non-collection asset at the given path from data file
-          group using the specified file format (by default, FITS); data
-          provider must be writable; if exporting in formats other than FITS,
-          "fmt" must be supported by Pillow, and "mode" is required and must be
-          one of the supported modes (see
-          https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
-
-    PUT /data-providers/[id]/assets?path=...
-        - update an existing non-collection asset at the given path by
-          overwriting it with the data uploaded as multipart/form-data; data
-          provider must be writable
-
-    PUT /data-providers/[id]/assets?[path=...&]data_file_id=...[&fmt=...]
-        - update an existing non-collection asset at the given path by
-          overwriting it with the given data file in the specified format
-          (by default, FITS); data provider must be writable; if no path
-          provided, the original asset path of the data file previously imported
-          from this data provider is used
-
-    PUT /data-providers/[id]/assets?[path=...&]group_id=...[&fmt=...&mode=...]
-        - update an existing non-collection asset at the given path by
-          overwriting it with the given data file group combined into a single
-          file in the specified format (by default, FITS);
-          * data provider must be writable;
-          * if no path provided, the original asset path of the data file group
-            previously imported from this data provider is used
-          * if exporting in formats other than FITS, "fmt" must be supported by
-            Pillow, and "mode" is required and must be one of the supported
-            modes (see
-            https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
+    PUT /data-providers/[id]/assets?path=...&name=...
+        - rename an existing asset at the given path; data provider must
+          be writable
 
     DELETE /data-providers/[id]/assets?path=...[&force]
         - delete the existing asset at the given path; data provider must be
@@ -220,12 +192,119 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             return json_response(provider.get_child_assets(path))
         return json_response([DataProviderAssetSchema(asset)])
 
-    # POST/PUT/DELETE always work with asset(s) at the given path; when PUTting
-    # from a data file or a data file group, and the target path is not set,
-    # save to the original path if available and matches the data provider ID
+    # POST/PUT/DELETE always work with asset(s) at the given path
     if path is None:
+        raise errors.MissingFieldError(field='path')
+
+    if request.method == 'POST':
+        # Create collection asset at the given path
+        return json_response(DataProviderAssetSchema(provider.create_asset(
+            path, None, **params)), 201)
+
+    if request.method == 'PUT':
+        # Rename asset at the given path
+        name = params.pop('name', None)
+        if not name:
+            raise errors.MissingFieldError(field='name')
+        return json_response(DataProviderAssetSchema(provider.rename_asset(
+            path, name, **params)))
+
+    if request.method == 'DELETE':
+        force = 'force' in params
+        if force:
+            params.pop('force')
+
+        # Check that the asset at the given path exists
+        asset = provider.get_asset(path)
+
+        # "force" is required to recursively delete a non-empty collection asset
+        if asset.collection and provider.get_child_assets(path) and not force:
+            raise CannotDeleteNonEmptyCollectionAssetError()
+
+        provider.delete_asset(path, **params)
+        return json_response()
+
+
+@app.route(resource_prefix + '<id>/assets/data', methods=('GET', 'POST', 'PUT'))
+@auth_required('user')
+def data_providers_assets_data(id: Union[int, str]) -> Response:
+    """
+    Download, create, or update non-collection asset data
+
+    GET /data-providers/[id]/assets/data?path=...
+        - download unmodified non-collection asset data directly to the caller
+          in form data
+
+    POST /data-providers/[id]/assets/data?path=
+        - create a new non-collection asset from a data file uploaded
+          as multipart/form-data; data provider must be writable
+
+    POST /data-providers/[id]/assets/data?path=...&data_file_id=...[&fmt=...]
+        - create a new non-collection asset at the given path from data file
+          using the specified file format (by default, FITS); data provider must
+          be writable; if exporting in formats other than FITS, "fmt" must
+          be supported by Pillow
+
+    POST /data-providers/[id]/assets/data?path=...&group_id=...
+        [&fmt=...&mode=...]
+        - create a new non-collection asset at the given path from data file
+          group using the specified file format (by default, FITS); data
+          provider must be writable; if exporting in formats other than FITS,
+          "fmt" must be supported by Pillow, and "mode" is required and must be
+          one of the supported modes (see
+          https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
+
+    PUT /data-providers/[id]/assets?path=...
+        - update an existing non-collection asset data at the given path by
+          overwriting it with the data uploaded as multipart/form-data; data
+          provider must be writable
+
+    PUT /data-providers/[id]/assets?[path=...&]data_file_id=...[&fmt=...]
+        - update an existing non-collection asset at the given path by
+          overwriting it with the given data file in the specified format
+          (by default, FITS); data provider must be writable; if no path
+          provided, the original asset path of the data file previously imported
+          from this data provider is used
+
+    PUT /data-providers/[id]/assets?[path=...&]group_id=...[&fmt=...&mode=...]
+        - update an existing non-collection asset at the given path by
+          overwriting it with the given data file group combined into a single
+          file in the specified format (by default, FITS);
+          * data provider must be writable;
+          * if no path provided, the original asset path of the data file group
+            previously imported from this data provider is used
+          * if exporting in formats other than FITS, "fmt" must be supported by
+            Pillow, and "mode" is required and must be one of the supported
+            modes (see
+            https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
+
+    :param id: data provider ID (int or str) or name for which the assets
+        are managed
+
+    :return: request-dependent JSON response, see above
+    """
+    try:
+        provider = providers[id]
+    except KeyError:
+        try:
+            provider = providers[int(id)]
+        except (KeyError, ValueError):
+            raise UnknownDataProviderError(id=id)
+    check_provider_auth(provider)
+
+    if request.method != 'GET' and provider.readonly:
+        raise ReadOnlyDataProviderError(id=id)
+
+    params = request.args.to_dict()
+    path = params.pop('path', None)
+    if not path:
         if request.method != 'PUT':
+            # Path is required for all asset data requests except PUT
             raise errors.MissingFieldError(field='path')
+
+        # When PUTting from a data file or a data file group, and the target
+        # path is not set, save to the original path if available and matches
+        # the data provider ID
         if params.get('group_id'):
             from .data_files import get_data_file_group
             group = get_data_file_group(current_user.id, params['group_id'])
@@ -243,12 +322,35 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             df = get_data_file(current_user.id, params['data_file_id'])
             if getattr(df, 'data_provider', None) == str(id):
                 path = getattr(df, 'asset_path', None)
-        if path is None:
+        if not path:
             raise errors.MissingFieldError(field='path')
 
-    # Get data file; optional for POST
+    if request.method == 'GET':
+        # Non-collection asset download request
+        asset = provider.get_asset(path)
+        if asset.collection:
+            raise errors.ValidationError(
+                'path', 'Cannot download collection assets')
+        data = provider.get_asset_data(path)
+
+        # Get MIME type of data
+        mimetype = 'application/octet-stream'
+        try:
+            imtype = asset.metadata['type']
+            if imtype == 'FITS':
+                mimetype = 'image/fits'
+            elif PILImage is not None:
+                mimetype = PILImage.MIME[imtype]
+        except KeyError:
+            pass
+
+        return send_file(
+            BytesIO(data), mimetype=mimetype, as_attachment=True,
+            attachment_filename=asset.name)
+
     data = None
     if request.method in ('POST', 'PUT'):
+        # Retrieve data being exported
         group_id = params.pop('group_id', None)
         data_file_id = params.pop('data_file_id', None)
         fmt = params.pop('fmt', 'FITS')
@@ -267,13 +369,13 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             from .data_files import get_data_file_bytes
             data = get_data_file_bytes(current_user.id, data_file_id, fmt=fmt)
         else:
-            # Creating collection asset or creating/updating from uploaded data;
-            # in the second case, use only the first multipart/form-data file
+            # Creating/updating from uploaded data; use the first
+            # multipart/form-data file
             try:
                 data = list(request.files.values())[0].read()
             except (AttributeError, IndexError):
                 data = None
-            if data is None and request.method == 'PUT':
+            if data is None:
                 raise errors.MissingFieldError(field='data_file_id|group_id')
 
         # Check quota
@@ -287,35 +389,12 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             if usage + size > quota:
                 raise QuotaExceededError(quota=quota, usage=usage, size=size)
 
-    # Create/update/delete an asset at the given path
     if request.method == 'POST':
-        # Check that no asset at the given path exists already
-        try:
-            provider.get_asset(path)
-        except AssetNotFoundError:
-            pass
-        else:
-            raise AssetAlreadyExistsError()
-
+        # Create non-collection asset
         return json_response(DataProviderAssetSchema(provider.create_asset(
             path, data, **params)), 201)
 
     if request.method == 'PUT':
-        # Check that the asset at the given path exists and is not a collection
+        # Update non-collection asset
         return json_response(DataProviderAssetSchema(provider.update_asset(
             path, data, **params)))
-
-    if request.method == 'DELETE':
-        force = 'force' in params
-        if force:
-            params.pop('force')
-
-        # Check that the asset at the given path exists
-        asset = provider.get_asset(path)
-
-        # "force" is required to recursively delete a non-empty collection asset
-        if asset.collection and provider.get_child_assets(path) and not force:
-            raise CannotDeleteNonEmptyCollectionAssetError()
-
-        provider.delete_asset(path, **params)
-        return json_response()
