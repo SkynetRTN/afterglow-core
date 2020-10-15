@@ -237,6 +237,18 @@ class DataProvider(AfterglowSchema):
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='create_asset')
 
+    def rename_asset(self, path: str, name: str) -> DataProviderAsset:
+        """
+        Rename asset at the given path
+
+        :param path: path at which to create the asset
+        :param name: new asset name
+
+        :return: updated data provider asset object
+        """
+        raise errors.MethodNotImplementedError(
+            class_name=self.__class__.__name__, method_name='rename_asset')
+
     def update_asset(self, path: str, data: bytes, **kwargs) \
             -> DataProviderAsset:
         """

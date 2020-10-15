@@ -99,11 +99,7 @@ class LocalDiskDataProvider(DataProvider):
                                 raise
                     except Exception as e:
                         # noinspection PyUnresolvedReferences
-                        raise FilesystemError(
-                            reason=e.message
-                            if hasattr(e, 'message') and e.message
-                            else ', '.join(str(arg) for arg in e.args) if e.args
-                            else str(e))
+                        raise FilesystemError(reason=str(e))
         return p
 
     @staticmethod
@@ -492,10 +488,7 @@ class LocalDiskDataProvider(DataProvider):
                 return f.read()
         except Exception as e:
             # noinspection PyUnresolvedReferences
-            raise FilesystemError(
-                reason=e.message if hasattr(e, 'message') and e.message
-                else ', '.join(str(arg) for arg in e.args) if e.args
-                else str(e))
+            raise FilesystemError(reason=str(e))
 
     def create_asset(self, path: str, data: Optional[bytes] = None, **kwargs) \
             -> DataProviderAsset:
@@ -535,12 +528,41 @@ class LocalDiskDataProvider(DataProvider):
 
         except Exception as e:
             # noinspection PyUnresolvedReferences
-            raise FilesystemError(
-                reason=e.message if hasattr(e, 'message') and e.message
-                else ', '.join(str(arg) for arg in e.args) if e.args
-                else str(e))
+            raise FilesystemError(reason=str(e))
 
         return self._get_asset(path, filename)
+
+    def rename_asset(self, path: str, name: str) -> DataProviderAsset:
+        """
+        Rename asset at the given path
+
+        :param path: path at which to create the asset
+        :param name: new asset name
+
+        :return: updated data provider asset object
+        """
+        # Check that the given path exists and is not a directory
+        root = self.abs_root
+        filename = os.path.abspath(os.path.join(root, path))
+        if not filename.startswith(root):
+            raise AssetOutsideRootError()
+        if not os.path.exists(filename):
+            raise AssetNotFoundError(path=path)
+
+        new_filename = os.path.join(
+            os.path.dirname(filename), os.path.basename(name))
+        if os.path.exists(new_filename):
+            raise AssetAlreadyExistsError()
+
+        # Rename file or directory
+        try:
+            os.rename(filename, new_filename)
+        except Exception as e:
+            raise FilesystemError(reason=str(e))
+
+        return self._get_asset(
+            new_filename.split(root + os.path.sep)[1].replace('\\', '/'),
+            new_filename)
 
     def update_asset(self, path: str, data: bytes, **kwargs) \
             -> DataProviderAsset:
@@ -567,11 +589,7 @@ class LocalDiskDataProvider(DataProvider):
             with open(filename, 'wb') as f:
                 f.write(data)
         except Exception as e:
-            # noinspection PyUnresolvedReferences
-            raise FilesystemError(
-                reason=e.message if hasattr(e, 'message') and e.message
-                else ', '.join(str(arg) for arg in e.args) if e.args
-                else str(e))
+            raise FilesystemError(reason=str(e))
 
         return self._get_asset(path, filename)
 
@@ -594,16 +612,10 @@ class LocalDiskDataProvider(DataProvider):
                 shutil.rmtree(filename)
             except Exception as e:
                 # noinspection PyUnresolvedReferences
-                raise FilesystemError(
-                    reason=e.message if hasattr(e, 'message') and e.message
-                    else ', '.join(str(arg) for arg in e.args) if e.args
-                    else str(e))
+                raise FilesystemError(reason=str(e))
         else:
             try:
                 os.remove(filename)
             except Exception as e:
                 # noinspection PyUnresolvedReferences
-                raise FilesystemError(
-                    reason=e.message if hasattr(e, 'message') and e.message
-                    else ', '.join(str(arg) for arg in e.args) if e.args
-                    else str(e))
+                raise FilesystemError(reason=str(e))
