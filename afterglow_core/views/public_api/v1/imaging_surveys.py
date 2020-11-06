@@ -48,8 +48,7 @@ def get_imaging_surveys(name: Optional[str] = None) -> Response:
       floating-point pixel values, same as /data-files/[id]/pixels; "fits" -
       original FITS file as returned by SkyView; otherwise, `fmt`should be
       a format name (case-insensitive) of a particular image format supported
-      by PIL/Pillow or matplotlib (if non-grayscale colormap), e.g. "jpeg" or
-      "png"
+      by PIL/Pillow, e.g. "jpeg" or "png"
 
     Other arguments define the visualization parameters for formats other than
     raw and fits; see :func:`skylib.io.conversion.get_image`.
