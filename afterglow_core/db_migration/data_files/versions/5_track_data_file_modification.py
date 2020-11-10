@@ -12,12 +12,26 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column(
-        'data_files', sa.Column('modified', sa.Boolean(), server_default='0'))
-    op.add_column('data_files', sa.Column(
-        'modified_on', sa.DateTime(), onupdate=datetime.utcnow))
+    with op.batch_alter_table(
+            'data_files',
+            table_args=(
+                    sa.CheckConstraint('length(name) <= 1024'),
+                    sa.CheckConstraint('length(group_id) = 36'),
+            ),
+            table_kwargs=dict(sqlite_autoincrement=True)) as batch_op:
+        batch_op.add_column(sa.Column(
+            'modified', sa.Boolean(), server_default='0'))
+        batch_op.add_column(sa.Column(
+            'modified_on', sa.DateTime(), onupdate=datetime.utcnow))
 
 
 def downgrade():
-    op.drop_column('data_files', 'modified')
-    op.drop_column('data_files', 'modified_on')
+    with op.batch_alter_table(
+            'data_files',
+            table_args=(
+                    sa.CheckConstraint('length(name) <= 1024'),
+                    sa.CheckConstraint('length(group_id) = 36'),
+            ),
+            table_kwargs=dict(sqlite_autoincrement=True)) as batch_op:
+        batch_op.drop_column('modified')
+        batch_op.drop_column('modified_on')

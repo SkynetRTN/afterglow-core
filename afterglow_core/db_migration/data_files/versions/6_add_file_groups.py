@@ -31,12 +31,11 @@ def upgrade():
                 sa.CheckConstraint('length(group_id) = 36'),
             ),
             table_kwargs=dict(sqlite_autoincrement=True)) as batch_op:
-        batch_op.alter_column('group_id', nullable=False)
+        batch_op.alter_column('group_id', nullable=False, index=True)
         batch_op.add_column(sa.Column(
             'group_order', sa.Integer(), nullable=False, server_default='0'))
 
 
 def downgrade():
-    op.drop_index('ik_group_id', 'data_files')
     op.drop_column('data_files', 'group_id')
     op.drop_column('data_files', 'group_order')
