@@ -2,7 +2,9 @@
 Afterglow Core: image cropping job plugin
 """
 
-from typing import List as TList, Tuple
+from __future__ import annotations
+
+from typing import List as TList, Optional, Tuple
 
 from marshmallow.fields import Integer, List, Nested
 from numpy import ndarray
@@ -16,7 +18,7 @@ from ..data_files import (
     save_data_file)
 
 
-__all__ = ['CroppingJob']
+__all__ = ['CroppingJob', 'run_cropping_job']
 
 
 def max_rectangle(histogram: ndarray) -> Tuple[int, int, int]:
@@ -104,6 +106,130 @@ def get_auto_crop(user_id: int, file_ids: TList[int]) \
     return left, right, top, bottom
 
 
+def run_cropping_job(job: Job,
+                     settings: Optional[CroppingSettings],
+                     job_file_ids: TList[int],
+                     inplace: bool = False) -> TList[int]:
+    """
+    Image cropping job body; also used during alignment
+
+    :param job: job class instance
+    :param settings: cropping settings
+    :param job_file_ids: data file IDs to process
+    :param inplace: crop in place instead of creating a new data file
+
+    :return: list of generated/modified data file IDs
+    """
+    if settings:
+        left = getattr(settings, 'left', None)
+        if left is None:
+            left = 0
+        right = getattr(settings, 'right', None)
+        if right is None:
+            right = 0
+        top = getattr(settings, 'top', None)
+        if top is None:
+            top = 0
+        bottom = getattr(settings, 'bottom', None)
+        if bottom is None:
+            bottom = 0
+    else:
+        left = right = top = bottom = 0
+    if left < 0:
+        raise ValidationError(
+            'settings.left', 'Left margin must be non-negative')
+    if right < 0:
+        raise ValidationError(
+            'settings.right', 'Right margin must be non-negative')
+    if top < 0:
+        raise ValidationError(
+            'settings.top', 'Top margin must be non-negative')
+    if bottom < 0:
+        raise ValidationError(
+            'settings.bottom', 'Bottom margin must be non-negative')
+
+    auto_crop = not any([left, right, top, bottom])
+    if auto_crop:
+        # Automatic cropping by masked pixels
+        left, right, top, bottom = get_auto_crop(job.user_id, job_file_ids)
+
+    if not any([left, right, top, bottom]) and inplace:
+        # Nothing to do; if inplace=False, will simply duplicate all input
+        # data files
+        return job_file_ids
+
+    adb = get_data_file_db(job.user_id)
+
+    # Crop all data files and adjust WCS
+    new_file_ids = []
+    for i, file_id in enumerate(job_file_ids):
+        try:
+            data, hdr = get_data_file_data(job.user_id, file_id)
+            if any([left, right, top, bottom]):
+                if auto_crop and isinstance(data, MaskedArray):
+                    # Automatic cropping guarantees that there are no masked
+                    # pixels
+                    data = data.data
+                data = data[bottom:-(top + 1), left:-(right + 1)]
+                hdr.add_history(
+                    'Cropped with margins: left={}, right={}, top={}, '
+                    'bottom={}'.format(left, right, top, bottom))
+
+                # Move CRPIXn if present
+                if left:
+                    try:
+                        hdr['CRPIX1'] -= left
+                    except (KeyError, ValueError):
+                        pass
+                if bottom:
+                    try:
+                        hdr['CRPIX2'] -= bottom
+                    except (KeyError, ValueError):
+                        pass
+
+                if inplace:
+                    try:
+                        # Overwrite the original data file
+                        save_data_file(
+                            adb, get_root(job.user_id), file_id, data, hdr)
+                        adb.commit()
+                    except Exception:
+                        adb.rollback()
+                        raise
+                else:
+                    hdr.add_history(
+                        'Original data file ID: {:d}'.format(file_id))
+                    try:
+                        file_id = create_data_file(
+                            adb, None, get_root(job.user_id), data, hdr,
+                            duplicates='append', session_id=job.session_id).id
+                        adb.commit()
+                    except Exception:
+                        adb.rollback()
+                        raise
+            elif not inplace:
+                # Merely duplicate the original data file
+                try:
+                    hdr.add_history(
+                        'Original data file ID: {:d}'.format(file_id))
+                    file_id = create_data_file(
+                        adb, None, get_root(job.user_id), data, hdr,
+                        duplicates='append', session_id=job.session_id).id
+                    adb.commit()
+                except Exception:
+                    adb.rollback()
+                    raise
+
+            new_file_ids.append(file_id)
+        except Exception as e:
+            job.add_error('Data file ID {}: {}'.format(job_file_ids[i], e))
+        finally:
+            job.state.progress = (i + 1)/len(job_file_ids)*100
+            job.update()
+
+    return new_file_ids
+
+
 class CroppingSettings(AfterglowSchema):
     left: int = Integer(default=0)
     right: int = Integer(default=0)
@@ -128,115 +254,5 @@ class CroppingJob(Job):
     inplace: bool = Boolean(default=False)
 
     def run(self):
-        if not getattr(self, 'file_ids'):
-            return
-
-        settings = self.settings
-        if settings:
-            left = getattr(settings, 'left', None)
-            if left is None:
-                left = 0
-            right = getattr(settings, 'right', None)
-            if right is None:
-                right = 0
-            top = getattr(settings, 'top', None)
-            if top is None:
-                top = 0
-            bottom = getattr(settings, 'bottom', None)
-            if bottom is None:
-                bottom = 0
-        else:
-            left = right = top = bottom = 0
-        if left < 0:
-            raise ValidationError(
-                'settings.left', 'Left margin must be non-negative')
-        if right < 0:
-            raise ValidationError(
-                'settings.right', 'Right margin must be non-negative')
-        if top < 0:
-            raise ValidationError(
-                'settings.top', 'Top margin must be non-negative')
-        if bottom < 0:
-            raise ValidationError(
-                'settings.bottom', 'Bottom margin must be non-negative')
-
-        auto_crop = not any([left, right, top, bottom])
-        if auto_crop:
-            # Automatic cropping by masked pixels
-            left, right, top, bottom = get_auto_crop(
-                self.user_id, self.file_ids)
-
-        if not any([left, right, top, bottom]) and self.inplace:
-            # Nothing to do; if inplace=False, will simply duplicate all input
-            # data files
-            return
-
-        adb = get_data_file_db(self.user_id)
-
-        # Crop all data files and adjust WCS
-        for i, file_id in enumerate(self.file_ids):
-            try:
-                data, hdr = get_data_file_data(self.user_id, file_id)
-                if any([left, right, top, bottom]):
-                    if auto_crop and isinstance(data, MaskedArray):
-                        # Automatic cropping guarantees that there are no masked
-                        # pixels
-                        data = data.data
-                    data = data[bottom:-(top + 1), left:-(right + 1)]
-                    hdr.add_history(
-                        'Cropped with margins: left={}, right={}, top={}, '
-                        'bottom={}'.format(left, right, top, bottom))
-
-                    # Move CRPIXn if present
-                    if left:
-                        try:
-                            hdr['CRPIX1'] -= left
-                        except (KeyError, ValueError):
-                            pass
-                    if bottom:
-                        try:
-                            hdr['CRPIX2'] -= bottom
-                        except (KeyError, ValueError):
-                            pass
-
-                    if self.inplace:
-                        try:
-                            # Overwrite the original data file
-                            save_data_file(
-                                adb, get_root(self.user_id), file_id, data, hdr)
-                            adb.commit()
-                        except Exception:
-                            adb.rollback()
-                            raise
-                    else:
-                        hdr.add_history(
-                            'Original data file ID: {:d}'.format(file_id))
-                        try:
-                            file_id = create_data_file(
-                                adb, None, get_root(self.user_id), data, hdr,
-                                duplicates='append',
-                                session_id=self.session_id).id
-                            adb.commit()
-                        except Exception:
-                            adb.rollback()
-                            raise
-                elif not self.inplace:
-                    # Merely duplicate the original data file
-                    try:
-                        hdr.add_history(
-                            'Original data file ID: {:d}'.format(file_id))
-                        file_id = create_data_file(
-                            adb, None, get_root(self.user_id), data, hdr,
-                            duplicates='append', session_id=self.session_id).id
-                        adb.commit()
-                    except Exception:
-                        adb.rollback()
-                        raise
-
-                self.result.file_ids.append(file_id)
-            except Exception as e:
-                self.add_error(
-                    'Data file ID {}: {}'.format(self.file_ids[i], e))
-            finally:
-                self.state.progress = (i + 1)/len(self.file_ids)*100
-                self.update()
+        self.result.file_ids = run_cropping_job(
+            self, self.settings, getattr(self, 'file_ids', []), self.inplace)

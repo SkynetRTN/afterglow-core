@@ -15,6 +15,7 @@ from ...errors import AfterglowError, ValidationError
 from ..data_files import (
     create_data_file, get_data_file_data, get_data_file_db, get_root,
     save_data_file)
+from .cropping_job import run_cropping_job
 
 
 __all__ = ['AlignmentJob']
@@ -42,6 +43,7 @@ class AlignmentJob(Job):
     sources: TList[SourceExtractionData] = List(
         Nested(SourceExtractionData), default=[])
     inplace: bool = Boolean(default=False)
+    crop: bool = Boolean(default=False)
 
     def run(self):
         settings = self.settings
@@ -107,6 +109,7 @@ class AlignmentJob(Job):
 
         # Load data and extract WCS for reference image
         ref_data, ref_hdr = get_data_file_data(self.user_id, ref_file_id)
+        ref_height, ref_width = ref_data.shape
         # noinspection PyBroadException
         try:
             ref_wcs = WCS(ref_hdr)
@@ -146,7 +149,7 @@ class AlignmentJob(Job):
                         if not src_stars:
                             raise ValueError('Missing alignment star(s)')
                         data = apply_transform_stars(
-                            data, src_stars, dst_stars)
+                            data, src_stars, dst_stars, ref_width, ref_height)
 
                         nref = len(src_stars)
                         hist_msg = '{:d} star{}'.format(
@@ -165,7 +168,7 @@ class AlignmentJob(Job):
                             raise ValueError('Missing WCS')
 
                         data = apply_transform_wcs(
-                            data, wcs, ref_wcs,
+                            data, wcs, ref_wcs, ref_width, ref_height,
                             grid_points=settings.wcs_grid_points)
 
                         hist_msg = 'WCS'
@@ -234,3 +237,7 @@ class AlignmentJob(Job):
             finally:
                 self.state.progress = (i + 1)/len(file_ids)*100
                 self.update()
+
+        # Optionally crop aligned files in place
+        if self.crop:
+            run_cropping_job(self, None, self.result.file_ids, inplace=True)

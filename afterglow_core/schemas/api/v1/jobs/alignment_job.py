@@ -35,3 +35,4 @@ class AlignmentJobSchema(JobSchema):
     sources: TList[SourceExtractionDataSchema] = List(
         Nested(SourceExtractionDataSchema), default=[])
     inplace: bool = Boolean(default=False)
+    crop: bool = Boolean(default=False)
