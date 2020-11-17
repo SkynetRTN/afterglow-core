@@ -22,11 +22,11 @@ class ICatalogSource(AfterglowSchema):
     """
     Generic catalog source definition without astrometry
     """
-    id = String()  # type: str
-    file_id = Integer()  # type: int
-    label = String()  # type: str
-    catalog_name = String()  # type: str
-    mags = Dict(keys=String, values=Nested(Mag))  # type: TDict[str, Mag]
+    id: str = String()
+    file_id: int = Integer()
+    label: str = String()
+    catalog_name: str = String()
+    mags: TDict[str, Mag] = Dict(keys=String, values=Nested(Mag))
 
 
 class CatalogSource(ICatalogSource, IAstrometry, IPhotometry):
@@ -71,13 +71,12 @@ class Catalog(AfterglowSchema):
     """
     __polymorphic_on__ = 'name'
 
-    name = String(default=None)  # type: str
-    display_name = String(default=None)  # type: str
-    num_sources = Integer()  # type: int
-    mags = Dict(
-        keys=String,
-        values=List(String()), default={})  # type: TDict[str, TList[str]]
-    filter_lookup = Dict(keys=String, values=String)  # type: TDict[str, str]
+    name: str = String(default=None)
+    display_name: str = String(default=None)
+    num_sources: int = Integer()
+    mags: TDict[str, TList[str]] = Dict(
+        keys=String, values=List(String()), default={})
+    filter_lookup: TDict[str, str] = Dict(keys=String, values=String)
 
     def __init__(self, **kwargs):
         """

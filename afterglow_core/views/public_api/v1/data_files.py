@@ -6,7 +6,7 @@ import astropy.io.fits as pyfits
 import os
 import gzip
 from io import BytesIO
-from typing import Union
+from typing import Optional, Union
 
 import numpy
 from flask import Response, request
@@ -24,6 +24,7 @@ resource_prefix = url_prefix + 'data-files/'
 
 
 def make_data_response(data: Union[bytes, numpy.ndarray],
+                       mimetype: Optional[str] = None,
                        status_code: int = 200) -> Response:
     """
     Initialize a Flask response object returning the binary data array
@@ -32,6 +33,8 @@ def make_data_response(data: Union[bytes, numpy.ndarray],
     returned either as an optionally gzipped binary stream or as a JSON list.
 
     :param data: data to send to the client
+    :param mimetype: optional MIME type of the data; automatically guessed
+        if not set
     :param status_code: optional HTTP status code; defaults to 200 - OK
 
     :return: Flask response object
@@ -71,8 +74,9 @@ def make_data_response(data: Union[bytes, numpy.ndarray],
                     data.dtype.byteorder == '=' and sys.byteorder == 'big':
                 data = data.byteswap()
             data = data.tobytes()
-            mimetype = 'application/octet-stream'
-        else:
+            if not mimetype:
+                mimetype = 'application/octet-stream'
+        elif not mimetype:
             # Sending FITS file
             mimetype = 'image/fits'
         if allow_gzip:
@@ -107,8 +111,8 @@ def data_files() -> Response:
           values set to pixel_value (0 by default); associate with the given
           session (anonymous if not set)
 
-    POST /data-files?name=...&session_id=...
-        - import data file from the request body to the given session
+    POST /data-files?name=...[&session_id=...]
+        - import data file from multipart/form-data to the given session
 
     POST /data-files?provider_id=...&path=...&duplicates=...&recurse=...
                      session_id=...
@@ -139,7 +143,8 @@ def data_files() -> Response:
         res = [
             DataFileSchema(df)
             for df in import_data_files(
-                auth.current_user.id, **request.args.to_dict())]
+                auth.current_user.id, files=request.files,
+                **request.args.to_dict())]
 
         return json_response(res, 201 if res else 200)
 
@@ -502,7 +507,7 @@ def data_files_pixels(id: int) -> Response:
 @auth.auth_required('user')
 def data_files_fits(id: int) -> Response:
     """
-    Return the whole data file as a FITS file
+    Return data file as FITS
 
     GET /data-files/[id]/fits
 
@@ -525,6 +530,40 @@ def data_files_fits(id: int) -> Response:
         above), either the gzipped or uncompressed FITS file data
     """
     return make_data_response(get_data_file_bytes(auth.current_user.id, id))
+
+
+@app.route(resource_prefix + '<int:id>/<fmt>')
+@auth.auth_required('user')
+def data_files_image(id: int, fmt: str) -> Response:
+    """
+    Export data file in the given format
+
+    GET /data-files/[id]/[fmt]
+
+    Depending on the request headers (Accept and Accept-Encoding), the FITS
+    file is returned either as a gzipped or uncompressed (default) FITS.
+
+    [Accept-Encoding:]
+    [Accept-Encoding: identity]
+    -> (uncompressed FITS)
+    Content-Type: image/fits
+
+    Accept-Encoding: gzip
+    -> (compressed FITS)
+    Content-Type: image/fits
+    Content-Encoding: gzip
+
+    :param id: data file ID
+    :param fmt: image format supported by Pillow
+
+    :return: depending on the Accept and Accept-Encoding HTTP headers (see
+        above), either the gzipped or uncompressed image data
+    """
+    data = get_data_file_bytes(auth.current_user.id, id, fmt=fmt)
+    from PIL import Image  # guaranteed to be available if export succeeded
+    return make_data_response(
+        data, mimetype=Image.MIME.get(fmt, Image.MIME.get(
+            fmt.upper(), 'image')))
 
 
 @app.route(url_prefix + 'sessions', methods=['GET', 'POST'])

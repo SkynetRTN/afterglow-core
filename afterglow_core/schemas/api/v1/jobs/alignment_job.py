@@ -16,23 +16,23 @@ __all__ = ['AlignmentSettingsSchema', 'AlignmentJobResultSchema',
 
 
 class AlignmentSettingsSchema(AfterglowSchema):
-    ref_image = String(default='central')  # type: str
-    wcs_grid_points = Integer(default=0)  # type: int
+    ref_image: str = String(default='central')
+    wcs_grid_points: int = Integer(default=0)
 
 
 class AlignmentJobResultSchema(JobResultSchema):
-    file_ids = List(Integer(), default=[])  # type: TList[int]
+    file_ids: TList[int] = List(Integer(), default=[])
 
 
 class AlignmentJobSchema(JobSchema):
     type = 'alignment'
 
-    result = Nested(
-        AlignmentJobResultSchema, default={})  # type: AlignmentJobResultSchema
-    file_ids = List(Integer(), default=[])  # type: TList[int]
-    settings = Nested(
-        AlignmentSettingsSchema, default={})  # type: AlignmentSettingsSchema
-    sources = List(
-        Nested(SourceExtractionDataSchema),
-        default=[])  # type: TList[SourceExtractionDataSchema]
-    inplace = Boolean(default=False)  # type: bool
+    result: AlignmentJobResultSchema = Nested(
+        AlignmentJobResultSchema, default={})
+    file_ids: TList[int] = List(Integer(), default=[])
+    settings: AlignmentSettingsSchema = Nested(
+        AlignmentSettingsSchema, default={})
+    sources: TList[SourceExtractionDataSchema] = List(
+        Nested(SourceExtractionDataSchema), default=[])
+    inplace: bool = Boolean(default=False)
+    crop: bool = Boolean(default=False)

@@ -170,24 +170,22 @@ def merge_sources(sources: TList[SourceExtractionData],
 
 
 class SourceMergeSettings(AfterglowSchema):
-    pos_type = String(default='auto')  # type: str
-    tol = Float(default=None)  # type: float
+    pos_type: str = String(default='auto')
+    tol: float = Float(default=None)
 
 
 class SourceMergeJobResult(JobResult):
-    data = List(Nested(SourceExtractionData),
-                default=[])  # type: TList[SourceExtractionData]
+    data: TList[SourceExtractionData] = List(
+        Nested(SourceExtractionData), default=[])
 
 
 class SourceMergeJob(Job):
     type = 'source_merge'
     description = 'Merge Sources from Multiple Images'
 
-    result = Nested(SourceMergeJobResult)  # type: SourceMergeJobResult
-    sources = List(Nested(
-        SourceExtractionData))  # type: TList[SourceExtractionData]
-    settings = Nested(
-        SourceMergeSettings, default={})  # type: SourceMergeSettings
+    result: SourceMergeJobResult = Nested(SourceMergeJobResult)
+    sources: TList[SourceExtractionData] = List(Nested(SourceExtractionData))
+    settings: SourceMergeSettings = Nested(SourceMergeSettings, default={})
 
     def run(self):
         self.result.data = merge_sources(self.sources, self.settings, self.id)

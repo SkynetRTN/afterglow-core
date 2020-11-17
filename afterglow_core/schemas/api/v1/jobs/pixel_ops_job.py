@@ -14,15 +14,15 @@ __all__ = ['PixelOpsJobResultSchema', 'PixelOpsJobSchema']
 
 
 class PixelOpsJobResultSchema(JobResultSchema):
-    file_ids = List(Integer(), default=[])  # type: TList[int]
-    data = List(Float(), default=[])  # type: TList[float]
+    file_ids: TList[int] = List(Integer(), default=[])
+    data: TList[float] = List(Float(), default=[])
 
 
 class PixelOpsJobSchema(JobSchema):
     type = 'pixel_ops'
 
-    result = Nested(PixelOpsJobResultSchema)  # type: PixelOpsJobResultSchema
-    file_ids = List(Integer(), default=[])  # type: TList[int]
-    op = String(default=None)  # type: str
-    inplace = Boolean(default=False)  # type: bool
-    aux_file_ids = List(Integer(), default=[])  # type: TList[int]
+    result: PixelOpsJobResultSchema = Nested(PixelOpsJobResultSchema)
+    file_ids: TList[int] = List(Integer(), default=[])
+    op: str = String(default=None)
+    inplace: bool = Boolean(default=False)
+    aux_file_ids: TList[int] = List(Integer(), default=[])

@@ -6,7 +6,7 @@ from . import AfterglowError
 
 
 __all__ = [
-    'AssetOutsideRootError', 'FilesystemError', 'UnrecognizedDataFormatError',
+    'AssetOutsideRootError', 'FilesystemError',
 ]
 
 
@@ -19,15 +19,6 @@ class AssetOutsideRootError(AfterglowError):
     message = 'Asset path outside the data directory'
 
 
-class UnrecognizedDataFormatError(AfterglowError):
-    """
-    File at the given path has unknown format
-    """
-    code = 404
-    subcode = 1101
-    message = 'Data file format not recognized'
-
-
 class FilesystemError(AfterglowError):
     """
     Attempting to do a filesystem operation on asset failed (e.g. permission
@@ -37,5 +28,5 @@ class FilesystemError(AfterglowError):
         reason: error message describing the reason of failure
     """
     code = 403
-    subcode = 1102
+    subcode = 1101
     message = 'Filesystem error'

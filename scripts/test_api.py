@@ -137,7 +137,9 @@ if __name__ == '__main__':
             # from args
             files = {'data': (params.get('name', 'data'), data,
                               'application/octet-stream')}
-        params, data, json_data = None, None, params
+            data = None
+        else:
+            params, json_data = None, params
         # headers['Content-Type'] = 'application/json'
     if headers:
         print('\n'.join('{}: {}'.format(h, v) for h, v in headers.items()),
@@ -146,7 +148,7 @@ if __name__ == '__main__':
         print(params, file=sys.stderr)
     if json_data:
         print(json.dumps(json_data), file=sys.stderr)
-    if data and headers.get('Content-Type') == 'application/json':
+    if data and isinstance(data, dict):
         print(json.dumps(data), file=sys.stderr)
 
     warnings.filterwarnings('ignore', 'Unverified HTTPS request is being made')

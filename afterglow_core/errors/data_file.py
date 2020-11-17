@@ -7,14 +7,15 @@ from . import AfterglowError
 
 __all__ = [
     'CannotCreateDataFileDirError', 'CannotImportFromCollectionAssetError',
-    'MissingWCSError', 'UnknownDataFileError', 'UnrecognizedDataFileError',
+    'MissingWCSError', 'UnknownDataFileError', 'UnrecognizedDataFormatError',
     'UnknownSessionError', 'DuplicateSessionNameError',
+    'UnknownDataFileGroupError', 'DataFileExportError',
 ]
 
 
 class UnknownDataFileError(AfterglowError):
     """
-    Format of the data file being imported is not recognized
+    Requested data file with unknown ID
 
     Extra attributes::
         id: requested data file ID
@@ -27,7 +28,7 @@ class UnknownDataFileError(AfterglowError):
 class CannotCreateDataFileDirError(AfterglowError):
     """
     Initializing the user data file storage failed (e.g. directory not
-    writeable or database creation error)
+    writable or database creation error)
 
     Extra attributes::
         reason: error message describing the reason why the operation has failed
@@ -50,7 +51,7 @@ class CannotImportFromCollectionAssetError(AfterglowError):
     message = 'Cannot import from collection asset'
 
 
-class UnrecognizedDataFileError(AfterglowError):
+class UnrecognizedDataFormatError(AfterglowError):
     """
     An attempt was made to import a data file that has unknown format
 
@@ -95,3 +96,26 @@ class DuplicateSessionNameError(AfterglowError):
     """
     subcode = 2006
     message = 'Duplicate session name'
+
+
+class UnknownDataFileGroupError(AfterglowError):
+    """
+    No data files match the given group ID
+
+    Extra attributes::
+        id: requested data file group ID
+    """
+    code = 404
+    subcode = 2007
+    message = 'Unknown data file group ID'
+
+
+class DataFileExportError(AfterglowError):
+    """
+    Cannot export data file to image
+
+    Extra attributes::
+        reason: error message describing the reason of failure
+    """
+    subcode = 2008
+    message = 'Cannot export data file'

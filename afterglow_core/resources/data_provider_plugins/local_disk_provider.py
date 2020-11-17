@@ -34,8 +34,8 @@ from ...models import DataProvider, DataProviderAsset
 from ...errors.data_provider import (
     AssetNotFoundError, AssetAlreadyExistsError,
     CannotUpdateCollectionAssetError)
-from ...errors.data_provider_local_disk import (
-    AssetOutsideRootError, UnrecognizedDataFormatError, FilesystemError)
+from ...errors.data_provider_local_disk import *
+from ...errors.data_file import UnrecognizedDataFormatError
 
 
 __all__ = ['LocalDiskDataProvider']
@@ -59,8 +59,8 @@ class LocalDiskDataProvider(DataProvider):
     if rawpy is not None:
         search_fields['type']['enum'].append('RAW')
 
-    peruser = False  # type: bool
-    root = '.'  # type: str
+    peruser: bool = False
+    root: str = '.'
 
     @property
     def usage(self) -> int:
@@ -99,11 +99,7 @@ class LocalDiskDataProvider(DataProvider):
                                 raise
                     except Exception as e:
                         # noinspection PyUnresolvedReferences
-                        raise FilesystemError(
-                            reason=e.message
-                            if hasattr(e, 'message') and e.message
-                            else ', '.join(str(arg) for arg in e.args) if e.args
-                            else str(e))
+                        raise FilesystemError(reason=str(e))
         return p
 
     @staticmethod
@@ -140,7 +136,6 @@ class LocalDiskDataProvider(DataProvider):
         # noinspection PyBroadException
         try:
             with pyfits.open(filename, 'readonly') as f:
-                imtype = 'FITS'
                 layers = len(f)
                 imwidth = f[0].header['NAXIS1']
                 imheight = f[0].header['NAXIS2']
@@ -155,10 +150,8 @@ class LocalDiskDataProvider(DataProvider):
                 except KeyError:
                     pass
 
-                try:
-                    flt = f[0].header['FILTER']
-                except KeyError:
-                    pass
+                flt = ','.join(hdu.header['FILTER']
+                               for hdu in f if 'FILTER' in hdu.header)
 
                 try:
                     try:
@@ -184,6 +177,8 @@ class LocalDiskDataProvider(DataProvider):
                                     pass
                 except KeyError:
                     pass
+
+            imtype = 'FITS'
         except Exception:
             pass
 
@@ -197,11 +192,13 @@ class LocalDiskDataProvider(DataProvider):
                     try:
                         with PILImage.open(f) as im:
                             imtype = im.format
-                            layers = len(im.getbands())
+                            band_names = im.getbands()
+                            layers = len(band_names)
+                            flt = ','.join(band_names)
                             imwidth, imheight = im.size
                             exif = {
                                 ExifTags.TAGS[key]: convert_exif_field(val)
-                                for key, val in getattr(im, '_getexif')()
+                                for key, val in im.getexif().items()
                             }
                     except Exception:
                         pass
@@ -219,10 +216,14 @@ class LocalDiskDataProvider(DataProvider):
                             im = rawpy.imread(f)
                         finally:
                             sys.stderr = save_stderr
-                        imtype = 'RAW'
-                        layers = im.num_colors
-                        imwidth = im.sizes.width
-                        imheight = im.sizes.height
+                        try:
+                            imtype = str(im.raw_type)
+                            layers = im.num_colors
+                            flt = ','.join(chr(b) for b in im.color_desc)
+                            imwidth = im.sizes.width
+                            imheight = im.sizes.height
+                        finally:
+                            im.close()
                     except Exception:
                         pass
 
@@ -261,12 +262,11 @@ class LocalDiskDataProvider(DataProvider):
                     if exptime:
                         try:
                             exptime = datetime.strptime(
-                                str(exptime), '%Y:%m:%d %H:%M:%S')
+                                str(exptime), '%Y:%m:%d %H:%M:%S.%f')
                         except ValueError:
                             try:
                                 exptime = datetime.strptime(
-                                    str(exptime),
-                                    '%Y:%m:%d %H:%M:%S.%f')
+                                    str(exptime), '%Y:%m:%d %H:%M:%S')
                             except ValueError:
                                 pass
 
@@ -488,10 +488,7 @@ class LocalDiskDataProvider(DataProvider):
                 return f.read()
         except Exception as e:
             # noinspection PyUnresolvedReferences
-            raise FilesystemError(
-                reason=e.message if hasattr(e, 'message') and e.message
-                else ', '.join(str(arg) for arg in e.args) if e.args
-                else str(e))
+            raise FilesystemError(reason=str(e))
 
     def create_asset(self, path: str, data: Optional[bytes] = None, **kwargs) \
             -> DataProviderAsset:
@@ -531,19 +528,51 @@ class LocalDiskDataProvider(DataProvider):
 
         except Exception as e:
             # noinspection PyUnresolvedReferences
-            raise FilesystemError(
-                reason=e.message if hasattr(e, 'message') and e.message
-                else ', '.join(str(arg) for arg in e.args) if e.args
-                else str(e))
+            raise FilesystemError(reason=str(e))
 
         return self._get_asset(path, filename)
 
-    def update_asset(self, path: str, data: bytes, **kwargs) -> None:
+    def rename_asset(self, path: str, name: str) -> DataProviderAsset:
+        """
+        Rename asset at the given path
+
+        :param path: path at which to create the asset
+        :param name: new asset name
+
+        :return: updated data provider asset object
+        """
+        # Check that the given path exists and is not a directory
+        root = self.abs_root
+        filename = os.path.abspath(os.path.join(root, path))
+        if not filename.startswith(root):
+            raise AssetOutsideRootError()
+        if not os.path.exists(filename):
+            raise AssetNotFoundError(path=path)
+
+        new_filename = os.path.join(
+            os.path.dirname(filename), os.path.basename(name))
+        if os.path.exists(new_filename):
+            raise AssetAlreadyExistsError()
+
+        # Rename file or directory
+        try:
+            os.rename(filename, new_filename)
+        except Exception as e:
+            raise FilesystemError(reason=str(e))
+
+        return self._get_asset(
+            new_filename.split(root + os.path.sep)[1].replace('\\', '/'),
+            new_filename)
+
+    def update_asset(self, path: str, data: bytes, **kwargs) \
+            -> DataProviderAsset:
         """
         Update an asset at the given path
 
         :param path: path of the asset to update
         :param data: FITS file data
+
+        :return: updated data provider asset object
         """
         # Check that the given path exists and is not a directory
         root = self.abs_root
@@ -560,11 +589,9 @@ class LocalDiskDataProvider(DataProvider):
             with open(filename, 'wb') as f:
                 f.write(data)
         except Exception as e:
-            # noinspection PyUnresolvedReferences
-            raise FilesystemError(
-                reason=e.message if hasattr(e, 'message') and e.message
-                else ', '.join(str(arg) for arg in e.args) if e.args
-                else str(e))
+            raise FilesystemError(reason=str(e))
+
+        return self._get_asset(path, filename)
 
     def delete_asset(self, path: str, **kwargs) -> None:
         """
@@ -585,16 +612,10 @@ class LocalDiskDataProvider(DataProvider):
                 shutil.rmtree(filename)
             except Exception as e:
                 # noinspection PyUnresolvedReferences
-                raise FilesystemError(
-                    reason=e.message if hasattr(e, 'message') and e.message
-                    else ', '.join(str(arg) for arg in e.args) if e.args
-                    else str(e))
+                raise FilesystemError(reason=str(e))
         else:
             try:
                 os.remove(filename)
             except Exception as e:
                 # noinspection PyUnresolvedReferences
-                raise FilesystemError(
-                    reason=e.message if hasattr(e, 'message') and e.message
-                    else ', '.join(str(arg) for arg in e.args) if e.args
-                    else str(e))
+                raise FilesystemError(reason=str(e))

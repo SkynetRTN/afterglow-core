@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import List as TList, Optional
 
 from marshmallow.fields import Integer, List, Nested
+from astropy.wcs import WCS
 
 from skylib.astrometry import Solver, solve_field
 
@@ -65,21 +66,21 @@ WCS_REGEX = re.compile(
 
 
 class WcsCalibrationSettings(AfterglowSchema):
-    ra_hours = Float(default=0)  # type: float
-    dec_degs = Float(default=0)  # type: float
-    radius = Float(default=180)  # type: float
-    min_scale = Float(default=0.1)  # type: float
-    max_scale = Float(default=60)  # type: float
-    parity = Boolean(
+    ra_hours: Optional[float] = Float(default=None)
+    dec_degs: Optional[float] = Float(default=None)
+    radius: float = Float(default=180)
+    min_scale: float = Float(default=0.1)
+    max_scale: float = Float(default=60)
+    parity: Optional[bool] = Boolean(
         truthy={True, 1, 'negative'},
-        falsy={False, 0, 'positive'}, default=None)  # type: Optional[bool]
-    sip_order = Integer(default=3)  # type: int
-    crpix_center = Boolean(default=True)  # type: bool
-    max_sources = Integer(default=100)  # type: Optional[int]
+        falsy={False, 0, 'positive'}, default=None)
+    sip_order: int = Integer(default=3)
+    crpix_center: bool = Boolean(default=True)
+    max_sources: Optional[int] = Integer(default=100)
 
 
 class WcsCalibrationJobResult(JobResult):
-    file_ids = List(Integer(), default=[])  # type: TList[int]
+    file_ids: TList[int] = List(Integer(), default=[])
 
 
 class WcsCalibrationJob(Job):
@@ -89,15 +90,14 @@ class WcsCalibrationJob(Job):
     type = 'wcs_calibration'
     description = 'Plate-solve Images'
 
-    result = Nested(
-        WcsCalibrationJobResult, default={})  # type: WcsCalibrationJobResult
-    file_ids = List(Integer(), default=[])  # type: TList[int]
-    settings = Nested(
-        WcsCalibrationSettings, default={})  # type: WcsCalibrationSettings
-    source_extraction_settings = Nested(
-        SourceExtractionSettings,
-        default=None)  # type: SourceExtractionSettings
-    inplace = Boolean(default=False)  # type: bool
+    result: WcsCalibrationJobResult = Nested(
+        WcsCalibrationJobResult, default={})
+    file_ids: TList[int] = List(Integer(), default=[])
+    settings: WcsCalibrationSettings = Nested(
+        WcsCalibrationSettings, default={})
+    source_extraction_settings: SourceExtractionSettings = Nested(
+        SourceExtractionSettings, default=None)
+    inplace: bool = Boolean(default=False)
 
     def run(self):
         settings = self.settings
@@ -127,7 +127,7 @@ class WcsCalibrationJob(Job):
             return
 
         source_extraction_settings = self.source_extraction_settings or \
-            SourceExtractionSettings()
+            SourceExtractionSettings(_set_defaults=True)
         if settings.max_sources is not None:
             source_extraction_settings.limit = settings.max_sources
 
@@ -139,6 +139,7 @@ class WcsCalibrationJob(Job):
         for i, file_id in enumerate(self.file_ids):
             try:
                 data, hdr = get_data_file_data(self.user_id, file_id)
+                height, width = data.shape
 
                 # Extract sources
                 sources = run_source_extraction_job(
@@ -146,14 +147,47 @@ class WcsCalibrationJob(Job):
                 xy = [(source.x, source.y) for source in sources]
                 fluxes = [source.flux for source in sources]
 
+                ra_hours, dec_degs = settings.ra_hours, settings.dec_degs
+                if ra_hours is None and dec_degs is None:
+                    # Guess starting RA and Dec from WCS in the image header
+                    # noinspection PyBroadException
+                    try:
+                        wcs = WCS(hdr, relax=True)
+                        if wcs.has_celestial:
+                            ra_hours, dec_degs = wcs.all_pix2world(
+                                (width - 1)/2, (height - 1)/2, 0)
+                            ra_hours /= 15
+                    except Exception:
+                        pass
+                if ra_hours is None and dec_degs is None:
+                    # Guess starting RA and Dec from MaxIm DL FITS keywords
+                    for name in ('OBJRA', 'TELRA', 'RA'):
+                        try:
+                            h, m, s = hdr[name].split(':')
+                            ra_hours = int(h) + int(m)/60 + float(s)/3600
+                        except (KeyError, ValueError):
+                            pass
+                        else:
+                            break
+                    for name in ('OBJDEC', 'TELDEC', 'DEC'):
+                        try:
+                            d, m, s = hdr[name].split(':')
+                            dec_degs = \
+                                (abs(int(d)) + int(m)/60 + float(s)/3600) * \
+                                (1 - d.strip().startswith('-'))
+                        except (KeyError, ValueError):
+                            pass
+                        else:
+                            break
+
                 # Run Astrometry.net; allow to abort the job by calling back
                 # from the engine into Python code
                 solution = solve_field(
                     solver, xy, fluxes,
-                    width=data.shape[1],
-                    height=data.shape[0],
-                    ra_hours=settings.ra_hours or 0,
-                    dec_degs=settings.dec_degs or 0,
+                    width=width,
+                    height=height,
+                    ra_hours=ra_hours or 0,
+                    dec_degs=dec_degs or 0,
                     radius=settings.radius,
                     min_scale=settings.min_scale, max_scale=settings.max_scale,
                     parity=settings.parity,

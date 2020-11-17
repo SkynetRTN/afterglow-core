@@ -18,34 +18,31 @@ __all__ = [
 
 
 class WcsCalibrationSettingsSchema(AfterglowSchema):
-    ra_hours = Float(default=0)  # type: float
-    dec_degs = Float(default=0)  # type: float
-    radius = Float(default=180)  # type: float
-    min_scale = Float(default=0.1)  # type: float
-    max_scale = Float(default=60)  # type: float
-    parity = Boolean(
+    ra_hours: Optional[float] = Float(default=None)
+    dec_degs: Optional[float] = Float(default=None)
+    radius: float = Float(default=180)
+    min_scale: float = Float(default=0.1)
+    max_scale: float = Float(default=60)
+    parity: Optional[bool] = Boolean(
         truthy={True, 1, 'negative'},
-        falsy={False, 0, 'positive'}, default=None)  # type: Optional[bool]
-    sip_order = Integer(default=3)  # type: int
-    crpix_center = Boolean(default=True)  # type: bool
-    max_sources = Integer(default=100)  # type: Optional[int]
+        falsy={False, 0, 'positive'}, default=None)
+    sip_order: int = Integer(default=3)
+    crpix_center: bool = Boolean(default=True)
+    max_sources: Optional[int] = Integer(default=100)
 
 
 class WcsCalibrationJobResultSchema(JobResultSchema):
-    file_ids = List(Integer(), default=[])  # type: TList[int]
+    file_ids: TList[int] = List(Integer(), default=[])
 
 
 class WcsCalibrationJobSchema(JobSchema):
     type = 'wcs_calibration'
 
-    result = Nested(
-        WcsCalibrationJobResultSchema,
-        default={})  # type: WcsCalibrationJobResultSchema
-    file_ids = List(Integer(), default=[])  # type: TList[int]
-    settings = Nested(
-        WcsCalibrationSettingsSchema,
-        default={})  # type: WcsCalibrationSettingsSchema
-    source_extraction_settings = Nested(
-        SourceExtractionSettingsSchema,
-        default=None)  # type: SourceExtractionSettingsSchema
-    inplace = Boolean(default=False)  # type: bool
+    result: WcsCalibrationJobResultSchema = Nested(
+        WcsCalibrationJobResultSchema, default={})
+    file_ids: TList[int] = List(Integer(), default=[])
+    settings: WcsCalibrationSettingsSchema = Nested(
+        WcsCalibrationSettingsSchema, default={})
+    source_extraction_settings: SourceExtractionSettingsSchema = Nested(
+        SourceExtractionSettingsSchema, default=None)
+    inplace: bool = Boolean(default=False)

@@ -18,25 +18,24 @@ class FieldCal(AfterglowSchema):
     """
     Field calibration prescription
     """
-    id = Integer()  # type: int
-    name = String()  # type: str
-    catalog_sources = List(Nested(CatalogSource))  # type: TList[CatalogSource]
-    catalogs = List(String())  # type: list
-    custom_filter_lookup = Dict(
-        keys=String, values=Dict(
-            keys=String, values=String))  # type: TDict[str, TDict[str, str]]
-    source_inclusion_percent = Float()  # type: float
-    min_snr = Float()  # type: float
-    max_snr = Float()  # type: float
-    source_match_tol = Float()  # type: float
+    id: int = Integer()
+    name: str = String()
+    catalog_sources: TList[CatalogSource] = List(Nested(CatalogSource))
+    catalogs: TList[str] = List(String())
+    custom_filter_lookup: TDict[str, TDict[str, str]] = Dict(
+        keys=String, values=Dict(keys=String, values=String))
+    source_inclusion_percent: float = Float()
+    min_snr: float = Float()
+    max_snr: float = Float()
+    source_match_tol: float = Float()
 
 
 class FieldCalResult(AfterglowSchema):
     """
     Result of field calibration for a data file
     """
-    file_id = Integer()  # type: int
-    phot_results = List(
-        Nested(PhotometryData), default=[])  # type: TList[PhotometryData]
-    zero_point = Float()  # type: float
-    zero_point_error = Float()  # type: float
+    file_id: int = Integer()
+    phot_results: TList[PhotometryData] = List(
+        Nested(PhotometryData), default=[])
+    zero_point: float = Float()
+    zero_point_error: float = Float()

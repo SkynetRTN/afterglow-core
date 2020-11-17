@@ -18,29 +18,27 @@ __all__ = ['StackingJob']
 
 
 class StackingSettings(AfterglowSchema):
-    mode = String(default='average')  # type: str
-    scaling = String(default=None)  # type: str
-    rejection = String(default=None)  # type: str
-    percentile = Integer(default=50)  # type: int
-    lo = Float(default=0)  # type: float
-    hi = Float(default=100)  # type: float
+    mode: str = String(default='average')
+    scaling: str = String(default=None)
+    rejection: str = String(default=None)
+    percentile: int = Integer(default=50)
+    lo: float = Float(default=0)
+    hi: float = Float(default=100)
 
 
 class StackingJobResult(JobResult):
-    file_id = Integer()  # type: int
+    file_id: int = Integer()
 
 
 class StackingJob(Job):
     type = 'stacking'
     description = 'Stack Images'
 
-    result = Nested(
-        StackingJobResult, default={})  # type: StackingJobResult
-    file_ids = List(Integer(), default=[])  # type: TList[int]
-    # alignment_settings = Nested(
-    #     AlignmentSettings, default={})  # type: AlignmentSettings
-    stacking_settings = Nested(
-        StackingSettings, default={})  # type: StackingSettings
+    result: StackingJobResult = Nested(StackingJobResult, default={})
+    file_ids: TList[int] = List(Integer(), default=[])
+    # alignment_settings: AlignmentSettings = Nested(
+    #     AlignmentSettings, default={})
+    stacking_settings: StackingSettings = Nested(StackingSettings, default={})
 
     def run(self):
         settings = self.stacking_settings

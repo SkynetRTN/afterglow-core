@@ -35,8 +35,8 @@ for _name in ['fft', 'ifft', 'rfft', 'irfft', 'hfft', 'ihfft', 'rfftn',
 
 
 class PixelOpsJobResult(JobResult):
-    file_ids = List(Integer(), default=[])  # type: TList[int]
-    data = List(Float(), default=[])  # type: TList[float]
+    file_ids: TList[int] = List(Integer(), default=[])
+    data: TList[float] = List(Float(), default=[])
 
 
 class PixelOpsJob(Job):
@@ -76,11 +76,11 @@ class PixelOpsJob(Job):
     type = 'pixel_ops'
     description = 'Pixel Operations'
 
-    result = Nested(PixelOpsJobResult)  # type: PixelOpsJobResult
-    file_ids = List(Integer(), default=[])  # type: TList[int]
-    op = String(default=None)  # type: str
-    inplace = Boolean(default=False)  # type: bool
-    aux_file_ids = List(Integer(), default=[])  # type: TList[int]
+    result: PixelOpsJobResult = Nested(PixelOpsJobResult)
+    file_ids: TList[int] = List(Integer(), default=[])
+    op: str = String(default=None)
+    inplace: bool = Boolean(default=False)
+    aux_file_ids: TList[int] = List(Integer(), default=[])
 
     def run(self):
         # Deduce the type of result by analyzing the user-supplied expression

@@ -20,36 +20,36 @@ class MagSchema(AfterglowSchema):
 
 
 class IPhotometrySchema(AfterglowSchema):
-    flux = Float()  # type: float
-    flux_error = Float()  # type: float
-    mag = Float()  # type: float
-    mag_error = Float()  # type: float
+    flux: float = Float()
+    flux_error: float = Float()
+    mag: float = Float()
+    mag_error: float = Float()
 
 
 class IApertureSchema(AfterglowSchema):
-    aper_a = Float()  # type: float
-    aper_b = Float()  # type: float
-    aper_theta = Float()  # type: float
-    annulus_a_in = Float()  # type: float
-    annulus_b_in = Float()  # type: float
-    annulus_theta_in = Float()  # type: float
-    annulus_a_out = Float()  # type: float
-    annulus_b_out = Float()  # type: float
-    annulus_theta_out = Float()  # type: float
+    aper_a: float = Float()
+    aper_b: float = Float()
+    aper_theta: float = Float()
+    annulus_a_in: float = Float()
+    annulus_b_in: float = Float()
+    annulus_theta_in: float = Float()
+    annulus_a_out: float = Float()
+    annulus_b_out: float = Float()
+    annulus_theta_out: float = Float()
 
 
 class PhotSettingsSchema(AfterglowSchema):
-    mode = String(default='aperture')  # type: str
-    a = Float(default=None)  # type: float
-    b = Float(default=None)  # type: float
-    theta = Float(default=0)  # type: float
-    a_in = Float(default=None)  # type: float
-    a_out = Float(default=None)  # type: float
-    b_out = Float(default=None)  # type: float
-    theta_out = Float(default=None)  # type: float
-    gain = Float(default=None)  # type: float
-    centroid_radius = Float(default=0)  # type: float
-    zero_point = Float(default=0)  # type: float
+    mode: str = String(default='aperture')
+    a: float = Float(default=None)
+    b: float = Float(default=None)
+    theta: float = Float(default=0)
+    a_in: float = Float(default=None)
+    a_out: float = Float(default=None)
+    b_out: float = Float(default=None)
+    theta_out: float = Float(default=None)
+    gain: float = Float(default=None)
+    centroid_radius: float = Float(default=0)
+    zero_point: float = Float(default=0)
 
 
 class PhotometryDataSchema(SourceExtractionDataSchema, IPhotometrySchema,
@@ -88,20 +88,20 @@ class PhotometrySchema(AfterglowSchema):
             subtraction was enabled; not set otherwise
 
     """
-    flux = Float()  # type: float
-    flux_err = Float()  # type: float
-    mag = Float()  # type: float
-    mag_err = Float()  # type: float
-    x = Float()  # type: float
-    y = Float()  # type: float
-    a = Float()  # type: float
-    b = Float()  # type: float
-    theta = Float()  # type: float
-    a_in = Float()  # type: float
-    a_out = Float()  # type: float
-    b_out = Float()  # type: float
-    theta_out = Float()  # type: float
-    area = Float()  # type: float
-    background_area = Float()  # type: float
-    background = Float()  # type: float
-    background_rms = Float()  # type: float
+    flux: float = Float()
+    flux_err: float = Float()
+    mag: float = Float()
+    mag_err: float = Float()
+    x: float = Float()
+    y: float = Float()
+    a: float = Float()
+    b: float = Float()
+    theta: float = Float()
+    a_in: float = Float()
+    a_out: float = Float()
+    b_out: float = Float()
+    theta_out: float = Float()
+    area: float = Float()
+    background_area: float = Float()
+    background: float = Float()
+    background_rms: float = Float()

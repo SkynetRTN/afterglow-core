@@ -16,6 +16,7 @@ from .. import app
 from ..models import User
 from ..errors import MissingFieldError, ValidationError
 from ..errors.auth import DuplicateUsernameError, UnknownUserError
+from .base import Date, DateTime
 
 
 __all__ = [
@@ -77,11 +78,11 @@ class DbUser(db.Model, UserMixin):
     last_name = db.Column(
         db.String,
         db.CheckConstraint('last_name is null or length(last_name) <= 255'))
-    birth_date = db.Column(db.Date)
+    birth_date = db.Column(Date)
     active = db.Column(db.Boolean, server_default='1')
-    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    created_at = db.Column(DateTime, default=db.func.current_timestamp())
     modified_at = db.Column(
-        db.DateTime, default=db.func.current_timestamp(),
+        DateTime, default=db.func.current_timestamp(),
         onupdate=db.func.current_timestamp())
     roles = db.relationship(
         'DbRole', secondary=user_roles,

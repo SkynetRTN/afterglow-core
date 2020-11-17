@@ -19,13 +19,13 @@ from . import url_prefix
 class TokenSchema(Resource):
     __get_view__ = 'tokens'
 
-    id = Integer()  # type: int
-    user_id = Integer()  # type: int
-    token_type = String()  # type: str
-    access_token = String()  # type: str
-    issued_at = Integer()  # type: int
-    expires_in = Integer()  # type: int
-    note = String()  # type: str
+    id: int = Integer()
+    user_id: int = Integer()
+    token_type: str = String()
+    access_token: str = String()
+    issued_at: int = Integer()
+    expires_in: int = Integer()
+    note: str = String()
 
 
 @app.route(url_prefix + 'tokens', methods=['GET', 'POST'])
