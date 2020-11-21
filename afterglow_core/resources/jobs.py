@@ -34,11 +34,8 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
-from .. import app, auth, plugins
+from .. import app, plugins
 from ..models import Job, JobState, JobResult, job_file_dir, job_file_path
-from ..resources.base import Date, DateTime, JSONType, Time
-from ..resources.data_files import get_session
-from ..resources.users import DbUser
 from ..schemas import (
     AfterglowSchema, Boolean as BooleanField, Date as DateField,
     DateTime as DateTimeField, Float as FloatField, Time as TimeField)
@@ -47,6 +44,8 @@ from ..errors.job import (
     JobServerError, UnknownJobError, UnknownJobFileError, UnknownJobTypeError,
     InvalidMethodError, CannotSetJobStatusError, CannotCancelJobError,
     CannotDeleteJobError)
+from .base import Date, DateTime, JSONType, Time
+from .data_files import get_session
 
 # Encryption imports
 try:
@@ -324,6 +323,9 @@ class JobWorkerProcess(Process):
         data_files.data_files_engine_lock = threading.Lock()
         for engine in data_files.data_files_engine.values():
             engine.dispose()
+
+        from .. import auth
+        from .users import DbUser
 
         # Wait for an incoming job request
         app.logger.info('%s Waiting for jobs', prefix)
@@ -1144,6 +1146,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
 
     :return: response message
     """
+    from .. import auth
     try:
         # Prepare server message
         msg = dict(args)
