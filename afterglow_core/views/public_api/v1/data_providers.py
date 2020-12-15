@@ -116,8 +116,7 @@ def data_providers(id: Optional[Union[int, str]] = None) -> Response:
     return json_response(DataProviderSchema(provider))
 
 
-@app.route(resource_prefix + '<id>/assets',
-           methods=('GET', 'POST', 'PUT', 'DELETE'))
+@app.route(resource_prefix + '<id>/assets', methods=('GET', 'PUT', 'DELETE'))
 @auth_required('user')
 def data_providers_assets(id: Union[int, str]) -> Response:
     """
@@ -133,10 +132,6 @@ def data_providers_assets(id: Union[int, str]) -> Response:
           for data providers that have collection assets, the optional path
           defines a collection asset to search in; data provider must be
           searchable
-
-    POST /data-providers/[id]/assets?path=
-        - create a new empty collection asset at the given path; data provider
-          must be writable
 
     PUT /data-providers/[id]/assets?path=...&name=...
         - rename an existing asset at the given path; data provider must
@@ -196,11 +191,6 @@ def data_providers_assets(id: Union[int, str]) -> Response:
     if path is None:
         raise errors.MissingFieldError(field='path')
 
-    if request.method == 'POST':
-        # Create collection asset at the given path
-        return json_response(DataProviderAssetSchema(provider.create_asset(
-            path, None, **params)), 201)
-
     if request.method == 'PUT':
         # Rename asset at the given path
         name = params.pop('name', None)
@@ -210,9 +200,9 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             path, name, **params)))
 
     if request.method == 'DELETE':
-        force = 'force' in params
-        if force:
-            params.pop('force')
+        force = params.pop('force', False)
+        if force is None:
+            force = True
 
         # Check that the asset at the given path exists
         asset = provider.get_asset(path)
@@ -229,7 +219,9 @@ def data_providers_assets(id: Union[int, str]) -> Response:
 @auth_required('user')
 def data_providers_assets_data(id: Union[int, str]) -> Response:
     """
-    Download, create, or update non-collection asset data
+    Download, create, or update asset data
+
+    For all requests except GET, data provider must be writable.
 
     GET /data-providers/[id]/assets/data?path=...
         - download unmodified non-collection asset data directly to the caller
@@ -237,40 +229,47 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
 
     POST /data-providers/[id]/assets/data?path=
         - create a new non-collection asset from a data file uploaded
-          as multipart/form-data; data provider must be writable
+          as multipart/form-data
+        - create a new empty collection asset if request body is empty
 
     POST /data-providers/[id]/assets/data?path=...&data_file_id=...[&fmt=...]
         - create a new non-collection asset at the given path from data file
-          using the specified file format (by default, FITS); data provider must
-          be writable; if exporting in formats other than FITS, "fmt" must
-          be supported by Pillow
+          using the specified file format (by default, FITS)
+          * if exporting in formats other than FITS, "fmt" must be supported
+            by Pillow
 
     POST /data-providers/[id]/assets/data?path=...&group_id=...
         [&fmt=...&mode=...]
         - create a new non-collection asset at the given path from data file
-          group using the specified file format (by default, FITS); data
-          provider must be writable; if exporting in formats other than FITS,
-          "fmt" must be supported by Pillow, and "mode" is required and must be
-          one of the supported modes (see
-          https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
+          group using the specified file format (by default, FITS)
+          * if exporting in formats other than FITS, "fmt" must be supported
+            by Pillow, and "mode" is required and must be one of the supported
+            modes (see
+            https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
 
-    PUT /data-providers/[id]/assets?path=...
-        - update an existing non-collection asset data at the given path by
-          overwriting it with the data uploaded as multipart/form-data; data
-          provider must be writable
+    PUT /data-providers/[id]/assets?path=...[&force]
+        - update an existing asset data at the given path by overwriting it
+          with the data uploaded as multipart/form-data or creating an empty
+          collection asset if no data provided
+          * existing collection assets are overwritten if "force" is present
+            in query arguments
 
-    PUT /data-providers/[id]/assets?[path=...&]data_file_id=...[&fmt=...]
-        - update an existing non-collection asset at the given path by
-          overwriting it with the given data file in the specified format
-          (by default, FITS); data provider must be writable; if no path
-          provided, the original asset path of the data file previously imported
-          from this data provider is used
+    PUT /data-providers/[id]/assets?[path=...&][&force]data_file_id=...
+        [&fmt=...]
+        - update an existing asset at the given path by overwriting it with
+          the given data file in the specified format (by default, FITS)
+          * existing collection assets are overwritten if "force" is present
+            in query arguments
+          * if no path provided, the original asset path of the data file
+            previously imported from this data provider is used
 
-    PUT /data-providers/[id]/assets?[path=...&]group_id=...[&fmt=...&mode=...]
+    PUT /data-providers/[id]/assets?[path=...&][&force]group_id=...
+        [&fmt=...&mode=...]
         - update an existing non-collection asset at the given path by
           overwriting it with the given data file group combined into a single
-          file in the specified format (by default, FITS);
-          * data provider must be writable;
+          file in the specified format (by default, FITS)
+          * existing collection assets are overwritten if "force" is present
+            in query arguments
           * if no path provided, the original asset path of the data file group
             previously imported from this data provider is used
           * if exporting in formats other than FITS, "fmt" must be supported by
@@ -370,31 +369,33 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
             data = get_data_file_bytes(current_user.id, data_file_id, fmt=fmt)
         else:
             # Creating/updating from uploaded data; use the first
-            # multipart/form-data file
+            # multipart/form-data file; if empty, creating an empty collection
+            # asset
             try:
                 data = list(request.files.values())[0].read()
             except (AttributeError, IndexError):
                 data = None
-            if data is None:
-                raise errors.MissingFieldError(field='data_file_id|group_id')
 
         # Check quota
         quota = provider.quota
         if quota:
-            usage, size = provider.usage, len(data) if data is not None else 0
-            if usage is None:
-                usage = 0
+            usage = provider.usage or 0
+            size = len(data) if data is not None else 0
             if request.method == 'PUT':
                 usage -= provider.get_asset(path).metadata.get('size', 0)
             if usage + size > quota:
                 raise QuotaExceededError(quota=quota, usage=usage, size=size)
 
     if request.method == 'POST':
-        # Create non-collection asset
+        # Create non-collection asset from data or empty collection asset if
+        # no data provided
         return json_response(DataProviderAssetSchema(provider.create_asset(
             path, data, **params)), 201)
 
     if request.method == 'PUT':
-        # Update non-collection asset
+        # Update asset
+        force = params.pop('force', False)
+        if force is None:
+            force = True
         return json_response(DataProviderAssetSchema(provider.update_asset(
-            path, data, **params)))
+            path, data, force=force, **params)))

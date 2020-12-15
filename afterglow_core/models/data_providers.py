@@ -255,7 +255,7 @@ class DataProvider(AfterglowSchema):
         Update an asset at the given path
 
         :param path: path of the asset to update
-        :param data: FITS image data
+        :param data: asset data; create collection asset if empty
         :param kwargs: optional extra provider-specific parameters
 
         :return: updated data provider asset object

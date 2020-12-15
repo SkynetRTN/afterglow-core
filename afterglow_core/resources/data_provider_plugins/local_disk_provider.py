@@ -564,13 +564,15 @@ class LocalDiskDataProvider(DataProvider):
             new_filename.split(root + os.path.sep)[1].replace('\\', '/'),
             new_filename)
 
-    def update_asset(self, path: str, data: bytes, **kwargs) \
+    def update_asset(self, path: str, data: Optional[bytes],
+                     force: bool = False, **kwargs) \
             -> DataProviderAsset:
         """
         Update an asset at the given path
 
         :param path: path of the asset to update
-        :param data: FITS file data
+        :param data: asset data; create non-collection asset if None
+        :param force: recursively overwrite collection asset
 
         :return: updated data provider asset object
         """
@@ -582,12 +584,24 @@ class LocalDiskDataProvider(DataProvider):
         if not os.path.exists(filename):
             raise AssetNotFoundError(path=path)
         if os.path.isdir(filename):
-            raise CannotUpdateCollectionAssetError()
+            if not force:
+                raise CannotUpdateCollectionAssetError()
+            try:
+                shutil.rmtree(filename)
+            except Exception as e:
+                raise FilesystemError(reason=str(e))
 
-        # Save data to disk overwriting existing file
         try:
-            with open(filename, 'wb') as f:
-                f.write(data)
+            if data is None:
+                # Create a collection asset
+                if os.path.exists(filename):
+                    # Overwriting a file with a directory, must delete it first
+                    os.unlink(filename)
+                os.makedirs(filename)
+            else:
+                # Save data to disk overwriting existing file
+                with open(filename, 'wb') as f:
+                    f.write(data)
         except Exception as e:
             raise FilesystemError(reason=str(e))
 
