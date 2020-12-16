@@ -14,7 +14,7 @@ from ....models import DataProvider
 from ....schemas.api.v1 import DataProviderAssetSchema, DataProviderSchema
 from ....errors.auth import NotAuthenticatedError
 from ....errors.data_provider import (
-    AssetNotFoundError, UnknownDataProviderError, ReadOnlyDataProviderError,
+    UnknownDataProviderError, ReadOnlyDataProviderError,
     NonBrowseableDataProviderError, NonSearchableDataProviderError,
     CannotSearchInNonCollectionError, CannotDeleteNonEmptyCollectionAssetError)
 from ....errors.data_file import UnknownDataFileGroupError
@@ -205,6 +205,8 @@ def data_providers_assets(id: Union[int, str]) -> Response:
         force = params.pop('force', False)
         if force is None:
             force = True
+        else:
+            force = bool(int(force))
 
         # Check that the asset at the given path exists
         asset = provider.get_asset(path)
@@ -415,6 +417,8 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
                 force = params.pop('force', False)
                 if force is None:
                     force = True
+                else:
+                    force = bool(int(force))
                 return json_response(DataProviderAssetSchema(
                     provider.update_asset(path, data, force=force, **params)))
 
@@ -423,9 +427,13 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
         move = params.pop('move', False)
         if move is None:
             move = True
+        else:
+            move = bool(int(move))
         force = params.pop('force', False)
         if force is None:
             force = True
+        else:
+            force = bool(int(force))
         if src_provider_id is None or src_provider_id == id:
             src_provider = provider
         else:
@@ -443,7 +451,7 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
         if src_provider == provider and src_path == path:
             raise errors.ValidationError(
                 'src_path',
-                '{}ing onto itself'.format(('Copy', 'Mov')[bool(move)]))
+                '{}ing onto itself'.format(('Copy', 'Mov')[move]))
 
         return json_response(DataProviderAssetSchema(provider.recursive_copy(
             src_provider, src_path, path, move=move,
