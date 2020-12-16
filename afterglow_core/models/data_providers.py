@@ -4,11 +4,15 @@ Afterglow Core: data provider plugin data model
 A data provider plugin must subclass :class:`DataProvider`.
 """
 
+from __future__ import annotations
+
 from typing import Any, Dict as TDict, List as TList, Optional
 
 from marshmallow.fields import Dict, Integer, List, String
 
 from .. import app, errors
+from ..errors.data_provider import (
+    AssetNotFoundError, NonBrowseableDataProviderError, QuotaExceededError)
 from ..schemas import AfterglowSchema, Boolean
 
 
@@ -249,13 +253,13 @@ class DataProvider(AfterglowSchema):
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='rename_asset')
 
-    def update_asset(self, path: str, data: bytes, **kwargs) \
+    def update_asset(self, path: str, data: Optional[bytes], **kwargs) \
             -> DataProviderAsset:
         """
         Update an asset at the given path
 
         :param path: path of the asset to update
-        :param data: asset data; create collection asset if empty
+        :param data: asset data; create collection asset if None
         :param kwargs: optional extra provider-specific parameters
 
         :return: updated data provider asset object
@@ -273,3 +277,93 @@ class DataProvider(AfterglowSchema):
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='delete_asset')
+
+    def check_quota(self: DataProvider, path: Optional[str], data: bytes) \
+            -> None:
+        """
+        Check that the new asset data will not exceed the data provider's quota
+
+        :param path: asset path; must be set if updating existing asset
+        :param data: asset data being saved
+        """
+        quota = self.quota
+        if quota:
+            usage = self.usage or 0
+            size = len(data) if data is not None else 0
+            if path is not None:
+                usage -= self.get_asset(path).metadata.get('size', 0)
+            if usage + size > quota:
+                raise QuotaExceededError(quota=quota, usage=usage, size=size)
+
+    def recursive_copy(self, provider: DataProvider,
+                       src_path: str, dst_path: str,
+                       move: bool = False, update: Optional[bool] = None,
+                       force: bool = False, limit: int = 0, _depth: int = 0,
+                       **kwargs) \
+            -> DataProviderAsset:
+        """
+        Copy the whole asset from another data provider or a different path
+        within the same data provider
+
+        :param provider: source data provider; can be the same as the current
+            provider
+        :param src_path: asset path within the source data provider
+        :param dst_path: destination asset path within the current data provider
+        :param move: delete source asset after successful copy
+        :param update: update existing asset at `dst_path` vs create
+            a new asset; None (default) means auto
+        :param force: overwrite existing top-level collection asset if updating
+        :param limit: recursion limit for the copy
+        :param _depth: current recursion depth; keep as is
+        :param kwargs: optional provider-specific keyword arguments to
+            :meth:`create_asset`, :meth:`update_asset`, and :meth:`delete_asset`
+
+        :return: new data provider asset
+        """
+        if update is None:
+            # Create or update top-level asset?
+            try:
+                self.get_asset(dst_path)
+            except AssetNotFoundError:
+                update = False
+            else:
+                update = True
+
+        src_asset = provider.get_asset(src_path)
+        if src_asset.collection:
+            # Copying the whole collection asset tree; first, create/update
+            # empty collection asset at dst_path
+            if not provider.browseable:
+                raise NonBrowseableDataProviderError(id=provider.id)
+            if update:
+                res = self.update_asset(dst_path, None, force=force, **kwargs)
+            else:
+                res = self.create_asset(dst_path, None, **kwargs)
+
+            if not limit or _depth < limit - 1:
+                for child_asset in provider.get_child_assets(src_path):
+                    # For each child asset of a collection asset, recursively
+                    # copy its data; calculate the destination path by appending
+                    # the source asset name; always create destination asset
+                    # since no asset exists there yet
+                    self.recursive_copy(
+                        provider, child_asset.path,
+                        dst_path + '/' + child_asset.name, move=move,
+                        update=False, limit=limit, _depth=_depth + 1, **kwargs)
+        else:
+            # Copying a non-collection asset
+            src_data = provider.get_asset_data(src_path)
+            self.check_quota(dst_path if update else None, src_data)
+            if update:
+                # Updating top-level destination asset
+                res = self.update_asset(
+                    dst_path, src_data, force=force, **kwargs)
+            else:
+                # Creating non-collection asset
+                res = self.create_asset(dst_path, src_data, **kwargs)
+
+        if move:
+            # Delete the source asset after successful copy
+            self.delete_asset(src_path, **kwargs)
+
+        return res
