@@ -20,7 +20,8 @@ from ....errors.auth import NotAuthenticatedError
 from ....errors.data_provider import (
     UnknownDataProviderError, ReadOnlyDataProviderError,
     NonBrowseableDataProviderError, NonSearchableDataProviderError,
-    CannotSearchInNonCollectionError, CannotDeleteNonEmptyCollectionAssetError)
+    CannotSearchInNonCollectionError, CannotDeleteNonEmptyCollectionAssetError,
+    UploadNotAllowedError)
 from ....errors.data_file import UnknownDataFileGroupError
 from . import url_prefix
 
@@ -401,6 +402,8 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
                 try:
                     data = list(request.files.values())[0].read()
                 except (AttributeError, IndexError):
+                    if not provider.allow_upload:
+                        raise UploadNotAllowedError()
                     data = None
 
             provider.check_quota(

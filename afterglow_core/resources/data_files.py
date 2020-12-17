@@ -29,7 +29,8 @@ from ..errors.data_file import (
     UnknownDataFileError, CannotCreateDataFileDirError,
     CannotImportFromCollectionAssetError, UnknownSessionError,
     DuplicateSessionNameError, UnrecognizedDataFormatError,
-    UnknownDataFileGroupError, DataFileExportError)
+    UnknownDataFileGroupError, DataFileExportError,
+    DataFileUploadNotAllowedError)
 from ..errors.data_provider import UnknownDataProviderError
 from . import data_providers
 from .base import DateTime, JSONType
@@ -1147,6 +1148,8 @@ def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
             # Data file upload: get from multipart/form-data; use filename
             # for the 2nd and subsequent files or if the "name" parameter
             # is not provided
+            if not app.config.get('DATA_FILE_UPLOAD'):
+                raise DataFileUploadNotAllowedError()
             for i, (filename, file) in enumerate(files.items()):
                 all_data_files += import_data_file(
                     adb, root, None, None, {}, BytesIO(file.read()),

@@ -11,7 +11,7 @@ __all__ = [
     'CannotSearchInNonCollectionError', 'CannotUpdateCollectionAssetError',
     'NonBrowseableDataProviderError', 'NonSearchableDataProviderError',
     'QuotaExceededError', 'ReadOnlyDataProviderError',
-    'UnknownDataProviderError',
+    'UnknownDataProviderError', 'UploadNotAllowedError',
 ]
 
 
@@ -139,3 +139,16 @@ class QuotaExceededError(AfterglowError):
     code = 403
     subcode = 1009
     message = 'Storage quota exceeded'
+
+
+class UploadNotAllowedError(AfterglowError):
+    """
+    Attempting to upload a user file to read-write data provider that does not
+    allow uploading
+
+    Extra attributes::
+        None
+    """
+    code = 403
+    subcode = 1010
+    message = 'Upload not allowed'

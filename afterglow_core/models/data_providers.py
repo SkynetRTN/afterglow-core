@@ -110,6 +110,8 @@ class DataProvider(AfterglowSchema):
             updated, or deleted); automatically set depending on whether the
             provider implements create_asset(), update_asset(), or
             delete_asset()
+        allow_upload: if readonly=False, allow uploading user images
+            to the data provider
         quota: data provider storage quota, in bytes, if applicable
         usage: current usage of the data provider storage, in bytes, if
             applicable
@@ -129,6 +131,7 @@ class DataProvider(AfterglowSchema):
     searchable: bool = Boolean(default=False)
     search_fields: TDict[str, TDict[str, Any]] = Dict(default={})
     readonly: bool = Boolean(default=True)
+    allow_upload: bool = Boolean(default=False)
     quota: int = Integer(default=None)
     usage: int = Integer(default=None)
 
