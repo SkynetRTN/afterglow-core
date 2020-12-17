@@ -10,6 +10,10 @@ from flask import Response, request, send_file
 from .... import app, errors, json_response
 from ....auth import auth_required, current_user
 from ....resources.data_providers import providers
+from ....resources.data_files import (
+    get_data_file, get_data_file_bytes, get_data_file_group,
+    get_data_file_group_bytes, update_data_file_asset,
+    update_data_file_group_asset)
 from ....models import DataProvider
 from ....schemas.api.v1 import DataProviderAssetSchema, DataProviderSchema
 from ....errors.auth import NotAuthenticatedError
@@ -320,7 +324,6 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
         # path is not set, save to the original path if available and matches
         # the data provider ID
         if params.get('group_id'):
-            from .data_files import get_data_file_group
             group = get_data_file_group(current_user.id, params['group_id'])
             if not group:
                 UnknownDataFileGroupError(id=params['group_id'])
@@ -332,7 +335,6 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
                 # No original asset path in the group for the current provider
                 pass
         elif params.get('data_file_id'):
-            from .data_files import get_data_file
             df = get_data_file(current_user.id, params['data_file_id'])
             if getattr(df, 'data_provider', None) == str(id):
                 path = getattr(df, 'asset_path', None)
@@ -386,12 +388,10 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
                     raise errors.ValidationError(
                         'data_file_id',
                         '"group_id" and "data_file_id" are mutually exclusive')
-                from .data_files import get_data_file_group_bytes
                 data = get_data_file_group_bytes(
                     current_user.id, group_id, fmt=fmt, mode=mode)
             elif data_file_id is not None:
                 # Exporting single data file in the given format
-                from .data_files import get_data_file_bytes
                 data = get_data_file_bytes(
                     current_user.id, data_file_id, fmt=fmt)
             else:
@@ -409,18 +409,30 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
             if request.method == 'POST':
                 # Create non-collection asset from data or empty collection
                 # asset if no data provided
-                return json_response(DataProviderAssetSchema(
-                    provider.create_asset(path, data, **params)), 201)
-
-            if request.method == 'PUT':
+                asset = provider.create_asset(path, data, **params)
+            else:
                 # Update asset
                 force = params.pop('force', False)
                 if force is None:
                     force = True
                 else:
                     force = bool(int(force))
-                return json_response(DataProviderAssetSchema(
-                    provider.update_asset(path, data, force=force, **params)))
+                asset = provider.update_asset(path, data, force=force, **params)
+
+            # Link the original data files to the new asset and reset
+            # the modified flag on save
+            if data_file_id is not None:
+                update_data_file_asset(
+                    current_user.id, data_file_id, id, asset.path,
+                    asset.metadata, asset.name)
+            elif group_id is not None:
+                update_data_file_group_asset(
+                    current_user.id, group_id, id, asset.path,
+                    asset.metadata, asset.name)
+
+            return json_response(
+                DataProviderAssetSchema(asset),
+                201 if request.method == 'POST' else 200)
 
         # Recursively copying from another asset
         src_path = str(src_path)
@@ -453,6 +465,7 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
                 'src_path',
                 '{}ing onto itself'.format(('Copy', 'Mov')[move]))
 
+        update = request.method == 'PUT'
         return json_response(DataProviderAssetSchema(provider.recursive_copy(
-            src_provider, src_path, path, move=move,
-            update=request.method == 'PUT', force=force)))
+            src_provider, src_path, path, move=move, update=update,
+            force=force)), 200 if update else 201)
