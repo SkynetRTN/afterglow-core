@@ -38,7 +38,7 @@ from ...errors.data_provider_local_disk import *
 from ...errors.data_file import UnrecognizedDataFormatError
 
 
-__all__ = ['LocalDiskDataProvider']
+__all__ = ['LocalDiskDataProvider', 'RestrictedRWLocalDiskDataProvider']
 
 
 class LocalDiskDataProvider(DataProvider):
@@ -633,3 +633,21 @@ class LocalDiskDataProvider(DataProvider):
             except Exception as e:
                 # noinspection PyUnresolvedReferences
                 raise FilesystemError(reason=str(e))
+
+
+class RestrictedRWLocalDiskDataProvider(LocalDiskDataProvider):
+    """
+    Local disk data provider with restricted write access
+    """
+    name = 'restricted_local_disk'
+    display_name = description = 'Local Filesystem with Restricted Write Access'
+
+    writers = ()
+
+    def __getattribute__(self, item):
+        if item == 'readonly':
+            # Dynamic readonly attr implementation based on the currently
+            # authenticated user's username
+            return auth.current_user.username not in object.__getattribute__(
+                self, 'writers')
+        return super().__getattribute__(item)
