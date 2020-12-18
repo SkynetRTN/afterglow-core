@@ -76,7 +76,8 @@ def field_cal(id_or_name: str) -> Response:
         # Update field cal
         return json_response(FieldCalSchema(update_field_cal(
             auth.current_user.id, cal.id,
-            FieldCal(FieldCalSchema(**request.args.to_dict())))))
+            FieldCal(FieldCalSchema(**request.args.to_dict()),
+                     only=list(request.args.keys())))))
 
     if request.method == 'DELETE':
         # Delete field cal

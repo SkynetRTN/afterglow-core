@@ -94,7 +94,8 @@ def user(user_id: int) -> Response:
     active_admins = len(query_users(roles='admin'))
 
     if request.method == 'PUT':
-        u1 = User(UserSchema(**request.args.to_dict()))
+        u1 = User(UserSchema(**request.args.to_dict()),
+                  only=list(request.args.keys()))
 
         if not request.user.is_admin:
             for attr in ('username', 'active', 'roles'):
