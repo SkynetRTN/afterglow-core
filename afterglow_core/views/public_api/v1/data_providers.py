@@ -2,10 +2,9 @@
 Afterglow Core: API v1 data provider views
 """
 
-from io import BytesIO
 from typing import Optional, Union
 
-from flask import Response, request, send_file
+from flask import Response, request
 
 from .... import app, errors, json_response
 from ....auth import auth_required, current_user
@@ -363,9 +362,9 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
         except KeyError:
             pass
 
-        return send_file(
-            BytesIO(data), mimetype=mimetype, as_attachment=True,
-            attachment_filename=asset.name)
+        return Response(
+            data, 200 if data else 204, [('Content-Length', str(len(data)))],
+            mimetype)
 
     if request.method in ('POST', 'PUT'):
         group_id = params.pop('group_id', None)
