@@ -811,16 +811,27 @@ class JobRequestHandler(BaseRequestHandler):
                     if job_file is None or job_file.job.user_id != user_id:
                         raise UnknownJobFileError(id=file_id)
 
+                    filename = job_file_path(user_id, job_id, file_id)
                     try:
-                        with open(job_file_path(user_id, job_id, file_id),
-                                  'rb') as f:
+                        with open(filename, 'rb') as f:
                             result = f.read()
                     except Exception:
                         raise UnknownJobFileError(id=file_id)
+                    else:
+                        # noinspection PyBroadException
+                        try:
+                            os.unlink(filename)
+                        except Exception:
+                            pass
+
+                    # Remove job file after the first download request
 
                     binary_result = True
                     mimetype = job_file.mimetype
                     headers = job_file.headers
+                    if headers is None:
+                        headers = []
+                    headers.append(('Content-Length', str(len(result))))
 
                 else:
                     raise InvalidMethodError(
