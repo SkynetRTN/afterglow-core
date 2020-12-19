@@ -382,7 +382,7 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
     return db_data_file
 
 
-def import_data_file(adb, root: str, provider_id: Optional[str],
+def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                      asset_path: Optional[str], asset_metadata: dict, fp,
                      name: Optional[str], duplicates: str = 'ignore',
                      session_id: Optional[int] = None) -> TList[DbDataFile]:

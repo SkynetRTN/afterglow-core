@@ -13,7 +13,6 @@ from ....resources.data_files import (
     get_data_file, get_data_file_bytes, get_data_file_group,
     get_data_file_group_bytes, update_data_file_asset,
     update_data_file_group_asset)
-from ....models import DataProvider
 from ....schemas.api.v1 import DataProviderAssetSchema, DataProviderSchema
 from ....errors.auth import NotAuthenticatedError
 from ....errors.data_provider import (
@@ -24,53 +23,8 @@ from ....errors.data_provider import (
 from ....errors.data_file import UnknownDataFileGroupError
 from . import url_prefix
 
-try:
-    from PIL import Image as PILImage
-except ImportError:
-    PILImage = None
-
 
 resource_prefix = url_prefix + 'data-providers/'
-
-
-def check_provider_auth(provider: DataProvider):
-    """
-    Check that the user is authenticated with any of the auth methods required
-    for the given data provider; raises NotAuthenticatedError if not
-
-    :param provider: data provider plugin instance
-
-    :return: None
-    """
-    if not app.config.get('USER_AUTH'):
-        # User auth disabled, always succeed
-        return
-
-    auth_methods = provider.auth_methods
-    if not auth_methods:
-        # No specific auth methods requested
-        return
-
-    # Check that any of the auth methods requested is present
-    # in any of the user's identities
-    for required_method in auth_methods:
-        if required_method == 'http':
-            # HTTP auth requires username and password being set
-            if current_user.username and current_user.password:
-                return
-            continue
-
-        # For non-HTTP methods, check identities
-        try:
-            for identity in current_user.identities:
-                if identity.auth_method == required_method:
-                    return
-        except AttributeError:
-            pass
-
-    raise NotAuthenticatedError(
-        error_msg='Data provider "{}" requires authentication with either of '
-        'the methods: {}'.format(provider.id, ', '.join(auth_methods)))
 
 
 @app.route(resource_prefix[:-1])
@@ -97,7 +51,7 @@ def data_providers(id: Optional[Union[int, str]] = None) -> Response:
         for id in sorted({provider.id for provider in providers.values()}):
             provider = providers[id]
             try:
-                check_provider_auth(provider)
+                provider.check_auth()
             except NotAuthenticatedError:
                 pass
             else:
@@ -115,7 +69,7 @@ def data_providers(id: Optional[Union[int, str]] = None) -> Response:
 
     # If specific auth method(s) are requested for data provider, check that the
     # user is authenticated with any of these methods
-    check_provider_auth(provider)
+    provider.check_auth()
 
     return json_response(DataProviderSchema(provider))
 
@@ -158,7 +112,7 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             provider = providers[int(id)]
         except (KeyError, ValueError):
             raise UnknownDataProviderError(id=id)
-    check_provider_auth(provider)
+    provider.check_auth()
 
     if request.method != 'GET' and provider.readonly:
         raise ReadOnlyDataProviderError(id=id)
@@ -308,7 +262,7 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
             provider = providers[int(id)]
         except (KeyError, ValueError):
             raise UnknownDataProviderError(id=id)
-    check_provider_auth(provider)
+    provider.check_auth()
 
     if request.method != 'GET' and provider.readonly:
         raise ReadOnlyDataProviderError(id=id)
@@ -351,20 +305,9 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
                 'path', 'Cannot download collection assets')
         data = provider.get_asset_data(path)
 
-        # Get MIME type of data
-        mimetype = 'application/octet-stream'
-        try:
-            imtype = asset.metadata['type']
-            if imtype == 'FITS':
-                mimetype = 'image/fits'
-            elif PILImage is not None:
-                mimetype = PILImage.MIME[imtype]
-        except KeyError:
-            pass
-
         return Response(
             data, 200 if data else 204, [('Content-Length', str(len(data)))],
-            mimetype)
+            asset.mimetype)
 
     if request.method in ('POST', 'PUT'):
         group_id = params.pop('group_id', None)
@@ -459,7 +402,7 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
                 except (KeyError, ValueError):
                     raise UnknownDataProviderError(id=src_provider_id)
             if src_provider != provider:
-                check_provider_auth(src_provider)
+                src_provider.check_auth()
                 if move and src_provider.readonly:
                     raise ReadOnlyDataProviderError(id=src_provider.id)
         if src_provider == provider and src_path == path:

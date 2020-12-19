@@ -3,6 +3,7 @@ Afterglow Core: job schemas
 """
 
 from .alignment_job import *
+from .batch_download_job import *
 from .batch_import_job import *
 from .catalog_query_job import *
 from .cropping_job import *
