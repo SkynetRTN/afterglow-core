@@ -102,6 +102,21 @@ class LocalDiskDataProvider(DataProvider):
                         raise FilesystemError(reason=str(e))
         return p
 
+    def _path_to_filename(self, path: str) -> str:
+        """
+        Return absolute filesystem name corresponding to the given path
+        and check that it is inside the data provider root
+
+        :param path: asset path
+
+        :return: fully-qualified filesystem path
+        """
+        root = self.abs_root
+        filename = os.path.abspath(os.path.join(root, path.strip('/')))
+        if not filename.startswith(root):
+            raise AssetOutsideRootError()
+        return filename
+
     @staticmethod
     def _get_asset(path: str, filename: str) -> DataProviderAsset:
         """
@@ -113,7 +128,7 @@ class LocalDiskDataProvider(DataProvider):
 
         :return: asset object
         """
-        path = path.replace('\\', '/')
+        path = path.replace('\\', '/').strip('/')
         name = os.path.basename(filename)
 
         if os.path.isdir(filename):
@@ -305,13 +320,7 @@ class LocalDiskDataProvider(DataProvider):
 
         :return: asset object
         """
-        root = self.abs_root
-        filename = os.path.abspath(os.path.join(root, path))
-
-        # Prevent from going above the root path
-        if not filename.startswith(root):
-            raise AssetOutsideRootError()
-
+        filename = self._path_to_filename(path)
         if not os.path.exists(filename):
             raise AssetNotFoundError(path=path)
 
@@ -325,17 +334,12 @@ class LocalDiskDataProvider(DataProvider):
 
         :return: list of :class:`DataProviderAsset` objects for child assets
         """
-        root = self.abs_root
-        filename = os.path.abspath(os.path.join(root, path))
-
-        # Prevent from going above the root path
-        if not filename.startswith(root):
-            raise AssetOutsideRootError()
-
+        filename = self._path_to_filename(path)
         if not os.path.isdir(filename):
             raise AssetNotFoundError(path=path)
 
         # Return directory contents
+        root = self.abs_root
         return [DataProviderAsset(
             name=os.path.basename(fn),
             collection=os.path.isdir(fn),
@@ -404,7 +408,7 @@ class LocalDiskDataProvider(DataProvider):
             path = ''
             abs_path = root
         else:
-            abs_path = os.path.abspath(os.path.join(root, path))
+            abs_path = self._path_to_filename(path)
 
             # Prevent from going above the root path
             if not abs_path.startswith(root):
@@ -464,13 +468,7 @@ class LocalDiskDataProvider(DataProvider):
 
         :return: asset data
         """
-        root = self.abs_root
-        filename = os.path.abspath(os.path.join(root, path))
-
-        # Prevent from going above the root path
-        if not filename.startswith(root):
-            raise AssetOutsideRootError()
-
+        filename = self._path_to_filename(path)
         if not os.path.isfile(filename):
             raise AssetNotFoundError(path=path)
 
@@ -501,10 +499,7 @@ class LocalDiskDataProvider(DataProvider):
         :return: new data provider asset object
         """
         # Check that the given path does not exist
-        root = self.abs_root
-        filename = os.path.abspath(os.path.join(root, path))
-        if not filename.startswith(root):
-            raise AssetOutsideRootError()
+        filename = self._path_to_filename(path)
         if os.path.exists(filename):
             raise AssetAlreadyExistsError()
 
@@ -542,10 +537,7 @@ class LocalDiskDataProvider(DataProvider):
         :return: updated data provider asset object
         """
         # Check that the given path exists and is not a directory
-        root = self.abs_root
-        filename = os.path.abspath(os.path.join(root, path))
-        if not filename.startswith(root):
-            raise AssetOutsideRootError()
+        filename = self._path_to_filename(path)
         if not os.path.exists(filename):
             raise AssetNotFoundError(path=path)
 
@@ -561,8 +553,8 @@ class LocalDiskDataProvider(DataProvider):
             raise FilesystemError(reason=str(e))
 
         return self._get_asset(
-            new_filename.split(root + os.path.sep)[1].replace('\\', '/'),
-            new_filename)
+            new_filename.split(self.abs_root + os.path.sep)[1]
+            .replace('\\', '/'), new_filename)
 
     def update_asset(self, path: str, data: Optional[bytes],
                      force: bool = False, **kwargs) \
@@ -577,10 +569,7 @@ class LocalDiskDataProvider(DataProvider):
         :return: updated data provider asset object
         """
         # Check that the given path exists and is not a directory
-        root = self.abs_root
-        filename = os.path.abspath(os.path.join(root, path))
-        if not filename.startswith(root):
-            raise AssetOutsideRootError()
+        filename = self._path_to_filename(path)
         if not os.path.exists(filename):
             raise AssetNotFoundError(path=path)
         if os.path.isdir(filename):
@@ -614,10 +603,7 @@ class LocalDiskDataProvider(DataProvider):
         :param path: path of the asset to delete
         """
         # Check that the given path exists
-        root = self.abs_root
-        filename = os.path.abspath(os.path.join(root, path))
-        if not filename.startswith(root):
-            raise AssetOutsideRootError()
+        filename = self._path_to_filename(path)
         if not os.path.exists(filename):
             raise AssetNotFoundError(path=path)
 
