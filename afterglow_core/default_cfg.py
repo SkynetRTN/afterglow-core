@@ -45,7 +45,8 @@ DEFAULT_DATA_PROVIDER_AUTH = None
 # List of data provider specs [{'name': plugin_name, 'option': option ...} ...]
 DATA_PROVIDERS = [
     {'name': 'local_disk', 'display_name': 'Workspace', 'root': DATA_ROOT,
-     'readonly': False, 'peruser': True, 'quota': 10 << 30},
+     'readonly': False, 'peruser': True, 'quota': 10 << 30,
+     'allow_upload': True},
     {'name': 'imaging_surveys'},
 ]
 
@@ -59,6 +60,9 @@ DATA_FILE_ROOT = DATA_ROOT
 
 # Data files authentication; defaults to any method registered in USER_AUTH
 DATA_FILE_AUTH = None
+
+# Allow directly uploading files to Workbench
+DATA_FILE_UPLOAD = False
 
 # Number of histogram bins or method for calculating the optimal bin size
 # ("auto", "fd", "doane", "scott", "rice", "sturges", or "sqrt", see

@@ -10,6 +10,7 @@ __all__ = [
     'MissingWCSError', 'UnknownDataFileError', 'UnrecognizedDataFormatError',
     'UnknownSessionError', 'DuplicateSessionNameError',
     'UnknownDataFileGroupError', 'DataFileExportError',
+    'DataFileUploadNotAllowedError',
 ]
 
 
@@ -119,3 +120,15 @@ class DataFileExportError(AfterglowError):
     """
     subcode = 2008
     message = 'Cannot export data file'
+
+
+class DataFileUploadNotAllowedError(AfterglowError):
+    """
+    Attempt to upload a data file, but data file upload is disabled
+
+    Extra attributes::
+        None
+    """
+    code = 403
+    subcode = 2009
+    message = 'Data file upload not allowed'

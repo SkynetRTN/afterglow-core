@@ -198,7 +198,7 @@ class AlignmentJob(Job):
                             except KeyError:
                                 pass
 
-                        hdr.update(ref_wcs.to_header())
+                        hdr.update(ref_wcs.to_header(relax=True))
                         for name, val in orig_kw.items():
                             hdr[name] = val
                 else:

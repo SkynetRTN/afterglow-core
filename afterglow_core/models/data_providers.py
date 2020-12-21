@@ -4,11 +4,20 @@ Afterglow Core: data provider plugin data model
 A data provider plugin must subclass :class:`DataProvider`.
 """
 
+from __future__ import annotations
+
 from typing import Any, Dict as TDict, List as TList, Optional
 
+try:
+    from PIL import Image as PILImage
+except ImportError:
+    PILImage = None
 from marshmallow.fields import Dict, Integer, List, String
 
-from .. import app, errors
+from .. import app, auth, errors
+from ..errors.auth import NotAuthenticatedError
+from ..errors.data_provider import (
+    AssetNotFoundError, NonBrowseableDataProviderError, QuotaExceededError)
 from ..schemas import AfterglowSchema, Boolean
 
 
@@ -31,6 +40,23 @@ class DataProviderAsset(AfterglowSchema):
     collection: bool = Boolean(default=False)
     path: str = String(default=None)
     metadata: TDict[str, Any] = Dict(default={})
+
+    @property
+    def mimetype(self) -> Optional[str]:
+        """Non-collection asset MIME type"""
+        if self.collection:
+            return None
+
+        m = 'application/octet-stream'
+        try:
+            imtype = self.metadata['type']
+            if imtype == 'FITS':
+                m = 'image/fits'
+            elif PILImage is not None:
+                m = PILImage.MIME[imtype]
+        except KeyError:
+            pass
+        return m
 
 
 class DataProvider(AfterglowSchema):
@@ -106,6 +132,8 @@ class DataProvider(AfterglowSchema):
             updated, or deleted); automatically set depending on whether the
             provider implements create_asset(), update_asset(), or
             delete_asset()
+        allow_upload: if readonly=False, allow uploading user images
+            to the data provider
         quota: data provider storage quota, in bytes, if applicable
         usage: current usage of the data provider storage, in bytes, if
             applicable
@@ -125,6 +153,7 @@ class DataProvider(AfterglowSchema):
     searchable: bool = Boolean(default=False)
     search_fields: TDict[str, TDict[str, Any]] = Dict(default={})
     readonly: bool = Boolean(default=True)
+    allow_upload: bool = Boolean(default=False)
     quota: int = Integer(default=None)
     usage: int = Integer(default=None)
 
@@ -237,25 +266,26 @@ class DataProvider(AfterglowSchema):
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='create_asset')
 
-    def rename_asset(self, path: str, name: str) -> DataProviderAsset:
+    def rename_asset(self, path: str, name: str, **kwargs) -> DataProviderAsset:
         """
         Rename asset at the given path
 
         :param path: path at which to create the asset
         :param name: new asset name
+        :param kwargs: optional extra provider specific parameters
 
         :return: updated data provider asset object
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='rename_asset')
 
-    def update_asset(self, path: str, data: bytes, **kwargs) \
+    def update_asset(self, path: str, data: Optional[bytes], **kwargs) \
             -> DataProviderAsset:
         """
         Update an asset at the given path
 
         :param path: path of the asset to update
-        :param data: FITS image data
+        :param data: asset data; create collection asset if None
         :param kwargs: optional extra provider-specific parameters
 
         :return: updated data provider asset object
@@ -273,3 +303,128 @@ class DataProvider(AfterglowSchema):
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='delete_asset')
+
+    def check_quota(self: DataProvider, path: Optional[str], data: bytes) \
+            -> None:
+        """
+        Check that the new asset data will not exceed the data provider's quota
+
+        :param path: asset path; must be set if updating existing asset
+        :param data: asset data being saved
+        """
+        quota = self.quota
+        if quota:
+            usage = self.usage or 0
+            size = len(data) if data is not None else 0
+            if path is not None:
+                usage -= self.get_asset(path).metadata.get('size', 0)
+            if usage + size > quota:
+                raise QuotaExceededError(quota=quota, usage=usage, size=size)
+
+    def check_auth(self) -> None:
+        """
+        Check that the user is authenticated with any of the auth methods
+        required for the data provider; raises NotAuthenticatedError if not
+        """
+        if not app.config.get('USER_AUTH'):
+            # User auth disabled, always succeed
+            return
+
+        auth_methods = self.auth_methods
+        if not auth_methods:
+            # No specific auth methods requested
+            return
+
+        # Check that any of the auth methods requested is present
+        # in any of the user's identities
+        for required_method in auth_methods:
+            if required_method == 'http':
+                # HTTP auth requires username and password being set
+                if auth.current_user.username and auth.current_user.password:
+                    return
+                continue
+
+            # For non-HTTP methods, check identities
+            try:
+                for identity in auth.current_user.identities:
+                    if identity.auth_method == required_method:
+                        return
+            except AttributeError:
+                pass
+
+        raise NotAuthenticatedError(
+            error_msg='Data provider "{}" requires authentication with either '
+            'of the methods: {}'.format(self.id, ', '.join(auth_methods)))
+
+    def recursive_copy(self, provider: DataProvider,
+                       src_path: str, dst_path: str,
+                       move: bool = False, update: Optional[bool] = None,
+                       force: bool = False, limit: int = 0, _depth: int = 0,
+                       **kwargs) \
+            -> DataProviderAsset:
+        """
+        Copy the whole asset from another data provider or a different path
+        within the same data provider
+
+        :param provider: source data provider; can be the same as the current
+            provider
+        :param src_path: asset path within the source data provider
+        :param dst_path: destination asset path within the current data provider
+        :param move: delete source asset after successful copy
+        :param update: update existing asset at `dst_path` vs create
+            a new asset; None (default) means auto
+        :param force: overwrite existing top-level collection asset if updating
+        :param limit: recursion limit for the copy
+        :param _depth: current recursion depth; keep as is
+        :param kwargs: optional provider-specific keyword arguments to
+            :meth:`create_asset`, :meth:`update_asset`, and :meth:`delete_asset`
+
+        :return: new data provider asset
+        """
+        if update is None:
+            # Create or update top-level asset?
+            try:
+                self.get_asset(dst_path)
+            except AssetNotFoundError:
+                update = False
+            else:
+                update = True
+
+        src_asset = provider.get_asset(src_path)
+        if src_asset.collection:
+            # Copying the whole collection asset tree; first, create/update
+            # empty collection asset at dst_path
+            if not provider.browseable:
+                raise NonBrowseableDataProviderError(id=provider.id)
+            if update:
+                res = self.update_asset(dst_path, None, force=force, **kwargs)
+            else:
+                res = self.create_asset(dst_path, None, **kwargs)
+
+            if not limit or _depth < limit - 1:
+                for child_asset in provider.get_child_assets(src_path):
+                    # For each child asset of a collection asset, recursively
+                    # copy its data; calculate the destination path by appending
+                    # the source asset name; always create destination asset
+                    # since no asset exists there yet
+                    self.recursive_copy(
+                        provider, child_asset.path,
+                        dst_path + '/' + child_asset.name, move=move,
+                        update=False, limit=limit, _depth=_depth + 1, **kwargs)
+        else:
+            # Copying a non-collection asset
+            src_data = provider.get_asset_data(src_path)
+            self.check_quota(dst_path if update else None, src_data)
+            if update:
+                # Updating top-level destination asset
+                res = self.update_asset(
+                    dst_path, src_data, force=force, **kwargs)
+            else:
+                # Creating non-collection asset
+                res = self.create_asset(dst_path, src_data, **kwargs)
+
+        if move:
+            # Delete the source asset after successful copy
+            self.delete_asset(src_path, **kwargs)
+
+        return res

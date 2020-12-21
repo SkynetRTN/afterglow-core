@@ -29,7 +29,8 @@ from ..errors.data_file import (
     UnknownDataFileError, CannotCreateDataFileDirError,
     CannotImportFromCollectionAssetError, UnknownSessionError,
     DuplicateSessionNameError, UnrecognizedDataFormatError,
-    UnknownDataFileGroupError, DataFileExportError)
+    UnknownDataFileGroupError, DataFileExportError,
+    DataFileUploadNotAllowedError)
 from ..errors.data_provider import UnknownDataProviderError
 from . import data_providers
 from .base import DateTime, JSONType
@@ -74,6 +75,7 @@ __all__ = [
     # API endpoint interface
     'delete_data_file', 'get_data_file', 'get_data_file_group',
     'import_data_files', 'query_data_files', 'update_data_file',
+    'update_data_file_asset', 'update_data_file_group_asset',
     # Sessions
     'get_session', 'query_sessions', 'create_session', 'update_session',
     'delete_session',
@@ -380,7 +382,7 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
     return db_data_file
 
 
-def import_data_file(adb, root: str, provider_id: Optional[str],
+def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                      asset_path: Optional[str], asset_metadata: dict, fp,
                      name: Optional[str], duplicates: str = 'ignore',
                      session_id: Optional[int] = None) -> TList[DbDataFile]:
@@ -455,10 +457,8 @@ def import_data_file(adb, root: str, provider_id: Optional[str],
                     else:
                         # No channel name; use number
                         layer = str(i + 1)
-                    fullname = name + '.' + layer
                 else:
                     layer = None
-                    fullname = name
 
                 if i and primary_header:
                     # Copy primary header cards to extension header
@@ -474,7 +474,7 @@ def import_data_file(adb, root: str, provider_id: Optional[str],
                 asset_metadata['type'] = 'FITS'
 
                 all_data_files.append(create_data_file(
-                    adb, fullname, root, hdu.data, hdu.header, provider_id,
+                    adb, name, root, hdu.data, hdu.header, provider_id,
                     asset_path, asset_metadata, layer, duplicates, session_id,
                     group_id=group_id, group_order=i))
 
@@ -612,14 +612,12 @@ def import_data_file(adb, root: str, provider_id: Optional[str],
 
             if name and len(channels) > 1 and channel:
                 layer = channel
-                fullname = name + '.' + channel
             else:
                 layer = None
-                fullname = name
 
             # Store FITS image bottom to top
             all_data_files.append(create_data_file(
-                adb, fullname, root, data[::-1], hdr, provider_id, asset_path,
+                adb, name, root, data[::-1], hdr, provider_id, asset_path,
                 asset_metadata, layer, duplicates, session_id,
                 group_id=group_id, group_order=i))
 
@@ -1150,6 +1148,8 @@ def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
             # Data file upload: get from multipart/form-data; use filename
             # for the 2nd and subsequent files or if the "name" parameter
             # is not provided
+            if not app.config.get('DATA_FILE_UPLOAD'):
+                raise DataFileUploadNotAllowedError()
             for i, (filename, file) in enumerate(files.items()):
                 all_data_files += import_data_file(
                     adb, root, None, None, {}, BytesIO(file.read()),
@@ -1238,6 +1238,70 @@ def update_data_file(user_id: Optional[int], data_file_id: int,
             raise
 
     return data_file
+
+
+def update_data_file_asset(user_id: Optional[int], data_file_id: int,
+                           provider_id: str, asset_path: str,
+                           asset_metadata: dict, name: str) -> None:
+    """
+    Link data file to a new asset; called after exporting data file to asset
+
+    :param user_id: current user ID (None if user auth is disabled)
+    :param data_file_id: data file ID to update
+    :param provider_id: data provider ID/name
+    :param asset_path: data provider asset path
+    :param asset_metadata: data provider asset metadata
+    :param name: new data file name
+    """
+    adb = get_data_file_db(user_id)
+
+    db_data_file = adb.query(DbDataFile).get(data_file_id)
+    if db_data_file is None:
+        raise UnknownDataFileError(id=data_file_id)
+
+    try:
+        db_data_file.data_provider = provider_id
+        db_data_file.asset_path = asset_path
+        db_data_file.asset_metadata = asset_metadata
+        db_data_file.name = name
+        db_data_file.modified = False
+        adb.commit()
+    except Exception:
+        adb.rollback()
+        raise
+
+
+def update_data_file_group_asset(user_id: Optional[int], group_id: str,
+                                 provider_id: str, asset_path: str,
+                                 asset_metadata: dict, name: str) -> None:
+    """
+    Link data file group to a new asset; called after exporting group to asset
+
+    :param user_id: current user ID (None if user auth is disabled)
+    :param group_id: data file group ID to update
+    :param provider_id: data provider ID/name
+    :param asset_path: data provider asset path
+    :param asset_metadata: data provider asset metadata
+    :param name: new data file name
+    """
+    adb = get_data_file_db(user_id)
+
+    db_data_files = adb.query(DbDataFile) \
+        .filter(DbDataFile.group_id == group_id)
+    if not db_data_files.count():
+        raise UnknownDataFileGroupError(id=group_id)
+
+    try:
+        for db_data_file in db_data_files:
+            db_data_file.data_provider = provider_id
+            db_data_file.asset_path = asset_path
+            db_data_file.asset_metadata = asset_metadata
+            db_data_file.name = name
+            db_data_file.modified = False
+        adb.commit()
+    except Exception:
+        adb.rollback()
+        raise
 
 
 def delete_data_file(user_id: Optional[int], id: int) -> None:

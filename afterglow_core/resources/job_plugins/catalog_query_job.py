@@ -140,8 +140,11 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
     # Calculate bounding box centers and RA/Dec sizes for each of the FOVs
     boxes = []
     for wcs in wcs_list:
-        # noinspection PyProtectedMember
-        width, height = wcs._naxis1, wcs._naxis2
+        try:
+            # noinspection PyProtectedMember
+            width, height = wcs._naxis1, wcs._naxis2
+        except AttributeError:
+            height, width = wcs.array_shape
         center = wcs.all_pix2world((width - 1)/2, (height - 1)/2, 0)
 
         # Move center to RA = Dec = 0 so that we get a proper box size in terms
@@ -293,8 +296,12 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
         good = False
         for wcs in wcs_list:
             x, y = wcs.all_world2pix(s.ra_hours*15, s.dec_degs, 0)
-            # noinspection PyProtectedMember
-            if 0 <= x < wcs._naxis1 and 0 <= y < wcs._naxis2:
+            try:
+                # noinspection PyProtectedMember
+                w, h = wcs._naxis1, wcs._naxis2
+            except AttributeError:
+                h, w = wcs.array_shape
+            if 0 <= x < w and 0 <= y < h:
                 good = True
                 break
         if good:

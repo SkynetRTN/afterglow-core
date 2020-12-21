@@ -86,8 +86,9 @@ def make_data_response(data: Union[bytes, numpy.ndarray],
             data = s.getvalue()
             headers = [('Content-Encoding', 'gzip')]
         else:
-            headers = None
-        return Response(data, status_code, headers, mimetype)
+            headers = []
+        headers.append(('Content-Length', str(len(data))))
+        return Response(data, status_code if data else 204, headers, mimetype)
 
     if allow_json and is_array:
         return json_response(data.tolist(), status_code)
@@ -179,7 +180,8 @@ def data_file(id: int) -> Response:
         # Update data file
         return json_response(DataFileSchema(update_data_file(
             auth.current_user.id, id,
-            DataFile(DataFileSchema(**request.args.to_dict())))))
+            DataFile(DataFileSchema(**request.args.to_dict()),
+                     only=list(request.args.keys())))))
 
     if request.method == 'DELETE':
         # Delete data file
@@ -632,7 +634,8 @@ def session(id: Union[int, str]) -> Response:
         # Update data file
         return json_response(DataFileSchema(update_session(
             auth.current_user.id, id,
-            Session(SessionSchema(**request.args.to_dict())))))
+            Session(SessionSchema(**request.args.to_dict()),
+                    only=list(request.args.keys())))))
 
     if request.method == 'DELETE':
         # Delete data file

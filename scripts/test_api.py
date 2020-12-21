@@ -187,4 +187,4 @@ if __name__ == '__main__':
                     r.headers['Content-Encoding']), file=sys.stderr)
             except KeyError:
                 pass
-            print(r.content)
+            sys.stdout.buffer.write(r.content)

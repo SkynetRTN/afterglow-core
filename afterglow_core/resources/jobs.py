@@ -34,11 +34,8 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
-from .. import app, auth, plugins
+from .. import app, plugins
 from ..models import Job, JobState, JobResult, job_file_dir, job_file_path
-from ..resources.base import Date, DateTime, JSONType, Time
-from ..resources.data_files import get_session
-from ..resources.users import DbUser
 from ..schemas import (
     AfterglowSchema, Boolean as BooleanField, Date as DateField,
     DateTime as DateTimeField, Float as FloatField, Time as TimeField)
@@ -47,6 +44,8 @@ from ..errors.job import (
     JobServerError, UnknownJobError, UnknownJobFileError, UnknownJobTypeError,
     InvalidMethodError, CannotSetJobStatusError, CannotCancelJobError,
     CannotDeleteJobError)
+from .base import Date, DateTime, JSONType, Time
+from .data_files import get_session
 
 # Encryption imports
 try:
@@ -325,6 +324,9 @@ class JobWorkerProcess(Process):
         for engine in data_files.data_files_engine.values():
             engine.dispose()
 
+        from .. import auth
+        from .users import DbUser
+
         # Wait for an incoming job request
         app.logger.info('%s Waiting for jobs', prefix)
         while True:
@@ -356,6 +358,8 @@ class JobWorkerProcess(Process):
 
                 # Set auth.current_user to the actual db user
                 auth.current_user = DbUser.query.get(job.user_id)
+                if auth.current_user is None:
+                    print('!!! No user for user ID', job.user_id)
 
                 # Clear the possible cancel request
                 if WINDOWS:
@@ -807,16 +811,27 @@ class JobRequestHandler(BaseRequestHandler):
                     if job_file is None or job_file.job.user_id != user_id:
                         raise UnknownJobFileError(id=file_id)
 
+                    filename = job_file_path(user_id, job_id, file_id)
                     try:
-                        with open(job_file_path(user_id, job_id, file_id),
-                                  'rb') as f:
+                        with open(filename, 'rb') as f:
                             result = f.read()
                     except Exception:
                         raise UnknownJobFileError(id=file_id)
+                    else:
+                        # noinspection PyBroadException
+                        try:
+                            os.unlink(filename)
+                        except Exception:
+                            pass
+
+                    # Remove job file after the first download request
 
                     binary_result = True
                     mimetype = job_file.mimetype
                     headers = job_file.headers
+                    if headers is None:
+                        headers = []
+                    headers.append(('Content-Length', str(len(result))))
 
                 else:
                     raise InvalidMethodError(
@@ -1144,6 +1159,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
 
     :return: response message
     """
+    from .. import auth
     try:
         # Prepare server message
         msg = dict(args)

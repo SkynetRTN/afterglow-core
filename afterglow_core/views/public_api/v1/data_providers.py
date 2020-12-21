@@ -2,71 +2,29 @@
 Afterglow Core: API v1 data provider views
 """
 
-from io import BytesIO
 from typing import Optional, Union
 
-from flask import Response, request, send_file
+from flask import Response, request
 
 from .... import app, errors, json_response
 from ....auth import auth_required, current_user
 from ....resources.data_providers import providers
+from ....resources.data_files import (
+    get_data_file, get_data_file_bytes, get_data_file_group,
+    get_data_file_group_bytes, update_data_file_asset,
+    update_data_file_group_asset)
 from ....schemas.api.v1 import DataProviderAssetSchema, DataProviderSchema
 from ....errors.auth import NotAuthenticatedError
 from ....errors.data_provider import (
     UnknownDataProviderError, ReadOnlyDataProviderError,
     NonBrowseableDataProviderError, NonSearchableDataProviderError,
     CannotSearchInNonCollectionError, CannotDeleteNonEmptyCollectionAssetError,
-    QuotaExceededError)
+    UploadNotAllowedError)
 from ....errors.data_file import UnknownDataFileGroupError
 from . import url_prefix
 
-try:
-    from PIL import Image as PILImage
-except ImportError:
-    PILImage = None
-
 
 resource_prefix = url_prefix + 'data-providers/'
-
-
-def check_provider_auth(provider):
-    """
-    Check that the user is authenticated with any of the auth methods required
-    for the given data provider; raises NotAuthenticatedError if not
-
-    :param DataProvider provider: data provider plugin instance
-
-    :return: None
-    """
-    if not app.config.get('USER_AUTH'):
-        # User auth disabled, always succeed
-        return
-
-    auth_methods = provider.auth_methods
-    if not auth_methods:
-        # No specific auth methods requested
-        return
-
-    # Check that any of the auth methods requested is present
-    # in any of the user's identities
-    for required_method in auth_methods:
-        if required_method == 'http':
-            # HTTP auth requires username and password being set
-            if current_user.username and current_user.password:
-                return
-            continue
-
-        # For non-HTTP methods, check identities
-        try:
-            for identity in current_user.identities:
-                if identity.auth_method == required_method:
-                    return
-        except AttributeError:
-            pass
-
-    raise NotAuthenticatedError(
-        error_msg='Data provider "{}" requires authentication with either of '
-        'the methods: {}'.format(provider.id, ', '.join(auth_methods)))
 
 
 @app.route(resource_prefix[:-1])
@@ -93,7 +51,7 @@ def data_providers(id: Optional[Union[int, str]] = None) -> Response:
         for id in sorted({provider.id for provider in providers.values()}):
             provider = providers[id]
             try:
-                check_provider_auth(provider)
+                provider.check_auth()
             except NotAuthenticatedError:
                 pass
             else:
@@ -111,13 +69,12 @@ def data_providers(id: Optional[Union[int, str]] = None) -> Response:
 
     # If specific auth method(s) are requested for data provider, check that the
     # user is authenticated with any of these methods
-    check_provider_auth(provider)
+    provider.check_auth()
 
     return json_response(DataProviderSchema(provider))
 
 
-@app.route(resource_prefix + '<id>/assets',
-           methods=('GET', 'POST', 'PUT', 'DELETE'))
+@app.route(resource_prefix + '<id>/assets', methods=('GET', 'PUT', 'DELETE'))
 @auth_required('user')
 def data_providers_assets(id: Union[int, str]) -> Response:
     """
@@ -133,10 +90,6 @@ def data_providers_assets(id: Union[int, str]) -> Response:
           for data providers that have collection assets, the optional path
           defines a collection asset to search in; data provider must be
           searchable
-
-    POST /data-providers/[id]/assets?path=
-        - create a new empty collection asset at the given path; data provider
-          must be writable
 
     PUT /data-providers/[id]/assets?path=...&name=...
         - rename an existing asset at the given path; data provider must
@@ -159,13 +112,15 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             provider = providers[int(id)]
         except (KeyError, ValueError):
             raise UnknownDataProviderError(id=id)
-    check_provider_auth(provider)
+    provider.check_auth()
 
     if request.method != 'GET' and provider.readonly:
         raise ReadOnlyDataProviderError(id=id)
 
     params = request.args.to_dict()
     path = params.pop('path', None)
+    if path is not None:
+        path = str(path)
 
     if request.method == 'GET':
         if params:
@@ -196,11 +151,6 @@ def data_providers_assets(id: Union[int, str]) -> Response:
     if path is None:
         raise errors.MissingFieldError(field='path')
 
-    if request.method == 'POST':
-        # Create collection asset at the given path
-        return json_response(DataProviderAssetSchema(provider.create_asset(
-            path, None, **params)), 201)
-
     if request.method == 'PUT':
         # Rename asset at the given path
         name = params.pop('name', None)
@@ -210,9 +160,11 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             path, name, **params)))
 
     if request.method == 'DELETE':
-        force = 'force' in params
-        if force:
-            params.pop('force')
+        force = params.pop('force', False)
+        if force is None:
+            force = True
+        else:
+            force = bool(int(force))
 
         # Check that the asset at the given path exists
         asset = provider.get_asset(path)
@@ -229,7 +181,9 @@ def data_providers_assets(id: Union[int, str]) -> Response:
 @auth_required('user')
 def data_providers_assets_data(id: Union[int, str]) -> Response:
     """
-    Download, create, or update non-collection asset data
+    Download, create, or update asset data
+
+    For all requests except GET, data provider must be writable.
 
     GET /data-providers/[id]/assets/data?path=...
         - download unmodified non-collection asset data directly to the caller
@@ -237,46 +191,64 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
 
     POST /data-providers/[id]/assets/data?path=
         - create a new non-collection asset from a data file uploaded
-          as multipart/form-data; data provider must be writable
+          as multipart/form-data
+        - create a new empty collection asset if request body is empty
 
     POST /data-providers/[id]/assets/data?path=...&data_file_id=...[&fmt=...]
         - create a new non-collection asset at the given path from data file
-          using the specified file format (by default, FITS); data provider must
-          be writable; if exporting in formats other than FITS, "fmt" must
-          be supported by Pillow
+          using the specified file format (by default, FITS)
+          * if exporting in formats other than FITS, "fmt" must be supported
+            by Pillow
 
     POST /data-providers/[id]/assets/data?path=...&group_id=...
         [&fmt=...&mode=...]
         - create a new non-collection asset at the given path from data file
-          group using the specified file format (by default, FITS); data
-          provider must be writable; if exporting in formats other than FITS,
-          "fmt" must be supported by Pillow, and "mode" is required and must be
-          one of the supported modes (see
-          https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
+          group using the specified file format (by default, FITS)
+          * if exporting in formats other than FITS, "fmt" must be supported
+            by Pillow, and "mode" is required and must be one of the supported
+            modes (see
+            https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
 
-    PUT /data-providers/[id]/assets?path=...
-        - update an existing non-collection asset data at the given path by
-          overwriting it with the data uploaded as multipart/form-data; data
-          provider must be writable
+    POST /data-providers/[id]/assets/data?path=...&src_path=...
+        [&src_provider_id=...][&move]
+        - copy/move asset to another path within the same data provider or
+          (if "src_provider_id" is supplied) from a different data provider
+          * if "move" is present, the original asset is deleted
 
-    PUT /data-providers/[id]/assets?[path=...&]data_file_id=...[&fmt=...]
-        - update an existing non-collection asset at the given path by
-          overwriting it with the given data file in the specified format
-          (by default, FITS); data provider must be writable; if no path
-          provided, the original asset path of the data file previously imported
-          from this data provider is used
+    PUT /data-providers/[id]/assets?path=...[&force]
+        - update existing asset data at the given path by overwriting it
+          with the data uploaded as multipart/form-data or creating an empty
+          collection asset if no data provided
+          * existing collection assets are overwritten if "force" is present
 
-    PUT /data-providers/[id]/assets?[path=...&]group_id=...[&fmt=...&mode=...]
-        - update an existing non-collection asset at the given path by
-          overwriting it with the given data file group combined into a single
-          file in the specified format (by default, FITS);
-          * data provider must be writable;
+    PUT /data-providers/[id]/assets?[path=...&]&data_file_id=...[&fmt=...]
+        [&force]
+        - update existing asset at the given path by overwriting it with
+          the given data file in the specified format (by default, FITS)
+          * existing collection assets are overwritten if "force" is present
+          * if no path provided, the original asset path of the data file
+            previously imported from this data provider is used
+
+    PUT /data-providers/[id]/assets?[path=...&]&group_id=...[&fmt=...&mode=...]
+        [&force]
+        - update existing asset at the given path by overwriting it with
+          the given data file group combined into a single file in the specified
+          format (by default, FITS)
+          * existing collection assets are overwritten if "force" is present
           * if no path provided, the original asset path of the data file group
             previously imported from this data provider is used
           * if exporting in formats other than FITS, "fmt" must be supported by
             Pillow, and "mode" is required and must be one of the supported
             modes (see
             https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
+
+    PUT /data-providers/[id]/assets/data?path=...&src_path=...
+        [&src_provider_id=...][&move][&force]
+        - update existing asset by copying from another path within the same
+          data provider or (if "src_provider_id" is supplied) from a different
+          data provider
+          * existing collection assets are overwritten if "force" is present
+          * if "move" is present, the original asset is deleted
 
     :param id: data provider ID (int or str) or name for which the assets
         are managed
@@ -290,7 +262,7 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
             provider = providers[int(id)]
         except (KeyError, ValueError):
             raise UnknownDataProviderError(id=id)
-    check_provider_auth(provider)
+    provider.check_auth()
 
     if request.method != 'GET' and provider.readonly:
         raise ReadOnlyDataProviderError(id=id)
@@ -298,7 +270,7 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
     params = request.args.to_dict()
     path = params.pop('path', None)
     if not path:
-        if request.method != 'PUT':
+        if request.method != 'PUT' or params.get('src_path') is not None:
             # Path is required for all asset data requests except PUT
             raise errors.MissingFieldError(field='path')
 
@@ -306,7 +278,6 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
         # path is not set, save to the original path if available and matches
         # the data provider ID
         if params.get('group_id'):
-            from .data_files import get_data_file_group
             group = get_data_file_group(current_user.id, params['group_id'])
             if not group:
                 UnknownDataFileGroupError(id=params['group_id'])
@@ -318,12 +289,13 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
                 # No original asset path in the group for the current provider
                 pass
         elif params.get('data_file_id'):
-            from .data_files import get_data_file
             df = get_data_file(current_user.id, params['data_file_id'])
             if getattr(df, 'data_provider', None) == str(id):
                 path = getattr(df, 'asset_path', None)
         if not path:
             raise errors.MissingFieldError(field='path')
+    else:
+        path = str(path)
 
     if request.method == 'GET':
         # Non-collection asset download request
@@ -333,68 +305,112 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
                 'path', 'Cannot download collection assets')
         data = provider.get_asset_data(path)
 
-        # Get MIME type of data
-        mimetype = 'application/octet-stream'
-        try:
-            imtype = asset.metadata['type']
-            if imtype == 'FITS':
-                mimetype = 'image/fits'
-            elif PILImage is not None:
-                mimetype = PILImage.MIME[imtype]
-        except KeyError:
-            pass
+        return Response(
+            data, 200 if data else 204, [('Content-Length', str(len(data)))],
+            asset.mimetype)
 
-        return send_file(
-            BytesIO(data), mimetype=mimetype, as_attachment=True,
-            attachment_filename=asset.name)
-
-    data = None
     if request.method in ('POST', 'PUT'):
-        # Retrieve data being exported
         group_id = params.pop('group_id', None)
         data_file_id = params.pop('data_file_id', None)
-        fmt = params.pop('fmt', 'FITS')
-        mode = params.pop('mode', None)
-        if group_id is not None:
-            # Exporting data file group using the given format and mode
-            if data_file_id is not None:
+        src_provider_id = params.pop('src_provider_id', None)
+        src_path = params.pop('src_path', None)
+        if src_path is None:
+            # Saving a data file/data file group or uploading
+            if src_provider_id is not None:
                 raise errors.ValidationError(
-                    'data_file_id',
-                    '"group_id" and "data_file_id" are mutually exclusive')
-            from .data_files import get_data_file_group_bytes
-            data = get_data_file_group_bytes(
-                current_user.id, group_id, fmt=fmt, mode=mode)
-        elif data_file_id is not None:
-            # Exporting single data file in the given format
-            from .data_files import get_data_file_bytes
-            data = get_data_file_bytes(current_user.id, data_file_id, fmt=fmt)
+                    'src_provider_id',
+                    '"src_provider_id" is not allowed with "group_id" and '
+                    '"data_file_id"')
+            fmt = params.pop('fmt', 'FITS')
+            mode = params.pop('mode', None)
+
+            # Retrieve data being exported
+            if group_id is not None:
+                # Exporting data file group using the given format and mode
+                if data_file_id is not None:
+                    raise errors.ValidationError(
+                        'data_file_id',
+                        '"group_id" and "data_file_id" are mutually exclusive')
+                data = get_data_file_group_bytes(
+                    current_user.id, group_id, fmt=fmt, mode=mode)
+            elif data_file_id is not None:
+                # Exporting single data file in the given format
+                data = get_data_file_bytes(
+                    current_user.id, data_file_id, fmt=fmt)
+            else:
+                # Creating/updating from uploaded data; use the first
+                # multipart/form-data file; if empty, creating an empty
+                # collection asset
+                try:
+                    data = list(request.files.values())[0].read()
+                except (AttributeError, IndexError):
+                    if not provider.allow_upload:
+                        raise UploadNotAllowedError()
+                    data = None
+
+            provider.check_quota(
+                path if request.method == 'PUT' else None, data)
+
+            if request.method == 'POST':
+                # Create non-collection asset from data or empty collection
+                # asset if no data provided
+                asset = provider.create_asset(path, data, **params)
+            else:
+                # Update asset
+                force = params.pop('force', False)
+                if force is None:
+                    force = True
+                else:
+                    force = bool(int(force))
+                asset = provider.update_asset(path, data, force=force, **params)
+
+            # Link the original data files to the new asset and reset
+            # the modified flag on save
+            if data_file_id is not None:
+                update_data_file_asset(
+                    current_user.id, data_file_id, id, asset.path,
+                    asset.metadata, asset.name)
+            elif group_id is not None:
+                update_data_file_group_asset(
+                    current_user.id, group_id, id, asset.path,
+                    asset.metadata, asset.name)
+
+            return json_response(
+                DataProviderAssetSchema(asset),
+                201 if request.method == 'POST' else 200)
+
+        # Recursively copying from another asset
+        src_path = str(src_path)
+        move = params.pop('move', False)
+        if move is None:
+            move = True
         else:
-            # Creating/updating from uploaded data; use the first
-            # multipart/form-data file
+            move = bool(int(move))
+        force = params.pop('force', False)
+        if force is None:
+            force = True
+        else:
+            force = bool(int(force))
+        if src_provider_id is None or src_provider_id == id:
+            src_provider = provider
+        else:
             try:
-                data = list(request.files.values())[0].read()
-            except (AttributeError, IndexError):
-                data = None
-            if data is None:
-                raise errors.MissingFieldError(field='data_file_id|group_id')
+                src_provider = providers[src_provider_id]
+            except KeyError:
+                try:
+                    src_provider = providers[int(src_provider_id)]
+                except (KeyError, ValueError):
+                    raise UnknownDataProviderError(id=src_provider_id)
+            if src_provider != provider:
+                src_provider.check_auth()
+                if move and src_provider.readonly:
+                    raise ReadOnlyDataProviderError(id=src_provider.id)
+        if src_provider == provider and src_path == path:
+            raise errors.ValidationError(
+                'src_path',
+                '{}ing onto itself'.format(('Copy', 'Mov')[move]))
 
-        # Check quota
-        quota = provider.quota
-        if quota:
-            usage, size = provider.usage, len(data) if data is not None else 0
-            if usage is None:
-                usage = 0
-            if request.method == 'PUT':
-                usage -= provider.get_asset(path).metadata.get('size', 0)
-            if usage + size > quota:
-                raise QuotaExceededError(quota=quota, usage=usage, size=size)
-
-    if request.method == 'POST':
-        # Create non-collection asset
-        return json_response(DataProviderAssetSchema(provider.create_asset(
-            path, data, **params)), 201)
-
-    if request.method == 'PUT':
-        # Update non-collection asset
-        return json_response(DataProviderAssetSchema(provider.update_asset(
-            path, data, **params)))
+        update = request.method == 'PUT'
+        return json_response(DataProviderAssetSchema(provider.recursive_copy(
+            src_provider, src_path, path, move=move, update=update,
+            force=force)), 200 if update else 201)

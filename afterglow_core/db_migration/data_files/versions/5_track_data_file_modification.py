@@ -14,10 +14,7 @@ depends_on = None
 def upgrade():
     with op.batch_alter_table(
             'data_files',
-            table_args=(
-                    sa.CheckConstraint('length(name) <= 1024'),
-                    sa.CheckConstraint('length(group_id) = 36'),
-            ),
+            table_args=(sa.CheckConstraint('length(name) <= 1024'),),
             table_kwargs=dict(sqlite_autoincrement=True)) as batch_op:
         batch_op.add_column(sa.Column(
             'modified', sa.Boolean(), server_default='0'))
