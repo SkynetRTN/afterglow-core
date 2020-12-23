@@ -170,8 +170,7 @@ class Job(AfterglowSchema):
                         'Error processing file {}: {}'.format(file_id, e))
                     self.result.values.append(None)
                 finally:
-                    self.state.progress = (file_no + 1)/len(file_ids)*100
-                    self.update()
+                    self.update_progress((file_no + 1)/len(file_ids)*100)
 
     :meth:`run` may read and create the regular user data files by calling
     functions from :mod:`afterglow_core.resources.data_files` using
@@ -331,15 +330,12 @@ class Job(AfterglowSchema):
 
     def update_progress(self, progress: float) -> None:
         """
-        Update Job.state.progress
+        Set Job.state.progress and call :meth:`update`
 
         :param progress: job progress (0 to 100)
         """
         self.state.progress = progress
-        self._queue.put(dict(
-            id=self.id,
-            state=dict(progress=progress),
-        ))
+        self.update()
 
     def create_job_file(self, id: Union[int, str], data: bytes,
                         mimetype: Optional[str] = None,

@@ -87,8 +87,7 @@ class BatchImportJob(Job):
             except Exception as e:
                 self.add_error('Data file #{}: {}'.format(i + 1, e))
             finally:
-                self.state.progress = (i + 1)/nfiles*100
-                self.update()
+                self.update_progress((i + 1)/nfiles*100)
 
         if self.result.file_ids:
             adb.commit()

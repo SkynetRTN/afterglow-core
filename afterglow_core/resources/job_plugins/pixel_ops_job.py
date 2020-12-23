@@ -127,8 +127,7 @@ class PixelOpsJob(Job):
                     except Exception as e:
                         self.add_error('Image #{:d}: {}'.format(i, e))
                     finally:
-                        self.state.progress = (i + 1)/len(data_files)*100
-                        self.update()
+                        self.update_progress((i + 1)/len(data_files)*100)
             else:
                 # Case 2: reduce to a single image/scalar; always create a new
                 # data file if non-scalar
@@ -146,8 +145,7 @@ class PixelOpsJob(Job):
                     self.add_error(
                         'Data file ID {}: {}'.format(self.file_ids[i], e))
                 finally:
-                    self.state.progress = (i + 1)/len(data_files)*100
-                    self.update()
+                    self.update_progress((i + 1)/len(data_files)*100)
 
     def handle_expr(self, expr, local_vars, file_id=None):
         """
