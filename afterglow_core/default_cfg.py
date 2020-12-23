@@ -119,3 +119,7 @@ JOB_POOL_MIN = 1
 
 # Maximum job pool size; 0 = no limit
 JOB_POOL_MAX = 16
+
+# Maximum RAM in megabytes allowed to be allocated by certain memory-intensive
+# jobs
+JOB_MAX_RAM = 100.0

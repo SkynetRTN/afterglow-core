@@ -235,8 +235,7 @@ class AlignmentJob(Job):
                 self.add_error(
                     'Data file ID {}: {}'.format(file_ids[i], e))
             finally:
-                self.state.progress = (i + 1)/len(file_ids)*100
-                self.update()
+                self.update_progress((i + 1)/len(file_ids)*100)
 
         # Optionally crop aligned files in place
         if self.crop:

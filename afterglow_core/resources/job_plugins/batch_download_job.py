@@ -99,8 +99,7 @@ class BatchDownloadJob(Job):
                                 'Data file ID {} ({}): {}'.format(
                                     file_id, filename, e))
 
-                self.state.progress = (file_no + 1)/len(filenames)*100
-                self.update()
+                self.update_progress((file_no + 1)/len(filenames)*100)
 
         self.create_job_file('download', data.getvalue(), 'application/zip')
 
@@ -163,7 +162,6 @@ class BatchAssetDownloadJob(Job):
                     self.add_error(
                         'Asset "{}": {}'.format(asset.path, e))
 
-                self.state.progress = (file_no + 1)/len(assets)*100
-                self.update()
+                self.update_progress((file_no + 1)/len(assets)*100)
 
         self.create_job_file('download', data.getvalue(), 'application/zip')

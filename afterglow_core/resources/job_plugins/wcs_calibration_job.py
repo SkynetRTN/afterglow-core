@@ -245,5 +245,4 @@ class WcsCalibrationJob(Job):
                 self.add_error(
                     'Data file ID {}: {}'.format(self.file_ids[i], e))
             finally:
-                self.state.progress = (i + 1)/len(self.file_ids)*100
-                self.update()
+                self.update_progress((i + 1)/len(self.file_ids)*100)
