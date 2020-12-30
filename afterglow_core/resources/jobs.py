@@ -33,6 +33,7 @@ from sqlalchemy import (
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+from flask_sqlalchemy import SQLAlchemy
 
 from .. import app, plugins
 from ..models import Job, JobState, JobResult, job_file_dir, job_file_path
@@ -323,9 +324,14 @@ class JobWorkerProcess(Process):
         data_files.data_files_engine_lock = threading.Lock()
         for engine in data_files.data_files_engine.values():
             engine.dispose()
+        data_files.data_files_engine = {}
 
         from .. import auth
-        from .users import DbUser
+        from . import users
+        users.db = SQLAlchemy(app)
+        if app.config.get('AUTH_ENABLED'):
+            # noinspection PyProtectedMember
+            users._init_users()
 
         # Wait for an incoming job request
         app.logger.info('%s Waiting for jobs', prefix)
@@ -357,7 +363,7 @@ class JobWorkerProcess(Process):
                     continue
 
                 # Set auth.current_user to the actual db user
-                auth.current_user = DbUser.query.get(job.user_id)
+                auth.current_user = users.DbUser.query.get(job.user_id)
                 if auth.current_user is None:
                     print('!!! No user for user ID', job.user_id)
 
