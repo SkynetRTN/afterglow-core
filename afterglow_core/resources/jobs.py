@@ -823,12 +823,12 @@ class JobRequestHandler(BaseRequestHandler):
                             result = f.read()
                     except Exception:
                         raise UnknownJobFileError(id=file_id)
-                    else:
-                        # noinspection PyBroadException
-                        try:
-                            os.unlink(filename)
-                        except Exception:
-                            pass
+                    # else:
+                    #     # noinspection PyBroadException
+                    #     try:
+                    #         os.unlink(filename)
+                    #     except Exception:
+                    #         pass
 
                     # Remove job file after the first download request
 
