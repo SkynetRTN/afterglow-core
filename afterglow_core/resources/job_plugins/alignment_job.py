@@ -24,6 +24,7 @@ __all__ = ['AlignmentJob']
 class AlignmentSettings(AfterglowSchema):
     ref_image: str = String(default='central')
     wcs_grid_points: int = Integer(default=0)
+    prefilter: bool = Boolean(default=True)
 
 
 class AlignmentJobResult(JobResult):
@@ -149,7 +150,8 @@ class AlignmentJob(Job):
                         if not src_stars:
                             raise ValueError('Missing alignment star(s)')
                         data = apply_transform_stars(
-                            data, src_stars, dst_stars, ref_width, ref_height)
+                            data, src_stars, dst_stars, ref_width, ref_height,
+                            prefilter=settings.prefilter)
 
                         nref = len(src_stars)
                         hist_msg = '{:d} star{}'.format(
@@ -169,7 +171,8 @@ class AlignmentJob(Job):
 
                         data = apply_transform_wcs(
                             data, wcs, ref_wcs, ref_width, ref_height,
-                            grid_points=settings.wcs_grid_points)
+                            grid_points=settings.wcs_grid_points,
+                            prefilter=settings.prefilter)
 
                         hist_msg = 'WCS'
 
