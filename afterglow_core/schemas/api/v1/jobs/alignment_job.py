@@ -18,6 +18,7 @@ __all__ = ['AlignmentSettingsSchema', 'AlignmentJobResultSchema',
 class AlignmentSettingsSchema(AfterglowSchema):
     ref_image: str = String(default='central')
     wcs_grid_points: int = Integer(default=0)
+    prefilter: bool = Boolean(default=True)
 
 
 class AlignmentJobResultSchema(JobResultSchema):
