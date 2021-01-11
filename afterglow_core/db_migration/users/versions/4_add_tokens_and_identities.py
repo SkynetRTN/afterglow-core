@@ -1,6 +1,7 @@
 """Add persistent tokens, identities, and birth_date column"""
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.engine.reflection import Inspector
 import json
 
 # revision identifiers, used by Alembic.
@@ -11,12 +12,16 @@ depends_on = None
 
 
 def upgrade():
+    conn = op.get_bind()
+    if 'identities' in Inspector.from_engine(conn).get_table_names():
+        op.drop_table('identities')
     identities_table = op.create_table(
         'identities',
         sa.Column('id', sa.Integer(), primary_key=True, nullable=False),
         sa.Column('name', sa.String(), nullable=False),
         sa.Column(
-            'user_id', sa.Integer(), sa.ForeignKey('users.id'), nullable=False),
+            'user_id', sa.Integer(), sa.ForeignKey('users.id'),
+            nullable=False),
         sa.Column('auth_method', sa.String(), nullable=False),
         sa.Column('data', sa.Text(), default=''),
         sa.CheckConstraint('length(name) <= 255'),
@@ -27,25 +32,26 @@ def upgrade():
     # Create an auth_method='skynet' Identity for each existing user
     # with User.auth_methods containing 'skynet'
     # noinspection SqlResolve
-    users = op.execute(
+    users = conn.execute(
         'select id, username, email, first_name, last_name, auth_methods '
         'from users').fetchall()
-    identities = [
-        dict(
-            user_id=user[0],
-            name=user[1] or user[2] or
-            (user[3] or '' + ' ' + user[4] or '').strip() or str(user[0]),
-            auth_method='skynet',
-            data=json.dumps(dict(
-                [('username', user[1])] +
-                ([('email', user[2])] if user[2] else []) +
-                ([('first_name', user[3])] if user[3] else []) +
-                ([('last_name', user[4])] if user[4] else [])
-            )),
-        )
-        for user in users if 'skynet' in user[5]
-    ]
-    op.bulk_insert(identities_table, identities)
+    if users:
+        identities = [
+            dict(
+                user_id=user[0],
+                name=user[1] or user[2] or
+                (user[3] or '' + ' ' + user[4] or '').strip() or str(user[0]),
+                auth_method='skynet',
+                data=json.dumps(dict(
+                    [('username', user[1])] +
+                    ([('email', user[2])] if user[2] else []) +
+                    ([('first_name', user[3])] if user[3] else []) +
+                    ([('last_name', user[4])] if user[4] else [])
+                )),
+            )
+            for user in users if 'skynet' in user[5]
+        ]
+        op.bulk_insert(identities_table, identities)
 
     with op.batch_alter_table(
             'users', recreate='always',
