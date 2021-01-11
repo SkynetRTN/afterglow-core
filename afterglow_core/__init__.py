@@ -10,7 +10,7 @@ from typing import Any, Dict as TDict, Optional
 from flask_cors import CORS
 from marshmallow import missing
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
-from flask import Flask, Response
+from flask import Flask, Response, request
 
 from .schemas import AfterglowSchema
 
