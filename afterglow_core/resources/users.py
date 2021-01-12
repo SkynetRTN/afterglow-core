@@ -16,7 +16,7 @@ from .. import app
 from ..models import User
 from ..errors import MissingFieldError, ValidationError
 from ..errors.auth import DuplicateUsernameError, UnknownUserError
-from .base import Date, DateTime
+from .base import Date, DateTime, JSONType
 
 
 __all__ = [
@@ -134,7 +134,7 @@ class DbIdentity(db.Model):
     auth_method = db.Column(
         db.String,
         db.CheckConstraint('length(auth_method) <= 40'), nullable=False)
-    data = db.Column(db.Text, default='')
+    data = db.Column(JSONType, default={})
 
     user = db.relationship(DbUser, uselist=False, backref='identities')
 

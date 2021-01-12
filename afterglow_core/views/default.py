@@ -253,7 +253,7 @@ def oauth2_authorized(plugin_id: str) -> Response:
             # username with user ID to prevent a possible future account seizure
             try:
                 identity.name = user_profile['id']
-                identity.data = json.dumps(user_profile)
+                identity.data = user_profile
                 identity.user.first_name = \
                     user_profile.get('first_name') or None
                 identity.user.last_name = user_profile.get('last_name') or None
@@ -307,7 +307,7 @@ def oauth2_authorized(plugin_id: str) -> Response:
                 user_id=user.id,
                 name=user_profile['id'],
                 auth_method=oauth_plugin.name,
-                data=json.dumps(user_profile),
+                data=user_profile,
             )
             db.session.add(identity)
             db.session.commit()
@@ -316,6 +316,15 @@ def oauth2_authorized(plugin_id: str) -> Response:
             raise
     else:
         user = identity.user
+        if identity.data != user_profile:
+            # Account data (e.g. API access token) has changed since the last
+            # login, update it
+            try:
+                identity.data = user_profile
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                raise
 
     next_url = state.get('next')
     if not next_url:
