@@ -321,13 +321,14 @@ class JobWorkerProcess(Process):
         # Close all possible data file db engine connections inherited from the
         # parent process
         from . import data_files
-        for engine in data_files.data_files_engine.values():
+        for engine, _ in data_files.data_files_engine.values():
             engine.dispose()
         # noinspection PyTypeChecker
         reload(data_files)
 
         from .. import auth
         from . import users
+        users.db.engine.dispose()
         # noinspection PyTypeChecker
         reload(users)
         if app.config.get('AUTH_ENABLED'):
