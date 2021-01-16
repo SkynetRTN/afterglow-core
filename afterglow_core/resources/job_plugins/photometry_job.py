@@ -11,7 +11,7 @@ from astropy.wcs import WCS
 import sep
 
 from skylib.photometry import aperture_photometry
-from skylib.extraction.centroiding import centroid_sources
+from skylib.extraction.centroiding import centroid_psf, centroid_sources
 
 from ...models import (
     Job, JobResult, SourceExtractionData, PhotSettings, PhotometryData,
@@ -196,18 +196,36 @@ def run_photometry_job(job: Job, settings: PhotSettings,
             if not sources[file_id]:
                 raise ValueError('All sources are outside image boundaries')
 
+            r_cent = settings.centroid_radius
             if settings.mode == 'auto':
+                # We need the ellipse parameters for adaptive photometry;
+                # derive them from the FWHMs if available, otherwise do
+                # the PSF-based centroiding to compute both centroids and FWHMs
                 for i, source in enumerate(sources[file_id]):
                     row = source_table[i]
-                    row['a'] = source.fwhm_x/sigma_to_fwhm
-                    row['b'] = source.fwhm_y/sigma_to_fwhm
-                    row['theta'] = source.theta
+                    a = getattr(source, 'fwhm_x', 0)/sigma_to_fwhm
+                    b = getattr(source, 'fwhm_y', 0)/sigma_to_fwhm
+                    theta = getattr(source, 'theta', 0)
+                    if a and b:
+                        row['a'] = a
+                        row['b'] = b
+                        row['theta'] = theta
+                        if r_cent > 0:
+                            row['x'], row['y'] = centroid_sources(
+                                data, row['x'], row['y'], r_cent)
+                    else:
+                        if r_cent <= 0:
+                            raise ValueError(
+                                'Centroiding must be enabled for adaptive '
+                                'photometry with no FWHM info')
+                        row['x'], row['y'], row['a'], row['b'], row['theta'] = \
+                            centroid_psf(data, row['x'], row['y'], r_cent)
                 source_table['theta'] = deg2rad(source_table['theta'])
-
-            if settings.centroid_radius > 0:
+            elif r_cent > 0:
+                # For the fixed-aperture mode, obtain the accurate centroids
+                # only if requested
                 source_table['x'], source_table['y'] = centroid_sources(
-                    data, source_table['x'], source_table['y'],
-                    settings.centroid_radius)
+                    data, source_table['x'], source_table['y'], r_cent)
 
             # Photometer all sources in the current image
             source_table = aperture_photometry(data, source_table, **phot_kw)

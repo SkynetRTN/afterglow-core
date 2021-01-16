@@ -85,5 +85,7 @@ class SkynetOAuthPlugin(OAuthServerPluginBase):
             pf['email'] = user['email']
         if user.get('birthdate'):
             pf['birth_date'] = user['birthdate']
+        if user.get('accessToken'):
+            pf['api_token'] = user['accessToken']
 
         return pf

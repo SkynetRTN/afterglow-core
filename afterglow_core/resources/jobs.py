@@ -19,6 +19,7 @@ import base64
 from datetime import datetime
 from glob import glob
 from multiprocessing import Event, Process, Queue
+from importlib import reload
 from socketserver import BaseRequestHandler, ThreadingTCPServer
 from typing import Any, Dict as TDict
 import threading
@@ -33,7 +34,6 @@ from sqlalchemy import (
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from flask_sqlalchemy import SQLAlchemy
 
 from .. import app, plugins
 from ..models import Job, JobState, JobResult, job_file_dir, job_file_path
@@ -321,14 +321,16 @@ class JobWorkerProcess(Process):
         # Close all possible data file db engine connections inherited from the
         # parent process
         from . import data_files
-        data_files.data_files_engine_lock = threading.Lock()
-        for engine in data_files.data_files_engine.values():
+        for engine, _ in data_files.data_files_engine.values():
             engine.dispose()
-        data_files.data_files_engine = {}
+        # noinspection PyTypeChecker
+        reload(data_files)
 
         from .. import auth
         from . import users
-        users.db = SQLAlchemy(app)
+        users.db.engine.dispose()
+        # noinspection PyTypeChecker
+        reload(users)
         if app.config.get('AUTH_ENABLED'):
             # noinspection PyProtectedMember
             users._init_users()
@@ -363,9 +365,13 @@ class JobWorkerProcess(Process):
                     continue
 
                 # Set auth.current_user to the actual db user
-                auth.current_user = users.DbUser.query.get(job.user_id)
-                if auth.current_user is None:
-                    print('!!! No user for user ID', job.user_id)
+                if job.user_id is not None:
+                    auth.current_user = users.DbUser.query.get(job.user_id)
+                    if auth.current_user is None:
+                        print('!!! No user for user ID', job.user_id)
+                        auth.current_user = auth.AnonymousUser()
+                else:
+                    auth.current_user = auth.AnonymousUser()
 
                 # Clear the possible cancel request
                 if WINDOWS:
