@@ -118,3 +118,5 @@ class StackingJob(Job):
         except Exception:
             adb.rollback()
             raise
+        finally:
+            adb.remove()

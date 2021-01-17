@@ -192,10 +192,17 @@ class Job(AfterglowSchema):
             ...  # do some processing
             # create a new data file and return its ID
             adb = get_data_file_db(self.user_id)
-            self.result.file_id = create_data_file(
-                adb, None, get_root(self.user_id), data, hdr,
-                duplicates='append', session_id=self.session_id,
-            ).id
+            try:
+                self.result.file_id = create_data_file(
+                    adb, None, get_root(self.user_id), data, hdr,
+                    duplicates='append', session_id=self.session_id,
+                ).id
+                adb.commit()
+            except Exception:
+                adb.rollback()
+                raise
+            finally:
+                adb.remove()
 
     In addition to the regular data files, a job may create extra "job files"
     containing any data that does not fit in the database and should be

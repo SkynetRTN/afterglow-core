@@ -321,7 +321,8 @@ class JobWorkerProcess(Process):
         # Close all possible data file db engine connections inherited from the
         # parent process
         from . import data_files
-        for engine, _ in data_files.data_files_engine.values():
+        for engine, session in data_files.data_files_engine.values():
+            session.close_all()
             engine.dispose()
         # noinspection PyTypeChecker
         reload(data_files)
@@ -366,12 +367,15 @@ class JobWorkerProcess(Process):
 
                 # Set auth.current_user to the actual db user
                 if job.user_id is not None:
-                    auth.current_user = users.DbUser.query.get(job.user_id)
+                    user_session = users.db.create_scoped_session()
+                    auth.current_user = user_session.query(users.DbUser) \
+                        .get(job.user_id)
                     if auth.current_user is None:
                         print('!!! No user for user ID', job.user_id)
                         auth.current_user = auth.AnonymousUser()
                 else:
                     auth.current_user = auth.AnonymousUser()
+                    user_session = None
 
                 # Clear the possible cancel request
                 if WINDOWS:
@@ -398,6 +402,9 @@ class JobWorkerProcess(Process):
                     # Unexpected job exception
                     job.result.errors.append(str(e))
                 finally:
+                    if user_session is not None:
+                        user_session.remove()
+
                     # Notify the job server about job completion
                     if job.state.status != 'canceled':
                         job.state.status = 'completed'
