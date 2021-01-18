@@ -826,21 +826,21 @@ class JobRequestHandler(BaseRequestHandler):
                         raise UnknownJobFileError(id=file_id)
 
                     filename = job_file_path(user_id, job_id, file_id)
-                    try:
-                        with open(filename, 'rb') as f:
-                            result = f.read()
-                    except Exception:
-                        raise UnknownJobFileError(id=file_id)
+                    # try:
+                    #     with open(filename, 'rb') as f:
+                    #         result = f.read()
+                    # except Exception:
+                    #     raise UnknownJobFileError(id=file_id)
                     # else:
+                    #     # Remove job file after the first download request
                     #     # noinspection PyBroadException
                     #     try:
                     #         os.unlink(filename)
                     #     except Exception:
                     #         pass
 
-                    # Remove job file after the first download request
-
-                    binary_result = True
+                    # binary_result = True
+                    result = filename
                     mimetype = job_file.mimetype
                     headers = job_file.headers
                     if headers is None:

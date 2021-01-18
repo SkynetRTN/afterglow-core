@@ -4,7 +4,7 @@ Afterglow Core: API v1 job views
 
 from typing import Any, Dict as TDict, Union
 
-from flask import Response, request
+from flask import Response, request, send_file
 
 from .... import app, auth, json_response
 from ....resources.jobs import job_server_request
@@ -174,9 +174,6 @@ def jobs_result_files(id: Union[int, str], file_id: str) -> Response:
     msg = job_server_request('jobs/result/files', 'GET', id=id, file_id=file_id)
     if msg['status'] != 200:
         return error_response(msg)
-    return Response(
+    return send_file(
         msg['body'],
-        status=msg.get('status', 200 if msg['body'] else 204),
-        headers=msg.get('headers'),
-        mimetype=msg.get('mimetype', 'application/octet-stream'),
-    )
+        msg.get('mimetype', 'application/octet-stream'))
