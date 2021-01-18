@@ -593,19 +593,14 @@ class JobRequestHandler(BaseRequestHandler):
         headers = None
 
         try:
-            msg_len = self.request.recv(msg_hdr_size)
-            if len(msg_len) < msg_hdr_size:
-                raise JobServerError(reason='Missing message size')
+            msg_len = bytearray()
+            while len(msg_len) < msg_hdr_size:
+                msg_len += self.request.recv(msg_hdr_size - len(msg_len))
             msg_len = struct.unpack(msg_hdr, msg_len)[0]
 
-            nbytes = msg_len
-            msg = b''
-            while nbytes:
-                s = self.request.recv(nbytes)
-                if not s:
-                    raise JobServerError(reason='Incomplete message')
-                msg += s
-                nbytes -= len(s)
+            msg = bytearray()
+            while len(msg) < msg_len:
+                msg += self.request.recv(msg_len - len(msg))
 
             try:
                 msg = json.loads(decrypt(msg))
@@ -1196,19 +1191,14 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
             sock.sendall(struct.pack(msg_hdr, len(msg)) + msg)
 
             # Get response
-            msg_len = sock.recv(msg_hdr_size)
-            if len(msg_len) < msg_hdr_size:
-                raise JobServerError(reason='Missing message size')
+            msg_len = bytearray()
+            while len(msg_len) < msg_hdr_size:
+                msg_len += sock.recv(msg_hdr_size - len(msg_len))
             msg_len = struct.unpack(msg_hdr, msg_len)[0]
 
-            nbytes = msg_len
-            msg = b''
-            while nbytes:
-                s = sock.recv(nbytes)
-                if not s:
-                    raise JobServerError(reason='Incomplete message')
-                msg += s
-                nbytes -= len(s)
+            msg = bytearray()
+            while len(msg) < msg_len:
+                msg += sock.recv(msg_len - len(msg))
         finally:
             # sock.shutdown(socket.SHUT_RDWR)
             sock.close()
