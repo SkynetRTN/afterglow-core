@@ -839,7 +839,7 @@ class JobRequestHandler(BaseRequestHandler):
                     #     except Exception:
                     #         pass
 
-                    # binary_result = True
+                    binary_result = True
                     result = filename
                     mimetype = job_file.mimetype
                     headers = job_file.headers
