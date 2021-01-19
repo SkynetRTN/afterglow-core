@@ -2,6 +2,7 @@
 Afterglow Core: Skynet OAuth authentication plugin
 """
 
+import sys
 import requests
 from urllib.parse import urljoin
 from typing import Optional
@@ -67,11 +68,16 @@ class SkynetOAuthPlugin(OAuthServerPluginBase):
 
         :return: user profile
         """
-        user = requests.get(
+        resp = requests.get(
             urljoin(self.base_url, 'users'),
             headers={
                 'Authorization': 'Bearer {}'.format(token.access),
-            }, verify=False if app.config.get('DEBUG') else True).json()
+            }, verify=False if app.config.get('DEBUG') else True)
+        try:
+            user = resp.json()
+        except Exception:
+            print(resp.text, file=sys.stderr)
+            raise
 
         pf = dict(
             id=user['id'],
