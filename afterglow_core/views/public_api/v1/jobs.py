@@ -175,5 +175,5 @@ def jobs_result_files(id: Union[int, str], file_id: str) -> Response:
     if msg['status'] != 200:
         return error_response(msg)
     return send_file(
-        msg['body'],
-        msg.get('mimetype', 'application/octet-stream'))
+        msg['filename'],
+        msg['mimetype'] or 'application/octet-stream')

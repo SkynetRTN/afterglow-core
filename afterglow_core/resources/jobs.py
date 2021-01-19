@@ -15,7 +15,6 @@ import json
 import struct
 import socket
 import cProfile
-import base64
 from datetime import datetime
 from glob import glob
 from multiprocessing import Event, Process, Queue
@@ -588,9 +587,6 @@ class JobRequestHandler(BaseRequestHandler):
         session = self.server.session_factory()
 
         http_status = 200
-        binary_result = False
-        mimetype = None
-        headers = None
 
         try:
             msg_len = bytearray()
@@ -825,27 +821,11 @@ class JobRequestHandler(BaseRequestHandler):
                     if job_file is None or job_file.job.user_id != user_id:
                         raise UnknownJobFileError(id=file_id)
 
-                    filename = job_file_path(user_id, job_id, file_id)
-                    # try:
-                    #     with open(filename, 'rb') as f:
-                    #         result = f.read()
-                    # except Exception:
-                    #     raise UnknownJobFileError(id=file_id)
-                    # else:
-                    #     # Remove job file after the first download request
-                    #     # noinspection PyBroadException
-                    #     try:
-                    #         os.unlink(filename)
-                    #     except Exception:
-                    #         pass
-
-                    binary_result = True
-                    result = filename
-                    mimetype = job_file.mimetype
-                    headers = job_file.headers
-                    if headers is None:
-                        headers = []
-                    headers.append(('Content-Length', str(len(result))))
+                    result = {
+                        'filename': job_file_path(user_id, job_id, file_id),
+                        'mimetype': job_file.mimetype,
+                        'headers': job_file.headers or [],
+                    }
 
                 else:
                     raise InvalidMethodError(
@@ -893,19 +873,7 @@ class JobRequestHandler(BaseRequestHandler):
             pass
 
         # Format response message, encrypt and send back to Flask
-        msg = {}
-        if binary_result:
-            # Data (e.g. job file) to be sent in the HTTP response; encode
-            # in Base64 to be able to serialize into JSON
-            msg['body'] = base64.b64encode(result).decode('ascii')
-            if mimetype:
-                msg['mimetype'] = mimetype
-        else:
-            # JSON message
-            msg['json'] = result
-        if headers:
-            msg['headers'] = headers
-        msg['status'] = http_status
+        msg = {'json': result, 'status': http_status}
 
         # noinspection PyBroadException
         try:
@@ -1214,13 +1182,6 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
         msg = json.loads(decrypt(msg))
         if not isinstance(msg, dict):
             raise Exception()
-
-        try:
-            # The optional message body was sent encoded in Base64,
-            # decode it back
-            msg['body'] = base64.b64decode(msg['body'])
-        except KeyError:
-            pass
     except Exception:
         raise JobServerError(reason='JSON structure expected')
 
