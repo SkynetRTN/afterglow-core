@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 from typing import Optional
 
 from .. import app
+from ..errors.auth import NotAuthenticatedError
 from . import OAuthServerPluginBase, OAuthToken
 
 
@@ -76,8 +77,7 @@ class SkynetOAuthPlugin(OAuthServerPluginBase):
         try:
             user = resp.json()
         except Exception:
-            print(resp.text, file=sys.stderr)
-            raise
+            raise NotAuthenticatedError(error_msg=resp.text)
 
         pf = dict(
             id=user['id'],
