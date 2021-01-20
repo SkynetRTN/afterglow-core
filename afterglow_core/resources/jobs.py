@@ -15,6 +15,7 @@ import json
 import struct
 import socket
 import cProfile
+import atexit
 from datetime import datetime
 from glob import glob
 from multiprocessing import Event, Process, Queue
@@ -485,6 +486,12 @@ class JobWorkerProcessWrapper(object):
             # noinspection PyTypeChecker
             os.kill(self.ident, s)
 
+    def join(self) -> None:
+        """
+        Wait for the worker process completion
+        """
+        self.process.join()
+
 
 db_field_type_mapping = {
     fields.Boolean: Boolean,
@@ -907,6 +914,19 @@ def job_server(notify_queue, key, iv):
     terminate_listener_event = threading.Event()
     state_update_listener = None
 
+    # Initialize worker process pool
+    min_pool_size = app.config.get('JOB_POOL_MIN', 1)
+    max_pool_size = app.config.get('JOB_POOL_MAX', 16)
+    if min_pool_size > 0:
+        app.logger.info(
+            'Starting %d job worker process%s', min_pool_size,
+            '' if min_pool_size == 1 else 'es')
+        pool = [JobWorkerProcessWrapper(job_queue, result_queue)
+                for _ in range(min_pool_size)]
+    else:
+        pool = []
+    pool_lock = RWLock()
+
     try:
         app.logger.info('Starting Afterglow job server (pid %d)', os.getpid())
 
@@ -958,19 +978,6 @@ def job_server(notify_queue, key, iv):
             if e.errno != errno.ENOENT:
                 raise
 
-        # Initialize pool of worker processes
-        min_pool_size = app.config.get('JOB_POOL_MIN', 1)
-        max_pool_size = app.config.get('JOB_POOL_MAX', 16)
-        if min_pool_size > 0:
-            app.logger.info(
-                'Starting %d job worker process%s', min_pool_size,
-                '' if min_pool_size == 1 else 'es')
-            pool = [JobWorkerProcessWrapper(job_queue, result_queue)
-                    for _ in range(min_pool_size)]
-        else:
-            pool = []
-        pool_lock = RWLock()
-
         # Listen for job state updates in a separate thread
         def state_update_listener_body():
             """
@@ -1001,9 +1008,9 @@ def job_server(notify_queue, key, iv):
                     # Worker process assignment message
                     found = False
                     with pool_lock.acquire_read():
-                        for p in pool:
-                            if p.ident == job_pid:
-                                p.job_id = job_id
+                        for _p in pool:
+                            if _p.ident == job_pid:
+                                _p.job_id = job_id
                                 found = True
                                 break
                     if not found:
@@ -1084,18 +1091,27 @@ def job_server(notify_queue, key, iv):
         tcp_server.serve_forever()
 
     except (KeyboardInterrupt, SystemExit):
-        app.logger.info('Job server terminated')
+        pass
     except Exception as e:
         # Make sure the main process receives at least an error message if job
         # server process initialization failed
         notify_queue.put(('exception', e))
         app.logger.warn('Error in job server process', exc_info=True)
     finally:
+        # Stop all worker processes
+        with pool_lock.acquire_write():
+            for _ in range(len(pool)):
+                job_queue.put(None)
+            for p in pool:
+                p.join()
+
         # Shut down state update listener
         result_queue.put(None)
         terminate_listener_event.set()
         if state_update_listener is not None:
             state_update_listener.join()
+
+        app.logger.info('Job server terminated')
 
 
 @app.before_first_request
@@ -1123,6 +1139,10 @@ def init_jobs():
     if msg[0] == 'exception':
         # Job server initialization error
         raise msg[1]
+
+    # Terminate job server on Flask shutdown
+    atexit.register(lambda: job_server_request('', 'terminate'))
+
     if msg[0] == 'success':
         job_server_port = msg[1]
     else:
