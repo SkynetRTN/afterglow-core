@@ -1168,8 +1168,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
         msg.update(dict(
             resource=resource,
             method=method,
-            user_id=auth.current_user.id if auth.current_user is not None
-            else None,
+            user_id=getattr(auth.current_user, 'id', None),
         ))
         msg = encrypt(json.dumps(msg).encode('utf8'))
 
