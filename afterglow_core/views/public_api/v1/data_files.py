@@ -70,9 +70,9 @@ def make_data_response(data: Union[bytes, numpy.ndarray],
     if allow_bin:
         if is_array:
             if isinstance(data, numpy.ma.MaskedArray) and \
-                    data.fill_value != 1e20:
+                    data.fill_value != numpy.nan:
                 # Replace masked values with a crazy large value
-                data = numpy.ma.masked_array(data, fill_value=1e20)
+                data = numpy.ma.masked_array(data, fill_value=numpy.nan)
             # Make sure data are in little-endian byte order before sending over
             # the net
             if data.dtype.byteorder == '>' or \
