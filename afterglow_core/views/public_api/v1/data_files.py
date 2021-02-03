@@ -2,8 +2,9 @@
 Afterglow Core: API v1 data file views
 """
 
-import astropy.io.fits as pyfits
+import sys
 import os
+import astropy.io.fits as pyfits
 import gzip
 from io import BytesIO
 from typing import Optional, Union
@@ -68,15 +69,15 @@ def make_data_response(data: Union[bytes, numpy.ndarray],
 
     if allow_bin:
         if is_array:
-            # Make sure data are in little-endian byte order before sending over
-            # the net
             if isinstance(data, numpy.ma.MaskedArray) and \
                     data.fill_value != 1e20:
-                # Replace masked values with unrealistically small value
+                # Replace masked values with a crazy large value
                 data = numpy.ma.masked_array(data, fill_value=1e20)
+            # Make sure data are in little-endian byte order before sending over
+            # the net
             if data.dtype.byteorder == '>' or \
                     data.dtype.byteorder == '=' and sys.byteorder == 'big':
-                data = data.byteswap()
+                data = data.astype(data.dtype.newbyteorder('<'))
             data = data.tobytes()
             if not mimetype:
                 mimetype = 'application/octet-stream'
@@ -415,8 +416,8 @@ def data_files_hist(id: int) -> Response:
         # Cached histogram not found, calculate and return
         try:
             data = get_data_file_data(auth.current_user.id, id)[0]
-            min_bin = float(data.min(initial=0))
-            max_bin = float(data.max(initial=0))
+            # noinspection PyArgumentList
+            min_bin, max_bin = float(data.min()), float(data.max())
             bins = app.config['HISTOGRAM_BINS']
             if isinstance(bins, int) and not (data % 1).any():
                 if max_bin - min_bin < 0x100:
