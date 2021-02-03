@@ -169,7 +169,10 @@ class PixelOpsJob(Job):
 
             adb = get_data_file_db(self.user_id)
             try:
-                res = numpy.asarray(res).astype(numpy.float32)
+                if not isinstance(res, numpy.ndarray):
+                    # Cannot blindly apply asarray() to masked arrays
+                    res = numpy.asarray(res)
+                res = res.astype(numpy.float32)
                 if self.inplace:
                     hdr = get_data_file_data(self.user_id, file_id)[1]
                     hdr.add_history(

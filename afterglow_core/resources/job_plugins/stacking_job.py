@@ -102,17 +102,17 @@ class StackingJob(Job):
                 data_files.remove(data_file)
 
         # Combine using the given settings
-        fits = combine(
+        data, header = combine(
             data_files, mode=settings.mode, scaling=settings.scaling,
             rejection=settings.rejection, percentile=settings.percentile,
             lo=lo, hi=hi, max_mem_mb=app.config.get('JOB_MAX_RAM'),
-            callback=self.update_progress)
+            callback=self.update_progress)[0]
 
         # Create a new data file in the given session and return its ID
         adb = get_data_file_db(self.user_id)
         try:
             self.result.file_id = create_data_file(
-                adb, None, get_root(self.user_id), fits[0].data, fits[0].header,
+                adb, None, get_root(self.user_id), data, header,
                 duplicates='append', session_id=self.session_id).id
             adb.commit()
         except Exception:

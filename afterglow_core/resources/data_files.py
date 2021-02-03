@@ -791,7 +791,8 @@ def get_data_file_data(user_id: Optional[int], file_id: int) \
             data = fits[0].data
         else:
             # Masked data
-            data = numpy.ma.MaskedArray(fits[0].data, fits[1].data.astype(bool))
+            data = numpy.ma.masked_array(
+                fits[0].data, fits[1].data.astype(bool))
     else:
         # Table data in the primary HDU (?)
         data = fits[0].data

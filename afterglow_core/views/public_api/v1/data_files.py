@@ -70,6 +70,10 @@ def make_data_response(data: Union[bytes, numpy.ndarray],
         if is_array:
             # Make sure data are in little-endian byte order before sending over
             # the net
+            if isinstance(data, numpy.ma.MaskedArray) and \
+                    data.fill_value != 1e20:
+                # Replace masked values with unrealistically small value
+                data = numpy.ma.masked_array(data, fill_value=1e20)
             if data.dtype.byteorder == '>' or \
                     data.dtype.byteorder == '=' and sys.byteorder == 'big':
                 data = data.byteswap()
@@ -411,7 +415,8 @@ def data_files_hist(id: int) -> Response:
         # Cached histogram not found, calculate and return
         try:
             data = get_data_file_data(auth.current_user.id, id)[0]
-            min_bin, max_bin = float(data.min()), float(data.max())
+            min_bin = float(data.min(initial=0))
+            max_bin = float(data.max(initial=0))
             bins = app.config['HISTOGRAM_BINS']
             if isinstance(bins, int) and not (data % 1).any():
                 if max_bin - min_bin < 0x100:
@@ -427,6 +432,8 @@ def data_files_hist(id: int) -> Response:
                     max_bin = min_bin + bins
                 else:
                     max_bin = min_bin + 1
+            if isinstance(data, numpy.ma.MaskedArray):
+                data = data.compressed()
             data = numpy.histogram(data, bins, (min_bin, max_bin))[0]
 
             # Cache histogram and limits

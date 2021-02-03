@@ -166,10 +166,6 @@ def run_cropping_job(job: Job,
             try:
                 data, hdr = get_data_file_data(job.user_id, file_id)
                 if any([left, right, top, bottom]):
-                    if auto_crop and isinstance(data, MaskedArray):
-                        # Automatic cropping guarantees that there are no masked
-                        # pixels
-                        data = data.data
                     data = data[bottom:-(top + 1), left:-(right + 1)]
                     hdr.add_history(
                         'Cropped with margins: left={}, right={}, top={}, '
