@@ -368,8 +368,14 @@ class JobWorkerProcess(Process):
                 # Set auth.current_user to the actual db user
                 if job.user_id is not None:
                     user_session = users.db.create_scoped_session()
-                    auth.current_user = user_session.query(users.DbUser) \
-                        .get(job.user_id)
+                    try:
+                        auth.current_user = user_session.query(users.DbUser) \
+                            .get(job.user_id)
+                    except Exception:
+                        print(
+                            '!!! User db query error for user ID', job.user_id)
+                        user_session.remove()
+                        raise
                     if auth.current_user is None:
                         print('!!! No user for user ID', job.user_id)
                         auth.current_user = auth.AnonymousUser()
