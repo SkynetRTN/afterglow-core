@@ -67,15 +67,11 @@ def initialize() -> Response:
             raise MissingFieldError('password')
         # TODO check security of password
 
-        email = request.args.get('email')
-        if not email:
-            raise MissingFieldError('email')
-
         try:
             u = DbUser(
                 username=username,
                 password=hash_password(password),
-                email=email,
+                email=request.args.get('email'),
                 first_name=request.args.get('first_name'),
                 last_name=request.args.get('last_name'),
                 birth_date=request.args.get('birth_date'),
@@ -284,8 +280,10 @@ def oauth2_authorized(plugin_id: str) -> Response:
                     user_profile.get('username'),
                     user_profile.get('email'),
                     ' '.join(
-                        ([user_profile.get('first_name')] or []) +
-                        ([user_profile.get('last_name')] or [])),
+                        ([user_profile['first_name']]
+                         if user_profile.get('first_name') else []) +
+                        ([user_profile['last_name']]
+                         if user_profile.get('last_name') else [])),
                     user_profile['id']):
                 if username_candidate and str(username_candidate).strip() and \
                         not DbUser.query.filter(

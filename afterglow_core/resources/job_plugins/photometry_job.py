@@ -100,12 +100,6 @@ def run_photometry_job(job: Job, settings: PhotSettings,
             k_in=settings.a_in,
             k_out=settings.a_out,
         )
-
-        # Make sure that all input sources have FWHMs
-        if any(getattr(source, attr, None) is None
-               for attr in ('fwhm_x', 'fwhm_y', 'theta')
-               for source in job_sources):
-            raise ValueError('Missing FWHM data for automatic photometry')
     else:
         raise ValueError('Photometry mode must be "aperture" or "auto"')
 

@@ -8,7 +8,7 @@ from .... import app, json_response
 from ....auth import auth_required
 from ....models import User
 from ....resources.users import *
-from ....schemas.api.v1 import UserSchema
+from ....schemas.api.v1 import MinorUserSchema, UserSchema
 from ....errors.auth import (
     AdminRequiredError, CannotDeactivateTheOnlyAdminError,
     CannotDeleteCurrentUserError)
@@ -43,7 +43,8 @@ def users() -> Response:
     if request.method == 'GET':
         # Return all users matching the given attributes
         return json_response(
-            [UserSchema(u) for u in query_users(
+            [MinorUserSchema(u) if u.is_minor else UserSchema(u)
+             for u in query_users(
                 username=request.args.get('username'),
                 active=request.args.get('active'),
                 roles=request.args.get('roles'),
@@ -87,7 +88,8 @@ def user(user_id: int) -> Response:
     u = get_user(user_id)
 
     if request.method == 'GET':
-        return json_response(UserSchema(u))
+        return json_response(
+            MinorUserSchema(u) if u.is_minor else UserSchema(u))
 
     # At least one active admin must remain when deactivating admin account
     # or removing admin role from account
@@ -112,7 +114,9 @@ def user(user_id: int) -> Response:
                     not any(r.name == 'admin' for r in u1.roles)):
                 raise CannotDeactivateTheOnlyAdminError()
 
-        return json_response(UserSchema(update_user(u.id, u1)))
+        u1 = update_user(u.id, u1)
+        return json_response(
+            MinorUserSchema(u1) if u1.is_minor else UserSchema(u1))
 
     if request.method == 'DELETE':
         if u.id == request.user.id:

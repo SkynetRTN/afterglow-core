@@ -15,7 +15,7 @@ import json
 import struct
 import socket
 import cProfile
-import base64
+import atexit
 from datetime import datetime
 from glob import glob
 from multiprocessing import Event, Process, Queue
@@ -321,7 +321,8 @@ class JobWorkerProcess(Process):
         # Close all possible data file db engine connections inherited from the
         # parent process
         from . import data_files
-        for engine, _ in data_files.data_files_engine.values():
+        for engine, session in data_files.data_files_engine.values():
+            session.close_all()
             engine.dispose()
         # noinspection PyTypeChecker
         reload(data_files)
@@ -366,12 +367,21 @@ class JobWorkerProcess(Process):
 
                 # Set auth.current_user to the actual db user
                 if job.user_id is not None:
-                    auth.current_user = users.DbUser.query.get(job.user_id)
+                    user_session = users.db.create_scoped_session()
+                    try:
+                        auth.current_user = user_session.query(users.DbUser) \
+                            .get(job.user_id)
+                    except Exception:
+                        print(
+                            '!!! User db query error for user ID', job.user_id)
+                        user_session.remove()
+                        raise
                     if auth.current_user is None:
                         print('!!! No user for user ID', job.user_id)
                         auth.current_user = auth.AnonymousUser()
                 else:
                     auth.current_user = auth.AnonymousUser()
+                    user_session = None
 
                 # Clear the possible cancel request
                 if WINDOWS:
@@ -398,6 +408,9 @@ class JobWorkerProcess(Process):
                     # Unexpected job exception
                     job.result.errors.append(str(e))
                 finally:
+                    if user_session is not None:
+                        user_session.remove()
+
                     # Notify the job server about job completion
                     if job.state.status != 'canceled':
                         job.state.status = 'completed'
@@ -478,6 +491,12 @@ class JobWorkerProcessWrapper(object):
                 pass
             # noinspection PyTypeChecker
             os.kill(self.ident, s)
+
+    def join(self) -> None:
+        """
+        Wait for the worker process completion
+        """
+        self.process.join()
 
 
 db_field_type_mapping = {
@@ -581,24 +600,16 @@ class JobRequestHandler(BaseRequestHandler):
         session = self.server.session_factory()
 
         http_status = 200
-        binary_result = False
-        mimetype = None
-        headers = None
 
         try:
-            msg_len = self.request.recv(msg_hdr_size)
-            if len(msg_len) < msg_hdr_size:
-                raise JobServerError(reason='Missing message size')
+            msg_len = bytearray()
+            while len(msg_len) < msg_hdr_size:
+                msg_len += self.request.recv(msg_hdr_size - len(msg_len))
             msg_len = struct.unpack(msg_hdr, msg_len)[0]
 
-            nbytes = msg_len
-            msg = b''
-            while nbytes:
-                s = self.request.recv(nbytes)
-                if not s:
-                    raise JobServerError(reason='Incomplete message')
-                msg += s
-                nbytes -= len(s)
+            msg = bytearray()
+            while len(msg) < msg_len:
+                msg += self.request.recv(msg_len - len(msg))
 
             try:
                 msg = json.loads(decrypt(msg))
@@ -823,27 +834,11 @@ class JobRequestHandler(BaseRequestHandler):
                     if job_file is None or job_file.job.user_id != user_id:
                         raise UnknownJobFileError(id=file_id)
 
-                    filename = job_file_path(user_id, job_id, file_id)
-                    try:
-                        with open(filename, 'rb') as f:
-                            result = f.read()
-                    except Exception:
-                        raise UnknownJobFileError(id=file_id)
-                    # else:
-                    #     # noinspection PyBroadException
-                    #     try:
-                    #         os.unlink(filename)
-                    #     except Exception:
-                    #         pass
-
-                    # Remove job file after the first download request
-
-                    binary_result = True
-                    mimetype = job_file.mimetype
-                    headers = job_file.headers
-                    if headers is None:
-                        headers = []
-                    headers.append(('Content-Length', str(len(result))))
+                    result = {
+                        'filename': job_file_path(user_id, job_id, file_id),
+                        'mimetype': job_file.mimetype,
+                        'headers': job_file.headers or [],
+                    }
 
                 else:
                     raise InvalidMethodError(
@@ -891,19 +886,7 @@ class JobRequestHandler(BaseRequestHandler):
             pass
 
         # Format response message, encrypt and send back to Flask
-        msg = {}
-        if binary_result:
-            # Data (e.g. job file) to be sent in the HTTP response; encode
-            # in Base64 to be able to serialize into JSON
-            msg['body'] = base64.b64encode(result).decode('ascii')
-            if mimetype:
-                msg['mimetype'] = mimetype
-        else:
-            # JSON message
-            msg['json'] = result
-        if headers:
-            msg['headers'] = headers
-        msg['status'] = http_status
+        msg = {'json': result, 'status': http_status}
 
         # noinspection PyBroadException
         try:
@@ -936,6 +919,19 @@ def job_server(notify_queue, key, iv):
     result_queue = Queue()
     terminate_listener_event = threading.Event()
     state_update_listener = None
+
+    # Initialize worker process pool
+    min_pool_size = app.config.get('JOB_POOL_MIN', 1)
+    max_pool_size = app.config.get('JOB_POOL_MAX', 16)
+    if min_pool_size > 0:
+        app.logger.info(
+            'Starting %d job worker process%s', min_pool_size,
+            '' if min_pool_size == 1 else 'es')
+        pool = [JobWorkerProcessWrapper(job_queue, result_queue)
+                for _ in range(min_pool_size)]
+    else:
+        pool = []
+    pool_lock = RWLock()
 
     try:
         app.logger.info('Starting Afterglow job server (pid %d)', os.getpid())
@@ -988,19 +984,6 @@ def job_server(notify_queue, key, iv):
             if e.errno != errno.ENOENT:
                 raise
 
-        # Initialize pool of worker processes
-        min_pool_size = app.config.get('JOB_POOL_MIN', 1)
-        max_pool_size = app.config.get('JOB_POOL_MAX', 16)
-        if min_pool_size > 0:
-            app.logger.info(
-                'Starting %d job worker process%s', min_pool_size,
-                '' if min_pool_size == 1 else 'es')
-            pool = [JobWorkerProcessWrapper(job_queue, result_queue)
-                    for _ in range(min_pool_size)]
-        else:
-            pool = []
-        pool_lock = RWLock()
-
         # Listen for job state updates in a separate thread
         def state_update_listener_body():
             """
@@ -1031,9 +1014,9 @@ def job_server(notify_queue, key, iv):
                     # Worker process assignment message
                     found = False
                     with pool_lock.acquire_read():
-                        for p in pool:
-                            if p.ident == job_pid:
-                                p.job_id = job_id
+                        for _p in pool:
+                            if _p.ident == job_pid:
+                                _p.job_id = job_id
                                 found = True
                                 break
                     if not found:
@@ -1114,18 +1097,27 @@ def job_server(notify_queue, key, iv):
         tcp_server.serve_forever()
 
     except (KeyboardInterrupt, SystemExit):
-        app.logger.info('Job server terminated')
+        pass
     except Exception as e:
         # Make sure the main process receives at least an error message if job
         # server process initialization failed
         notify_queue.put(('exception', e))
         app.logger.warn('Error in job server process', exc_info=True)
     finally:
+        # Stop all worker processes
+        with pool_lock.acquire_write():
+            for _ in range(len(pool)):
+                job_queue.put(None)
+            for p in pool:
+                p.join()
+
         # Shut down state update listener
         result_queue.put(None)
         terminate_listener_event.set()
         if state_update_listener is not None:
             state_update_listener.join()
+
+        app.logger.info('Job server terminated')
 
 
 @app.before_first_request
@@ -1153,6 +1145,10 @@ def init_jobs():
     if msg[0] == 'exception':
         # Job server initialization error
         raise msg[1]
+
+    # Terminate job server on Flask shutdown
+    atexit.register(lambda: job_server_request('', 'terminate'))
+
     if msg[0] == 'success':
         job_server_port = msg[1]
     else:
@@ -1178,7 +1174,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
         msg.update(dict(
             resource=resource,
             method=method,
-            user_id=auth.current_user.id,
+            user_id=getattr(auth.current_user, 'id', None),
         ))
         msg = encrypt(json.dumps(msg).encode('utf8'))
 
@@ -1189,19 +1185,14 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
             sock.sendall(struct.pack(msg_hdr, len(msg)) + msg)
 
             # Get response
-            msg_len = sock.recv(msg_hdr_size)
-            if len(msg_len) < msg_hdr_size:
-                raise JobServerError(reason='Missing message size')
+            msg_len = bytearray()
+            while len(msg_len) < msg_hdr_size:
+                msg_len += sock.recv(msg_hdr_size - len(msg_len))
             msg_len = struct.unpack(msg_hdr, msg_len)[0]
 
-            nbytes = msg_len
-            msg = b''
-            while nbytes:
-                s = sock.recv(nbytes)
-                if not s:
-                    raise JobServerError(reason='Incomplete message')
-                msg += s
-                nbytes -= len(s)
+            msg = bytearray()
+            while len(msg) < msg_len:
+                msg += sock.recv(msg_len - len(msg))
         finally:
             # sock.shutdown(socket.SHUT_RDWR)
             sock.close()
@@ -1217,13 +1208,6 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
         msg = json.loads(decrypt(msg))
         if not isinstance(msg, dict):
             raise Exception()
-
-        try:
-            # The optional message body was sent encoded in Base64,
-            # decode it back
-            msg['body'] = base64.b64decode(msg['body'])
-        except KeyError:
-            pass
     except Exception:
         raise JobServerError(reason='JSON structure expected')
 

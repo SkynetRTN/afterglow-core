@@ -42,6 +42,21 @@ class User(AfterglowSchema):
     settings: str = String()
     identities: TList[Identity] = List(Nested(Identity, only=['id', 'name']))
 
+    @property
+    def age(self):
+        """User's age in years or None if birth date not provided"""
+        bd = self.birth_date
+        if bd is None:
+            return None
+
+        return (datetime.now() - datetime.combine(bd, datetime.min.time())) \
+                   .total_seconds()/31556908.8
+
+    @property
+    def is_minor(self):
+        """Is user younger than 18 years?"""
+        return self.birth_date is None or self.age < 18
+
 
 class Token(AfterglowSchema):
     id: int = Integer()

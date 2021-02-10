@@ -160,8 +160,6 @@ class PixelOpsJob(Job):
         """
         res = eval(expr, context, local_vars)
 
-        adb = get_data_file_db(self.user_id)
-
         nd = numpy.ndim(res)
         if nd:
             # Evaluation yields an array; replace the original data file or
@@ -169,40 +167,48 @@ class PixelOpsJob(Job):
             if nd != 2:
                 raise ValueError('Expression must yield a 2D array or scalar')
 
-            res = numpy.asarray(res).astype(numpy.float32)
-            if self.inplace:
-                hdr = get_data_file_data(self.user_id, file_id)[1]
-                hdr.add_history(
-                    'Updated by evaluating expression "{}"'.format(expr))
-
-                try:
-                    save_data_file(
-                        adb, get_root(self.user_id), file_id, res, hdr)
-                    adb.commit()
-                except Exception:
-                    adb.rollback()
-                    raise
-            else:
-                if file_id is None:
-                    hdr = pyfits.Header()
-                    hdr.add_history(
-                        'Created by evaluating expression "{}"'.format(expr))
-                else:
+            adb = get_data_file_db(self.user_id)
+            try:
+                if not isinstance(res, numpy.ndarray):
+                    # Cannot blindly apply asarray() to masked arrays
+                    res = numpy.asarray(res)
+                res = res.astype(numpy.float32)
+                if self.inplace:
                     hdr = get_data_file_data(self.user_id, file_id)[1]
                     hdr.add_history(
-                        'Created from data file {:d} by evaluating expression '
-                        '"{}"'.format(file_id, expr))
+                        'Updated by evaluating expression "{}"'.format(expr))
 
-                try:
-                    # Create data file in the same session as input data file
-                    # or, if created from expression not involving
-                    file_id = create_data_file(
-                        adb, None, get_root(self.user_id), res, hdr,
-                        duplicates='append', session_id=self.session_id).id
-                    adb.commit()
-                except Exception:
-                    adb.rollback()
-                    raise
+                    try:
+                        save_data_file(
+                            adb, get_root(self.user_id), file_id, res, hdr)
+                        adb.commit()
+                    except Exception:
+                        adb.rollback()
+                        raise
+                else:
+                    if file_id is None:
+                        hdr = pyfits.Header()
+                        hdr.add_history(
+                            'Created by evaluating expression "{}"'
+                            .format(expr))
+                    else:
+                        hdr = get_data_file_data(self.user_id, file_id)[1]
+                        hdr.add_history(
+                            'Created from data file {:d} by evaluating '
+                            'expression "{}"'.format(file_id, expr))
+
+                    try:
+                        # Create data file in the same session as input data
+                        # file or, if created from expression not involving
+                        file_id = create_data_file(
+                            adb, None, get_root(self.user_id), res, hdr,
+                            duplicates='append', session_id=self.session_id).id
+                        adb.commit()
+                    except Exception:
+                        adb.rollback()
+                        raise
+            finally:
+                adb.remove()
 
             self.result.file_ids.append(file_id)
         else:

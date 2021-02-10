@@ -159,47 +159,56 @@ def run_cropping_job(job: Job,
         return job_file_ids
 
     adb = get_data_file_db(job.user_id)
-
-    # Crop all data files and adjust WCS
-    new_file_ids = []
-    for i, file_id in enumerate(job_file_ids):
-        try:
-            data, hdr = get_data_file_data(job.user_id, file_id)
-            if any([left, right, top, bottom]):
-                if auto_crop and isinstance(data, MaskedArray):
-                    # Automatic cropping guarantees that there are no masked
-                    # pixels
-                    data = data.data
-                data = data[bottom:-(top + 1), left:-(right + 1)]
-                hdr.add_history(
-                    'Cropped with margins: left={}, right={}, top={}, '
-                    'bottom={}'.format(left, right, top, bottom))
-
-                # Move CRPIXn if present
-                if left:
-                    try:
-                        hdr['CRPIX1'] -= left
-                    except (KeyError, ValueError):
-                        pass
-                if bottom:
-                    try:
-                        hdr['CRPIX2'] -= bottom
-                    except (KeyError, ValueError):
-                        pass
-
-                if inplace:
-                    try:
-                        # Overwrite the original data file
-                        save_data_file(
-                            adb, get_root(job.user_id), file_id, data, hdr)
-                        adb.commit()
-                    except Exception:
-                        adb.rollback()
-                        raise
-                else:
+    try:
+        # Crop all data files and adjust WCS
+        new_file_ids = []
+        for i, file_id in enumerate(job_file_ids):
+            try:
+                data, hdr = get_data_file_data(job.user_id, file_id)
+                if any([left, right, top, bottom]):
+                    data = data[bottom:-(top + 1), left:-(right + 1)]
                     hdr.add_history(
-                        'Original data file ID: {:d}'.format(file_id))
+                        'Cropped with margins: left={}, right={}, top={}, '
+                        'bottom={}'.format(left, right, top, bottom))
+
+                    # Move CRPIXn if present
+                    if left:
+                        try:
+                            hdr['CRPIX1'] -= left
+                        except (KeyError, ValueError):
+                            pass
+                    if bottom:
+                        try:
+                            hdr['CRPIX2'] -= bottom
+                        except (KeyError, ValueError):
+                            pass
+
+                    if inplace:
+                        try:
+                            # Overwrite the original data file
+                            save_data_file(
+                                adb, get_root(job.user_id), file_id, data, hdr)
+                            adb.commit()
+                        except Exception:
+                            adb.rollback()
+                            raise
+                    else:
+                        hdr.add_history(
+                            'Original data file ID: {:d}'.format(file_id))
+                        try:
+                            file_id = create_data_file(
+                                adb, None, get_root(job.user_id), data, hdr,
+                                duplicates='append',
+                                session_id=job.session_id).id
+                            adb.commit()
+                        except Exception:
+                            adb.rollback()
+                            raise
+                elif not inplace:
+                    # Merely duplicate the original data file
                     try:
+                        hdr.add_history(
+                            'Original data file ID: {:d}'.format(file_id))
                         file_id = create_data_file(
                             adb, None, get_root(job.user_id), data, hdr,
                             duplicates='append', session_id=job.session_id).id
@@ -207,24 +216,14 @@ def run_cropping_job(job: Job,
                     except Exception:
                         adb.rollback()
                         raise
-            elif not inplace:
-                # Merely duplicate the original data file
-                try:
-                    hdr.add_history(
-                        'Original data file ID: {:d}'.format(file_id))
-                    file_id = create_data_file(
-                        adb, None, get_root(job.user_id), data, hdr,
-                        duplicates='append', session_id=job.session_id).id
-                    adb.commit()
-                except Exception:
-                    adb.rollback()
-                    raise
 
-            new_file_ids.append(file_id)
-        except Exception as e:
-            job.add_error('Data file ID {}: {}'.format(job_file_ids[i], e))
-        finally:
-            job.update_progress((i + 1)/len(job_file_ids)*100)
+                new_file_ids.append(file_id)
+            except Exception as e:
+                job.add_error('Data file ID {}: {}'.format(job_file_ids[i], e))
+            finally:
+                job.update_progress((i + 1)/len(job_file_ids)*100)
+    finally:
+        adb.remove()
 
     return new_file_ids
 
