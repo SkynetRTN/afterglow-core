@@ -145,7 +145,7 @@ class WcsCalibrationJob(Job):
                     # Extract sources
                     sources = run_source_extraction_job(
                         self, source_extraction_settings, [file_id])
-                    xy = [(source.x, source.y) for source in sources]
+                    xy = [(source.x - 1, source.y - 1) for source in sources]
                     fluxes = [source.flux for source in sources]
 
                     ra_hours, dec_degs = settings.ra_hours, settings.dec_degs
