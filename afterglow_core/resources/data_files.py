@@ -767,7 +767,7 @@ def get_data_file_fits(user_id: Optional[int], file_id: int,
 
 
 def get_data_file_data(user_id: Optional[int], file_id: int) \
-        -> Tuple[numpy.ndarray, pyfits.Header]:
+        -> Tuple[Union[numpy.ndarray, numpy.ma.MaskedArray], pyfits.Header]:
     """
     Return FITS file data and header for a data file with the given ID; handles
     masked images
