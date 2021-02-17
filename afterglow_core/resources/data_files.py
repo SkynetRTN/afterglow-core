@@ -223,7 +223,8 @@ def get_data_file_db(user_id: Optional[int]):
             else ', '.join(str(arg) for arg in e.args) if e.args else str(e))
 
 
-def save_data_file(adb, root: str, file_id: int, data: numpy.ndarray, hdr,
+def save_data_file(adb, root: str, file_id: int,
+                   data: Union[numpy.ndarray, numpy.ma.MaskedArray], hdr,
                    modified: bool = True) \
         -> None:
     """
