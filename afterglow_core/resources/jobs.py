@@ -356,7 +356,7 @@ class JobWorkerProcess(Process):
                         _queue=result_queue, _set_defaults=True, **job_descr)
                 except Exception as e:
                     # Report job creation error to job server
-                    app.logger.warn(
+                    app.logger.warning(
                         '%s Could not create job', prefix, exc_info=True)
                     result_queue.put(dict(
                         id=job_descr['id'],
@@ -434,7 +434,7 @@ class JobWorkerProcess(Process):
                 # started
                 pass
             except Exception:
-                app.logger.warn(
+                app.logger.warning(
                     '%s Internal job queue error', prefix, exc_info=True)
 
         if WINDOWS:
@@ -681,7 +681,7 @@ class JobRequestHandler(BaseRequestHandler):
                         # All workers are currently busy
                         if server.max_pool_size and \
                                 pool_size >= server.max_pool_size:
-                            app.logger.warn(
+                            app.logger.warning(
                                 'All job worker processes are busy; '
                                 'consider increasing JOB_POOL_MAX')
                         else:
@@ -895,7 +895,7 @@ class JobRequestHandler(BaseRequestHandler):
         except Exception:
             # noinspection PyBroadException
             try:
-                app.logger.warn(
+                app.logger.warning(
                     'Error sending job server response', exc_info=True)
             except Exception:
                 pass
@@ -1000,7 +1000,7 @@ def job_server(notify_queue, key, iv):
                         'state' in msg and \
                         not isinstance(msg['state'], dict) or \
                         'result' in msg and not isinstance(msg['result'], dict):
-                    app.logger.warn(
+                    app.logger.warning(
                         'Job state listener got unexpected message "%s"', msg)
                     continue
 
@@ -1020,7 +1020,7 @@ def job_server(notify_queue, key, iv):
                                 found = True
                                 break
                     if not found:
-                        app.logger.warn(
+                        app.logger.warning(
                             'Job state listener got a job assignment message '
                             'for non-existent worker process %s', job_pid)
                     continue
@@ -1039,7 +1039,7 @@ def job_server(notify_queue, key, iv):
                             sess.commit()
                         except Exception:
                             sess.rollback()
-                            app.logger.warn(
+                            app.logger.warning(
                                 'Could not add job file "%s" to database',
                                 exc_info=True)
                         continue
@@ -1067,7 +1067,7 @@ def job_server(notify_queue, key, iv):
                         sess.commit()
                     except Exception:
                         sess.rollback()
-                        app.logger.warn(
+                        app.logger.warning(
                             'Could not update job state/result "%s"',
                             msg, exc_info=True)
                 finally:
@@ -1102,7 +1102,7 @@ def job_server(notify_queue, key, iv):
         # Make sure the main process receives at least an error message if job
         # server process initialization failed
         notify_queue.put(('exception', e))
-        app.logger.warn('Error in job server process', exc_info=True)
+        app.logger.warning('Error in job server process', exc_info=True)
     finally:
         # Stop all worker processes
         with pool_lock.acquire_write():

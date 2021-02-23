@@ -1332,7 +1332,7 @@ def delete_data_file(user_id: Optional[int], id: int) -> None:
             os.remove(filename)
         except Exception as e:
             # noinspection PyUnresolvedReferences
-            app.logger.warn(
+            app.logger.warning(
                 'Error removing data file "%s" (ID %d) [%s]',
                 filename, id,
                 e.message if hasattr(e, 'message') and e.message

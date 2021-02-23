@@ -433,7 +433,7 @@ def delete_user(user_id: int) -> None:
         try:
             shutil.rmtree(data_file_dir)
         except Exception as exc:
-            app.logger.warn(
+            app.logger.warning(
                 'Error removing user\'s data file directory "%s" '
                 '[%s]', data_file_dir, user_id, exc)
 

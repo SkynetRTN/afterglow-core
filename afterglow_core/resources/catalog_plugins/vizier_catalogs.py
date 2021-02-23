@@ -256,5 +256,5 @@ for kw in app.config.get('CUSTOM_VIZIER_CATALOGS', []):
         globals()[classname] = newclass
         __all__.append(classname)
     except Exception:
-        app.logger.warn(
+        app.logger.warning(
             'Could not initialize custom VizieR catalog', exc_info=True)
