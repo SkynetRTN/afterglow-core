@@ -197,9 +197,9 @@ def run_photometry_job(job: Job, settings: PhotSettings,
                 # the PSF-based centroiding to compute both centroids and FWHMs
                 for i, source in enumerate(sources[file_id]):
                     row = source_table[i]
-                    a = getattr(source, 'fwhm_x', 0)/sigma_to_fwhm
-                    b = getattr(source, 'fwhm_y', 0)/sigma_to_fwhm
-                    theta = getattr(source, 'theta', 0)
+                    a = (getattr(source, 'fwhm_x', None) or 0)/sigma_to_fwhm
+                    b = (getattr(source, 'fwhm_y', None) or 0)/sigma_to_fwhm
+                    theta = getattr(source, 'theta', None) or 0
                     if a and b:
                         row['a'] = a
                         row['b'] = b

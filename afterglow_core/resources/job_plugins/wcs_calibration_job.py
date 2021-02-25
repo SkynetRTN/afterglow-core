@@ -144,8 +144,9 @@ class WcsCalibrationJob(Job):
 
                     # Extract sources
                     sources = run_source_extraction_job(
-                        self, source_extraction_settings, [file_id])
-                    xy = [(source.x, source.y) for source in sources]
+                        self, source_extraction_settings, [file_id],
+                        update_progress=False)
+                    xy = [(source.x - 1, source.y - 1) for source in sources]
                     fluxes = [source.flux for source in sources]
 
                     ra_hours, dec_degs = settings.ra_hours, settings.dec_degs
@@ -197,7 +198,7 @@ class WcsCalibrationJob(Job):
                         crpix_center=settings.crpix_center,
                         max_sources=settings.max_sources,
                         retry_lost=False,
-                        callback=lambda: 1)
+                        callback=lambda: self.state.status != 'canceled')
                     if solution.wcs is None:
                         raise RuntimeError('WCS solution not found')
 

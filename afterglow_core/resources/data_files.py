@@ -223,7 +223,8 @@ def get_data_file_db(user_id: Optional[int]):
             else ', '.join(str(arg) for arg in e.args) if e.args else str(e))
 
 
-def save_data_file(adb, root: str, file_id: int, data: numpy.ndarray, hdr,
+def save_data_file(adb, root: str, file_id: int,
+                   data: Union[numpy.ndarray, numpy.ma.MaskedArray], hdr,
                    modified: bool = True) \
         -> None:
     """
@@ -767,7 +768,7 @@ def get_data_file_fits(user_id: Optional[int], file_id: int,
 
 
 def get_data_file_data(user_id: Optional[int], file_id: int) \
-        -> Tuple[numpy.ndarray, pyfits.Header]:
+        -> Tuple[Union[numpy.ndarray, numpy.ma.MaskedArray], pyfits.Header]:
     """
     Return FITS file data and header for a data file with the given ID; handles
     masked images
@@ -1331,7 +1332,7 @@ def delete_data_file(user_id: Optional[int], id: int) -> None:
             os.remove(filename)
         except Exception as e:
             # noinspection PyUnresolvedReferences
-            app.logger.warn(
+            app.logger.warning(
                 'Error removing data file "%s" (ID %d) [%s]',
                 filename, id,
                 e.message if hasattr(e, 'message') and e.message

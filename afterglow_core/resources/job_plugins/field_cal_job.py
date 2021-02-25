@@ -109,7 +109,8 @@ class FieldCalJob(Job):
             epochs, wcss = {}, {}
             matching_catalog_sources = []
             detected_sources = run_source_extraction_job(
-                self, self.source_extraction_settings, self.file_ids)
+                self, self.source_extraction_settings, self.file_ids,
+                update_progress=False)
             if not detected_sources:
                 raise RuntimeError('Could not detect any sources')
             for source in detected_sources:
