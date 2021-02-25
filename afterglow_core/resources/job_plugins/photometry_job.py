@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List as TList, Tuple
 
 from marshmallow.fields import Integer, List, Nested
-from numpy import clip, cos, deg2rad, isfinite, sin, vstack, zeros
+from numpy import clip, concatenate, cos, deg2rad, isfinite, sin, zeros
 from astropy.wcs import WCS
 import sep
 
@@ -181,8 +181,8 @@ def run_photometry_job(job: Job, settings: PhotSettings,
                     del sources[file_id][i]
                     if i:
                         if i < len(source_table) - 1:
-                            source_table = vstack([source_table[:i],
-                                                   source_table[i + 1:]])
+                            source_table = concatenate(
+                                [source_table[:i], source_table[i + 1:]])
                         else:
                             source_table = source_table[:i]
                     else:
