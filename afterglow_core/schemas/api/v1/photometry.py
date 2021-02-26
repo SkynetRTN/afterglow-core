@@ -2,6 +2,8 @@
 Afterglow Core: photometry-related schemas
 """
 
+from typing import Optional
+
 from marshmallow.fields import String
 
 from .source_extraction import SourceExtractionDataSchema
@@ -22,8 +24,8 @@ class MagSchema(AfterglowSchema):
 class IPhotometrySchema(AfterglowSchema):
     flux: float = Float()
     flux_error: float = Float()
-    mag: float = Float()
-    mag_error: float = Float()
+    mag: Optional[float] = Float()
+    mag_error: Optional[float] = Float()
 
 
 class IApertureSchema(AfterglowSchema):
