@@ -25,8 +25,8 @@ class Mag(AfterglowSchema):
 class IPhotometry(AfterglowSchema):
     flux: float = Float()
     flux_error: float = Float()
-    mag: float = Float()
-    mag_error: float = Float()
+    mag: Optional[float] = Float()
+    mag_error: Optional[float] = Float()
 
 
 class IAperture(AfterglowSchema):
@@ -84,8 +84,11 @@ class PhotometryData(SourceExtractionData, IPhotometry, IAperture):
             # IPhotometry
             self.flux = row['flux']
             self.flux_error = row['flux_err']
-            self.mag = row['mag'] + zero_point
-            self.mag_error = row['mag_err']
+            if row['mag'] or row['mag_err']:
+                self.mag = row['mag'] + zero_point
+                self.mag_error = row['mag_err']
+            else:
+                self.mag = self.mag_error = None
 
             # IAperture
             if row['aper_a']:
