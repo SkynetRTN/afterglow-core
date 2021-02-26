@@ -5,6 +5,7 @@ Afterglow Core: imaging survey data provider plugin
 from typing import List as TList, Optional, Tuple
 
 from io import BytesIO
+from threading import Lock
 
 from astropy import units as u
 from astropy.coordinates import Angle
@@ -34,20 +35,47 @@ class ImagingSurveyDataProvider(DataProvider):
     description = 'Access to about 200 imaging surveys like DSS'
     searchable = True
     browseable = False
-    # noinspection PyProtectedMember
-    search_fields = dict(
-        survey=dict(label='Survey', type='multi_choice',
-                    enum=SkyView._valid_surveys),
-        ra_hours=dict(label='Center RA', type='float', min_val=0, max_val=24),
-        dec_degs=dict(label='Center Dec', type='float',
-                      min_val=-90, max_val=90),
-        object=dict(label='Object', type='text'),
-        width=dict(label='Field Width [arcmin]', type='float', min_val=0),
-        height=dict(label='Field Height [arcmin]', type='int', min_val=0),
-    )
     readonly = True
     quota = usage = None
     allow_multiple_instances = False
+
+    _search_fields: dict = None
+    _search_fields_lock: Lock = None
+
+    def __init__(self, **kwargs):
+        """
+        Create data provider instance
+
+        :param kwargs: data provider initialization parameters; unused
+        """
+        super().__init__(**kwargs)
+        self._search_fields_lock = Lock()
+
+    @property
+    def search_fields(self):
+        """Dictionary of searchable fields"""
+        with self._search_fields_lock:
+            if self._search_fields is None:
+                # Initialize search field dict on first access to prevent from
+                # connecting to SkyView when importing the module, even if this
+                # data provider is not enabled in the configuration
+                # noinspection PyProtectedMember
+                self._search_fields = dict(
+                    survey=dict(
+                        label='Survey', type='multi_choice',
+                        enum=SkyView._valid_surveys),
+                    ra_hours=dict(
+                        label='Center RA', type='float', min_val=0, max_val=24),
+                    dec_degs=dict(
+                        label='Center Dec', type='float',
+                        min_val=-90, max_val=90),
+                    object=dict(label='Object', type='text'),
+                    width=dict(
+                        label='Field Width [arcmin]', type='float', min_val=0),
+                    height=dict(
+                        label='Field Height [arcmin]', type='int', min_val=0),
+                )
+            return self._search_fields
 
     @staticmethod
     def _get_asset_params(path: str) -> Tuple[str, str, float, float]:
