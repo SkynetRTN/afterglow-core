@@ -10,7 +10,8 @@ __all__ = [
     'MissingWCSError', 'UnknownDataFileError', 'UnrecognizedDataFormatError',
     'UnknownSessionError', 'DuplicateSessionNameError',
     'UnknownDataFileGroupError', 'DataFileExportError',
-    'DataFileUploadNotAllowedError',
+    'DataFileUploadNotAllowedError', 'DuplicateDataFileNameError',
+    'DuplicateDataFileGroupNameError',
 ]
 
 
@@ -101,14 +102,14 @@ class DuplicateSessionNameError(AfterglowError):
 
 class UnknownDataFileGroupError(AfterglowError):
     """
-    No data files match the given group ID
+    No data files match the given group name
 
     Extra attributes::
-        id: requested data file group ID
+        group_name: requested data file group name
     """
     code = 404
     subcode = 2007
-    message = 'Unknown data file group ID'
+    message = 'Unknown data file group'
 
 
 class DataFileExportError(AfterglowError):
@@ -132,3 +133,29 @@ class DataFileUploadNotAllowedError(AfterglowError):
     code = 403
     subcode = 2009
     message = 'Data file upload not allowed'
+
+
+class DuplicateDataFileNameError(AfterglowError):
+    """
+    Attempt to create/update a data file with the name identical to an existing
+    data file name within the same session
+
+    Extra attributes::
+        name: requested data file name
+    """
+    code = 403
+    subcode = 2010
+    message = 'Duplicate data file name'
+
+
+class DuplicateDataFileGroupNameError(AfterglowError):
+    """
+    Attempt to create a new data file group with the name identical to
+    an existing data file group name within the same session
+
+    Extra attributes::
+        group_name: requested data file group name
+    """
+    code = 403
+    subcode = 2011
+    message = 'Duplicate data file group name'

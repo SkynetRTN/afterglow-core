@@ -200,7 +200,7 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
           * if exporting in formats other than FITS, "fmt" must be supported
             by Pillow
 
-    POST /data-providers/[id]/assets/data?path=...&group_id=...
+    POST /data-providers/[id]/assets/data?path=...&group_name=...
         [&fmt=...&mode=...]
         - create a new non-collection asset at the given path from data file
           group using the specified file format (by default, FITS)
@@ -229,8 +229,8 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
           * if no path provided, the original asset path of the data file
             previously imported from this data provider is used
 
-    PUT /data-providers/[id]/assets?[path=...&]&group_id=...[&fmt=...&mode=...]
-        [&force]
+    PUT /data-providers/[id]/assets?[path=...&]&group_name=...
+        [&fmt=...&mode=...][&force]
         - update existing asset at the given path by overwriting it with
           the given data file group combined into a single file in the specified
           format (by default, FITS)
@@ -277,10 +277,10 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
         # When PUTting from a data file or a data file group, and the target
         # path is not set, save to the original path if available and matches
         # the data provider ID
-        if params.get('group_id'):
-            group = get_data_file_group(current_user.id, params['group_id'])
+        if params.get('group_name'):
+            group = get_data_file_group(current_user.id, params['group_name'])
             if not group:
-                UnknownDataFileGroupError(id=params['group_id'])
+                UnknownDataFileGroupError(group_name=params['group_name'])
             try:
                 path = [df for df in group
                         if getattr(df, 'data_provider', None) == str(id) and
@@ -310,7 +310,7 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
             asset.mimetype)
 
     if request.method in ('POST', 'PUT'):
-        group_id = params.pop('group_id', None)
+        group_name = params.pop('group_name', None)
         data_file_id = params.pop('data_file_id', None)
         src_provider_id = params.pop('src_provider_id', None)
         src_path = params.pop('src_path', None)
@@ -319,20 +319,21 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
             if src_provider_id is not None:
                 raise errors.ValidationError(
                     'src_provider_id',
-                    '"src_provider_id" is not allowed with "group_id" and '
+                    '"src_provider_id" is not allowed with "group_name" and '
                     '"data_file_id"')
             fmt = params.pop('fmt', 'FITS')
             mode = params.pop('mode', None)
 
             # Retrieve data being exported
-            if group_id is not None:
+            if group_name is not None:
                 # Exporting data file group using the given format and mode
                 if data_file_id is not None:
                     raise errors.ValidationError(
                         'data_file_id',
-                        '"group_id" and "data_file_id" are mutually exclusive')
+                        '"group_name" and "data_file_id" are mutually '
+                        'exclusive')
                 data = get_data_file_group_bytes(
-                    current_user.id, group_id, fmt=fmt, mode=mode)
+                    current_user.id, group_name, fmt=fmt, mode=mode)
             elif data_file_id is not None:
                 # Exporting single data file in the given format
                 data = get_data_file_bytes(
@@ -370,9 +371,9 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
                 update_data_file_asset(
                     current_user.id, data_file_id, id, asset.path,
                     asset.metadata, asset.name)
-            elif group_id is not None:
+            elif group_name is not None:
                 update_data_file_group_asset(
-                    current_user.id, group_id, id, asset.path,
+                    current_user.id, group_name, id, asset.path,
                     asset.metadata, asset.name)
 
             return json_response(
