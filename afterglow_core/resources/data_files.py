@@ -324,7 +324,8 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
                      layer: Optional[str] = None, duplicates: str = 'ignore',
                      session_id: Optional[int] = None,
                      group_name: Optional[str] = None,
-                     group_order: Optional[int] = 0) -> DbDataFile:
+                     group_order: Optional[int] = 0,
+                     allow_duplicate_group_name: bool = False) -> DbDataFile:
     """
     Create a database entry for a new data file and save it to data file
     directory as an single (image) or double (image + mask) HDU FITS or
@@ -349,6 +350,9 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
     :param session_id: optional user session ID; defaults to anonymous session
     :param group_name: optional name of the file group; default: data file name
     :param group_order: 0-based order of the file in the group
+    :param allow_duplicate_group_name: don't throw an error if the specified
+        group name already exists; useful when importing several files belonging
+        to the same group
 
     :return: data file instance
     """
@@ -390,7 +394,7 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
             name_cand = append_suffix(group_name, '_{:03d}'.format(i))
             i += 1
         group_name = name_cand
-    elif adb.query(DbDataFile).filter_by(
+    elif not allow_duplicate_group_name and adb.query(DbDataFile).filter_by(
             session_id=session_id, group_name=group_name).count():
         # Cannot create a new data file with an explicitly set group name
         # matching an existing group name
@@ -506,10 +510,10 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                 # just the HDU index
                 layer = hdu.header.get('FILTER') or \
                     hdu.header.get('EXTNAME') or str(i + 1)
-                layer_base, i = layer, 1
+                layer_base, layer_no = layer, 1
                 while layer in layers:
-                    layer = '{}.{}'.format(layer_base, i)
-                    i += 1
+                    layer = '{}.{}'.format(layer_base, layer_no)
+                    layer_no += 1
                 layers.append(layer)
 
                 # When importing multiple HDUs, add layer name to data file
@@ -532,7 +536,8 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                 all_data_files.append(create_data_file(
                     adb, name, root, hdu.data, hdu.header, provider_id,
                     asset_path, 'FITS', asset_metadata, layer, duplicates,
-                    session_id, group_name=group_name, group_order=i))
+                    session_id, group_name=group_name, group_order=i,
+                    allow_duplicate_group_name=i > 0))
 
     except errors.AfterglowError:
         raise
@@ -556,11 +561,11 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                         bands = im.split()
                     else:
                         bands = (im,)
-                    channels = {
+                    channels = [
                         (band_name, numpy.fromstring(
                             band.tobytes(), numpy.uint8).reshape(
                             [height, width]))
-                        for band_name, band in zip(band_names, bands)}
+                        for band_name, band in zip(band_names, bands)]
                     if exifread is None:
                         exif = {
                             ExifTags.TAGS[key]: convert_exif_field(val)
@@ -673,7 +678,8 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
             all_data_files.append(create_data_file(
                 adb, name, root, data[::-1], hdr, provider_id, asset_path,
                 asset_type, asset_metadata, layer, duplicates, session_id,
-                group_name=group_name, group_order=i))
+                group_name=group_name, group_order=i,
+                allow_duplicate_group_name=i > 0))
 
     return all_data_files
 
@@ -864,7 +870,7 @@ def get_data_file_uint8(user_id: Optional[int], file_id: int) -> numpy.ndarray:
 
     :return: uint8 image data; masked values are set to 0
     """
-    data = get_data_file_data(user_id, file_id)[0]
+    data = get_data_file_data(user_id, file_id)[0][::-1]
     if data.dtype.fields is not None:
         raise DataFileExportError(reason='Cannot export non-image data files')
     mn, mx = data.min(), data.max()
@@ -877,16 +883,21 @@ def get_data_file_uint8(user_id: Optional[int], file_id: int) -> numpy.ndarray:
 
 
 def get_data_file_bytes(user_id: Optional[int], file_id: int,
-                        fmt: str = 'FITS') -> bytes:
+                        fmt: Optional[str] = None) -> bytes:
     """
     Return FITS file data for data file with the given ID
 
     :param user_id: current user ID (None if user auth is disabled)
     :param file_id: data file ID
-    :param fmt: image export format: FITS (default) or any supported by Pillow
+    :param fmt: image export format: "FITS" or any supported by Pillow; default:
+        use the original import format
 
     :return: data file bytes
     """
+    if not fmt:
+        # If omitted, use the original file format from asset_type
+        fmt = get_data_file(user_id, file_id).asset_type or 'FITS'
+
     if fmt == 'FITS':
         try:
             with open(get_data_file_path(user_id, file_id), 'rb') as f:
@@ -908,7 +919,7 @@ def get_data_file_bytes(user_id: Optional[int], file_id: int,
 
 
 def get_data_file_group_bytes(user_id: Optional[int], group_name: str,
-                              fmt: str = 'FITS',
+                              fmt: Optional[str] = None,
                               mode: Optional[str] = None) -> bytes:
     """
     Return data combined from a data file group in the original format, suitable
@@ -916,24 +927,38 @@ def get_data_file_group_bytes(user_id: Optional[int], group_name: str,
 
     :param user_id: current user ID (None if user auth is disabled)
     :param group_name: data file group name
-    :param fmt: image export format: FITS (default) or any supported by Pillow
+    :param fmt: image export format: "FITS" or any supported by Pillow; default:
+        use the original import format
     :param mode: for non-FITS formats, Pillow image mode
-        (https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
+        (https://pillow.readthedocs.io/en/stable/handbook/concepts.html);
+        default: use the original import mode or guess from the number of files
+        in the group: 1 -> L, 3 -> RGB, 4 -> RGBA
 
     :return: data file bytes
     """
-    data_files = [(df.id, df.type)
-                  for df in get_data_file_db(user_id).query(DbDataFile)
-                  .filter(DbDataFile.group_name == group_name)
-                  .order_by(DbDataFile.group_order)]
-    if not data_files:
+    data_file_ids, data_file_types, data_file_formats, data_file_modes = zip(
+        *[(df.id, df.type, df.asset_type,
+           df.asset_metadata.get('image_mode')
+           if getattr(df, 'asset_metadata', None) else None)
+          for df in get_data_file_db(user_id).query(DbDataFile)
+          .filter(DbDataFile.group_name == group_name)
+          .order_by(DbDataFile.group_order)])
+    n = len(data_file_ids)
+    if not n:
         raise UnknownDataFileGroupError(group_name=group_name)
+
+    if not fmt:
+        if not all(data_file_formats) or len(set(data_file_formats)) != 1:
+            raise DataFileExportError(
+                reason='Undefined or inconsistent file types in the group; '
+                'please specify the output format explicitly')
+        fmt = data_file_formats[0]
 
     buf = BytesIO()
     if fmt == 'FITS':
         # Assemble individual single-HDU data files into a single multi-HDU FITS
         fits = pyfits.HDUList()
-        for file_id, hdu_type in data_files:
+        for file_id, hdu_type in zip(data_file_ids, data_file_types):
             with open(get_data_file_path(user_id, file_id), 'rb') as f:
                 data = f.read()
             if hdu_type == 'image':
@@ -945,24 +970,37 @@ def get_data_file_group_bytes(user_id: Optional[int], group_name: str,
         raise DataFileExportError(reason='Server does not support image export')
     else:
         # Export image via Pillow using the specified mode
-        if len(data_files) > 1:
-            if not mode:
-                raise errors.MissingFieldError(field='mode')
+        if not mode:
+            # Try to use the original mode
+            if all(data_file_modes) and len(set(data_file_modes)) == 1:
+                mode = data_file_modes[0]
+            # Use default mode depending on the number of files in the group
+            elif n == 1:
+                mode = 'L'
+            elif n == 3:
+                mode = 'RGB'
+            elif n == 4:
+                mode = 'RGBA'
+            else:
+                raise DataFileExportError(
+                    reason="Don't know how to export a group of {:d} images"
+                    .format(n))
+        if n > 1:
             if mode not in PILImage.MODES:
                 raise DataFileExportError(
                     reason='Unsupported image export mode "{}"'.format(mode))
-        if any(hdu_type != 'image' for _, hdu_type in data_files):
+        if any(hdu_type != 'image' for hdu_type in data_file_types):
             raise DataFileExportError(
                 reason='Cannot export non-image data files')
         try:
-            if len(data_files) > 1:
+            if n > 1:
                 im = PILImage.merge(
                     mode,
                     [PILImage.fromarray(get_data_file_uint8(user_id, file_id))
-                     for file_id, _ in data_files])
+                     for file_id in data_file_ids])
             else:
                 im = PILImage.fromarray(get_data_file_uint8(
-                    user_id, data_files[0][0]))
+                    user_id, data_file_ids[0]))
             im.save(buf, format=fmt)
         except errors.AfterglowError:
             raise

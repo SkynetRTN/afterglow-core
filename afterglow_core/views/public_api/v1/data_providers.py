@@ -196,18 +196,17 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
 
     POST /data-providers/[id]/assets/data?path=...&data_file_id=...[&fmt=...]
         - create a new non-collection asset at the given path from data file
-          using the specified file format (by default, FITS)
-          * if exporting in formats other than FITS, "fmt" must be supported
-            by Pillow
+          using the specified file format (by default, same as the original file
+          if the data file was imported or FITS otherwise)
 
     POST /data-providers/[id]/assets/data?path=...&group_name=...
         [&fmt=...&mode=...]
         - create a new non-collection asset at the given path from data file
-          group using the specified file format (by default, FITS)
-          * if exporting in formats other than FITS, "fmt" must be supported
-            by Pillow, and "mode" is required and must be one of the supported
-            modes (see
-            https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
+          group using the specified file format (by default, same as
+          the original file if the data file was imported or FITS otherwise)
+          and image mode (by default, L, RGB, or RGBA, depending on the number
+          of files in the group; see also
+          https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
 
     POST /data-providers/[id]/assets/data?path=...&src_path=...
         [&src_provider_id=...][&move]
@@ -224,23 +223,16 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
     PUT /data-providers/[id]/assets?[path=...&]&data_file_id=...[&fmt=...]
         [&force]
         - update existing asset at the given path by overwriting it with
-          the given data file in the specified format (by default, FITS)
+          the given data file in the original or some other format
           * existing collection assets are overwritten if "force" is present
           * if no path provided, the original asset path of the data file
             previously imported from this data provider is used
 
     PUT /data-providers/[id]/assets?[path=...&]&group_name=...
         [&fmt=...&mode=...][&force]
-        - update existing asset at the given path by overwriting it with
-          the given data file group combined into a single file in the specified
-          format (by default, FITS)
-          * existing collection assets are overwritten if "force" is present
-          * if no path provided, the original asset path of the data file group
-            previously imported from this data provider is used
-          * if exporting in formats other than FITS, "fmt" must be supported by
-            Pillow, and "mode" is required and must be one of the supported
-            modes (see
-            https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
+        - update existing asset at the given or the original path by overwriting
+          it with the given data file group combined into a single file
+          in the original or some other format
 
     PUT /data-providers/[id]/assets/data?path=...&src_path=...
         [&src_provider_id=...][&move][&force]
@@ -270,24 +262,23 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
     params = request.args.to_dict()
     path = params.pop('path', None)
     if not path:
-        if request.method != 'PUT' or params.get('src_path') is not None:
-            # Path is required for all asset data requests except PUT
+        if request.method == 'GET' or params.get('src_path') is not None:
+            # Path is required for GET and for copy/move operations
             raise errors.MissingFieldError(field='path')
 
-        # When PUTting from a data file or a data file group, and the target
-        # path is not set, save to the original path if available and matches
-        # the data provider ID
+        # When POSTing/PUTting from a data file or a data file group,
+        # and the target path is not set, save to the original path
+        # if available, same for all files in the group, and is in the same
+        # data provider
         if params.get('group_name'):
             group = get_data_file_group(current_user.id, params['group_name'])
             if not group:
                 UnknownDataFileGroupError(group_name=params['group_name'])
-            try:
-                path = [df for df in group
-                        if getattr(df, 'data_provider', None) == str(id) and
-                        getattr(df, 'asset_path', None)][0].asset_path
-            except IndexError:
-                # No original asset path in the group for the current provider
-                pass
+            if all(getattr(df, 'data_provider', None) == str(id)
+                   for df in group) and len(set(
+                    df.asset_path for df in group
+                    if getattr(df, 'asset_path', None))) == 1:
+                path = group[0].asset_path
         elif params.get('data_file_id'):
             df = get_data_file(current_user.id, params['data_file_id'])
             if getattr(df, 'data_provider', None) == str(id):
@@ -315,13 +306,14 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
         src_provider_id = params.pop('src_provider_id', None)
         src_path = params.pop('src_path', None)
         if src_path is None:
-            # Saving a data file/data file group or uploading
+            # Saving a data file/group or uploading
             if src_provider_id is not None:
                 raise errors.ValidationError(
                     'src_provider_id',
                     '"src_provider_id" is not allowed with "group_name" and '
                     '"data_file_id"')
-            fmt = params.pop('fmt', 'FITS')
+
+            fmt = params.pop('fmt', None)
             mode = params.pop('mode', None)
 
             # Retrieve data being exported
