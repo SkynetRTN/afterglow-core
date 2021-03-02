@@ -90,6 +90,7 @@ class DbDataFile(DataFileBase):
     height = Column(Integer)
     data_provider = Column(String)
     asset_path = Column(String)
+    asset_type = Column(String, server_default='FITS')
     asset_metadata = Column(JSONType)
     layer = Column(String)
     created_on = Column(DateTime, default=datetime.utcnow)
@@ -316,9 +317,11 @@ def append_suffix(name: str, suffix: str):
 
 
 def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
-                     hdr=None, provider: str = None, path: str = None,
-                     metadata: dict = None, layer: str = None,
-                     duplicates: str = 'ignore',
+                     hdr=None, provider: Optional[str] = None,
+                     path: Optional[str] = None,
+                     file_type: Optional[str] = None,
+                     metadata: Optional[dict] = None,
+                     layer: Optional[str] = None, duplicates: str = 'ignore',
                      session_id: Optional[int] = None,
                      group_name: Optional[str] = None,
                      group_order: Optional[int] = 0) -> DbDataFile:
@@ -335,6 +338,7 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
     :param hdr: FITS header
     :param provider: data provider ID/name if not creating an empty data file
     :param path: path of the data provider asset the file was imported from
+    :param file_type: original file type ("FITS", "JPEG", etc.)
     :param metadata: data provider asset metadata
     :param layer: optional layer ID for multiple-layer assets
     :param duplicates: optional duplicate handling mode used if the data file
@@ -400,6 +404,7 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
         height=height,
         data_provider=provider,
         asset_path=path,
+        asset_type=file_type or 'FITS',
         asset_metadata=metadata,
         layer=layer,
         session_id=session_id,
@@ -524,12 +529,10 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                                 pass
                     hdu.header.update(h)
 
-                asset_metadata['type'] = 'FITS'
-
                 all_data_files.append(create_data_file(
                     adb, name, root, hdu.data, hdu.header, provider_id,
-                    asset_path, asset_metadata, layer, duplicates, session_id,
-                    group_name=group_name, group_order=i))
+                    asset_path, 'FITS', asset_metadata, layer, duplicates,
+                    session_id, group_name=group_name, group_order=i))
 
     except errors.AfterglowError:
         raise
@@ -537,13 +540,14 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
         # Non-FITS file; try importing all color planes with Pillow and rawpy
         exif = None
         channels = []
+        asset_type = None
 
         if PILImage is not None:
             # noinspection PyBroadException
             try:
                 fp.seek(0)
                 with PILImage.open(fp) as im:
-                    asset_metadata['type'] = im.format
+                    asset_type = im.format
                     asset_metadata['image_mode'] = im.mode
                     width, height = im.size
                     band_names = im.getbands()
@@ -577,7 +581,7 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                 finally:
                     sys.stderr = save_stderr
                 try:
-                    asset_metadata['type'] = str(im.raw_type)
+                    asset_type = str(im.raw_type)
                     asset_metadata['image_mode'] = im.color_desc.decode('ascii')
                     asset_metadata['layers'] = im.num_colors
                     r, g, b = numpy.rollaxis(im.postprocess(output_bps=16), 2)
@@ -668,7 +672,7 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
             # Store FITS image bottom to top
             all_data_files.append(create_data_file(
                 adb, name, root, data[::-1], hdr, provider_id, asset_path,
-                asset_metadata, layer, duplicates, session_id,
+                asset_type, asset_metadata, layer, duplicates, session_id,
                 group_name=group_name, group_order=i))
 
     return all_data_files

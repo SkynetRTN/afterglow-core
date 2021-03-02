@@ -1,4 +1,4 @@
-"""Rename group_id to group_name"""
+"""Rename group_id to group_name; add asset_type"""
 
 from alembic import op
 import sqlalchemy as sa
@@ -20,6 +20,8 @@ def upgrade():
             table_kwargs=dict(sqlite_autoincrement=True)) as batch_op:
         batch_op.drop_index('ix_data_files_group_id')
         batch_op.alter_column('group_id', new_column_name='group_name')
+        batch_op.add_column(sa.Column(
+            'asset_type', sa.String, server_default='FITS'))
 
     # noinspection SqlResolve
     op.execute('update data_files set group_name = coalesce(name, id)')
@@ -38,6 +40,7 @@ def downgrade():
             'data_files',
             table_args=(sa.CheckConstraint('length(name) <= 1024'),),
             table_kwargs=dict(sqlite_autoincrement=True)) as batch_op:
+        batch_op.drop_column('asset_type')
         batch_op.drop_index('ix_data_files_group_name')
         batch_op.alter_column('group_name', new_column_name='group_id')
 
