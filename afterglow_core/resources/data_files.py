@@ -518,8 +518,7 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
 
                 # When importing multiple HDUs, add layer name to data file
                 # name; keep the original file extension
-                if len(fits) > 1 + int(
-                        isinstance(hdu, pyfits.TableHDU.__base__)) and layer:
+                if len(fits) > 1 and layer:
                     name = append_suffix(group_name, '.' + layer)
 
                 if i and primary_header:
