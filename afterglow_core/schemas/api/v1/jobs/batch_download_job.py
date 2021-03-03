@@ -18,7 +18,7 @@ class BatchDownloadJobSchema(JobSchema):
     type = 'batch_download'
 
     file_ids: TList[int] = List(Integer(), default=[])
-    group_ids: TList[str] = List(String(), default=[])
+    group_names: TList[str] = List(String(), default=[])
 
 
 class BatchAssetDownloadJobSchema(JobSchema):

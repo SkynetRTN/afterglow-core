@@ -29,13 +29,13 @@ class BatchDownloadJob(Job):
     description = 'Download Multiple Data Files and Groups'
 
     file_ids: TList[int] = List(Integer(), default=[])
-    group_ids: TList[str] = List(String(), default=[])
+    group_names: TList[str] = List(String(), default=[])
 
     def run(self):
-        if not self.file_ids and not self.group_ids:
-            raise ValidationError('file_ids|group_ids', 'Empty job')
+        if not self.file_ids and not self.group_names:
+            raise ValidationError('file_ids|group_names', 'Empty job')
 
-        if len(self.file_ids) == 1 and not self.group_ids:
+        if len(self.file_ids) == 1 and not self.group_names:
             # Single data file; don't create archive
             self.create_job_file(
                 'download', get_data_file_bytes(self.user_id, self.file_ids[0]),
@@ -47,18 +47,19 @@ class BatchDownloadJob(Job):
         for file_id in self.file_ids:
             try:
                 df = get_data_file(self.user_id, file_id)
-                groups.setdefault(df.group_id, set()).add((file_id, df.name))
+                groups.setdefault(df.group_name, set()).add((file_id, df.name))
             except Exception as e:
                 self.add_error('Data file ID {}: {}'.format(file_id, e))
-        for group_id in self.group_ids:
+        for group_name in self.group_names:
             try:
-                group = get_data_file_group(self.user_id, group_id)
+                group = get_data_file_group(self.user_id, group_name)
                 if not group:
-                    raise UnknownDataFileGroupError(id=group_id)
+                    raise UnknownDataFileGroupError(group_name=group_name)
                 for df in group:
-                    groups.setdefault(group_id, set()).add((df.id, df.name))
+                    groups.setdefault(group_name, set()).add((df.id, df.name))
             except Exception as e:
-                self.add_error('Data file group ID {}: {}'.format(group_id, e))
+                self.add_error(
+                    'Data file group "{}": {}'.format(group_name, e))
 
         # Ensure unique filenames within the archive
         file_id_lists, filenames = list(zip(

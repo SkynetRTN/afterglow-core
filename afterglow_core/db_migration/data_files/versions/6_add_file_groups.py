@@ -37,5 +37,6 @@ def upgrade():
 
 
 def downgrade():
+    op.drop_index('data_files', 'ix_data_files_group_id')
     op.drop_column('data_files', 'group_id')
     op.drop_column('data_files', 'group_order')

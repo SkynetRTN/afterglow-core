@@ -527,7 +527,7 @@ class LocalDiskDataProvider(DataProvider):
 
         return self._get_asset(path, filename)
 
-    def rename_asset(self, path: str, name: str) -> DataProviderAsset:
+    def rename_asset(self, path: str, name: str, **kwargs) -> DataProviderAsset:
         """
         Rename asset at the given path
 

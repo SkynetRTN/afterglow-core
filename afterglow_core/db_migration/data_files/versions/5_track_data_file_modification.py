@@ -25,10 +25,7 @@ def upgrade():
 def downgrade():
     with op.batch_alter_table(
             'data_files',
-            table_args=(
-                    sa.CheckConstraint('length(name) <= 1024'),
-                    sa.CheckConstraint('length(group_id) = 36'),
-            ),
+            table_args=(sa.CheckConstraint('length(name) <= 1024'),),
             table_kwargs=dict(sqlite_autoincrement=True)) as batch_op:
         batch_op.drop_column('modified')
         batch_op.drop_column('modified_on')

@@ -8,7 +8,6 @@ from glob import glob
 from datetime import datetime
 import json
 import sqlite3
-import uuid
 from threading import Lock
 from io import BytesIO
 from typing import Dict as TDict, List as TList, Optional, Tuple, Union
@@ -25,12 +24,7 @@ import astropy.io.fits as pyfits
 
 from .. import app, errors
 from ..models import DataFile, Session
-from ..errors.data_file import (
-    UnknownDataFileError, CannotCreateDataFileDirError,
-    CannotImportFromCollectionAssetError, UnknownSessionError,
-    DuplicateSessionNameError, UnrecognizedDataFormatError,
-    UnknownDataFileGroupError, DataFileExportError,
-    DataFileUploadNotAllowedError)
+from ..errors.data_file import *
 from ..errors.data_provider import UnknownDataProviderError
 from . import data_providers
 from .base import DateTime, JSONType
@@ -96,6 +90,7 @@ class DbDataFile(DataFileBase):
     height = Column(Integer)
     data_provider = Column(String)
     asset_path = Column(String)
+    asset_type = Column(String, server_default='FITS')
     asset_metadata = Column(JSONType)
     layer = Column(String)
     created_on = Column(DateTime, default=datetime.utcnow)
@@ -105,9 +100,7 @@ class DbDataFile(DataFileBase):
         Integer,
         ForeignKey('sessions.id', name='fk_sessions_id', ondelete='cascade'),
         nullable=True, index=True)
-    group_id = Column(
-        String, CheckConstraint('length(group_id) = 36'), nullable=False,
-        index=True)
+    group_name = Column(String, nullable=False, index=True)
     group_order = Column(Integer, nullable=False, server_default='0')
 
 
@@ -217,7 +210,8 @@ def get_data_file_db(user_id: Optional[int]):
         return session
 
     except Exception as e:
-        # noinspection PyUnresolvedReferences
+        import traceback
+        traceback.print_exc()
         raise CannotCreateDataFileDirError(
             reason=e.message if hasattr(e, 'message') and e.message
             else ', '.join(str(arg) for arg in e.args) if e.args else str(e))
@@ -286,13 +280,52 @@ def save_data_file(adb, root: str, file_id: int,
         db_data_file.modified = True
 
 
+def append_suffix(name: str, suffix: str):
+    """
+    Append a suffix (e.g. numeric or layer name) to a file-like name; preserve
+    the original non-numeric file extension (e.g. .fits); return the unmodified
+    name if it already contains this suffix
+
+    :param name: data file name, group name, etc.
+    :param suffix: suffix to append, including separator
+
+    :return: `name` with `suffix` appended in the appropriate place
+    """
+    if name.endswith(suffix):
+        return name
+
+    try:
+        base, ext = name.rsplit('.', 1)
+        if ext:
+            # noinspection PyBroadException
+            try:
+                int(ext)
+            except Exception:
+                ext = '.' + ext
+            else:
+                # Numeric suffix; treat as no suffix
+                raise ValueError('Numeric suffix')
+    except ValueError:
+        base, ext = name, None
+    if base.endswith(suffix):
+        return name
+
+    name = base + suffix
+    if ext:
+        name += ext
+    return name
+
+
 def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
-                     hdr=None, provider: str = None, path: str = None,
-                     metadata: dict = None, layer: str = None,
-                     duplicates: str = 'ignore',
+                     hdr=None, provider: Optional[str] = None,
+                     path: Optional[str] = None,
+                     file_type: Optional[str] = None,
+                     metadata: Optional[dict] = None,
+                     layer: Optional[str] = None, duplicates: str = 'ignore',
                      session_id: Optional[int] = None,
-                     group_id: Optional[str] = None,
-                     group_order: Optional[int] = 0) -> DbDataFile:
+                     group_name: Optional[str] = None,
+                     group_order: Optional[int] = 0,
+                     allow_duplicate_group_name: bool = False) -> DbDataFile:
     """
     Create a database entry for a new data file and save it to data file
     directory as an single (image) or double (image + mask) HDU FITS or
@@ -306,6 +339,7 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
     :param hdr: FITS header
     :param provider: data provider ID/name if not creating an empty data file
     :param path: path of the data provider asset the file was imported from
+    :param file_type: original file type ("FITS", "JPEG", etc.)
     :param metadata: data provider asset metadata
     :param layer: optional layer ID for multiple-layer assets
     :param duplicates: optional duplicate handling mode used if the data file
@@ -314,8 +348,11 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
         "overwrite" = re-import the file and replace the existing data file,
         "append" = always import as a new data file
     :param session_id: optional user session ID; defaults to anonymous session
-    :param group_id: optional GUID of the file group; default: auto-generate
+    :param group_name: optional name of the file group; default: data file name
     :param group_order: 0-based order of the file in the group
+    :param allow_duplicate_group_name: don't throw an error if the specified
+        group name already exists; useful when importing several files belonging
+        to the same group
 
     :return: data file instance
     """
@@ -333,11 +370,35 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
             name = name[:name.index('.')]
         except ValueError:
             pass
-        name = 'file_{}'.format(name)
 
-    if group_id is None:
-        # Auto-generate group ID
-        group_id = str(uuid.uuid4())
+        # Make sure that the auto-generated file name is unique within
+        # the session
+        name_cand, i = name, 1
+        while adb.query(DbDataFile).filter_by(
+                session_id=session_id,
+                name='file_{}.fits'.format(name_cand)).count():
+            name_cand = '{}_{:03d}'.format(name, i)
+            i += 1
+        name = 'file_{}.fits'.format(name_cand)
+    elif adb.query(DbDataFile).filter_by(
+            session_id=session_id, name=name).count():
+        raise DuplicateDataFileNameError(name=name)
+
+    if group_name is None:
+        # By default, set group name equal to data file name; make sure that
+        # it is unique within the session
+        group_name = name
+        name_cand, i = group_name, 1
+        while adb.query(DbDataFile).filter_by(
+                session_id=session_id, group_name=name_cand).count():
+            name_cand = append_suffix(group_name, '_{:03d}'.format(i))
+            i += 1
+        group_name = name_cand
+    elif not allow_duplicate_group_name and adb.query(DbDataFile).filter_by(
+            session_id=session_id, group_name=group_name).count():
+        # Cannot create a new data file with an explicitly set group name
+        # matching an existing group name
+        raise DuplicateDataFileGroupNameError(group_name=group_name)
 
     # Create/update a database row
     sqla_fields = dict(
@@ -347,10 +408,11 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
         height=height,
         data_provider=provider,
         asset_path=path,
+        asset_type=file_type or 'FITS',
         asset_metadata=metadata,
         layer=layer,
         session_id=session_id,
-        group_id=group_id,
+        group_name=group_name,
         group_order=group_order,
     )
 
@@ -385,7 +447,7 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
 
 def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                      asset_path: Optional[str], asset_metadata: dict, fp,
-                     name: Optional[str], duplicates: str = 'ignore',
+                     name: str, duplicates: str = 'ignore',
                      session_id: Optional[int] = None) -> TList[DbDataFile]:
     """
     Create data file(s) from a (possibly multi-layer) non-collection data
@@ -398,7 +460,7 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
     :param asset_metadata: data provider asset metadata
     :param fp: file-like object containing the asset data, should be opened for
         reading
-    :param name: data file name
+    :param name: data file name or group name if multi-layer asset
     :param duplicates: optional duplicate handling mode used if the data file
         with the same `provider`, `path`, and `layer` was already imported
         before: "ignore" (default) = don't re-import the existing data file,
@@ -409,6 +471,7 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
     :return: list of DbDataFile instances created/updated
     """
     all_data_files = []
+    group_name = name
 
     # A FITS file?
     # noinspection PyBroadException
@@ -425,10 +488,8 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                 except KeyError:
                     pass
 
-            # Generate group ID for all HDUs
-            group_id = str(uuid.uuid4())
-
             # Import each HDU as a separate data file
+            layers = []
             for i, hdu in enumerate(fits):
                 if isinstance(hdu, pyfits.ImageHDU.__base__):
                     # Image HDU; eliminate redundant extra dimensions if any,
@@ -445,21 +506,21 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                         hdu.header['NAXIS2'], hdu.header['NAXIS1'] = imshape
                         hdu.data = hdu.data.reshape(imshape)
 
-                if name and len(fits) > 1 + int(
-                        isinstance(hdu, pyfits.TableHDU.__base__)):
-                    # When importing multiple HDUs, append a unique suffix to
-                    # DbDataFile.name (e.g. filter name)
-                    layer = hdu.header.get('FILTER')
-                    if layer:
-                        # Check that the filter is unique among other HDUs
-                        if any(_hdu.header.get('FILTER') == layer
-                               for _hdu in fits if _hdu is not hdu):
-                            layer += '.' + str(i + 1)
-                    else:
-                        # No channel name; use number
-                        layer = str(i + 1)
-                else:
-                    layer = None
+                # Obtain the unique layer name: filter name, extension name, or
+                # just the HDU index
+                layer = hdu.header.get('FILTER') or \
+                    hdu.header.get('EXTNAME') or str(i + 1)
+                layer_base, layer_no = layer, 1
+                while layer in layers:
+                    layer = '{}.{}'.format(layer_base, layer_no)
+                    layer_no += 1
+                layers.append(layer)
+
+                # When importing multiple HDUs, add layer name to data file
+                # name; keep the original file extension
+                if len(fits) > 1 + int(
+                        isinstance(hdu, pyfits.TableHDU.__base__)) and layer:
+                    name = append_suffix(group_name, '.' + layer)
 
                 if i and primary_header:
                     # Copy primary header cards to extension header
@@ -472,12 +533,11 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                                 pass
                     hdu.header.update(h)
 
-                asset_metadata['type'] = 'FITS'
-
                 all_data_files.append(create_data_file(
                     adb, name, root, hdu.data, hdu.header, provider_id,
-                    asset_path, asset_metadata, layer, duplicates, session_id,
-                    group_id=group_id, group_order=i))
+                    asset_path, 'FITS', asset_metadata, layer, duplicates,
+                    session_id, group_name=group_name, group_order=i,
+                    allow_duplicate_group_name=i > 0))
 
     except errors.AfterglowError:
         raise
@@ -485,13 +545,14 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
         # Non-FITS file; try importing all color planes with Pillow and rawpy
         exif = None
         channels = []
+        asset_type = None
 
         if PILImage is not None:
             # noinspection PyBroadException
             try:
                 fp.seek(0)
                 with PILImage.open(fp) as im:
-                    asset_metadata['type'] = im.format
+                    asset_type = im.format
                     asset_metadata['image_mode'] = im.mode
                     width, height = im.size
                     band_names = im.getbands()
@@ -500,11 +561,11 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                         bands = im.split()
                     else:
                         bands = (im,)
-                    channels = {
+                    channels = [
                         (band_name, numpy.fromstring(
                             band.tobytes(), numpy.uint8).reshape(
                             [height, width]))
-                        for band_name, band in zip(band_names, bands)}
+                        for band_name, band in zip(band_names, bands)]
                     if exifread is None:
                         exif = {
                             ExifTags.TAGS[key]: convert_exif_field(val)
@@ -525,7 +586,7 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                 finally:
                     sys.stderr = save_stderr
                 try:
-                    asset_metadata['type'] = str(im.raw_type)
+                    asset_type = str(im.raw_type)
                     asset_metadata['image_mode'] = im.color_desc.decode('ascii')
                     asset_metadata['layers'] = im.num_colors
                     r, g, b = numpy.rollaxis(im.postprocess(output_bps=16), 2)
@@ -606,21 +667,19 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
             except Exception:
                 pass
 
-        group_id = str(uuid.uuid4())
-        for i, (channel, data) in enumerate(channels):
-            if channel:
-                hdr['FILTER'] = (channel, 'Filter name')
+        for i, (layer, data) in enumerate(channels):
+            if layer:
+                hdr['FILTER'] = (layer, 'Filter name')
 
-            if name and len(channels) > 1 and channel:
-                layer = channel
-            else:
-                layer = None
+            if len(channels) > 1 and layer:
+                name = append_suffix(group_name, '.' + layer)
 
             # Store FITS image bottom to top
             all_data_files.append(create_data_file(
                 adb, name, root, data[::-1], hdr, provider_id, asset_path,
-                asset_metadata, layer, duplicates, session_id,
-                group_id=group_id, group_order=i))
+                asset_type, asset_metadata, layer, duplicates, session_id,
+                group_name=group_name, group_order=i,
+                allow_duplicate_group_name=i > 0))
 
     return all_data_files
 
@@ -811,7 +870,7 @@ def get_data_file_uint8(user_id: Optional[int], file_id: int) -> numpy.ndarray:
 
     :return: uint8 image data; masked values are set to 0
     """
-    data = get_data_file_data(user_id, file_id)[0]
+    data = get_data_file_data(user_id, file_id)[0][::-1]
     if data.dtype.fields is not None:
         raise DataFileExportError(reason='Cannot export non-image data files')
     mn, mx = data.min(), data.max()
@@ -824,16 +883,21 @@ def get_data_file_uint8(user_id: Optional[int], file_id: int) -> numpy.ndarray:
 
 
 def get_data_file_bytes(user_id: Optional[int], file_id: int,
-                        fmt: str = 'FITS') -> bytes:
+                        fmt: Optional[str] = None) -> bytes:
     """
     Return FITS file data for data file with the given ID
 
     :param user_id: current user ID (None if user auth is disabled)
     :param file_id: data file ID
-    :param fmt: image export format: FITS (default) or any supported by Pillow
+    :param fmt: image export format: "FITS" or any supported by Pillow; default:
+        use the original import format
 
     :return: data file bytes
     """
+    if not fmt:
+        # If omitted, use the original file format from asset_type
+        fmt = get_data_file(user_id, file_id).asset_type or 'FITS'
+
     if fmt == 'FITS':
         try:
             with open(get_data_file_path(user_id, file_id), 'rb') as f:
@@ -854,33 +918,47 @@ def get_data_file_bytes(user_id: Optional[int], file_id: int,
     return buf.getvalue()
 
 
-def get_data_file_group_bytes(user_id: Optional[int], group_id: str,
-                              fmt: str = 'FITS',
+def get_data_file_group_bytes(user_id: Optional[int], group_name: str,
+                              fmt: Optional[str] = None,
                               mode: Optional[str] = None) -> bytes:
     """
     Return data combined from a data file group in the original format, suitable
     for exporting to data provider
 
     :param user_id: current user ID (None if user auth is disabled)
-    :param group_id: data file group ID
-    :param fmt: image export format: FITS (default) or any supported by Pillow
+    :param group_name: data file group name
+    :param fmt: image export format: "FITS" or any supported by Pillow; default:
+        use the original import format
     :param mode: for non-FITS formats, Pillow image mode
-        (https://pillow.readthedocs.io/en/stable/handbook/concepts.html)
+        (https://pillow.readthedocs.io/en/stable/handbook/concepts.html);
+        default: use the original import mode or guess from the number of files
+        in the group: 1 -> L, 3 -> RGB, 4 -> RGBA
 
     :return: data file bytes
     """
-    data_files = [(df.id, df.type)
-                  for df in get_data_file_db(user_id).query(DbDataFile)
-                  .filter(DbDataFile.group_id == group_id)
-                  .order_by(DbDataFile.group_order)]
-    if not data_files:
-        raise UnknownDataFileGroupError(id=group_id)
+    data_file_ids, data_file_types, data_file_formats, data_file_modes = zip(
+        *[(df.id, df.type, df.asset_type,
+           df.asset_metadata.get('image_mode')
+           if getattr(df, 'asset_metadata', None) else None)
+          for df in get_data_file_db(user_id).query(DbDataFile)
+          .filter(DbDataFile.group_name == group_name)
+          .order_by(DbDataFile.group_order)])
+    n = len(data_file_ids)
+    if not n:
+        raise UnknownDataFileGroupError(group_name=group_name)
+
+    if not fmt:
+        if not all(data_file_formats) or len(set(data_file_formats)) != 1:
+            raise DataFileExportError(
+                reason='Undefined or inconsistent file types in the group; '
+                'please specify the output format explicitly')
+        fmt = data_file_formats[0]
 
     buf = BytesIO()
     if fmt == 'FITS':
         # Assemble individual single-HDU data files into a single multi-HDU FITS
         fits = pyfits.HDUList()
-        for file_id, hdu_type in data_files:
+        for file_id, hdu_type in zip(data_file_ids, data_file_types):
             with open(get_data_file_path(user_id, file_id), 'rb') as f:
                 data = f.read()
             if hdu_type == 'image':
@@ -892,24 +970,37 @@ def get_data_file_group_bytes(user_id: Optional[int], group_id: str,
         raise DataFileExportError(reason='Server does not support image export')
     else:
         # Export image via Pillow using the specified mode
-        if len(data_files) > 1:
-            if not mode:
-                raise errors.MissingFieldError(field='mode')
+        if not mode:
+            # Try to use the original mode
+            if all(data_file_modes) and len(set(data_file_modes)) == 1:
+                mode = data_file_modes[0]
+            # Use default mode depending on the number of files in the group
+            elif n == 1:
+                mode = 'L'
+            elif n == 3:
+                mode = 'RGB'
+            elif n == 4:
+                mode = 'RGBA'
+            else:
+                raise DataFileExportError(
+                    reason="Don't know how to export a group of {:d} images"
+                    .format(n))
+        if n > 1:
             if mode not in PILImage.MODES:
                 raise DataFileExportError(
                     reason='Unsupported image export mode "{}"'.format(mode))
-        if any(hdu_type != 'image' for _, hdu_type in data_files):
+        if any(hdu_type != 'image' for hdu_type in data_file_types):
             raise DataFileExportError(
                 reason='Cannot export non-image data files')
         try:
-            if len(data_files) > 1:
+            if n > 1:
                 im = PILImage.merge(
                     mode,
                     [PILImage.fromarray(get_data_file_uint8(user_id, file_id))
-                     for file_id, _ in data_files])
+                     for file_id in data_file_ids])
             else:
                 im = PILImage.fromarray(get_data_file_uint8(
-                    user_id, data_files[0][0]))
+                    user_id, data_file_ids[0]))
             im.save(buf, format=fmt)
         except errors.AfterglowError:
             raise
@@ -1013,13 +1104,13 @@ def get_data_file(user_id: Optional[int], file_id: int) -> DataFile:
     return DataFile(db_data_file)
 
 
-def get_data_file_group(user_id: Optional[int], group_id: str) \
+def get_data_file_group(user_id: Optional[int], group_name: str) \
         -> TList[DataFile]:
     """
     Return data file objects belonging to the given group
 
     :param user_id: current user ID (None if user auth is disabled)
-    :param group_id: data file group ID
+    :param group_name: data file group name
 
     :return: data file objects sorted by group_order
     """
@@ -1027,7 +1118,7 @@ def get_data_file_group(user_id: Optional[int], group_id: str) \
 
     return [DataFile(db_data_file)
             for db_data_file in adb.query(DbDataFile)
-            .filter(DbDataFile.group_id == group_id)
+            .filter(DbDataFile.group_name == group_name)
             .order_by(DbDataFile.group_order)]
 
 
@@ -1210,7 +1301,8 @@ def update_data_file(user_id: Optional[int], data_file_id: int,
 
     :param user_id: current user ID (None if user auth is disabled)
     :param data_file_id: data file ID to update
-    :param data_file: data_file object containing updated parameters
+    :param data_file: data_file object containing updated parameters: name,
+        session ID, group name, or group order
     :param force: if set, flag the data file as modified even if no fields were
         changed
 
@@ -1224,7 +1316,7 @@ def update_data_file(user_id: Optional[int], data_file_id: int,
 
     modified = force
     for key, val in data_file.to_dict().items():
-        if key not in ('name', 'session_id', 'group_id', 'group_order'):
+        if key not in ('name', 'session_id', 'group_name', 'group_order'):
             continue
         if val != getattr(db_data_file, key):
             setattr(db_data_file, key, val)
@@ -1273,14 +1365,14 @@ def update_data_file_asset(user_id: Optional[int], data_file_id: int,
         raise
 
 
-def update_data_file_group_asset(user_id: Optional[int], group_id: str,
+def update_data_file_group_asset(user_id: Optional[int], group_name: str,
                                  provider_id: str, asset_path: str,
                                  asset_metadata: dict, name: str) -> None:
     """
     Link data file group to a new asset; called after exporting group to asset
 
     :param user_id: current user ID (None if user auth is disabled)
-    :param group_id: data file group ID to update
+    :param group_name: data file group name to update
     :param provider_id: data provider ID/name
     :param asset_path: data provider asset path
     :param asset_metadata: data provider asset metadata
@@ -1289,9 +1381,9 @@ def update_data_file_group_asset(user_id: Optional[int], group_id: str,
     adb = get_data_file_db(user_id)
 
     db_data_files = adb.query(DbDataFile) \
-        .filter(DbDataFile.group_id == group_id)
+        .filter(DbDataFile.group_name == group_name)
     if not db_data_files.count():
-        raise UnknownDataFileGroupError(id=group_id)
+        raise UnknownDataFileGroupError(group_name=group_name)
 
     try:
         for db_data_file in db_data_files:

@@ -21,13 +21,15 @@ class DataFileSchema(Resource):
     Fields:
         id: unique integer data file ID; assigned automatically when creating
             or importing data file into session
+        type: "image" or "table"
         name: data file name; on import, set to the data provider asset name
-        width: image width
-        height: image height
+        width: image width or number of table columns
+        height: image height or number of table rows
         data_provider: for imported data files, name of the originating data
             provider; not defined for data files created from scratch or
             uploaded
         asset_path: for imported data files, the original asset path
+        asset_type: original asset file type ("FITS", "JPEG", etc.)
         asset_metadata: dictionary of the originating data provider asset
             metadata
         layer: layer ID for data files imported from multi-layer data provider
@@ -35,8 +37,8 @@ class DataFileSchema(Resource):
         created_on: datetime.datetime of data file creation
         modified: True if the file was modified after creation
         modified_on: datetime.datetime of data file modification
-        session_id: ID of session owning the data file
-        group_id: GUID of the data file group
+        session_id: ID of session if the data file is associated with a session
+        group_name: name of the data file group
         group_order: 0-based order of the data file in the group
     """
     __get_view__ = 'data_files'
@@ -48,6 +50,7 @@ class DataFileSchema(Resource):
     height: int = Integer(default=None)
     data_provider: str = String(default=None)
     asset_path: str = String(default=None)
+    asset_type: str = String(default=None)
     asset_metadata: TDict[str, Any] = Dict(default={})
     layer: str = String(default=None)
     created_on: datetime = DateTime(
@@ -56,7 +59,7 @@ class DataFileSchema(Resource):
     modified_on: datetime = DateTime(
         default=None, format='%Y-%m-%d %H:%M:%S.%f')
     session_id: Optional[int] = Integer(default=None)
-    group_id: str = String(default=None)
+    group_name: str = String(default=None)
     group_order: int = Integer(default=0)
 
 
