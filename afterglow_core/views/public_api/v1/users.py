@@ -10,8 +10,8 @@ from ....models import User
 from ....resources.users import *
 from ....schemas.api.v1 import MinorUserSchema, UserSchema
 from ....errors.auth import (
-    AdminRequiredError, CannotDeactivateTheOnlyAdminError,
-    CannotDeleteCurrentUserError)
+    AdminOrSameUserRequiredError, AdminRequiredError,
+    CannotDeactivateTheOnlyAdminError, CannotDeleteCurrentUserError)
 from . import url_prefix
 
 
@@ -22,11 +22,10 @@ def users() -> Response:
     List or create user accounts; admins only
 
     GET /users
-        - return the list of registered user IDs
+        - return a list of all registered users
 
     GET /users?username=...&active=...&roles=...
-        - return the list of IDs of registered users matching the given
-            criteria
+        - return the list of users matching the given criteria
 
     POST /users?username=...&password=...&roles=...&first_name=...&last_name=...
         &email=...&birth_date=...&settings=...
@@ -83,7 +82,7 @@ def user(user_id: int) -> Response:
     # Admin rights are required for listing, creating, and deleting users;
     # not required for retrieving and updating the current user's profile
     if not request.user.is_admin and user_id != request.user.id:
-        raise AdminRequiredError()
+        raise AdminOrSameUserRequiredError()
 
     u = get_user(user_id)
 
