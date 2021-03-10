@@ -196,4 +196,4 @@ class UnknownTokenError(AfterglowError):
     """
     code = 400
     subcode = 114
-    message = 'Unknown token error'
+    message = 'Unknown token'

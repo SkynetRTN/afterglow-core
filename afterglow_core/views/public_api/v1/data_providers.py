@@ -78,8 +78,7 @@ def data_providers(id: Optional[Union[int, str]] = None) -> Response:
 @auth_required('user')
 def data_providers_assets(id: Union[int, str]) -> Response:
     """
-    Return data provider asset metadata, create collection assets, rename
-    or delete assets
+    Return data provider asset metadata, rename or delete assets
 
     GET /data-providers/[id]/assets?path=...
         - return a one-element list containing metadata for the asset

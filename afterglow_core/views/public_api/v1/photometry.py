@@ -39,7 +39,7 @@ def data_file_photometry(id: int) -> Response:
         dec_degs: Dec or a comma-separated list of Decs of aperture centers; can
             be passed instead of `x` and `y` provided the data file is
             astrometric-calibrated
-        a: aperture radius os semi-major axis (for elliptical aperture), in
+        a: aperture radius or semi-major axis (for elliptical aperture), in
             pixels
         b: semi-minor aperture axis in pixels for elliptical aperture; if
             omitted or equal to `a`, circular aperture is used
@@ -61,7 +61,7 @@ def data_file_photometry(id: int) -> Response:
             pixels
 
     :return: JSON response containing serialized Photometry object (single xy
-        or RA/Dec value) or a list of PHotometry objects otherwise
+        or RA/Dec value) or a list of Photometry objects otherwise
     """
     # Get request parameters
     try:
