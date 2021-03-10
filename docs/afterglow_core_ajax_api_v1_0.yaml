@@ -1,0 +1,318 @@
+openapi: 3.0.1
+
+info:
+  title: Afterglow Core AJAX API
+  description: 'Afterglow is an online astronomical data analysis tool developed
+    by the [Skynet Robotic Telescope Network](https://skynet.unc.edu/) team at
+    the University of North Carolina at Chapel Hill. Afterglow Core AJAX API
+    contains endpoints utilized by Afterglow Access, the Afterglow web
+    frontend.'
+  contact:
+    name: Vladimir Kouprianov
+    email: vkoupr@email.unc.edu
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+servers:
+  - url: https://afterglow.skynet.unc.edu/api/v1
+    description: Production API Server
+  - url: https://sparge.skynet.unc.edu/api/v1
+    description: Development API Server
+
+components:
+
+  securitySchemes:
+    skynet_auth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://afterglow.skynet.unc.edu/oauth2/authorize
+          tokenUrl: https://afterglow.skynet.unc.edu/oauth2/token
+          scopes:
+            email: get the user's email address
+    afterglow_auth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://afterglow.skynet.unc.edu/oauth2/authorize
+          tokenUrl: https://afterglow.skynet.unc.edu/oauth2/token
+          scopes:
+            email: get the user's email address
+    api_key_header:
+      type: apiKey
+      description: API key in Authorization header
+      name: Authorization
+      in: header
+    api_key_cookie:
+      type: apiKey
+      description: API key in cookie (access_token + access_token_sig)
+      name: afterglow_core_access_token
+      in: cookie
+    http:
+      type: http
+      scheme: basic
+
+
+  schemas:
+
+    AfterglowError:
+      description: Afterglow API error
+      type: object
+      properties:
+        subcode:
+          description: exception-specific error code; by convention, has the form "nmm", where the most significant digits ("n") define the Afterglow Core module and the two least significant digits ("mm") define specific exception within that module, from 0 to 99
+          type: integer
+          minimum: 0
+        exception:
+          description: exception class name
+          type: string
+        message:
+          description: error message
+          type: string
+        traceback:
+          description: Python exception traceback; only returned for HTTP 500 Internal Server Error
+
+    Token:
+      description: personal access token
+      type: object
+      properties:
+        id:
+          description: token ID
+          type: integer
+          readOnly: true
+        user_id:
+          description: user ID
+          type: integer
+        token_type:
+          description: token type
+          type: string
+          enum: [personal, cookie, oauth2]
+        access_token:
+          description: token value
+          type: string
+        issued_at:
+          description: date issued
+          type: string
+          format: 'date-time'
+        expires_in:
+          description: token expiration time in seconds
+          type: integer
+        note:
+          description: user-supplied token description
+          type: string
+
+  responses:
+
+    GenericError:
+      description: Unexpected Afterglow Core error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+
+    ValidationError:
+      description: Server-side validation fails for a certain field passed as a request parameter
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  field:
+                    description: name of the field
+                    type: string
+          example:
+            subcode: 2
+            message: "Validation failed"
+
+    UnknownTokenError:
+      description: DELETEing /users/tokens/<id> with invalid id
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 400
+            subcode: 114
+            message: "Unknown token error"
+
+    UnknownClientError:
+      description: The user requested an unknown OAuth2 client
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  id:
+                    description: client ID requested
+                    type: string
+          example:
+            code: 404
+            subcode: 200
+            message: "Unknown OAuth2 client ID"
+
+    MissingClientIdError:
+      description: OAuth2 client ID not provided
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 400
+            subcode: 201
+            message: "Missing client ID"
+
+
+paths:
+
+  /ajax/app-authorizations:
+    summary: Manage OAuth2 client authorization
+    get:
+      summary: return authorized clients for the authenticated user
+      responses:
+        200:
+          description: list of user clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      description: OAuth2 Afterglow internal client ID
+                      type: integer
+                    client_id:
+                      description: OAuth2 client ID
+                      type: string
+                    user_id:
+                      description: user ID
+                      type: integer
+                    client:
+                      description: OAuth2 client object
+                      type: object
+                      properties:
+                        client_id:
+                          description: OAuth2 client ID
+                          type: string
+                        name:
+                          description: OAuth2 client name
+                          type: string
+    post:
+      summary: authorize the given client for the authenticated user
+      requestBody:
+        description: admin user credentials
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                client_id:
+                  description: OAuth2 client ID
+                  type: string
+                  required: true
+      responses:
+        200:
+          description: client already authorized
+        201:
+          description: client added to the list of the authorized clients for the user
+        400:
+          description: client ID not provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/MissingClientIdError'
+        404:
+          description: unknown OAuth2 client
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownClientError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /ajax/app-authorizations/{id}:
+    summary: OAuth2 client authorization management
+    parameters:
+      - name: id
+        in: path
+        description: OAuth2 client ID to manage
+        schema:
+          type: integer
+        required: true
+    delete:
+      summary: revoke OAuth2 client authorization
+      responses:
+        200:
+          description: client authorization revoked
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /ajax/tokens:
+    summary: Return or create personal access tokens
+    get:
+      summary: return tokens for the authenticated user
+      responses:
+        200:
+          description: list of tokens
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Token'
+        default:
+          $ref: '#/components/responses/GenericError'
+    post:
+      summary: create personal access token
+      requestBody:
+        description: token parameters
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  description: token note
+                  type: string
+                  required: true
+      responses:
+        201:
+          description: new access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Token'
+        400:
+          description: missing or empty access token note
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/ValidationError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /ajax/tokens/{id}:
+    summary: Manage personal access tokens
+    parameters:
+      - name: id
+        in: path
+        description: personal access token ID to manage
+        schema:
+          type: integer
+        required: true
+    delete:
+      summary: delete personal access token
+      responses:
+        200:
+          description: token deleted
+        400:
+          description: unknown token ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownTokenError'
+        default:
+          $ref: '#/components/responses/GenericError'
