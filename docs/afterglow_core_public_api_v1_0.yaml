@@ -1,0 +1,5276 @@
+openapi: 3.0.1
+
+info:
+  title: Afterglow Core
+  description: 'Afterglow is an online astronomical data analysis tool developed
+    by the [Skynet Robotic Telescope Network](https://skynet.unc.edu/) team at
+    the University of North Carolina at Chapel Hill. Afterglow Core is its
+    server part that provides a RESTful API for data storage, manipulation, and
+    retrieval.'
+  contact:
+    name: Vladimir Kouprianov
+    email: vkoupr@email.unc.edu
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+servers:
+  - url: https://afterglow.skynet.unc.edu/api/v1
+    description: Production API Server
+  - url: https://sparge.skynet.unc.edu/api/v1
+    description: Development API Server
+
+components:
+
+  securitySchemes:
+    skynet_auth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://afterglow.skynet.unc.edu/oauth2/authorize
+          tokenUrl: https://afterglow.skynet.unc.edu/oauth2/token
+          scopes:
+            email: get the user's email address
+    afterglow_auth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://afterglow.skynet.unc.edu/oauth2/authorize
+          tokenUrl: https://afterglow.skynet.unc.edu/oauth2/token
+          scopes:
+            email: get the user's email address
+    api_key_header:
+      type: apiKey
+      description: API key in Authorization header
+      name: Authorization
+      in: header
+    api_key_cookie:
+      type: apiKey
+      description: API key in cookie (access_token + access_token_sig)
+      name: afterglow_core_access_token
+      in: cookie
+    http:
+      type: http
+      scheme: basic
+
+  schemas:
+
+    AfterglowError:
+      description: Afterglow API error
+      type: object
+      properties:
+        subcode:
+          description: exception-specific error code; by convention, has the form "nmm", where the most significant digits ("n") define the Afterglow Core module and the two least significant digits ("mm") define specific exception within that module, from 0 to 99
+          type: integer
+          minimum: 0
+        exception:
+          description: exception class name
+          type: string
+        message:
+          description: error message
+          type: string
+        traceback:
+          description: Python exception traceback; only returned for HTTP 500 Internal Server Error
+
+    Role:
+      description: User role
+      type: object
+      properties:
+        id:
+          description: user role ID
+          type: integer
+        name:
+          description: user role name
+          type: string
+          enum:
+            - admin
+            - user
+        description:
+          description: user role description
+          type: string
+
+    User:
+      description: Afterglow user info
+      type: object
+      properties:
+        id:
+          description: unique user ID
+          type: integer
+          readOnly: true
+        username:
+          description: unique username
+          type: string
+        email:
+          description: user's email address
+          type: string
+        first_name:
+          description: user's first name
+          type: string
+        last_name:
+          description: user's last name
+          type: string
+        birth_date:
+          description: user's birth date
+          type: string
+          format: 'date'
+        active:
+          description: user account active?
+          type: boolean
+        created_at:
+          description: UTC date/time of user account creation
+          type: string
+          format: 'date-time'
+          readOnly: true
+        modified_at:
+          description: UTC date/time of the last user info update
+          type: string
+          format: 'date-time'
+          readOnly: true
+        roles:
+          description: list of user role names
+          oneOf:
+            - type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    description: user role name
+                    type: string
+                    enum:
+                      - admin
+                      - user
+            - type: string
+              description: comma-separated list of roles "admin" or "user"
+        settings:
+          description: opaque client-dependent string (possibly JSON) storing the optional user settings
+          type: string
+
+    Token:
+      description: personal access token
+      type: object
+      properties:
+        id:
+          description: token ID
+          type: integer
+          readOnly: true
+        user_id:
+          description: user ID
+          type: integer
+        token_type:
+          description: token type
+          type: string
+          enum: [personal, cookie, oauth2]
+        access_token:
+          description: token value
+          type: string
+        issued_at:
+          description: date issued
+          type: string
+          format: 'date-time'
+        expires_in:
+          description: token expiration time in seconds
+          type: integer
+        note:
+          description: user-supplied token description
+          type: string
+
+    AuthnPluginBase:
+      description: Afterglow authentication plugin info
+      type: object
+      discriminator:
+        propertyName: type
+      properties:
+        id:
+          description: unique ID of the auth plugin; assigned in the plugin configuration
+          type: string
+        name:
+          description: auth plugin name; can be used by the clients in requests like GET /auth/[id]/...
+          type: string
+        type:
+          description: auth type (e.g. "http" or "oauth2")
+          type: string
+        description:
+          description: description of the auth method
+          type: string
+        icon:
+          description: plugin icon ID used by the client UI
+          type: string
+        register_users:
+          description: automatically register authenticated users if missing from the local user database; defaults to REGISTER_AUTHENTICATED_USERS afterglow.conf option
+          type: boolean
+
+    HttpAuthPluginBase:
+      allOf:
+        - $ref: '#/components/schemas/AuthnPluginBase'
+
+    OAuthServerPluginBase:
+      allOf:
+        - $ref: '#/components/schemas/AuthnPluginBase'
+        - type: object
+          properties:
+            authorize_url:
+              description: authorization URL
+              type: string
+            request_token_params:
+              description: request token parameters
+              type: object
+            client_id:
+              description: OAuth2 client ID
+              type: string
+
+    DataProvider:
+      description: Afterglow data provider definition, as set in the Afterglow Core configuration
+      type: object
+      properties:
+        id:
+          description: unique integer ID of the data provider; assigned automatically on initialization
+          type: integer
+        name:
+          description: unique data provider name; can be used by the clients in requests in place of integer ID
+          type: string
+        display_name:
+          description: data provider plugin name visible in Afterglow Access
+          type: string
+        icon:
+          description: icon name known to Afterglow Access
+          type: string
+        description:
+          description: a more verbose description of data provider shown in the client UI (Afterglow Access)
+          type: string
+        auth_methods:
+          description: 'list of data provider-specific authentication methods;
+            if None, defaults to DEFAULT_DATA_PROVIDER_AUTH -> DATA_FILE_AUTH ->
+            all auth methods available'
+          type: array
+          items:
+            type: string
+        columns:
+          description: list of column definitions
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                description: column name
+                type: string
+              field_name:
+                description: field name
+                type: string
+              sortable:
+                description: can sort by this column
+                type: boolean
+        sort_by:
+          description: name of column to use for initial sort
+          type: string
+        sort_asc:
+          description: initial sort order should be ascending
+          type: boolean
+        browseable:
+          description: true if data provider supports browsing, i.e. listing child assets of a collection asset at the given path
+          type: boolean
+        searchable:
+          description: true if data provider supports searching, i.e. querying using the custom search keywords defined by `search_fields`
+          type: boolean
+        search_fields:
+          description: 'mapping {field_name: {"label": label, "type": type, ...}, ...} containing names and descriptions of search fields used on the client side to create search forms'
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: string
+        readonly:
+          description: true if the data provider assets cannot be modified (created, updated, or deleted)
+          type: boolean
+        allow_upload:
+          description: if readonly=false, allow uploading user images to the data provider
+          type: boolean
+        quota:
+          description: data provider storage quota, in bytes, if applicable
+          type: number
+        usage:
+          description: current usage of the data provider storage, in bytes, if applicable
+          type: number
+
+    DataProviderAsset:
+      description: Definition of a data provider asset returned as a result of a query
+      type: object
+      properties:
+        name:
+          description: asset name (e.g. filename)
+          type: string
+          nullable: true
+        collection:
+          description: true for a collection asset
+          type: boolean
+        path:
+          description: asset path in the provider-specific form serving as a unique ID of the asset; for a browseable data provider, this can be a hierarchical filesystem-like path separated by "/"
+          type: string
+          nullable: true
+        metadata:
+          description: extra asset metadata, e.g. data format, image dimensions, etc.
+          type: object
+
+    Session:
+      description: 'A session is a collection of user''s data files. When creating or importing
+        a data file, it is associated with a certain session (by default, if no
+        session ID provided, with the anonymous session that always exists).
+        Sessions are created by the user via the /sessions endpoint. Their main
+        purpose is to provide independent Afterglow Access workspaces; in addition,
+        they may serve as a means to group data files by the client API scripts.'
+      type: object
+      properties:
+        id:
+          description: unique integer session ID; assigned automatically when creating the session
+          type: integer
+          nullable: true
+          readOnly: true
+        name:
+          description: unique session name
+          type: string
+          nullable: true
+        data:
+          description: optional arbitrary user data associated with the session
+          type: string
+        data_file_ids:
+          description: list of data file IDs associated with the session
+          type: array
+          items:
+            type: integer
+          readOnly: true
+      required: [name]
+
+    DataFile:
+      description: Description of a user data file -- image or table
+      type: object
+      properties:
+        id:
+          description: unique integer data file ID; assigned automatically when creating or importing data file into session
+          type: integer
+          readOnly: true
+        type:
+          description: data file type
+          type: string
+          enum:
+            - image
+            - table
+        name:
+          description: data file name; on import, set to the data provider asset name
+          type: string
+        width:
+          description: image width or number of table columns
+          type: integer
+        height:
+          description: image height or number of table rows
+          type: integer
+        data_provider:
+          description: for imported data files, name of the originating data provider; null for data files created from scratch or uploaded
+          type: string
+          nullable: true
+        asset_path:
+          description: original asset path for imported data files
+          type: string
+          nullable: true
+        asset_metadata:
+          description: originating data provider asset metadata
+          type: object
+        layer:
+          description: layer ID for data files imported from multi-layer data provider assets
+          type: string
+          nullable: true
+        created_on:
+          description: date/time of data file creation
+          type: string
+          format: 'date-time'
+        modified:
+          description: data file modification flag
+          type: boolean
+        modified_on:
+          description: date/time of data file modification
+          type: string
+          format: 'date-time'
+        session_id:
+          description: ID of session owning the data file
+          type: integer
+          nullable: true
+        group_name:
+          description: name of the data file group
+          type: string
+        group_order:
+          description: 0-based order of the data file in the group
+          type: integer
+          minimum: 0
+
+    HeaderEntry:
+      description: Data file FITS header entry
+      type: object
+      properties:
+        key:
+          description: FITS header keyword name
+          type: string
+        value:
+          description: keyword value, can be any scalar
+          oneOf:
+            - type: string
+            - type: integer
+            - type: number
+            - type: boolean
+        comment:
+          description: optional keyword comment
+          type: string
+          nullable: true
+      required: [key, value]
+
+    Hist:
+      description: Data file histogram
+      type: object
+      properties:
+        data:
+          description: counts for all histogram bins
+          type: array
+          items:
+            type: integer
+        min_bin:
+          description: left boundary of the leftmost bin
+          type: number
+        max_bin:
+          description: right boundary of the rightmost bin
+          type: number
+
+    Mag:
+      description: Magnitude of a source, either measured or catalog, comprising value and optional error
+      type: object
+      properties:
+        value:
+          description: magnitude value
+          type: number
+        error:
+          description: magnitude error
+          type: number
+          nullable: true
+          default: null
+      required: [value]
+
+    Photometry:
+      description: Result of manually photometering a source
+      type: object
+      properties:
+        flux:
+          description: flux within the aperture in ADUs; mean background within the annulus is subtracted if annulus is enabled
+          type: number
+        flux_err:
+          description: estimated 1-sigma error of flux
+          type: number
+        mag:
+          description: magnitude computed as -2.5log10(flux/texp)
+          type: number
+        mag_err:
+          description: estimated 1-sigma error of magnitude
+          type: number
+        x:
+          description: 1-based X pixel coordinate of the aperture center
+          type: number
+        y:
+          description: 1-based Y pixel coordinate of the aperture center
+          type: number
+        a:
+          description: aperture radius (or semi-major axis) in pixels
+          type: number
+        b:
+          description: semi-minor axis of the aperture
+          type: number
+        theta:
+          description: aperture position angle in degrees CCW if `a` != `b`
+          type: number
+        a_in:
+          description: inner annulus radius (or semi-major axis) in pixels; not set if local background subtraction was not used
+          type: number
+        a_out:
+          description: outer annulus radius (or semi-major axis) in pixels
+          type: number
+        b_out:
+          description: semi-minor outer axis of the annulus
+          type: number
+        theta_out:
+          description: annulus position angle in degrees CCW if `a` != `b`
+          type: number
+        area:
+          description: area within the aperture in square pixels
+          type: number
+        background_area:
+          description: annulus area in pixels if local background subtraction was enabled; not set otherwise
+          type: number
+        background:
+          description: mean background within the aperture estimated from the annulus if enabled; not set otherwise
+          type: number
+        background_rms:
+          description: RMS of background within the annulus if local background subtraction was enabled; not set otherwise
+          type: number
+
+    ISourceMeta:
+      description: Common parameters of extracted sources
+      type: object
+      properties:
+        file_id:
+          description: ID of data file containing the source
+          type: integer
+        time:
+          description: epoch associated with the source
+          type: string
+          format: 'date-time'
+        filter:
+          description: optical filter name
+          type: string
+        telescope:
+          description: name of telescope that acquired the image
+          type: string
+        exp_length:
+          description: exposure length [seconds]
+          type: number
+          minimum: 0
+
+    IAstrometry:
+      description: Source position/velocity information
+      type: object
+      properties:
+        ra_hours:
+          description: right ascension [hours]
+          type: number
+          minimum: 0
+          maximum: 24
+          exclusiveMaximum: true
+        dec_degs:
+          description: declination [degrees]
+          type: number
+          minimum: -90
+          maximum: 90
+        pm_sky:
+          description: proper motion in RA/Dec coordinates [degrees/second]
+          type: number
+        pm_pos_angle_sky:
+          description: position angle of proper motion in RA/Dec coordinates [degrees], counter-clockwise
+          type: number
+        x:
+          description: X pixel coordinate
+          type: number
+        y:
+          description: Y pixel coordinate
+          type: number
+        pm_pixel:
+          description: proper motion in pixel coordinates [pixels/second]
+          type: number
+        pm_pos_angle_pixel:
+          description: position angle of proper motion in pixel coordinates [degrees], counter-clockwise
+          type: number
+        pm_epoch:
+          description: epoch of proper motion
+          type: string
+          format: 'date-time'
+        flux:
+          description: source flux [electrons] (or [counts] if gain is not known)
+          type: number
+          minimum: 0
+
+    IFWHM:
+      description: Source shape information
+      type: object
+      properties:
+        fwhm_x:
+          description: FWHM along major axis [pixels]
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        fwhm_y:
+          description: FWHM along minor axis [pixels]
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        theta:
+          description: position angle of major axis [degrees], counter-clockwise
+          type: number
+
+    IPhotometry:
+      description: Photometric information for a source
+      type: object
+      properties:
+        flux:
+          description: flux [electrons]
+          type: number
+        flux_error:
+          description: error of flux [electrons]
+          type: number
+        mag:
+          description: magnitude
+          type: number
+          # should we add mags for different sigma levels?
+        mag_error:
+          description: error of magnitude
+          type: number
+
+    IAperture:
+      description: Parameters of aperture photometry for a source
+      type: object
+      properties:
+        aper_a:
+          description: radius or semi-major axis [pixels]
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        aper_b:
+          description: semi-minor axis [pixels]
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        aper_theta:
+          description: position angle of aperture major axis [degrees], counter-clockwise
+          type: number
+        annulus_a_in:
+          description: annulus inner radius or semi-major axis [pixels]
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        annulus_b_in:
+          description: annulus inner semi-minor axis [pixels]
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        annulus_theta_in:
+          description: position angle of major axis of inner annulus ellipse [degrees], counter-clockwise
+          type: number
+        annulus_a_out:
+          description: annulus outer radius or semi-major axis [pixels]
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        annulus_b_out:
+          description: annulus outer semi-minor axis [pixels]
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        annulus_theta_out:
+          description: position angle of major axis of outer annulus ellipse [degrees], counter-clockwise
+          type: number
+      required: [aper_a]
+
+    ISourceId:
+      description: Unique extracted source identification parameters
+      type: object
+      properties:
+        id:
+          description: source identifier across images
+          type: string
+
+    ICatalogSource:
+      description: Generic catalog source definition without astrometry
+      type: object
+      properties:
+        id:
+          description: catalog-specific ID of the source
+          type: string
+        file_id:
+          description: data file ID; used when FieldCalJob.photometry_settings == null
+          type: integer
+        label:
+          description: optional user-assigned label
+          type: string
+        catalog_name:
+          description: name of reference catalog
+          type: string
+        mags:
+          description: catalog magnitudes (with optional errors) for all available bandpasses
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/Mag'
+
+    Job:
+      description: 'Afterglow job is an asynchronous operation on input data -- commonly a set of user''s
+        data files. A job may result in a new data file, multiple data files, modifying existing data files,
+        or just a single number or numbers. Jobs represent potentially computationally-intensive operations
+        like source extraction and image alignment or stacking. Afterglow API clients like Afterglow Access
+        or custom scripts can create jobs, monitor their progress, interrupt them if needed, and retrieve
+        the results of computation.'
+      type: object
+      discriminator:
+        propertyName: type
+      properties:
+        id:
+          description: unique integer job ID assigned automatically on job creation
+          type: integer
+          readOnly: true
+        type:
+          description: job type name
+          type: string
+          enum:
+            - alignment
+            - batch_download
+            - batch_asset_download
+            - batch_import
+            - catalog_query
+            - cropping
+            - field_cal
+            - photometry
+            - pixel_ops
+            - sonification
+            - source_extraction
+            - source_merge
+            - stacking
+            - wcs_calibration
+        description:
+          description: job description
+          type: string
+        user_id:
+          description: ID of the user who submitted the job
+          type: integer
+          readOnly: true
+        session_id:
+          description: ID of the client session (null = default anonymous session); new data files will be created with this session ID
+          type: integer
+          nullable: true
+          default: none
+        state:
+          $ref: '#/components/schemas/JobState'
+        result:
+          $ref: '#/components/schemas/JobResult'
+      required: [type]
+
+    JobState:
+      description: Job state
+      type: object
+      properties:
+        status:
+          description: current job status; set to "pending" when the job is created, changes to "in_progress" when it is dispatched to a worker process, "completed" when it's finished (no matter success or error), and "canceled" if it's canceled by the client
+          type: string
+          enum: [pending, in_progress, canceled, completed]
+        created_on:
+          description: UTC time of job creation
+          type: string
+          format: 'date-time'
+        completed_on:
+          description: UTC time of job completion or cancellation
+          type: string
+          format: 'date-time'
+        progress:
+          description: current job progress
+          type: number
+          minimum: 0
+          maximum: 100
+
+    JobResult:
+      description: Resulting data returned by job on completion, including the possible errors and warnings issued in the course of job execution
+      type: object
+      properties:
+        errors:
+          description: list of possible error messages
+          type: array
+          items:
+            type: string
+        warnings:
+          description: list of possible warnings
+          type: array
+          items:
+            type: string
+
+    SourceExtractionSettings:
+      description: Parameters for all jobs involving source extraction
+      type: object
+      properties:
+        # support regions in 'sky' coordinates as well as 'pixel' coordinates?
+        x:
+          description: optional sub-region origin X, 1-based
+          type: integer
+          default: 1
+        y:
+          description: optional sub-region origin Y, 1-based
+          type: integer
+          default: 1
+        width:
+          description: optional sub-region size (0 = full width)
+          type: integer
+          default: 0
+        height:
+          description: optional sub-region size (0 = full height)
+          type: integer
+          default: 0
+        threshold:
+          description: extraction threshold in units of RMS
+          type: number
+          default: 2.5
+          minimum: 0
+          exclusiveMinimum: true
+        bk_size:
+          description: box size for background estimation (<= 1 = fraction of image size, > 1 = integer pixels)
+          type: number
+          default: 0.015625
+          minimum: 0
+          exclusiveMinimum: true
+        bk_filter_size:
+          description: window size of background median filter
+          type: integer
+          default: 3
+          minimum: 1
+        fwhm:
+          description: source FWHM [pixels]; 0 = no Gaussian filtering
+          type: number
+          minimum: 0
+          default: 0
+        ratio:
+          description: minor to major Gaussian kernel axis ratio, used if `fwhm` != 0
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          maximum: 1
+          default: 1
+        theta:
+          description: position angle of Gaussian kernel major axis [degrees], counter-clockwise
+          type: number
+          default: 0
+        min_pixels:
+          description: discard objects with less pixels
+          type: integer
+          minimum: 0
+          default: 3
+        deblend:
+          description: deblend overlapping sources
+          type: boolean
+          default: false
+        deblend_levels:
+          description: number of deblending levels
+          type: integer
+          minimum: 1
+          default: 32
+        deblend_contrast:
+          description: deblending contrast
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          default: 0.005
+        gain:
+          description: electrons to data units conversion factor override
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          nullable: true
+          default: null
+        clean:
+          description: cleaning parameter
+          type: number
+          default: 1
+        centroid:
+          description: enable centroiding
+          type: boolean
+          default: true
+        limit:
+          description: return only the given number of brightest sources
+          type: integer
+          minimum: 1
+          nullable: true
+          default: null
+      nullable: true
+      default: null
+
+    SourceMergeSettings:
+      description: Source merging parameters. Merging is finding the same sources in multiple images by doing a nearest neighbor match using either RA/Dec or XY coordinates. Instances of the same merged source in multiple data files are assigned the same source ID.
+      type: object
+      properties:
+        pos_type:
+          description: 'type of coordinates used for merging: sky = use RA/Dec, pixel = use XY, auto = use RA/Dec if available, XY otherwise'
+          type: string
+          enum: [sky, pixel, auto]
+          default: auto
+        tol:
+          description: source merging tolerance; should be null (= auto) for pos_type=auto, arcsecs for pos_type=sky, otherwise pixels; if omitted for pos_type=auto or pixel, assume 0.5 minimal distance between sources
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          nullable: true
+          default: null
+      nullable: true
+      default: null
+
+    SourceExtractionJob:
+      description: Source extraction job
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [source_extraction]
+            result:
+              $ref: '#/components/schemas/SourceExtractionJobResult'
+            file_ids:
+              description: IDs of data files for source extraction
+              type: array
+              items:
+                type: integer
+            source_extraction_settings:
+              $ref: '#/components/schemas/SourceExtractionSettings'
+            merge_sources:
+              description: merge sources found in multiple files
+              type: boolean
+              default: true
+            source_merge_settings:
+              $ref: '#/components/schemas/SourceMergeSettings'
+
+    SourceExtractionData:
+      description: Result of source extraction
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/ISourceMeta'
+        - $ref: '#/components/schemas/IAstrometry'
+        - $ref: '#/components/schemas/IFWHM'
+        - $ref: '#/components/schemas/ISourceId'
+
+    SourceExtractionJobResult:
+      description: 'Result of source extraction job: list of SourceExtractionData structures for each data file'
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/JobResult'
+        - type: object
+          properties:
+            data:
+              description: list of source extraction data for each input data file
+              type: array
+              items:
+                $ref: '#/components/schemas/SourceExtractionData'
+
+    SourceMergeJob:
+      description: Source merging job
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [source_merge]
+            result:
+              $ref: '#/components/schemas/SourceMergeJobResult'
+            sources:
+              description: list of source positions, either RA/Dec for merging in sky coordinates or XY for merging in pixel coordinates
+              type: array
+              items:
+                $ref: '#/components/schemas/IAstrometry'
+            settings:
+              $ref: '#/components/schemas/SourceMergeSettings'
+
+    SourceMergeJobResult:
+      description: 'Result of source merge job: list of SourceExtractionData structures for each data file'
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/JobResult'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/SourceExtractionData'
+
+    PhotSettings:
+      description: Photometry settings
+      type: object
+      properties:
+        mode:
+          description: 'Photometry mode: fixed-aperture vs adaptive (Kron)'
+          type: string
+          enum: [aperture, auto]
+        a:
+          description: aperture radius/semi-major axis [pixels] for mode=aperture, Kron factor (defaulting to 2.5) for mode=auto; required for mode=aperture
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          nullable: true
+        b:
+          description: aperture semi-minor axis [pixels] for mode=aperture, defaulting to `a`
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          nullable: true
+        theta:
+          description: position angle of semi-major axis [degrees], counter-clockwise, for mode=aperture and `a` != `b`
+          type: number
+          nullable: true
+          default: 0
+        a_in:
+          description: inner annulus radius/semi-major axis [pixels], defaults to `a`*Kron factor*1.5
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          nullable: true
+        a_out:
+          description: outer annulus radius/semi-major axis [pixels], defaults to `a`*Kron factor*2
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          nullable: true
+        b_out:
+          description: outer annulus semi-minor axis [pixels], defaults to `b`*Kron factor*2
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          nullable: true
+        theta_out:
+          description: annulus position angle [degrees], defaults to `theta`
+          type: number
+          nullable: true
+        gain:
+          description: default gain if not present in FITS headers
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          nullable: true
+        centroid_radius:
+          description: centroiding aperture radius; 0 = disable centroiding
+          type: number
+          minimum: 0
+          default: 0
+        zero_point:
+          description: 'photometric zero point m0 applied to instrumental magnitudes: m = -2.5 log10(flux/Texp) + m0'
+          type: number
+          default: 0
+      nullable: true
+      default: null
+
+    PhotometryJob:
+      description: Batch photometry job
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [photometry]
+            result:
+              $ref: '#/components/schemas/PhotometryJobResult'
+            file_ids:
+              description: IDs of data files for batch photometry
+              type: array
+              items:
+                type: integer
+            sources:
+              description: list of sources to photometer
+              type: array
+              items:
+                $ref: '#/components/schemas/SourceExtractionData'
+            settings:
+              $ref: '#/components/schemas/PhotSettings'
+
+    PhotometryData:
+      description: Result of photometering a single source
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/SourceExtractionData'
+        - $ref: '#/components/schemas/IPhotometry'
+        - $ref: '#/components/schemas/IAperture'
+
+    PhotometryJobResult:
+      description: 'Result of batch photometry job: flat list of photometered sources for all data files'
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/JobResult'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/PhotometryData'
+
+    CatalogSource:
+      description: Catalog object used for calibration
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/ICatalogSource'
+        - $ref: '#/components/schemas/IAstrometry'
+        - $ref: '#/components/schemas/IPhotometry'
+
+    Catalog:
+      description: Reference catalog definition
+      type: object
+      properties:
+        name:
+          description: unique internal catalog name
+          type: string
+        display_name:
+          description: a more verbose catalog description visible in the UI, defaulting to `name`
+          type: string
+        num_sources:
+          description: total number of sources in the catalog
+          type: integer
+        mags:
+          description: 'mapping between standard magnitude names like "B", "V", "R" for
+            magnitudes present in the catalog and catalog-specific magnitude
+            names and errors; the value is a 0 to 2-element list: the first item
+            is magnitude column name, the second item (if any) is magnitude
+            error column name; empty list or null means that there is no direct
+            correspondence to a catalog magnitude (e.g. if standard magnitudes
+            are derived from catalog magnitudes using certain expressions);
+            the mapping can be used to create catalog-specific constraint
+            expressions'
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        filter_lookup:
+          description: 'default custom mapping between certain bandpasses not present in the catalog and catalog magnitudes (in particular, aliases for non-standard catalog magnitude names), e.g.
+            {"Open": "(3*B + 5*R)/8", "r''": "rprime"}; used by field cal job'
+          type: object
+          additionalProperties:
+            type: string
+
+    CatalogQueryJob:
+      description: Catalog query job
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [catalog_query]
+            result:
+              $ref: '#/components/schemas/CatalogQueryJobResult'
+            catalogs:
+              description: list of catalog IDs to query
+              type: array
+              items:
+                type: string
+            ra_hours:
+              description: query field centered at this RA; requires `dec_degs`
+              type: number
+              minimum: 0
+              maximum: 24
+              exclusiveMaximum: true
+            dec_degs:
+              description: query field centered at this Dec; requires `ra_hours`
+              type: number
+              minimum: -90
+              maximum: 90
+            radius_arcmins:
+              description: query circular area of the given radius centered at (`ra_hours`, `dec_degs`); mutually exclusive with `width_arcmins` and `height_arcmins`
+              type: number
+              minimum: 0
+              exclusiveMinimum: true
+            width_arcmins:
+              description: query rectangular area of the given width centered at (`ra_hours`, `dec_degs`); mutually exclusive with `radius_arcmins`
+              type: number
+              minimum: 0
+              exclusiveMinimum: true
+            height_arcmins:
+              description: query rectangular area of the given height centered at (`ra_hours`, `dec_degs`); if omitted, assumed same as `width_arcmins`; mutually exclusive with `radius_arcmins`
+              type: number
+              minimum: 0
+              exclusiveMinimum: true
+            file_ids:
+              description: data file IDs to process; if specified, those sources are returned that fall into any of the given image FOVs; mutually exclusive with the above parameters (`ra_hours`, `dec_degs`, `radius_arcmins`, `width_arcmins`, and `height_arcmins`)
+              type: array
+              items:
+                type: integer
+            constraints:
+              description: 'optional catalog-specific constraints in the form {"column": "constraint expression", ...}'
+              type: object
+              additionalProperties:
+                type: string
+            source_ids:
+              description: return specific sources; mutually exclusive with all other query parameters
+              type: array
+              items:
+                type: string
+
+    CatalogQueryJobResult:
+      description: Result of a catalog query
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/JobResult'
+        - type: object
+          properties:
+            data:
+              description: list of catalog sources returned as a result of the query
+              type: array
+              items:
+                $ref: '#/components/schemas/CatalogSource'
+
+    FieldCal:
+      description: Field calibration prescription
+      type: object
+      properties:
+        id:
+          description: unique ID of field cal, assigned on creation
+          type: integer
+          readOnly: true
+        name:
+          description: optional user-defined description of field cal
+          type: string
+          required: true
+        catalog_sources:
+          description: explicit list of catalog sources with magnitudes used for obtaining a field cal
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogSource'
+        catalogs:
+          description: if no explicit catalog sources provided, list of catalogs to query for refstars
+          type: array
+          items:
+            type: string
+        custom_filter_lookup:
+          description: override for the default catalog filter mapping
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: string
+        source_inclusion_percent:
+          description: fraction of images which must contain cal source for it to be included
+          type: number
+          minimum: 0
+          maximum: 100
+          default: 0
+        source_match_tol:
+          description: source matching tolerance [pixels]
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        min_snr:
+          description: minimum reference star SNR; 0 = no limit
+          type: number
+          minimum: 0
+          default: 0
+        max_snr:
+          description: maximum reference star SNR; 0 = no limit
+          type: number
+          minimum: 0
+          default: 0
+
+    FieldCalResult:
+      description: Result of field calibration for a data file
+      type: object
+      properties:
+        file_id:
+          description: data file ID
+          type: integer
+        phot_results:
+          description: photometry results for all sources in the data file
+          type: array
+          items:
+            $ref: '#/components/schemas/PhotometryData'
+        zero_point:
+          description: photometric zero point for the data file
+          type: number
+        zero_point_error:
+          description: error of `zero_point`
+          type: number
+
+    FieldCalJob:
+      description: Photometric calibration job
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [field_cal]
+            result:
+              $ref: '#/components/schemas/FieldCalJobResult'
+            file_ids:
+              description: IDs of data files to calibrate
+              type: array
+              items:
+                type: integer
+            field_cal:
+              $ref: '#/components/schemas/FieldCal'
+            source_extraction_settings:
+              $ref: '#/components/schemas/SourceExtractionSettings'
+            photometry_settings:
+              $ref: '#/components/schemas/PhotSettings'
+
+    FieldCalJobResult:
+      description: Result of photometric calibration
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/JobResult'
+        - type: object
+          properties:
+            data:
+              description: list of field calibration results for all data files
+              type: array
+              items:
+                $ref: '#/components/schemas/FieldCalResult'
+
+    AlignmentSettings:
+      description: Image alignment settings
+      type: object
+      properties:
+        ref_image:
+          description: reference image; align with respect to first/last/central image or image with the given 0-based index
+          oneOf:
+            - type: string
+              enum: [first, central, last]
+            - type: string
+              format: '#index'
+            - type: integer
+          default: 'central'
+        wcs_grid_points:
+          description: 'number of grid points for WCS interpolation::
+            0: transform using WCS calculated for each pixel (no interpolation)
+            1: offset-only alignment using central pixel
+            2: shift + rotation + uniform scale (2-star) alignment using two points
+            >= 3: full affine transform using the given number of fake "alignment stars" generated from the WCS'
+          type: integer
+          default: 0
+        prefilter:
+          description: apply spline filter before interpolation to decrease blurring
+          type: boolean
+          default: true
+      nullable: true
+      default: null
+
+    StackingSettings:
+      description: Image stacking settings
+      type: object
+      properties:
+        mode:
+          description: stacking mode
+          type: string
+          enum: [average, percentile, mode, sum]
+          default: average
+        scaling:
+          description: 'scaling mode::
+            null (default) -- do not scale data
+            "average" -- scale data to match average values
+            "percentile" -- match the given percentile (median for `percentile` = 50)
+            "mode" -- match modal values'
+          type: string
+          enum: [average, percentile, mode]
+          nullable: true
+          default: null
+        rejection:
+          description: 'outlier rejection mode:
+            null (default) -- do not reject outliers,
+            "chauvenet" -- use Chauvenet robust outlier rejection,
+            "iraf" -- IRAF-like clipping of `lo` lowest and `hi` highest values,
+            "minmax" -- reject values outside the absolute lower and upper limits (use with caution as `min_keep` below is not guaranteed, and you may end up in all values rejected for some or even all pixels),
+            "sigclip" -- iteratively reject pixels below and/or above the baseline'
+          type: string
+          enum: [chauvenet, iraf, minmax, sigclip]
+          nullable: true
+          default: null
+        percentile:
+          description: for `mode`="percentile"; 50 = median
+          type: number
+          minimum: 0
+          maximum: 100
+          default: 50
+        lo:
+          description: '
+            `rejection` = "iraf": number of lowest values to clip; default: 1;
+            `rejection` = "minmax": reject values below this limit; default: not set;
+            `rejection` = "sigclip": reject values more than `lo` sigmas below the baseline; default: 3'
+          type: number
+        hi:
+          description: '
+            `rejection` = "iraf": number of highest values to clip; default: 1;
+            `rejection` = "minmax": reject values above this limit; default: not set;
+            `rejection` = "sigclip": reject values more than `hi` sigmas above the baseline; default: 3'
+          type: number
+      nullable: true
+      default: null
+
+    AlignmentJob:
+      description: Image alignment job
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [alignment]
+            result:
+              $ref: '#/components/schemas/AlignmentJobResult'
+            file_ids:
+              description: IDs of data files to align
+              type: array
+              items:
+                type: integer
+            settings:
+              $ref: '#/components/schemas/AlignmentSettings'
+            sources:
+              description: list of sources for each data file for source-based alignment; at least, file_id, id, x, y are required
+              type: array
+              items:
+                $ref: '#/components/schemas/SourceExtractionData'
+            inplace:
+              description: align in-place vs create a new data file for each input data file
+              type: boolean
+              default: false
+
+    AlignmentJobResult:
+      description: Result of image alignment
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/JobResult'
+        - type: object
+          properties:
+            file_ids:
+              description: list of output file IDs; same as input if `inplace` = true; otherwise, new file IDs
+              type: array
+              items:
+                type: integer
+
+    StackingJob:
+      description: Image stacking job
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [stacking]
+            result:
+              $ref: '#/components/schemas/StackingJobResult'
+            file_ids:
+              description: IDs of (possible previously aligned) data files to stack
+              type: array
+              items:
+                type: integer
+            stacking_settings:
+              $ref: '#/components/schemas/StackingSettings'
+
+    StackingJobResult:
+      description: Result of image stacking
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/JobResult'
+        - type: object
+          properties:
+            file_id:
+              description: ID of the resulting data file
+              type: integer
+
+    PixelOpsJob:
+      description: 'Pixel operations job
+        The operation is defined by a user-supplied Python expression involving the input image(s) ("img" or "imgs[i]") and their FITS headers ("hdr" or "hdrs[i]"). The following categories of operations are supported::
+
+        - one output image per input image (e.g. individual image transformation like adding a constant or resampling)::
+            F(img)  # apply F() to all images, e.g. img = img + 1
+
+        - reduce input images into a single output image (e.g. add)::
+            F(imgs)  # create a single data file; e.g. sum(imgs)
+
+        - combine input images into multiple output images (e.g. difference images); creates as many data files as possible by looping over "i" (the difference with the previous case is that the free variable "i" must be present in the expression)::
+            F(imgs[i], imgs[i+1] ...)  # e.g. imgs[i+1] - imgs[i]
+
+        The expression F() may include any Python operators and constants plus Numpy
+        and Scipy.ndimage definitions. It should evaluate either to a 2D image or
+        to a scalar. In the latter case, the resulting value is appended
+        to PixelOpsJob.result.data. Whether a new data file(s) are created or the
+        input ones are replaced by the output 2D image is controlled by the
+        `inplace` job parameter; this does not apply to the third case above and if
+        F() yields a scalar value. The expression may also include the variables
+        "aux_imgs" and "aux_hdrs", which are set to the lists of image data and
+        headers for data files listed in the `aux_file_ids` job parameter; the first
+        auxiliary image/header is also available via "aux_img" and "aux_hdr"
+        variables.'
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [pixel_ops]
+            result:
+              $ref: '#/components/schemas/PixelOpsJobResult'
+            file_ids:
+              description: input data file(s)
+              type: array
+              items:
+                type: integer
+            op:
+              description: operation on input data files
+              type: string
+            inplace:
+              description: overwrite input data files in the case of one output file per input file
+              type: boolean
+              default: false
+            aux_file_ids:
+              description: optional IDs of aux data files
+              type: array
+              items:
+                type: integer
+              default: []
+
+    PixelOpsJobResult:
+      description: Result of pixel ops job
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/JobResult'
+        - type: object
+          properties:
+            file_ids:
+              description: new file ids created or input file ids if inplace=false
+              type: array
+              items:
+                type: integer
+            data:
+              description: results of applying the operation to each input data file if expression yields a scalar value
+              type: array
+              items:
+                type: number
+
+    SonificationSettings:
+      description: Image sonification settings
+      type: object
+      properties:
+        x:
+          description: optional sub-region origin X, 1-based
+          type: integer
+          default: 1
+        y:
+          description: optional sub-region origin Y, 1-based
+          type: integer
+          default: 1
+        width:
+          description: optional sub-region size (0 = full width)
+          type: integer
+          minimum: 0
+          default: 0
+        height:
+          description: optional sub-region size (0 = full height)
+          type: integer
+          minimum: 0
+          default: 0
+        coord:
+          description: type of sonification coordinates
+          type: string
+          enum: [rect, radial, circ]
+          default: rect
+        barycenter:
+          description: shift origin to image barycenter
+          type: boolean
+          default: false
+        tempo:
+          description: input image rows per second of the output sound file
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          default: 100
+        sampling_rate:
+          description: output sampling rate [pps]
+          type: integer
+          minimum: 0
+          exclusiveMinimum: true
+          default: 44100
+        start_tone:
+          description: tone to start the scale from, 0 = C4
+          type: integer
+          default: 0
+        num_tones:
+          description: number of major scale tones to use
+          type: integer
+          minimum: 1
+          default: 22
+        volume:
+          description: output signal volume scaling
+          type: integer
+          minimum: 0
+          maximum: 32767
+          default: 16384
+        noise_volume:
+          description: noise volume scaling
+          type: integer
+          minimum: 0
+          maximum: 32767
+          default: 1000
+        bkg_scale:
+          description: box size for background estimator ( <= 1 = fraction of image size, >1 = pixels)
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          default: 0.015625
+        threshold:
+          description: detection threshold in units of noise RMS
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          default: 1.5
+        min_connected:
+          description: min pixels per object
+          type: integer
+          minimum: 1
+          default: 5
+        hi_clip:
+          description: high image data clipping percentile
+          type: number
+          minimum: 0
+          maximum: 100
+          default: 99.9
+        noise_lo:
+          description: low noise clipping percentile
+          type: number
+          minimum: 0
+          maximum: 100
+          default: 50
+        noise_hi:
+          description: high noise clipping percentile
+          type: number
+          minimum: 0
+          maximum: 100
+          default: 99.9
+        index_sounds:
+          description: include index sounds at the beginning and at the end of the output sound file
+          type: boolean
+          default: false
+      nullable: true
+      default: null
+
+    SonificationJob:
+      description: Image sonification job; result is obtained via GET /api/v1/jobs/[id]/result/files/sonification
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [sonification]
+            result:
+              $ref: '#/components/schemas/SonificationJobResult'
+            file_id:
+              description: data file ID to sonify
+              type: integer
+            settings:
+              $ref: '#/components/schemas/SonificationSettings'
+            format:
+              description: generated sound file format
+              type: string
+              enum: [wav, mp3]
+              default: wav
+
+    SonificationJobResult:
+      description: Result of image sonification
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/JobResult'
+        - type: object
+          properties:
+            sound_file_id:
+              description: output sound file ID; downloaded via GET jobs/[sound_file_id]/result/files
+              type: integer
+
+    CroppingSettings:
+      description: Image cropping settings
+      type: object
+      properties:
+        left:
+          description: left margin; all zeros mean auto-cropping by mask (e.g. after alignment)
+          type: integer
+          minimum: 0
+          default: 0
+        right:
+          description: right margin
+          type: integer
+          minimum: 0
+          default: 0
+        top:
+          description: top margin
+          type: integer
+          minimum: 0
+          default: 0
+        bottom:
+          description: bottom margin
+          type: integer
+          minimum: 0
+          default: 0
+      nullable: true
+      default: null
+
+    CroppingJob:
+      description: Batch image cropping job
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [cropping]
+            result:
+              $ref: '#/components/schemas/CroppingJobResult'
+            file_ids:
+              description: IDs of data files to crop
+              type: array
+              items:
+                type: integer
+            settings:
+              $ref: '#/components/schemas/CroppingSettings'
+            inplace:
+              description: crop in place vs create new data files
+              type: boolean
+              default: false
+
+    CroppingJobResult:
+      description: Result of image cropping
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/JobResult'
+        - type: object
+          properties:
+            file_ids:
+              description: new file ids created or input file ids if inplace=false
+              type: array
+              items:
+                type: integer
+
+    BatchImportSettings:
+      description: Batch file import settings
+      type: object
+      properties:
+        provider_id:
+          description: data provider ID to import from
+          type: string
+        path:
+          description: import data provider assets at the given path
+          type: string
+        duplicates:
+          description: what to do if the same data file was already imported
+          type: string
+          enum: [ignore, overwrite, append]
+          default: ignore
+        recurse:
+          description: recursively import the whole collection asset hierarchy
+          type: boolean
+          default: false
+      nullable: true
+      default: null
+
+    BatchImportJob:
+      description: Batch file import job; import multiple files at once or even the whole collection asset hierarchies
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [batch_import]
+            result:
+              $ref: '#/components/schemas/BatchImportJobResult'
+            settings:
+              description: list of settings for each asset to import
+              type: array
+              items:
+                $ref: '#/components/schemas/BatchImportSettings'
+            session_id:
+              description: assign imported data files to this session ID
+              type: integer
+              nullable: true
+              default: null
+
+    BatchImportJobResult:
+      description: Result of batch import
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/JobResult'
+        - type: object
+          properties:
+            file_ids:
+              description: IDs of the imported data files
+              type: array
+              items:
+                type: integer
+
+    BatchDownloadJob:
+      description: Data file batch download job
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [batch_download]
+            file_ids:
+              description: data file IDs to download
+              type: array
+              items:
+                type: integer
+            group_names:
+              description: group names to download
+              type: array
+              items:
+                type: string
+
+    BatchAssetDownloadJob:
+      description: Data provider asset batch download job
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [batch_asset_download]
+            provider_id:
+              description: data provider ID
+              type: integer
+            paths:
+              description: asset paths to download
+              type: array
+              items:
+                type: string
+
+    WcsCalibrationSettings:
+      description: WCS calibration settings
+      type: object
+      properties:
+        ra_hours:
+          description: optional starting right ascension of image center in hours
+          type: number
+          minimum: 0
+          maximum: 24
+          exclusiveMaximum: true
+          default: 0
+        dec_degs:
+          description: optional starting declination of image center in degrees
+          type: number
+          minimum: -90
+          maximum: 90
+          default: 0
+        radius:
+          description: field search radius in degrees (180 = search across the whole sky)
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          default: 180
+        min_scale:
+          description: minimum pixel scale in arcseconds/pixel
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          default: 0.1
+        max_scale:
+          description: maximum pixel scale in arcseconds/pixel
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          default: 60
+        parity:
+          description: 'expected image parity = sign of the determinant of the coordinate transformation matrix:
+            0 = false = "positive" -- flipped image
+            1 = true = "negative" -- normal orientation
+            null -- try both parities'
+          oneOf:
+            - type: boolean
+            - type: integer
+              minimum: 0
+              maximum: 1
+            - type: string
+              enum: [positive, negative]
+          nullable: true
+          default: null
+        sip_order:
+          description: order of SIP distortion terms; 0 = disable SIP tweaking
+          type: integer
+          minimum: 0
+          default: 3
+        crpix_center:
+          description: set reference pixel to image center
+          type: boolean
+          default: true
+        max_sources:
+          description: use only the given number of brightest sources
+          type: integer
+          minimum: 1
+          default: 100
+      nullable: true
+      default: null
+
+    WcsCalibrationJob:
+      description: WCS (astrometric) calibration job
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [wcs_calibration]
+            result:
+              $ref: '#/components/schemas/WcsCalibrationJobResult'
+            file_ids:
+              description: IDs of data files to calibrate
+              type: array
+              items:
+                type: integer
+            settings:
+              $ref: '#/components/schemas/WcsCalibrationSettings'
+            source_extraction_settings:
+              $ref: '#/components/schemas/SourceExtractionSettings'
+            inplace:
+              description: calibrate in-place vs create a new data file for each input data file
+              type: boolean
+              default: false
+
+    WcsCalibrationJobResult:
+      description: Result of WCS calibration
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/JobResult'
+        - type: object
+          properties:
+            file_ids:
+              description: list of output file IDs; same as input if `inplace` = true; otherwise, new file IDs
+              type: array
+              items:
+                type: integer
+
+  responses:
+
+    GenericError:
+      description: Unexpected Afterglow Core error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+
+    MethodNotImplementedError:
+      description: '\
+        Resource method is not implemented by Afterglow Core.
+        Usually returned by the data provider plugin system if the plugin class
+        does not override the required abstract base DataProvider class method.'
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  class_name:
+                    description: name of the class that must implement the method
+                    type: string
+                  method_name:
+                    description: name of the method to implement
+                    type: string
+          example:
+            code: 501
+            subcode: 1
+            message: "Method not implemented"
+
+    ValidationError:
+      description: Server-side validation fails for a certain field passed as a request parameter
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  field:
+                    description: name of the field
+                    type: string
+          example:
+            subcode: 2
+            message: "Validation failed"
+
+    MissingFieldError:
+      description: Required data is missing from request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/responses/ValidationError'
+          example:
+            subcode: 3
+            message: "Missing required data"
+
+    NotAcceptedError:
+      description: The client requested the MIME type that the server cannot return
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  accepted_mimetypes:
+                    description: Accept header value sent by the client
+                    type: string
+          example:
+            code: 406
+            subcode: 4
+            message: "Sending data in the format requested by HTTP Accept header is not supported"
+
+    NotAuthenticatedError:
+      description: User authentication failed, access denied
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  error_msg:
+                    description: authentication error message
+                    type: string
+          example:
+            code: 401
+            subcode: 100
+            message: "Not authenticated"
+
+    NoAdminRegisteredError:
+      description: Attempt to manage users (except for adding admin during the initial setup) with no admins registered in the system
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 101
+            message: "No admins registered"
+
+    AdminRequiredError:
+      description: Request needs authentication with admin role
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 102
+            message: "Must be admin to do that"
+
+    AdminOrSameUserRequiredError:
+      description: Request needs authentication with admin role or the same user it refers to
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 103
+            message: "Must be admin or same user to do that"
+
+    UnknownUserError:
+      description: User with the given ID is not registered
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  id:
+                    description: user ID
+                    type: integer
+          example:
+            code: 404
+            subcode: 104
+            message: "Unknown user"
+
+    InactiveUserError:
+      description: Attempting to access Afterglow using an inactive user account
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 105
+            message: "The user is deactivated"
+
+    CannotDeactivateTheOnlyAdminError:
+      description: Deactivating, removing admin role, or deleting the only admin user in the system
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 106
+            message: "Cannot deactivate/delete the only admin in the system"
+
+    DuplicateUsernameError:
+      description: Attempting to register user with username that is already associated with some other user
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  username:
+                    description: duplicate username
+                    type: string
+          example:
+            code: 403
+            subcode: 107
+            message: "User with this username already exists"
+
+    UnknownAuthMethodError:
+      description: Auth method was requested that is not registered in USER_AUTH
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  method:
+                    description: auth method ID
+                    type: string
+          example:
+            code: 404
+            subcode: 108
+            message: "Unknown authentication method"
+
+    CannotSetProtectedUserDataError:
+      description: The user is trying to update protected info
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  attr:
+                    description: read-only user attribute
+                    type: string
+          example:
+            code: 403
+            subcode: 109
+            message: "Cannot modify protected user info"
+
+    HttpAuthFailedError:
+      description: HTTP authentication data (username/password or Authentication-Token header) missing or invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 401
+            subcode: 110
+            message: "Invalid or missing username/password or authentication token"
+      headers:
+        WWW-Authenticate:
+          description: reason for rejecting username/password
+          schema:
+            type: string
+          example: 'Basic realm="Local Afterglow Users Only"'
+
+    CannotDeleteCurrentUserError:
+      description: Deleting currently authenticated user
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 111
+            message: "Cannot delete the currently authenticated user"
+
+    InitPageNotAvailableError:
+      description: Afterglow Core has already been initialized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 112
+            message: "Afterglow Core has already been initialized"
+
+    NotInitializedError:
+      description: Afterglow core has not yet been initialized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 113
+            message: "Afterglow Core has not yet been initialized"
+
+    UnknownTokenError:
+      description: DELETEing /users/tokens/<id> with invalid id
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 400
+            subcode: 114
+            message: "Unknown token"
+
+    UnknownClientError:
+      description: The user requested an unknown OAuth2 client
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  id:
+                    description: client ID requested
+                    type: string
+          example:
+            code: 404
+            subcode: 200
+            message: "Unknown OAuth2 client ID"
+
+    JobServerError:
+      description: Unhandled job server error
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  reason:
+                    description: error message describing the reason of failure
+                    type: string
+          example:
+            code: 500
+            subcode: 300
+            message: "Internal job server error"
+
+    UnknownJobError:
+      description: Unknown job ID requested
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  id:
+                    description: job ID
+                    type: integer
+          example:
+            code: 404
+            subcode: 301
+            message: "Unknown job"
+
+    UnknownJobFileError:
+      description: Unknown job file ID requested
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  id:
+                    description: job file ID
+                    type: string
+          example:
+            code: 404
+            subcode: 302
+            message: "Unknown job file"
+
+    UnknownJobTypeError:
+      description: Creating a job which type is not registered
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  type:
+                    description: job type
+                    type: string
+          example:
+            code: 400
+            subcode: 303
+            message: "Unknown job type"
+
+    InvalidMethodError:
+      description: The given resource does not support HTTP method requested
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  resource:
+                    description: resource ID
+                    type: string
+                  method:
+                    description: HTTP method requested
+                    type: string
+          example:
+            code: 405
+            subcode: 304
+            message: "Method is not supported"
+
+    CannotSetJobStatusError:
+      description: Setting job status to something other than "canceled"
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  status:
+                    description: job status
+                    type: string
+          example:
+            code: 403
+            subcode: 305
+            message: "Cannot set job status"
+
+    CannotCancelJobError:
+      description: Canceling a job that is not in in_progress state
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  status:
+                    description: job status
+                    type: string
+          example:
+            code: 403
+            subcode: 306
+            message: "Cannot cancel job"
+
+    CannotDeleteJobError:
+      description: Deleting a job that is not in completed or canceled state
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  status:
+                    description: job status
+                    type: string
+          example:
+            code: 403
+            subcode: 307
+            message: "Cannot delete job in its current state"
+
+    CannotCreateJobFileError:
+      description:  Error creating extra job file
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  id:
+                    description: job file ID
+                    type: string
+                  reason:
+                    description: error message describing the reason of failure
+                    type: string
+          example:
+            code: 500
+            subcode: 308
+            message: "Cannot create job file"
+
+    UnknownDataProviderError:
+      description: Invalid data provider ID when importing data files
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  id:
+                    description: data provider ID requested
+                    type: integer
+          example:
+            code: 404
+            subcode: 1000
+            message: "Unknown data provider ID"
+
+    ReadOnlyDataProviderError:
+      description: The user requested a POST, PUT, or DELETE for an asset of a read-only data provider
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  id:
+                    description: data provider ID requested
+                    type: integer
+          example:
+            code: 403
+            subcode: 1001
+            message: "Read-only data provider"
+
+    NonBrowseableDataProviderError:
+      description: The user requested a GET for a collection asset of a non-browseable data provider
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  id:
+                    description: data provider ID requested
+                    type: integer
+          example:
+            code: 403
+            subcode: 1002
+            message: "Non-browseable data provider"
+
+    NonSearchableDataProviderError:
+      description: The user requested a GET with search keywords for an asset of a non-searchable data provider
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  id:
+                    description: data provider ID requested
+                    type: integer
+          example:
+            code: 403
+            subcode: 1003
+            message: "Non-searchable data provider"
+
+    AssetNotFoundError:
+      description: No asset found at the given path
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  path:
+                    description: requested asset path
+                    type: string
+          example:
+            code: 404
+            subcode: 1004
+            message: "No asset found at the given path"
+
+    AssetAlreadyExistsError:
+      description: Attempt to create asset over the existing path
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 1005
+            message: "Asset already exists at the given path"
+
+    CannotSearchInNonCollectionError:
+      description: Attempt to search within a path that identifies a non-collection resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 1006
+            message: "Can only search in collection assets"
+
+    CannotUpdateCollectionAssetError:
+      description: Attempt to update a collection asset
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 1007
+            message: "Cannot update a collection asset"
+
+    CannotDeleteNonEmptyCollectionAssetError:
+      description: Attempt to delete a non-empty collection asset
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 1008
+            message: 'Cannot delete non-empty collection asset without "force"'
+
+    QuotaExceededError:
+      description: The user requested a GET with search keywords for an asset of a non-searchable data provider
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  quota:
+                    description: storage quota in bytes
+                    type: integer
+                  usage:
+                    description: used storage
+                    type: integer
+                  size:
+                    description: size of asset being created or updated
+                    type: integer
+          example:
+            code: 403
+            subcode: 1009
+            message: "Storage quota exceeded"
+
+    UploadNotAllowedError:
+      description: Attempting to upload a user file to read-write data provider that does not allow uploading
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 1010
+            message: "Upload not allowed"
+
+    AssetOutsideRootError:
+      description: Local disk data provider asset requested that is outside the root data directory
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 404
+            subcode: 1100
+            message: "Asset path outside the data directory"
+
+    FilesystemError:
+      description: Attempting to do a filesystem operation on local disk data provider asset failed (e.g. permission denied)
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  reason:
+                    description: error message describing the reason of failure
+                    type: string
+          example:
+            code: 403
+            subcode: 1101
+            message: "Filesystem error"
+
+    UnknownDataFileError:
+      description: Requested data file with unknown ID
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  id:
+                    description: requested data file ID
+                    type: integer
+          example:
+            code: 404
+            subcode: 2000
+            message: "Unknown data file ID"
+
+    CannotCreateDataFileDirError:
+      description: Initializing the user data file storage failed (e.g. directory not writeable or database creation error)
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  reason:
+                    description: error message describing the reason why the operation has failed
+                    type: string
+          example:
+            code: 403
+            subcode: 2001
+            message: "Cannot create data file storage directory"
+
+    CannotImportFromCollectionAssetError:
+      description: An attempt was made to import a data file from a collection asset
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  provider_id:
+                    description: data provider ID
+                    type: integer
+                  path:
+                    description: requested asset path
+                    type: string
+          example:
+            code: 403
+            subcode: 2002
+            message: "Cannot import from collection asset"
+
+    UnrecognizedDataFormatError:
+      description: An attempt was made to import a data file that has unknown format
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 2003
+            message: "Data file format not recognized"
+
+    MissingWCSError:
+      description: Data file has now WCS calibration
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 400
+            subcode: 2004
+            message: "Missing WCS info"
+
+    UnknownSessionError:
+      description: Requested session with unknown ID or name
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  id:
+                    description: session ID or name
+                    oneOf:
+                      - type: integer
+                      - type: string
+          example:
+            code: 404
+            subcode: 2005
+            message: "Unknown session"
+
+    DuplicateSessionNameError:
+      description: Session with the given name already exists
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  name:
+                    description: session name
+                    type: string
+          example:
+            code: 400
+            subcode: 2006
+            message: "Duplicate session name"
+
+    UnknownDataFileGroupError:
+      description: No data files match the given group ID
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  id:
+                    description: requested data file group ID
+                    type: string
+          example:
+            code: 404
+            subcode: 2007
+            message: "Unknown data file group ID"
+
+    DataFileExportError:
+      description: Cannot export data file to image
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  reason:
+                    description: error message describing the reason of failure
+                    type: string
+          example:
+            code: 400
+            subcode: 2008
+            message: "Cannot export data file"
+
+    DataFileUploadNotAllowedError:
+      description: Attempt to upload a data file, but data file upload is disabled
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AfterglowError'
+          example:
+            code: 403
+            subcode: 2009
+            message: "Data file upload not allowed"
+
+    DuplicateDataFileNameError:
+      description: Attempt to create/update a data file with the name identical to an existing data file name within the same session
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  name:
+                    description: requested data file name
+                    type: string
+          example:
+            code: 403
+            subcode: 2010
+            message: "Duplicate data file name"
+
+    DuplicateDataFileGroupNameError:
+      description: Attempt to create a new data file group with the name identical to an existing data file group name within the same session
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  group_name:
+                    description: requested data file group name
+                    type: string
+          example:
+            code: 403
+            subcode: 2011
+            message: "Duplicate data file group name"
+
+    UnknownCatalogError:
+      description: The user requested an unknown catalog
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  name:
+                    description: catalog name requested
+                    type: string
+          example:
+            code: 404
+            subcode: 3000
+            message: "Unknown catalog"
+
+    UnknownSurveyError:
+      description: SkyView does not host the given survey
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  survey:
+                    description: survey name
+                    type: string
+          example:
+            code: 404
+            subcode: 3100
+            message: "SkyView does not host the given survey"
+
+    SkyViewQueryError:
+      description: An error occurred during SkyView server query
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  msg:
+                    description: query error message
+                    type: string
+          example:
+            code: 502
+            subcode: 3101
+            message: "SkyView query error"
+
+    NoSurveyDataError:
+      description: Survey does not have any data for the given coordinates
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  survey:
+                    description: survey name
+                    type: string
+                  position:
+                    description: coordinates or object name
+                    type: string
+          example:
+            code: 404
+            subcode: 3102
+            message: "No data at the given coordinates"
+
+    UnknownFieldCalError:
+      description: Unknown field calibration
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  id:
+                    description: requested field cal ID
+                    type: integer
+          example:
+            code: 400
+            subcode: 4000
+            message: "Unknown field cal"
+
+    DuplicateFieldCalError:
+      description: Field cal with this name already exists
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/AfterglowError'
+              - type: object
+                properties:
+                  name:
+                    description: field cal name
+                    type: string
+          example:
+            code: 400
+            subcode: 4001
+            message: "Duplicate field cal name"
+
+
+paths:
+
+  /:
+    summary: Homepage for Afterglow Core
+    get:
+      summary: return dashboard page for the authenticated user
+      responses:
+        200:
+          description: Afterglow Core homepage or login page if not yet authenticated
+          content:
+            application/html:
+              schema:
+                type: string
+        302:
+          description: redirect to login page if not authenticated
+
+  /initialize:
+    summary: Afterglow Core initialization on first access
+    get:
+      summary: return initialization page
+      responses:
+        200:
+          description: Afterglow Core initialization page
+          content:
+            application/html:
+              schema:
+                type: string
+        403:
+          description: Afterglow Core has already been initialized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InitPageNotAvailableError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    post:
+      summary: perform Afterglow Core initialization
+      requestBody:
+        description: admin user credentials
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      responses:
+        201:
+          description: admin user info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        400:
+          description: required admin user info not provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/MissingFieldError'
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /login:
+    summary: Afterglow Core login page
+    get:
+      summary: return login page
+      parameters:
+        - name: next
+          in: query
+          description: redirect URL
+          schema:
+            type: object
+            properties:
+              next:
+                description: optional redirect URL
+                type: string
+      responses:
+        200:
+          description: Afterglow Core login page
+          content:
+            application/html:
+              schema:
+                type: string
+        302:
+          description: redirect to /initialize on first access or to URL specified by "next" on successful authentication
+        default:
+          $ref: '#/components/responses/GenericError'
+    post:
+      summary: login to Afterglow Core via username and password (HTTP auth)
+      responses:
+        200:
+          description: successfully logged in; return authenticated user info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        400:
+          description: missing or empty user authentication data (username and password)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/ValidationError'
+        401:
+          description: HTTP authentication failed (invalid username/password)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/HttpAuthFailedError'
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /login/oauth2/{plugin_id}:
+    summary: OAuth2.0 authorization code granted redirect endpoint
+    parameters:
+      - name: plugin_id
+        in: path
+        description: OAuth2 plugin ID
+        schema:
+          type: integer
+        required: true
+    get:
+      summary: authenticate via Afterglow OAuth2 server
+      parameters:
+        - name: state
+          in: query
+          description: authentication state object
+          schema:
+            type: object
+            properties:
+              next:
+                description: optional redirect URL
+                type: string
+          required: true
+        - name: code
+          in: query
+          description: authentication code
+          schema:
+            type: string
+          required: true
+      responses:
+        302:
+          description: on successful authentication, redirect to URL provided in state.next or the default URL (/); set afterglow_core_access_token cookie
+        400:
+          description: missing or invalid authentication data
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/MissingFieldError'
+                  - $ref: '#/components/responses/ValidationError'
+        401:
+          description: user authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/NotAuthenticatedError'
+        404:
+          description: unknown authentication method
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownAuthMethodError'
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /logout:
+    summary: log out of Afterglow Core
+    get:
+      summary: redirect to login page, clear access cookies
+      responses:
+        302:
+          description: redirect to login page
+        default:
+          $ref: '#/components/responses/GenericError'
+    post:
+      summary: redirect to login page, clear access cookies
+      responses:
+        302:
+          description: redirect to login page
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /admin/users:
+    summary: User management page
+    get:
+      summary: return user management page
+      responses:
+        200:
+          description: Afterglow Core user management page
+          content:
+            application/html:
+              schema:
+                type: string
+
+  /oauth2/authorize:
+    summary: Afterglow OAuth2 authorization endpoint
+    get:
+      summary: return OAuth2 authorization response
+      parameters:
+        - name: client_id
+          in: query
+          description: OAuth2 client ID
+          schema:
+            type: string
+          required: true
+      responses:
+        302:
+          description: redirect to consent page if the client was not confirmed yet or to redirect_uri otherwise
+        400:
+          description: missing client ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/MissingFieldError'
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /oauth2/token:
+    summary: Get OAuth2 token
+    post:
+      summary: return OAuth2 token
+      responses:
+        200:
+          description: OAuth2 token response
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /oauth2/consent:
+    summary: Afterglow OAuth2 consent page
+    get:
+      summary: return OAuth2 consent page
+      parameters:
+        - name: client_id
+          in: query
+          description: OAuth2 client ID
+          schema:
+            type: string
+          required: true
+        - name: next
+          in: query
+          description: URI to redirect to after consent
+          schema:
+            type: string
+      responses:
+        200:
+          description: Afterglow OAuth2 consent page
+          content:
+            application/html:
+              schema:
+                type: string
+        400:
+          description: missing client ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/MissingFieldError'
+        404:
+          description: unknown OAuth2 client
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownClientError'
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /settings/tokens:
+    summary: Token management page
+    get:
+      summary: return token managememnt page
+      responses:
+        200:
+          description: Afterglow token management page
+          content:
+            application/html:
+              schema:
+                type: string
+
+  /api/v1/catalogs:
+    summary: Reference catalog info
+    get:
+      summary: return all available catalogs
+      responses:
+        200:
+          description: list of catalogs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Catalog'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/catalogs/{name}:
+    summary: Specific reference catalog info
+    parameters:
+      - name: name
+        in: path
+        description: catalog ID
+        schema:
+          type: string
+        required: true
+    get:
+      summary: return the info on the given catalog
+      responses:
+        200:
+          description: catalog info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
+        404:
+          $ref: '#/components/responses/UnknownCatalogError'
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /api/v1/data-files:
+    summary: Query or create user data files
+    get:
+      summary: return the list of all user's data files associated with the given session or with the default anonymous session if unspecified
+      parameters:
+        - name: session_id
+          in: query
+          description: optional session ID, defaults to anonymous session
+          schema:
+            type: integer
+            nullable: true
+            default: null
+      responses:
+        200:
+          description: list of data files
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DataFile'
+        default:
+          $ref: '#/components/responses/GenericError'
+    post:
+      summary: create empty data file, upload, or import from data provider
+      requestBody:
+        description: data file import parameters
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                session_id:
+                  description: import data file to the given session, anonymous by default
+                  type: integer
+                  nullable: true
+                  default: null
+                name:
+                  description: new data file name, required if creating empty file; when importing from data provider, inferred from the asset path
+                  type: string
+                  nullable: true
+                  default: null
+                width:
+                  description: create empty data file of the given width; used in conjunction with `height` and `pixel_value`, mutually exclusive with `provider_id`
+                  type: integer
+                  nullable: true
+                  default: null
+                  minimum: 0
+                  exclusiveMinimum: true
+                height:
+                  description: create empty data file of the given height; used in conjunction with `width` and `pixel_value`, mutually exclusive with `provider_id`
+                  type: integer
+                  nullable: true
+                  default: null
+                  minimum: 0
+                  exclusiveMinimum: true
+                pixel_value:
+                  description: fill empty data file with the given value; used in conjunction with `width` and `height`, mutually exclusive with `provider_id`
+                  type: number
+                  nullable: true
+                  default: 0
+                provider_id:
+                  description: data provider ID, used in conjunction with `path` when importing from data provider, mutually exclusive with `width`/`height`/`value`
+                  type: integer
+                  nullable: true
+                  default: null
+                path:
+                  description: asset path of the data file, used in conjunction with `provider_id`; multiple asset paths can be passed as a JSON list
+                  anyOf:
+                    - type: string
+                    - type: array
+                      items:
+                        type: string
+                  nullable: true
+                  default: null
+                duplicates:
+                  description: 'how to handle already imported data files:
+                    - ignore: skip already imported assets,
+                    - overwrite: re-import,
+                    - append: always create a new data file'
+                  type: string
+                  enum: [ignore, overwrite, append]
+                recurse:
+                  description: recursively import child collection assets
+                  type: boolean
+                  default: false
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      parameters:
+        - name: session_id
+          in: query
+          description: optional session ID, defaults to anonymous session; used when uploading via multipart/form-data
+          schema:
+            type: integer
+            nullable: true
+            default: null
+        - name: name
+          in: query
+          description: new data file name; used when uploading via multipart/form-data
+          schema:
+            type: string
+            nullable: false
+      responses:
+        201:
+          description: list of created/imported/uploaded data files
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DataFile'
+        400:
+          description: missing required data or inputs not recognized
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/MissingFieldError'
+                  - $ref: '#/components/responses/ValidationError'
+        403:
+          description: attempt to import from a collection asset of non-browseable data provider or data file upload disabled
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/CannotImportFromCollectionAssetError'
+                  - $ref: '#/components/responses/DataFileUploadNotAllowedError'
+                  - $ref: '#/components/responses/DuplicateDataFileNameError'
+                  - $ref: '#/components/responses/DuplicateDataFileGroupNameError'
+        404:
+          description: unknown data provider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataProviderError'
+        422:
+          description: input data violates constraints
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/ValidationError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/data-files/{id}:
+    summary: Manage the given data file
+    parameters:
+      - name: id
+        in: path
+        description: data file ID
+        schema:
+          type: integer
+        required: true
+    get:
+      summary: return the given data file info
+      responses:
+        200:
+          description: requested data file info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataFile'
+        404:
+          description: unknown data file requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataFileError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    put:
+      summary: update the given data file info
+      requestBody:
+        description: data file parameters
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  description: new data file name
+                  type: string
+                session_id:
+                  description: reassign data file to another session
+                  type: integer
+                group_name:
+                  description: reassign data file to another group
+                  type: string
+                group_order:
+                  description: reorder data files in group
+                  type: integer
+      responses:
+        200:
+          description: updated data file info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataFile'
+        404:
+          description: unknown data file requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataFileError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    delete:
+      summary: delete the given data file
+      responses:
+        204:
+          description: data file deleted
+        404:
+          description: unknown data file requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataFileError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/data-files/{id}/header:
+    summary: Return or update data file header
+    parameters:
+      - name: id
+        in: path
+        description: data file ID
+        schema:
+          type: integer
+        required: true
+    get:
+      summary: return data file FITS header
+      responses:
+        200:
+          description: data file header
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HeaderEntry'
+        404:
+          description: unknown data file requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataFileError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    put:
+      summary: update data file FITS header
+      requestBody:
+        description: JSON keyword-value pairs overriding the current FITS header entries; a 2-element list value is interpreted as [value, comment]
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        200:
+          description: updated data file header
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HeaderEntry'
+        404:
+          description: unknown data file requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataFileError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/data-files/{id}/wcs:
+    summary: Return or update data file astrometric calibration (World Coordinate System) parameters
+    parameters:
+      - name: id
+        in: path
+        description: data file ID
+        schema:
+          type: integer
+        required: true
+    get:
+      summary: return WCS-related data file FITS keywords or empty list if no valid WCS found in the header
+      responses:
+        200:
+          description: WCS header
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HeaderEntry'
+        404:
+          description: unknown data file requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataFileError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    put:
+      summary: update data file WCS parameters
+      requestBody:
+        description: JSON keyword-value pairs overriding the current WCS keywords; null value means delete keyword, 2-element list is [value, comment]
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        200:
+          description: updated data file header
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HeaderEntry'
+        404:
+          description: unknown data file requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataFileError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/data-files/{id}/phot_cal:
+    summary: Return or update photometric calibration parameters
+    parameters:
+      - name: id
+        in: path
+        description: data file ID
+        schema:
+          type: integer
+        required: true
+    get:
+      summary: return photometric data file FITS keywords (zero point "m0" and error "m0_err") or empty object if no valid WCS found in the header
+      responses:
+        200:
+          description: WCS header
+          content:
+            application/json:
+              schema:
+                type: object
+        404:
+          description: unknown data file requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataFileError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    put:
+      summary: update photometric calibration parameters for the data file
+      requestBody:
+        description: JSON keyword-value pairs overriding the current photometric calibration keywords
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                m0:
+                  description: photometric zero point
+                  type: number
+                m0_err:
+                  description: photometric zero point error
+                  type: number
+                  minimum: 0
+                  exclusiveMinimum: true
+      responses:
+        200:
+          description: updated data file header
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  m0:
+                    description: photometric zero point
+                    type: number
+                  m0_err:
+                    description: photometric zero point error
+                    type: number
+                    minimum: 0
+                    exclusiveMinimum: true
+        404:
+          description: unknown data file requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataFileError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/data-files/{id}/hist:
+    summary: Return the data file histogram
+    parameters:
+      - name: id
+        in: path
+        description: data file ID
+        schema:
+          type: integer
+        required: true
+    get:
+      summary: 'data file histogram: integer counts for each bin'
+      responses:
+        200:
+          description: histogram object
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    description: integer counts for each histogram bin
+                    type: array
+                    items:
+                      type: integer
+                  min_bin:
+                    description: left histogram boundary
+                    type: number
+                  max_bin:
+                    description: right histogram boundary
+                    type: number
+        404:
+          description: unknown data file requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataFileError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/data-files/{id}/pixels:
+    summary: Return image data pixels
+    parameters:
+        - name: id
+          in: path
+          description: data file ID
+          schema:
+            type: integer
+          required: true
+    get:
+      summary: 'Return image data within the given rectangle or the whole image
+        By default, x and y are set to 1, width = image width - (x - 1), height = image height - (y - 1).
+        Depending on the request headers (Accept and Accept-Encoding), the pixel data are returned either as an optionally gzipped binary stream or as a JSON list.
+
+        [Accept: application/octet-stream]
+        [Accept: */octet-stream]
+        [Accept: application/*]
+        [Accept: */*]
+        -> (uncompressed binary)
+        Content-Type: application/octet-stream
+
+        [Accept: application/octet-stream]
+        [Accept: */octet-stream]
+        [Accept: application/*]
+        [Accept: */*]
+        Accept-Encoding: gzip
+        -> (compressed binary)
+        Content-Type: application/octet-stream
+        Content-Encoding: gzip
+
+        [Accept: application/json]
+        [Accept: */json]
+        -> (JSON)
+        Content-Type: application/json
+
+        Binary data is returned in the little-endian byte order (LSB first, Intel) in C (row-major) format, from bottom to top.'
+      parameters:
+        - name: x
+          in: query
+          description: 1-based top left corner X coordinate
+          schema:
+            type: integer
+            default: 1
+        - name: y
+          in: query
+          description: 1-based top left corner Y coordinate
+          schema:
+            type: integer
+            default: 1
+        - name: width
+          in: query
+          description: subframe width (null = full width)
+          schema:
+            type: integer
+            nullable: true
+            default: null
+        - name: height
+          in: query
+          description: subframe height (null = full height)
+          schema:
+            type: integer
+            nullable: true
+            default: null
+        - name: Accept
+          in: header
+          description: pixel data format
+          schema:
+            type: string
+            enum: [application/octet-stream, application/json]
+            default: application/octet-stream
+        - name: Accept-Encoding
+          in: header
+          description: 'return GZIP-compressed binary data if Accept-Encoding: gzip'
+          schema:
+            type: string
+            enum: ["", gzip]
+            default: ""
+      responses:
+        200:
+          description: 2D pixel array
+          headers:
+            Content-Encoding:
+              description: set to "gzip" if returning gzipped binary data
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: array
+                  items:
+                      type: number
+        400:
+          description: invalid subframe specification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/ValidationError'
+        404:
+          description: unknown data file requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataFileError'
+        406:
+          description: mimetype not accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/NotAcceptedError'
+        422:
+          description: invalid subframe specification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/ValidationError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/data-files/{id}/fits:
+    summary: Return raw FITS for a data file
+    parameters:
+      - name: id
+        in: path
+        description: data file ID
+        schema:
+          type: integer
+        required: true
+    get:
+      summary: 'Return the whole data file as a FITS file
+        Depending on the request headers (Accept and Accept-Encoding), the FITS file is returned either as a gzipped or uncompressed (default) FITS.
+
+        [Accept-Encoding:]
+        [Accept-Encoding: identity]
+        -> (uncompressed FITS)
+        Content-Type: image/fits
+
+        Accept-Encoding: gzip
+        -> (compressed FITS)
+        Content-Type: image/fits
+        Content-Encoding: gzip'
+      parameters:
+        - name: Accept-Encoding
+          in: header
+          description: 'return GZIP-compressed FITS if Accept-Encoding: gzip'
+          schema:
+            type: string
+            enum: ["", gzip]
+            default: ""
+      responses:
+        200:
+          description: (optionally gzip-compressed) FITS file
+          headers:
+            Content-Encoding:
+              description: set to "gzip" if returning gzipped file
+          content:
+            image/fits:
+              schema:
+                type: string
+                format: binary
+        404:
+          description: unknown data file requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataFileError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/data-files/{id}/{fmt}:
+    summary: Export data file in the given format
+    parameters:
+      - name: id
+        in: path
+        description: data file ID
+        schema:
+          type: integer
+        required: true
+      - name: fmt
+        in: path
+        description: image format supported by Pillow
+        schema:
+          type: string
+        required: true
+    get:
+      summary: return data file in the specified image format
+      parameters:
+        - name: Accept-Encoding
+          in: header
+          description: 'return GZIP-compressed FITS if Accept-Encoding: gzip'
+          schema:
+            type: string
+            enum: ["", gzip]
+            default: ""
+      responses:
+        200:
+          description: (optionally gzip-compressed) image file
+          headers:
+            Content-Encoding:
+              description: set to "gzip" if returning gzipped file
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        404:
+          description: unknown data file requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataFileError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/data-files/{id}/photometry:
+    summary: Return or update photometric calibration parameters
+    parameters:
+      - name: id
+        in: path
+        description: data file ID
+        schema:
+          type: integer
+        required: true
+    get:
+      summary: return photometric data file FITS keywords (zero point "m0" and error "m0_err") or empty object if no valid WCS found in the header
+      parameters:
+        - name: x
+          in: query
+          description: '1-based X position or a comma-separated list of positions of aperture
+            centers; the ending comma is ignored, so, if the caller wants a list
+            even in the case of a single input item, the input value can be
+            terminated with a comma'
+          schema:
+            oneOf:
+              - type: number
+              - type: string
+                format: csv
+        - name: y
+          in: query
+          description: '1-based Y position or a comma-separated list of positions of aperture centers; same length as `x`'
+          schema:
+            oneOf:
+              - type: number
+              - type: string
+                format: csv
+        - name: ra_hours
+          in: query
+          description: 'RA or a comma-separated list of RAs of aperture centers; can
+            be passed instead of `x` and `y` provided the data file is astrometric-calibrated'
+          schema:
+            oneOf:
+              - type: number
+                minimum: 0
+                maximum: 24
+                exclusiveMaximum: true
+              - type: string
+                format: csv
+        - name: dec_degs
+          in: query
+          description: 'Dec or a comma-separated list of Decs of aperture centers; can
+            be passed instead of `x` and `y` provided the data file is astrometric-calibrated'
+          schema:
+            oneOf:
+              - type: number
+                minimum: -90
+                maximum: 90
+              - type: string
+                format: csv
+        - name: a
+          in: query
+          description: aperture radius or semi-major axis (for elliptical aperture), in pixels
+          schema:
+            type: number
+            minimum: 0
+            exclusiveMinimum: true
+          required: true
+        - name: b
+          in: query
+          description: semi-minor aperture axis in pixels for elliptical aperture; if omitted or equal to `a`, circular aperture is used
+          schema:
+            type: number
+            minimum: 0
+            nullable: true
+            default: null
+        - name: theta
+          in: query
+          description: rotation angle of semi-major axis in degrees counter-clockwise from the X axis; unused for circular aperture
+          schema:
+            type: number
+            nullable: true
+            default: null
+        - name: a_in
+          in: query
+          description: inner radius or semi-major axis of annulus in pixels; defaults to `a` (annulus starts right at the aperture boundary)
+          schema:
+            type: number
+            minimum: 0
+            nullable: true
+            default: null
+        - name: a_out
+          in: query
+          description: outer radius or semi-major axis of annulus in pixels; setting `a_out` enables local background subtraction; must be > a_in (or a, if a_in is unspecified)
+          schema:
+            type: number
+            minimum: 0
+            nullable: true
+            default: null
+        - name: b_out
+          in: query
+          description: outer semi-minor axis of annulus; defaults to a_out*b/a, i.e. assumes the same ellipticity as the aperture
+          schema:
+            type: number
+            minimum: 0
+            nullable: true
+            default: null
+        - name: theta_out
+          in: query
+          description: rotation angle of the outer semi-major annulus axis in degrees counter-clockwise from the X axis; defaults to `theta`, i.e. same rotation as the aperture
+          schema:
+            type: number
+            nullable: true
+            default: null
+        - name: centroid_radius
+          in: query
+          description: if given, then the input XY coordinates are treated as the initial guess, and the actual coordinates are calculated by finding the photocenter around (`x`, `y`) within the given radius in pixels
+          schema:
+            type: number
+            minimum: 0
+            nullable: true
+            default: null
+      responses:
+        200:
+          description: photometry result(s)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Photometry'
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/Photometry'
+        400:
+          description: missing or invalid aperture parameters
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/MissingFieldError'
+                  - $ref: '#/components/responses/ValidationError'
+        404:
+          description: unknown data file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataFileError'
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /api/v1/sessions:
+    summary: Return or create session(s)
+    get:
+      summary: return all user's sessions
+      responses:
+        200:
+          description: list of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Session'
+        default:
+          $ref: '#/components/responses/GenericError'
+    post:
+      summary: create a new session with the given name and optional user data
+      requestBody:
+        description: session parameters
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  description: session name
+                  type: string
+                  nullable: false
+                  required: true
+                data:
+                  description: optional session data
+                  type: string
+                  nullable: true
+                  default: null
+      responses:
+        201:
+          description: new session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        400:
+          description: missing or duplicate session name
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/MissingFieldError'
+                  - $ref: '#/components/responses/DuplicateSessionNameError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/sessions/{id}:
+    summary: Manage the given session
+    parameters:
+      - name: id
+        in: path
+        description: session ID or name
+        schema:
+          oneOf:
+            - type: integer
+            - type: string
+        required: true
+    get:
+      summary: return the given session info by ID or name
+      responses:
+        200:
+          description: requested session info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        404:
+          description: unknown session requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownSessionError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    put:
+      summary: rename session with the given ID or name or change session data
+      requestBody:
+        description: session parameters
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  description: new session name
+                  type: string
+                data:
+                  description: new session data
+                  type: string
+      responses:
+        200:
+          description: updated session info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        404:
+          description: unknown session requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownSessionError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    delete:
+      summary: delete the given session
+      responses:
+        204:
+          description: session deleted
+        404:
+          description: unknown session requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownSessionError'
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /api/v1/data-providers:
+    summary: Return data providers
+    get:
+      summary: return a list of all registered data providers
+      responses:
+        200:
+          description: list of data providers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DataProvider'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/data-providers/{id}:
+    summary: Return data provider info
+    parameters:
+        - name: id
+          in: path
+          description: data provider ID or name
+          schema:
+            oneOf:
+              - type: integer
+              - type: string
+          required: true
+    get:
+      summary: return a single data provider with the given ID or name
+      responses:
+        200:
+          description: data provider info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataProvider'
+        404:
+          description: unknown data provider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataProviderError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/data-providers/{id}/assets:
+    summary: Return data provider asset metadata, rename or delete assets
+    parameters:
+      - name: id
+        in: path
+        description: data provider ID or name
+        schema:
+          oneOf:
+            - type: integer
+            - type: string
+        required: true
+    get:
+      summary: return asset(s) at the given path or with the given parameters
+      parameters:
+        - name: path
+          in: query
+          description: return asset at this path
+          schema:
+            type: string
+        - name: query
+          in: query
+          description: asset query parameters for searchable data providers
+          schema:
+            type: object
+            additionalProperties:
+              type: string
+          style: form
+          allowEmptyValue: true
+      responses:
+        200:
+          description: asset metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DataProviderAsset'
+        403:
+          description: browsing or searching is not allowed for this data provider/path
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/NonBrowseableDataProviderError'
+                  - $ref: '#/components/responses/NonSearchableDataProviderError'
+                  - $ref: '#/components/responses/CannotSearchInNonCollectionError'
+        404:
+          description: unknown data provider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownDataProviderError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    put:
+      summary: rename an existing asset at the given path
+      requestBody:
+        description: asset update parameters
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  description: asset path
+                  type: string
+                  required: true
+                name:
+                  description: new asset name
+                  type: string
+      responses:
+        200:
+          description: updated asset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataProviderAsset'
+        400:
+          description: missing asset path or name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/MissingFieldError'
+        403:
+          description: read-only data provider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/ReadOnlyDataProviderError'
+        404:
+          description: unknown data provider or asset
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/UnknownDataProviderError'
+                  - $ref: '#/components/responses/AssetNotFoundError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    delete:
+      summary: delete the existing asset at the given path
+      requestBody:
+        description: asset deletion parameters
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  description: asset path
+                  type: string
+                  required: true
+                force:
+                  description: recursively delete collection assets
+                  type: boolean
+                  default: false
+      responses:
+        204:
+          description: asset deleted
+        400:
+          description: missing asset path
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/MissingFieldError'
+        403:
+          description: read-only data provider or non-empty collection asset
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/ReadOnlyDataProviderError'
+                  - $ref: '#/components/responses/CannotDeleteNonEmptyCollectionAssetError'
+        404:
+          description: unknown data provider or asset
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/UnknownDataProviderError'
+                  - $ref: '#/components/responses/AssetNotFoundError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/data-providers/{id}/assets/data:
+    summary: Download, create, or update asset data
+    parameters:
+      - name: id
+        in: path
+        description: data provider ID or name
+        schema:
+          oneOf:
+            - type: integer
+            - type: string
+        required: true
+    get:
+      summary: download unmodified non-collection asset data directly to the caller in form data
+      parameters:
+        - name: path
+          in: query
+          description: download asset at this path
+          schema:
+            type: string
+      responses:
+        200:
+          description: raw asset data
+          headers:
+            Content-Length:
+              description: asset data size
+              schema:
+                type: integer
+          content:
+            "*/*":
+              schema:
+                type: string
+                format: binary
+        204:
+          description: empty data
+        400:
+          description: missing asset path or trying to download a collection asset
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/MissingFieldError'
+                  - $ref: '#/components/responses/ValidationError'
+        404:
+          description: unknown data provider or asset
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/UnknownDataProviderError'
+                  - $ref: '#/components/responses/AssetNotFoundError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    post:
+      summary: create a new empty collection asset or a new non-collection asset from data uploaded via multipart/form-data, from data file or data file group, or from another non-collection asset in the same or different data provider
+      requestBody:
+        description: asset creation parameters
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  description: create new asset at this path
+                  type: string
+                  required: true
+                data_file_id:
+                  description: data file ID; used when saving user's data file
+                  type: integer
+                group_name:
+                  description: data file group name; used when saving data file groups
+                  type: string
+                fmt:
+                  description: save data at the given format; used in conjunction with `data_file_id` or `group_name`; if specified, must be either "FITS" or any format understood by Pillow; null means use the format of the original data provider asset from which the data file was loaded or to FITS if the data file was created by image processing (e.g. stacking)
+                  type: string
+                  nullable: true
+                  default: null
+                mode:
+                  description: Pillow image mode ("RGB", "L", etc.); used in conjunction with `group_name`; null means use the original mode if the group was imported from a non-FITS image file, otherwise assume "L" for 1-file groups, "RGB" for 3-file groups, and "GRBA" for 4-file groups
+                  type: string
+                  nullable: true
+                  default: null
+                src_provider_id:
+                  description: source data provider ID or name; used when copying/moving an asset directly from another data provider; null means copy/move from the same data provider
+                  oneOf:
+                    - type: integer
+                    - type: string
+                  nullable: true
+                  default: null
+                src_path:
+                  description: source asset path; used when copying or moving from the same or another data provider
+                  type: string
+                move:
+                  description: delete source asset after copying, i.e. move
+                  type: boolean
+                  default: false
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  description: data to upload
+                  type: string
+                  format: binary
+      parameters:
+        - name: path
+          in: query
+          description: create new asset at this path when uploading via multipart/form-data or (with empty form data) creating a new empty collection asset
+          schema:
+            type: string
+      responses:
+        201:
+          description: new asset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataProviderAsset'
+        400:
+          description: missing asset path or inconsistent parameters
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/MissingFieldError'
+                  - $ref: '#/components/responses/ValidationError'
+        403:
+          description: read-only data provider, storage quota exceeded, asset already exists, or upload not allowed
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/ReadOnlyDataProviderError'
+                  - $ref: '#/components/responses/QuotaExceededError'
+                  - $ref: '#/components/responses/AssetAlreadyExistsError'
+                  - $ref: '#/components/responses/UploadNotAllowedError'
+        404:
+          description: unknown data provider, data file, or group
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/UnknownDataProviderError'
+                  - $ref: '#/components/responses/UnknownDataFileError'
+                  - $ref: '#/components/responses/UnknownDataFileGroupError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    put:
+      summary: update an existing asset with data uploaded via multipart/form-data, data file or data file group, or another non-collection asset in the same or different data provider
+      requestBody:
+        description: asset update parameters
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path:
+                  description: existing asset path; optional if saving data file or group to its original path
+                  type: string
+                data_file_id:
+                  description: data file ID; used when saving user's data file
+                  type: integer
+                group_name:
+                  description: data file group name; used when saving data file groups
+                  type: string
+                fmt:
+                  description: save data at the given format; used in conjunction with `data_file_id` or `group_name`; if specified, must be either "FITS" or any format understood by Pillow; null means use the format of the original data provider asset from which the data file was loaded or to FITS if the data file was created by image processing (e.g. stacking)
+                  type: string
+                  nullable: true
+                  default: null
+                mode:
+                  description: Pillow image mode ("RGB", "L", etc.); used in conjunction with `group_name`; null means use the original mode if the group was imported from a non-FITS image file, otherwise assume "L" for 1-file groups, "RGB" for 3-file groups, and "GRBA" for 4-file groups
+                  type: string
+                  nullable: true
+                  default: null
+                src_provider_id:
+                  description: source data provider ID or name; used when copying/moving an asset directly from another data provider; null means copy/move from the same data provider
+                  oneOf:
+                    - type: integer
+                    - type: string
+                  nullable: true
+                  default: null
+                src_path:
+                  description: source asset path; used when copying or moving from the same or another data provider
+                  type: string
+                move:
+                  description: delete source asset after copying, i.e. move; used in conjunction with `src_path`
+                  type: boolean
+                  default: false
+                force:
+                  description: overwrite the entire collection asset tree
+                  type: boolean
+                  default: false
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  description: data to upload
+                  type: string
+                  format: binary
+      parameters:
+        - name: path
+          in: query
+          description: update existing asset at this path when uploading via multipart/form-data or (with empty form data) creating an empty collection asset
+          schema:
+            type: string
+      responses:
+        200:
+          description: updated asset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataProviderAsset'
+        400:
+          description: inconsistent parameters
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/MissingFieldError'
+                  - $ref: '#/components/responses/ValidationError'
+        403:
+          description: read-only data provider or storage quota exceeded
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/ReadOnlyDataProviderError'
+                  - $ref: '#/components/responses/QuotaExceededError'
+        404:
+          description: unknown data provider, asset, data file, or group
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/UnknownDataProviderError'
+                  - $ref: '#/components/responses/AssetNotFoundError'
+                  - $ref: '#/components/responses/UnknownDataFileError'
+                  - $ref: '#/components/responses/UnknownDataFileGroupError'
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /api/v1/field-cals:
+    summary: Return or create photometric calibration prescription
+    get:
+      summary: return a list of all user's field cals
+      responses:
+        200:
+          description: list of field cals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FieldCal'
+        default:
+          $ref: '#/components/responses/GenericError'
+    post:
+      summary: create field cal with the given name and parameters
+      requestBody:
+        description: field cal parameters
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldCal'
+      responses:
+        201:
+          description: new field cal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldCal'
+        400:
+          description: missing or duplicate field cal name
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/MissingFieldError'
+                  - $ref: '#/components/responses/DuplicateFieldCalError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/field-cals/{id}:
+    summary: Return, update, or delete named photometric calibration prescription
+    parameters:
+      - name: id
+        in: path
+        description: unique field cal ID or name
+        schema:
+          oneOf:
+            - type: integer
+            - type: string
+        required: true
+    get:
+      summary: return the given field cal info
+      responses:
+        200:
+          description: field cal info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldCal'
+        404:
+          description: unknown field cal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownFieldCalError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    put:
+      summary: update field cal parameters
+      requestBody:
+        description: field cal parameters
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldCal'
+      responses:
+        200:
+          description: updated field cal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldCal'
+        400:
+          description: duplicate field cal name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/DuplicateFieldCalError'
+        404:
+          description: unknown field cal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownFieldCalError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    delete:
+      summary: delete the given field cal
+      responses:
+        204:
+          description: field cal deleted
+        404:
+          description: unknown field cal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownFieldCalError'
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /api/v1/imaging-surveys:
+    summary: Return available imaging surveys
+    get:
+      summary: return a list of all available survey names
+      responses:
+        200:
+          description: list of survey names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/imaging-surveys/{name}:
+    summary: Return available imaging surveys
+    parameters:
+      - name: name
+        in: path
+        description: imaging survey name
+        schema:
+          type: string
+        required: true
+    get:
+      summary: return image centered at the given equatorial coordinates or SIMBAD/NED object
+      parameters:
+        - name: ra_hours
+          in: query
+          description: RA of image center in hours; used in conjunction with `dec_degs`, mutually exclusive with `object`
+          schema:
+            type: number
+            minimum: 0
+            maximum: 24
+            exclusiveMaximum: true
+        - name: dec_degs
+          in: query
+          description: Dec of image center in degrees; used in conjunction with `ra_hours`, mutually exclusive with `object`
+          schema:
+            type: number
+            minimum: -90
+            maximum: 90
+        - name: object
+          in: query
+          description: object name, resolved by SIMBAD and NED; mutually exclusive with `ra_hours` and `dec_degs`
+          schema:
+            type: string
+        - name: size
+          in: query
+          description: either rectangular image size in arcmins or comma-separated width and height in arcminutes
+          schema:
+            oneOf:
+              - type: number
+                minimum: 0
+                exclusiveMinimum: true
+              - type: array
+                items:
+                  type: number
+                  minimum: 0
+                  exclusiveMinimum: true
+        - name: fmt
+          in: query
+          description: 'format of the data returned:
+            "raw": array of raw 32-bit floating-point pixel values, same as /api/v1/data-files/[id]/pixels;
+            "fits": original FITS file as returned by SkyView;
+            otherwise, `fmt` must be a format name (case-insensitive) of a particular image format supported by Pillow, e.g. "jpeg" or "png"'
+          schema:
+            type: string
+            default: raw
+      responses:
+        200:
+          description: 'image data: depending on `fmt`, either image file or raw pixel data'
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        400:
+          description: missing or invalid image size or field spec
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/MissingFieldError'
+                  - $ref: '#/components/responses/ValidationError'
+        404:
+          description: unknown survey or no data at the given position
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/UnknownSurveyError'
+                  - $ref: '#/components/responses/NoSurveyDataError'
+        406:
+          description: could not send data in any of the formats supported by the client
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/NotAcceptedError'
+        502:
+          description: error occurred during SkyView server query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/SkyViewQueryError'
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /api/v1/jobs:
+    summary: Return user's jobs or submit a job
+    get:
+      summary: return a list of all user's jobs submitted from the given session
+      parameters:
+        - name: session_id
+          in: query
+          description: session ID (anonymous session by default)
+          schema:
+            type: integer
+            nullable: true
+            default: null
+      responses:
+        200:
+          description: list of jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  oneOf:
+                    - $ref: '#/components/schemas/AlignmentJob'
+                    - $ref: '#/components/schemas/BatchDownloadJob'
+                    - $ref: '#/components/schemas/BatchAssetDownloadJob'
+                    - $ref: '#/components/schemas/BatchImportJob'
+                    - $ref: '#/components/schemas/CatalogQueryJob'
+                    - $ref: '#/components/schemas/CroppingJob'
+                    - $ref: '#/components/schemas/FieldCalJob'
+                    - $ref: '#/components/schemas/PhotometryJob'
+                    - $ref: '#/components/schemas/PixelOpsJob'
+                    - $ref: '#/components/schemas/SonificationJob'
+                    - $ref: '#/components/schemas/SourceExtractionJob'
+                    - $ref: '#/components/schemas/SourceMergeJob'
+                    - $ref: '#/components/schemas/StackingJob'
+                    - $ref: '#/components/schemas/WcsCalibrationJob'
+        500:
+          description: unexpected job server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/JobServerError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    post:
+      summary: submit a new job of the given type with the given job-specific parameters; if session_id is provided, the job is associated with the given client session
+      requestBody:
+        description: job parameters; Job.type is required, the rest are job-dependent
+        content:
+          application/json:
+            schema:
+              anyOf:
+                - $ref: '#/components/schemas/AlignmentJob'
+                - $ref: '#/components/schemas/BatchDownloadJob'
+                - $ref: '#/components/schemas/BatchAssetDownloadJob'
+                - $ref: '#/components/schemas/BatchImportJob'
+                - $ref: '#/components/schemas/CatalogQueryJob'
+                - $ref: '#/components/schemas/CroppingJob'
+                - $ref: '#/components/schemas/FieldCalJob'
+                - $ref: '#/components/schemas/PhotometryJob'
+                - $ref: '#/components/schemas/PixelOpsJob'
+                - $ref: '#/components/schemas/SonificationJob'
+                - $ref: '#/components/schemas/SourceExtractionJob'
+                - $ref: '#/components/schemas/SourceMergeJob'
+                - $ref: '#/components/schemas/StackingJob'
+                - $ref: '#/components/schemas/WcsCalibrationJob'
+      responses:
+        201:
+          description: new job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        400:
+          description: missing or invalid job type
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/MissingFieldError'
+                  - $ref: '#/components/responses/UnknownJobTypeError'
+        404:
+          description: unknown session
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/UnknownSessionError'
+        500:
+          description: unexpected job server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/JobServerError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/jobs/{id}:
+    summary: Return or delete a user's job
+    parameters:
+      - name: id
+        in: path
+        description: job ID to manage
+        schema:
+          type: integer
+        required: true
+    get:
+      summary: return job with the given ID
+      responses:
+        200:
+          description: job object
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AlignmentJob'
+                  - $ref: '#/components/schemas/BatchDownloadJob'
+                  - $ref: '#/components/schemas/BatchAssetDownloadJob'
+                  - $ref: '#/components/schemas/BatchImportJob'
+                  - $ref: '#/components/schemas/CatalogQueryJob'
+                  - $ref: '#/components/schemas/CroppingJob'
+                  - $ref: '#/components/schemas/FieldCalJob'
+                  - $ref: '#/components/schemas/PhotometryJob'
+                  - $ref: '#/components/schemas/PixelOpsJob'
+                  - $ref: '#/components/schemas/SonificationJob'
+                  - $ref: '#/components/schemas/SourceExtractionJob'
+                  - $ref: '#/components/schemas/SourceMergeJob'
+                  - $ref: '#/components/schemas/StackingJob'
+                  - $ref: '#/components/schemas/WcsCalibrationJob'
+        404:
+          description: unknown job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownJobError'
+        500:
+          description: unexpected job server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/JobServerError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    delete:
+      summary: delete job with the given ID
+      responses:
+        204:
+          description: job deleted
+        403:
+          description: job is not in the right state for deletion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/CannotDeleteJobError'
+        404:
+          description: unknown job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownJobError'
+        500:
+          description: unexpected job server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/JobServerError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/jobs/{id}/state:
+    summary: Return or modify job state
+    parameters:
+      - name: id
+        in: path
+        description: job ID to manage
+        schema:
+          type: integer
+        required: true
+    get:
+      summary: return job state
+      responses:
+        200:
+          description: job state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobState'
+        404:
+          description: unknown job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownJobError'
+        500:
+          description: unexpected job server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/JobServerError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    put:
+      summary: cancel job
+      requestBody:
+        description: new job state parameters
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  description: set to "canceled" to cancel job
+                  type: string
+                  enum: [canceled]
+                  required: true
+      responses:
+        200:
+          description: new job state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobState'
+        400:
+          description: missing new job status
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/MissingFieldError'
+        403:
+          description: invalid job status or job not in progress
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/CannotSetJobStatusError'
+                  - $ref: '#/components/responses/CannotCancelJobError'
+        404:
+          description: unknown job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownJobError'
+        500:
+          description: unexpected job server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/JobServerError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/jobs/{id}/result:
+    summary: Return job result
+    parameters:
+      - name: id
+        in: path
+        description: job ID
+        schema:
+          type: integer
+        required: true
+    get:
+      summary: return job-specific result
+      responses:
+        200:
+          description: job result
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/JobResult'
+                  - $ref: '#/components/schemas/AlignmentJobResult'
+                  - $ref: '#/components/schemas/BatchImportJobResult'
+                  - $ref: '#/components/schemas/CatalogQueryJobResult'
+                  - $ref: '#/components/schemas/CroppingJobResult'
+                  - $ref: '#/components/schemas/FieldCalJobResult'
+                  - $ref: '#/components/schemas/PhotometryJobResult'
+                  - $ref: '#/components/schemas/PixelOpsJobResult'
+                  - $ref: '#/components/schemas/SonificationJobResult'
+                  - $ref: '#/components/schemas/SourceExtractionJobResult'
+                  - $ref: '#/components/schemas/SourceMergeJobResult'
+                  - $ref: '#/components/schemas/StackingJobResult'
+                  - $ref: '#/components/schemas/WcsCalibrationJobResult'
+        404:
+          description: unknown job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownJobError'
+        500:
+          description: unexpected job server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/JobServerError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/jobs/{id}/files/{file_id}:
+    summary: Return extra job result file
+    parameters:
+      - name: id
+        in: path
+        description: job ID
+        schema:
+          type: integer
+        required: true
+      - name: file_id
+        in: path
+        description: job file ID
+        schema:
+          type: string
+        required: true
+    get:
+      summary: return job file data
+      responses:
+        200:
+          description: binary job file data
+          content:
+            "*/*":
+              schema:
+                type: string
+                format: binary
+        400:
+          description: missing job file ID
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/MissingFieldError'
+        404:
+          description: unknown job file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownJobFileError'
+        500:
+          description: unexpected job server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/JobServerError'
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /api/v1/user:
+    summary: Retrieve or update user account info
+    get:
+      summary: return user account info
+      responses:
+        200:
+          description: user account info object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/GenericError'
+    put:
+      summary: update user account info
+      requestBody:
+        description: updated user account parameters; non-admin users cannot change `username`, `active`, and `roles`
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        200:
+          description: updated user account info object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        403:
+          description: non-admin trying to change certain parameters or attempt to deactivate the only admin user
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/AdminRequiredError'
+                  - $ref: '#/components/responses/CannotDeactivateTheOnlyAdminError'
+        default:
+          $ref: '#/components/responses/GenericError'
+
+  /api/v1/users:
+    summary: List or create user accounts
+    get:
+      summary: return a list of all registered users or users matching certain criteria
+      parameters:
+        - name: username
+          in: query
+          description: only return user(s) matching this username
+          schema:
+            type: string
+            nullable: true
+            default: null
+        - name: active
+          in: query
+          description: only return active/inactive user account(s)
+          schema:
+            type: boolean
+            nullable: true
+            default: null
+        - name: roles
+          in: query
+          description: only return user(s) having the given role(s); multiple roles should be separated by commas
+          schema:
+            type: string
+            format: csv
+            nullable: true
+            default: null
+      responses:
+        200:
+          description: list of user account info objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/GenericError'
+    post:
+      summary: create a new user account
+      requestBody:
+        description: user account parameters; username and password are required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        201:
+          description: new user account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        400:
+          description: missing username/password, active=false, or invalid role
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/MissingFieldError'
+                  - $ref: '#/components/responses/ValidationError'
+        default:
+          $ref: '#/components/responses/GenericError'
+  /api/v1/users/{id}:
+    summary: Retrieve, update, or delete the given user account
+    parameters:
+      - name: id
+        in: path
+        description: user ID
+        schema:
+          type: integer
+        required: true
+    get:
+      summary: return the given user info
+      responses:
+        200:
+          description: user account info object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        403:
+          description: administrator rights are required to access other user's account info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/AdminOrSameUserRequiredError'
+        404:
+          description: unknown user ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownUserError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    put:
+      summary: update user account info
+      requestBody:
+        description: updated user account parameters; non-admin users cannot change `username`, `active`, and `roles`
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        200:
+          description: updated user account info object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        403:
+          description: non-admin trying to access other user's account info and change certain parameters or attempt to deactivate the only admin user
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/AdminOrSameUserRequiredError'
+                  - $ref: '#/components/responses/AdminRequiredError'
+                  - $ref: '#/components/responses/CannotDeactivateTheOnlyAdminError'
+        404:
+          description: unknown user ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownUserError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    delete:
+      summary: delete the given user account
+      responses:
+        204:
+          description: user account deleted
+        403:
+          description: non-admin trying to delete another user's account or attempt to delete own account or deactivate the only admin user
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/responses/AdminOrSameUserRequiredError'
+                  - $ref: '#/components/responses/CannotDeleteCurrentUserError'
+                  - $ref: '#/components/responses/CannotDeactivateTheOnlyAdminError'
+        404:
+          description: unknown user ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownUserError'
+        default:
+          $ref: '#/components/responses/GenericError'
