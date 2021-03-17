@@ -828,6 +828,21 @@ components:
           type: integer
           minimum: 0
           default: 3
+        min_fwhm:
+          description: discard objects with smaller FWHM in pixels
+          type: number
+          minimum: 0
+          default: 0.8
+        max_fwhm:
+          description: discard objects with larger FWHM in pixels; 0 to disable
+          type: number
+          minimum: 0
+          default: 10
+        max_ellipticity:
+          description: discard objects with larger major to minor axis ratio; 0 to disable
+          type: number
+          minimum: 0
+          default: 2
         deblend:
           description: deblend overlapping sources
           type: boolean

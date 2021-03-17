@@ -34,6 +34,9 @@ class SourceExtractionSettings(AfterglowSchema):
     ratio: float = Float(default=1)
     theta: float = Float(default=0)
     min_pixels: int = Integer(default=3)
+    min_fwhm: float = Float(default=0.8)
+    max_fwhm: float = Float(default=10)
+    max_ellipticity: float = Float(default=2)
     deblend: bool = Boolean(default=False)
     deblend_levels: int = Integer(default=32)
     deblend_contrast: float = Float(default=0.005)
@@ -98,6 +101,9 @@ def run_source_extraction_job(job: Job,
         ratio=settings.ratio,
         theta=settings.theta,
         min_pixels=settings.min_pixels,
+        min_fwhm=settings.min_fwhm,
+        max_fwhm=settings.max_fwhm,
+        max_ellipticity=settings.max_ellipticity,
         deblend=settings.deblend,
         deblend_levels=settings.deblend_levels,
         deblend_contrast=settings.deblend_contrast,
