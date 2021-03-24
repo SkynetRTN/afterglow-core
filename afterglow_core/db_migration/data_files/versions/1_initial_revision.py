@@ -1,5 +1,5 @@
 """Initial revision"""
-from alembic import context, op
+from alembic import op
 import sqlalchemy as sa
 
 
@@ -16,9 +16,7 @@ def upgrade():
     # and we must check that the table does not exist before creating it. Since
     # create_table() does not support CREATE TABLE IF NOT EXISTS, we check the
     # existence via SQLA.
-    # noinspection PyProtectedMember
-    engine = op._proxy.migration_context.connection.engine
-    if not engine.dialect.has_table(engine, 'data_files'):
+    if 'data_files' not in sa.inspect(op.get_bind()).get_table_names():
         op.create_table(
             'data_files',
             sa.Column('id', sa.Integer(), primary_key=True, nullable=False),

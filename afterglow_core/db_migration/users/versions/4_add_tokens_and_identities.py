@@ -1,7 +1,6 @@
 """Add persistent tokens, identities, and birth_date column"""
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.engine.reflection import Inspector
 import json
 
 # revision identifiers, used by Alembic.
@@ -13,7 +12,7 @@ depends_on = None
 
 def upgrade():
     conn = op.get_bind()
-    if 'identities' in Inspector.from_engine(conn).get_table_names():
+    if 'identities' in sa.inspect(conn).get_table_names():
         op.drop_table('identities')
     identities_table = op.create_table(
         'identities',

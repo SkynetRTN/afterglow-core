@@ -11,10 +11,9 @@ depends_on = None
 
 
 def upgrade():
-    # noinspection PyProtectedMember
-    engine = op._proxy.migration_context.connection.engine
+    tables = sa.inspect(op.get_bind()).get_table_names()
 
-    if not engine.dialect.has_table(engine, 'roles'):
+    if 'roles' not in tables:
         op.create_table(
             'roles',
             sa.Column('id', sa.Integer, primary_key=True),
@@ -22,7 +21,7 @@ def upgrade():
             sa.Column('description', sa.String),
         )
 
-    if not engine.dialect.has_table(engine, 'users'):
+    if 'users' not in tables:
         op.create_table(
             'users',
             sa.Column('id', sa.Integer, primary_key=True),
@@ -38,14 +37,14 @@ def upgrade():
             sa.Column('auth_methods', sa.String, server_default=''),
         )
 
-    if not engine.dialect.has_table(engine, 'user_roles'):
+    if 'user_roles' not in tables:
         op.create_table(
             'user_roles',
             sa.Column('user_id', sa.Integer, sa.ForeignKey('users.id')),
             sa.Column('role_id', sa.Integer, sa.ForeignKey('roles.id')),
         )
 
-    if not engine.dialect.has_table(engine, 'user_oauth_clients'):
+    if 'user_oauth_clients' not in tables:
         op.create_table(
             'user_oauth_clients',
             sa.Column('id', sa.Integer, primary_key=True),
