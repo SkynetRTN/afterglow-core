@@ -25,6 +25,7 @@ import time
 from typing import Callable, Optional, Sequence, Union
 
 from flask import Response, request, make_response, redirect, url_for
+from flask_wtf.csrf import generate_csrf, CSRFError
 
 from . import app
 from .errors.auth import NotAuthenticatedError
@@ -257,8 +258,16 @@ def _init_auth() -> None:
         token.issued_at = time.time()
         sess.commit()
 
+        csrf_token = generate_csrf()
+        response.set_cookie('afterglow_core.csrf', csrf_token)
+
         response.set_cookie(
             'afterglow_core_access_token', value=token.access_token,
+            max_age=expires_in,
+            secure=False, httponly=False)
+
+        response.set_cookie(
+            'afterglow_core_user_id', value=str(request.user.id),
             max_age=expires_in,
             secure=False, httponly=False)
 
@@ -278,6 +287,8 @@ def _init_auth() -> None:
         :return: Flask response with access token removed from cookies
         """
         response.set_cookie('afterglow_core_access_token', '', expires=0)
+        response.set_cookie('afterglow_core_user_id', '', expires=0)
+        response.set_cookie('afterglow_core.csrf', '', expires=0)
 
         return response
 
@@ -296,6 +307,10 @@ def _init_auth() -> None:
         # If access token in HTTP Authorization header, verify and authorize.
         # otherwise, attempt to reconstruct token from cookies
         tokens = []
+        token_param = request.args.get('token', None)
+        if token_param:
+            tokens.append(('personal', token_param))
+
         token_hdr = request.headers.get('Authorization')
         if token_hdr:
             parts = token_hdr.split()

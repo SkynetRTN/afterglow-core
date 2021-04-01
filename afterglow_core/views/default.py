@@ -225,7 +225,12 @@ def oauth2_authorized(plugin_id: str) -> Response:
         # TODO: render error page
         raise MissingFieldError('code')
 
-    token = oauth_plugin.get_token(request.args.get('code'))
+    base_url = request.host_url
+    # detect when server is behind a proxy and use the public facing URL when constructing the redirect_uri
+    if request.environ['HTTP_X_FORWARDED_PROTO'] and request.environ['HTTP_X_FORWARDED_FOR'] and request.environ['HTTP_X_FORWARDED_PORT']:
+        base_url = request.environ['HTTP_X_FORWARDED_PROTO'] + "://" + request.environ['HTTP_X_FORWARDED_FOR'] + ':' + request.environ['HTTP_X_FORWARDED_PORT']
+
+    token = oauth_plugin.get_token(request.args.get('code'), base_url)
     user_profile = oauth_plugin.get_user(token)
 
     if not user_profile:
@@ -324,9 +329,8 @@ def oauth2_authorized(plugin_id: str) -> Response:
                 db.session.rollback()
                 raise
 
-    next_url = state.get('next')
-    if not next_url:
-        next_url = '/'
+    next_url = base_url + state.get('next', '').strip('/')
+
     request.user = user
     return set_access_cookies(redirect(next_url))
 
