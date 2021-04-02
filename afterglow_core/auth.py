@@ -145,7 +145,8 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
 
         except NotAuthenticatedError:
             if kwargs.get('allow_redirect'):
-                return redirect(url_for('login', next=request.url))
+                #TODO: Make the login URL configurable
+                return redirect('/login?next=' + request.url)
             raise
 
         try:
