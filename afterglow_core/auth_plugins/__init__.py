@@ -226,7 +226,7 @@ class OAuthServerPluginBase(AuthnPluginBase):
             **self.request_token_params))
         return '{}?{}'.format(self.authorize_url, qs)
 
-    def get_token(self, code: str, base_url: str) -> OAuthToken:
+    def get_token(self, code: str, redirect_uri: str) -> OAuthToken:
         """
         Generic token getter; implemented by OAuth plugin base that
         retrieves the token using an authorization code
@@ -236,7 +236,6 @@ class OAuthServerPluginBase(AuthnPluginBase):
         :return: OAuthToken containing access, refresh, and expiration
         """
 
-        redirect_uri = base_url + url_for('oauth2_authorized', plugin_id=self.id)
         args = {
             'grant_type': 'authorization_code',
             'code': code,
