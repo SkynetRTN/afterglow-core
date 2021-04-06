@@ -2,14 +2,10 @@
 Afterglow Core: settings routes
 """
 
-import secrets
-
-from flask import Response, request
-from marshmallow.fields import Integer, String
+from flask import Response
 
 from ... import app, json_response
-from ...resources.users import DbUser, DbRole, DbIdentity, db
-
+from ...resources.users import DbUser
 from . import url_prefix
 
 
@@ -21,13 +17,9 @@ def server_status() -> Response:
     :return:
         GET /ajax/server_status: server status
     """
+    # TODO: import version number from module
 
-    #TODO: import version number from module
-
-    initialized = DbUser.query.count() != 0
-    server_status = {
-        "initialized": initialized,
+    return json_response({
+        "initialized": DbUser.query.count() != 0,
         "version": "1.0.1"
-    }
-
-    return json_response(server_status)
+    })

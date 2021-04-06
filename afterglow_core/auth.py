@@ -25,7 +25,7 @@ import time
 from typing import Callable, Optional, Sequence, Union
 
 from flask import Response, request, make_response, redirect, url_for
-from flask_wtf.csrf import generate_csrf, CSRFError
+from flask_wtf.csrf import generate_csrf
 
 from . import app
 from .errors.auth import NotAuthenticatedError

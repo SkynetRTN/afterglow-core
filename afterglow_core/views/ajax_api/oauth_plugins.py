@@ -2,19 +2,10 @@
 Afterglow Core: settings routes
 """
 
-import secrets
-
-from flask import Response, request
-from marshmallow.fields import Integer, String
-
-from ...auth import oauth_plugins
+from flask import Response
 
 from ... import app, json_response
-from ...auth import auth_required
-from ...resources.users import DbPersistentToken, db
-from ...schemas import Resource
-from ...errors import ValidationError
-from ...errors.auth import UnknownTokenError
+from ...auth import oauth_plugins
 from . import url_prefix
 
 
@@ -28,6 +19,8 @@ def get_oauth_plugins() -> Response:
     """
 
     plugins = [dict(id=p.id, icon=p.icon, description=p.description,
-                    authorizeUrl=p.authorize_url, client_id=p.client_id, request_token_params=p.request_token_params) for p in oauth_plugins.values()]
+                    authorizeUrl=p.authorize_url, client_id=p.client_id,
+                    request_token_params=p.request_token_params)
+               for p in oauth_plugins.values()]
 
     return json_response(plugins)

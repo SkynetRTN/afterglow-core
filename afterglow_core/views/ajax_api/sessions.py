@@ -1,23 +1,19 @@
-import hashlib
-import secrets
-import time
-from flask import make_response, abort, request, current_app, redirect, Response, session
-from flask_security.utils import hash_password, verify_password
+
+from flask import request, session
+from flask_security.utils import verify_password
 
 from ... import app, json_response
 from ...auth import auth_required, set_access_cookies, clear_access_cookies
-from ...resources.users import DbPersistentToken, DbUser, db
-from ...schemas import Resource
+from ...resources.users import DbUser
 from ...errors import ValidationError
 from ...errors.auth import HttpAuthFailedError
 from . import url_prefix
 
+
 # @csrf.exempt
 @app.route(url_prefix + 'sessions', methods=['POST'])
 def post():
-    #login using local identity
-    redirect_uri = request.json.get('redirect', '/')
-
+    # Login using local identity
     username = request.args.get('username')
     if not username:
         raise ValidationError('username', 'Username cannot be empty')
@@ -33,11 +29,12 @@ def post():
     if not verify_password(password, user.password):
         raise HttpAuthFailedError()
 
-    # set token cookies
+    # Set token cookies
     request.user = user
 
     return set_access_cookies(json_response())
-    
+
+
 @app.route(url_prefix + 'sessions', methods=['DELETE'])
 @auth_required
 def delete():

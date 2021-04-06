@@ -226,9 +226,15 @@ def oauth2_authorized(plugin_id: str) -> Response:
         raise MissingFieldError('code')
 
     base_url = request.host_url
-    # detect when server is behind a proxy and use the public facing URL when constructing the redirect_uri
-    if request.environ['HTTP_X_FORWARDED_PROTO'] and request.environ['HTTP_X_FORWARDED_FOR'] and request.environ['HTTP_X_FORWARDED_PORT']:
-        base_url = request.environ['HTTP_X_FORWARDED_PROTO'] + "://" + request.environ['HTTP_X_FORWARDED_FOR'] + ':' + request.environ['HTTP_X_FORWARDED_PORT']
+    # Detect when server is behind a proxy and use the public facing URL when
+    # constructing the redirect_uri
+    if request.environ['HTTP_X_FORWARDED_PROTO'] and \
+            request.environ['HTTP_X_FORWARDED_FOR'] and \
+            request.environ['HTTP_X_FORWARDED_PORT']:
+        base_url = '{}://{}:{}'.format(
+            request.environ['HTTP_X_FORWARDED_PROTO'],
+            request.environ['HTTP_X_FORWARDED_FOR'],
+            request.environ['HTTP_X_FORWARDED_PORT'])
 
     token = oauth_plugin.get_token(request.args.get('code'), base_url)
     user_profile = oauth_plugin.get_user(token)
