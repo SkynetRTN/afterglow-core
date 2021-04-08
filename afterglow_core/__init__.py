@@ -10,6 +10,7 @@ from typing import Any, Dict as TDict, Optional
 from flask_cors import CORS
 from marshmallow import missing
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
+from werkzeug.middleware.proxy_fix import ProxyFix
 from flask import Flask, Response, request
 
 from .schemas import AfterglowSchema
@@ -37,6 +38,7 @@ class AfterglowSchemaEncoder(json.JSONEncoder):
     """
     JSON encoder that can serialize AfterglowSchema class instances
     """
+
     def default(self, obj):
         if isinstance(obj, type(missing)):
             return None
@@ -75,6 +77,10 @@ app = Flask(__name__)
 cors = CORS(app, resources={'/api/*': {'origins': '*'}})
 app.config.from_object('afterglow_core.default_cfg')
 app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=True)
+
+proxy_count = app.config.get('APP_PROXY')
+if proxy_count:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxy_count, x_proto=proxy_count, x_host=proxy_count, x_port=proxy_count, x_prefix=proxy_count)
 
 if app.config.get('APP_PREFIX'):
     app.wsgi_app = PrefixMiddleware(
