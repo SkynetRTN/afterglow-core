@@ -2,7 +2,7 @@ import Vue from "vue";
 import Router from "vue-router";
 import Home from "./views/Home.vue";
 import AccessTokens from "./views/AccessTokens.vue";
-import OauthClientAuthorizations from "./views/OauthClientAuthorizations.vue";
+import ThirdPartyApps from "./views/ThirdPartyApps.vue";
 
 Vue.use(Router);
 
@@ -28,8 +28,8 @@ const routes = [
       title: "Third-Party Apps",
     },
     path: "/settings/apps",
-    name: "apps",
-    component: OauthClientAuthorizations,
+    name: "third-party-apps",
+    component: ThirdPartyApps,
   },
   {
     path: "/full-page",
@@ -55,7 +55,7 @@ const routes = [
         name: "oauth2-consent",
         component: () =>
           import(
-            /* webpackChunkName: "full-page" */ "./views/full-page/Oauth2Consent.vue"
+            /* webpackChunkName: "full-page" */ "./views/full-page/AppConsent.vue"
           ),
       },
       {

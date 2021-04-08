@@ -40,7 +40,7 @@ export interface OauthPlugin {
   authorizeUrl: string;
 }
 
-export interface OauthClientAuthorization {
+export interface AppAuthorization {
   id: number;
   userId: number;
   clientId: string;

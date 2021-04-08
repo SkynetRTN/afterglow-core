@@ -35,7 +35,7 @@ import { OauthClient } from "../api/types";
   name: "app-consent-form",
   components: {},
 })
-export default class AppConsentForm extends Vue {
+export default class AppAuthorizationForm extends Vue {
   @Prop({ default: null })
   client: OauthClient;
 

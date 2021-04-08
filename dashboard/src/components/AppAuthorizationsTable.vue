@@ -31,15 +31,15 @@
 
 <script lang="ts">
 import { Vue, Component, Prop, Watch } from "vue-property-decorator";
-import { OauthClientAuthorization } from "../api/types";
+import { AppAuthorization } from "../api/types";
 
 @Component({
-  name: "oauth-client-authorizations-table",
+  name: "app-authorizations-table",
   components: {},
 })
-export default class OauthClientAuthorizationsTable extends Vue {
+export default class AppAuthorizationsTable extends Vue {
   @Prop({ default: [] })
-  authorizations: OauthClientAuthorization[];
+  authorizations: AppAuthorization[];
 
   @Prop({ default: false })
   loading: boolean;

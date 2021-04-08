@@ -113,6 +113,11 @@ export default class extends Vue {
           icon: "key",
           label: "Access Tokens",
         },
+        {
+          to: "/settings/apps",
+          icon: "apps",
+          label: "Third-Party Apps",
+        },
       ],
       // "Admin",
       // [

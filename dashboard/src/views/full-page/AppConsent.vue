@@ -48,17 +48,17 @@
 <script lang="ts">
 import { Vue, Component } from "vue-property-decorator";
 import CardComponent from "../../components/CardComponent.vue";
-import AppConsentForm from "../../components/AppConsentForm.vue";
+import AppAuthorizationForm from "../../components/AppAuthorizationForm.vue";
 import { getOauthClient } from "../../api/oauth-clients";
-import { createOauthClientAuthorization } from "../../api/oauth-client-authorizations";
+import { createAppAuthorization } from "../../api/app-authorizations";
 import { OauthClient } from "../../api/types";
 import { isValidUrl } from "../../utils/validate";
 
 @Component({
-  name: "Oauth2Consent",
-  components: { CardComponent, AppConsentForm },
+  name: "AppConsent",
+  components: { CardComponent, AppAuthorizationForm },
 })
-export default class Login extends Vue {
+export default class AppConsent extends Vue {
   loading = true;
   error = "";
   client: OauthClient = null;
@@ -93,7 +93,7 @@ export default class Login extends Vue {
 
   onGranted(id: string) {
     this.loading = true;
-    createOauthClientAuthorization(this.client.id)
+    createAppAuthorization(this.client.id)
       .then(({ data: authorization }) => {
         this.loading = false;
         if (this.next && isValidUrl(this.next)) {

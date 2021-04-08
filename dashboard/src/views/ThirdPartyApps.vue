@@ -10,11 +10,11 @@
             header-icon="reload"
             v-on:header-icon-click="refresh()"
           >
-            <oauth-client-authorizations-table
+            <app-authorizations-table
               :authorizations="authorizations"
               :loading="loading"
               v-on:delete-authorization="onDeleteAuthorization($event)"
-            ></oauth-client-authorizations-table>
+            ></app-authorizations-table>
           </card-component>
         </div>
 
@@ -29,28 +29,28 @@ import { Vue, Component } from "vue-property-decorator";
 
 import TitleBar from "../components/TitleBar.vue";
 import CardComponent from "../components/CardComponent.vue";
-import OauthClientAuthorizationsTable from "../components/OauthClientAuthorizationsTable.vue";
+import AppAuthorizationsTable from "../components/AppAuthorizationsTable.vue";
 import {
-  deleteOauthClientAuthorization,
-  getOauthClientAuthorizations,
-} from "../api/oauth-client-authorizations";
-import { OauthClientAuthorization } from "../api/types";
+  deleteAppAuthorization,
+  getAppAuthorizations,
+} from "../api/app-authorizations";
+import { AppAuthorization } from "../api/types";
 
 @Component({
-  name: "oauth-client-authorizations",
+  name: "app-authorizations",
 
   components: {
     CardComponent,
-    OauthClientAuthorizationsTable,
+    AppAuthorizationsTable,
     TitleBar,
   },
 })
-export default class OauthClientAuthorizations extends Vue {
-  authorizations: OauthClientAuthorization[] = [];
+export default class ThirdPartyApps extends Vue {
+  authorizations: AppAuthorization[] = [];
   loading = false;
 
   get titleStack() {
-    return ["Third-Party Application Access"];
+    return ["Third-Party Apps"];
   }
 
   mounted() {
@@ -63,7 +63,7 @@ export default class OauthClientAuthorizations extends Vue {
 
   loadAuthorizations() {
     this.loading = true;
-    getOauthClientAuthorizations()
+    getAppAuthorizations()
       .then(({ data }) => {
         this.authorizations = data;
         this.loading = false;
@@ -77,7 +77,7 @@ export default class OauthClientAuthorizations extends Vue {
 
   onDeleteAuthorization(tokenId: number) {
     this.loading = true;
-    deleteOauthClientAuthorization(tokenId)
+    deleteAppAuthorization(tokenId)
       .then(() => {
         return this.loadAuthorizations();
         this.loading = false;
