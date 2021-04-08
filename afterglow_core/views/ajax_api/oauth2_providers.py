@@ -22,13 +22,13 @@ from ...errors.auth import (
 from . import url_prefix
 
 
-@app.route(url_prefix + 'oauth2_plugins', methods=['GET'])
-def oauth2_plugins() -> Response:
+@app.route(url_prefix + '/oauth2/providers', methods=['GET'])
+def oauth2_providers() -> Response:
     """
     Return available OAuth2 plugins
 
     :return:
-        GET /ajax/oauth_plugins: list of OAuth2 plugins
+        GET /ajax/oauth2/providers: list of OAuth2 plugins
     """
 
     plugins = [dict(id=p.id, icon=p.icon, description=p.description,
@@ -36,7 +36,7 @@ def oauth2_plugins() -> Response:
 
     return json_response(plugins)
 
-@app.route(url_prefix + '/oauth2_plugins/<string:plugin_id>/authorized')
+@app.route(url_prefix + '/oauth2/providers/<string:plugin_id>/authorized')
 def oauth2_authorized(plugin_id: str) -> Response:
     """
     OAuth2.0 authorization code granted redirect endpoint

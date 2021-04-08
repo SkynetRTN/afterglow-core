@@ -61,6 +61,7 @@ def _init_oauth():
     from sqlalchemy.pool import StaticPool
     from authlib.oauth2.rfc6749 import ClientMixin
     from authlib.oauth2.rfc6749 import grants
+    from authlib.oauth2.rfc7636 import CodeChallenge
     from authlib.integrations.sqla_oauth2 import (
         OAuth2AuthorizationCodeMixin, OAuth2TokenMixin, create_save_token_func)
     from authlib.integrations.flask_oauth2 import AuthorizationServer
@@ -112,14 +113,16 @@ def _init_oauth():
                 raise ValueError('Missing OAuth client name')
             if self.client_id is None:
                 raise ValueError('Missing OAuth client ID')
-            if self.client_secret is None:
-                raise ValueError('Missing OAuth client secret')
+            
             if not self.redirect_uris:
                 raise ValueError('Missing OAuth redirect URIs')
 
             if self.token_endpoint_auth_method not in (
                     'none', 'client_secret_post', 'client_secret_basic'):
                 raise ValueError('Invalid token endpoint auth method')
+
+            if self.token_endpoint_auth_method != 'none' and self.client_secret is None:
+                raise ValueError('Missing OAuth client secret')
 
             if self.description is None:
                 self.description = self.name
@@ -246,12 +249,17 @@ def _init_oauth():
             sess = memory_session()
             try:
                 # noinspection PyArgumentList
+                code_challenge = request.data.get('code_challenge')
+                code_challenge_method = request.data.get('code_challenge_method')
+
                 sess.add(OAuth2AuthorizationCode(
                     code=code,
                     client_id=req.client.client_id,
                     redirect_uri=req.redirect_uri,
                     scope=req.scope,
                     user_id=req.user.id,
+                    code_challenge=code_challenge,
+                    code_challenge_method=code_challenge_method,
                 ))
                 sess.commit()
             except Exception:
@@ -332,7 +340,7 @@ def _init_oauth():
     )
     oauth_server.register_grant(grants.ImplicitGrant)
     oauth_server.register_grant(grants.ClientCredentialsGrant)
-    oauth_server.register_grant(AuthorizationCodeGrant)
+    oauth_server.register_grant(AuthorizationCodeGrant, [CodeChallenge(required=True)])
     oauth_server.register_grant(RefreshTokenGrant)
 
     app.logger.info('Initialized Afterglow OAuth2 Service')
