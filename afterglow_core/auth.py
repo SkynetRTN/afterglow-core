@@ -24,7 +24,8 @@ from functools import wraps
 import time
 from typing import Callable, Optional, Sequence, Union
 
-from flask import Response, request, make_response, redirect, url_for
+from werkzeug.urls import url_encode
+from flask import Response, request, make_response, redirect, url_for, escape
 from flask_wtf.csrf import generate_csrf, CSRFError
 
 from . import app
@@ -145,8 +146,9 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
 
         except NotAuthenticatedError:
             if kwargs.get('allow_redirect'):
-                #TODO: Make the login URL configurable
-                return redirect('/login?next=' + request.url)
+                dashboard_prefix = app.config.get("DASHBOARD_PREFIX")
+                args = url_encode(dict(next=request.url))
+                return redirect('{dashboard_prefix}/login?{args}'.format(dashboard_prefix=dashboard_prefix, args=args))
             raise
 
         try:
