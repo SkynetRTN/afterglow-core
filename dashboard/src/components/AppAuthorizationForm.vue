@@ -32,7 +32,7 @@ import { Vue, Component, Prop, Watch } from "vue-property-decorator";
 import { OauthClient } from "../api/types";
 
 @Component({
-  name: "app-consent-form",
+  name: "app-authorization-form",
   components: {},
 })
 export default class AppAuthorizationForm extends Vue {

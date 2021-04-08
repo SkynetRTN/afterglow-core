@@ -18,13 +18,13 @@
         <div class="panel has-text-left has-background-white">
           <p class="panel-heading">Third-Party App Consent</p>
           <div class="panel-block">
-            <app-consent-form
+            <app-authorization-form
               v-if="client && !error && !loading"
               :client="client"
               v-on:app-consent-denied="onDenied($event)"
               v-on:app-consent-granted="onGranted($event)"
             >
-            </app-consent-form>
+            </app-authorization-form>
             <div v-else-if="error">
               {{ error }}
             </div>
@@ -95,7 +95,6 @@ export default class AppConsent extends Vue {
     this.loading = true;
     createAppAuthorization(this.client.id)
       .then(({ data: authorization }) => {
-        this.loading = false;
         if (this.next && isValidUrl(this.next)) {
           window.location.href = this.next;
         } else {
