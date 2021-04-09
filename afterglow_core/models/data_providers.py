@@ -24,6 +24,22 @@ from ..schemas import AfterglowSchema, Boolean
 __all__ = ['DataProvider', 'DataProviderAsset']
 
 
+def is_overridden(base: type, instance: Any, meth: str) -> bool:
+    """
+    Is the given method overridden in subclass?
+
+    :param base: base class
+    :param instance: instance of a subclass of `base`
+    :param meth: method name to check
+
+    :return: True if `meth` is overridden in `instance` class
+    """
+    return getattr(instance, meth).__func__ is not (
+        getattr(base, meth).__func__
+        if hasattr(getattr(base, meth), '__func__')
+        else getattr(base, meth))
+
+
 class DataProviderAsset(AfterglowSchema):
     """
     Class representing a data provider asset
@@ -169,28 +185,15 @@ class DataProvider(AfterglowSchema):
         # on what methods are reimplemented by provider; method attr of a class
         # is an unbound method instance in Python 2 and a function in Python 3
         if 'browseable' not in kwargs:
-            self.browseable = self.get_child_assets.__func__ is not \
-                (DataProvider.get_child_assets.__func__
-                 if hasattr(DataProvider.get_child_assets, '__func__')
-                 else DataProvider.get_child_assets)
+            self.browseable = is_overridden(
+                DataProvider, self, 'get_child_assets')
         if 'searchable' not in kwargs:
-            self.searchable = self.find_assets.__func__ is not \
-                (DataProvider.find_assets.__func__
-                 if hasattr(DataProvider.find_assets, '__func__')
-                 else DataProvider.find_assets)
+            self.searchable = is_overridden(DataProvider, self, 'find_assets')
         if 'readonly' not in kwargs:
-            self.readonly = self.create_asset.__func__ is \
-                (DataProvider.create_asset.__func__
-                 if hasattr(DataProvider.create_asset, '__func__')
-                 else DataProvider.create_asset) and \
-                self.update_asset.__func__ is \
-                (DataProvider.update_asset.__func__
-                 if hasattr(DataProvider.update_asset, '__func__')
-                 else DataProvider.update_asset) and \
-                self.delete_asset.__func__ is \
-                (DataProvider.delete_asset.__func__
-                 if hasattr(DataProvider.delete_asset, '__func__')
-                 else DataProvider.delete_asset)
+            self.readonly = \
+                not is_overridden(DataProvider, self, 'create_asset') and \
+                not is_overridden(DataProvider, self, 'update_asset') and \
+                not is_overridden(DataProvider, self, 'delete_asset')
 
         if self.auth_methods is None:
             # Use default data provider authentication
