@@ -11,6 +11,7 @@ import sqlite3
 from threading import Lock
 from io import BytesIO
 from typing import Dict as TDict, List as TList, Optional, Tuple, Union
+import warnings
 
 from sqlalchemy import (
     Boolean, CheckConstraint, Column, ForeignKey, Integer, String,
@@ -21,6 +22,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.engine import Engine
 import numpy
 import astropy.io.fits as pyfits
+from astropy.wcs import FITSFixedWarning
+from astropy.io.fits.verify import VerifyWarning
 
 from .. import app, errors
 from ..models import DataFile, Session
@@ -75,6 +78,9 @@ __all__ = [
     'delete_session',
 ]
 
+
+warnings.filterwarnings('ignore', category=FITSFixedWarning)
+warnings.filterwarnings('ignore', category=VerifyWarning)
 
 DataFileBase = declarative_base()
 

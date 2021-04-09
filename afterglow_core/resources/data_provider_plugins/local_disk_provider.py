@@ -11,8 +11,11 @@ from errno import EEXIST
 from datetime import datetime
 from glob import glob
 from typing import List as TList, Optional, Union
+import warnings
 
 import astropy.io.fits as pyfits
+from astropy.wcs import FITSFixedWarning
+from astropy.io.fits.verify import VerifyWarning
 
 try:
     from PIL import Image as PILImage, ExifTags
@@ -39,6 +42,10 @@ from ...errors.data_file import UnrecognizedDataFormatError
 
 
 __all__ = ['LocalDiskDataProvider', 'RestrictedRWLocalDiskDataProvider']
+
+
+warnings.filterwarnings('ignore', category=FITSFixedWarning)
+warnings.filterwarnings('ignore', category=VerifyWarning)
 
 
 class LocalDiskDataProvider(DataProvider):
