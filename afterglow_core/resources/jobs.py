@@ -24,6 +24,7 @@ from socketserver import BaseRequestHandler, ThreadingTCPServer
 from typing import Any, Dict as TDict
 import threading
 import sqlite3
+import tracemalloc
 
 # noinspection PyProtectedMember
 from marshmallow import Schema, fields, missing
@@ -336,9 +337,17 @@ class JobWorkerProcess(Process):
             # noinspection PyProtectedMember
             users._init_users()
 
+        # Memory leak detection support
+        trace_malloc = app.config.get('JOB_TRACE_MALLOC')
+        if trace_malloc:
+            tracemalloc.start()
+        prev_snapshot = None
+
         # Wait for an incoming job request
         app.logger.info('%s Waiting for jobs', prefix)
         while True:
+            job_descr = job = None
+
             # noinspection PyBroadException
             try:
                 job_descr = job_queue.get()
@@ -436,6 +445,18 @@ class JobWorkerProcess(Process):
             except Exception:
                 app.logger.warning(
                     '%s Internal job queue error', prefix, exc_info=True)
+
+            if trace_malloc:
+                snapshot = tracemalloc.take_snapshot()
+                if prev_snapshot is not None:
+                    stats = snapshot.compare_to(prev_snapshot, 'lineno')
+                    app.logger.info(
+                        '\n%s: %s -> %s\n%s\n',
+                        prefix, job_descr,
+                        (job.result.errors or 'OK') if job is not None
+                        else 'not started',
+                        '\n'.join(str(l) for l in stats[:5]))
+                prev_snapshot = snapshot
 
         if WINDOWS:
             # Terminate abort event listener
