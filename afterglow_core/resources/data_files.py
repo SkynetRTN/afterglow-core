@@ -844,25 +844,24 @@ def get_data_file_data(user_id: Optional[int], file_id: int) \
         an extra image HDU, it is converted into a :class:`numpy.ma.MaskedArray`
         instance
     """
-    fits = get_data_file_fits(user_id, file_id)
-
-    if fits[0].data is None:
-        # Table stored in extension HDU
-        data = fits[1].data
-    elif fits[0].data.dtype.fields is None:
-        # Image stored in the primary HDU, with an optional mask
-        if len(fits) == 1:
-            # Normal image data
-            data = fits[0].data
+    with get_data_file_fits(user_id, file_id) as fits:
+        if fits[0].data is None:
+            # Table stored in extension HDU
+            data = fits[1].data
+        elif fits[0].data.dtype.fields is None:
+            # Image stored in the primary HDU, with an optional mask
+            if len(fits) == 1:
+                # Normal image data
+                data = fits[0].data
+            else:
+                # Masked data
+                data = numpy.ma.masked_array(
+                    fits[0].data, fits[1].data.astype(bool))
         else:
-            # Masked data
-            data = numpy.ma.masked_array(
-                fits[0].data, fits[1].data.astype(bool))
-    else:
-        # Table data in the primary HDU (?)
-        data = fits[0].data
+            # Table data in the primary HDU (?)
+            data = fits[0].data
 
-    return data, fits[0].header
+        return data, fits[0].header
 
 
 def get_data_file_uint8(user_id: Optional[int], file_id: int) -> numpy.ndarray:
