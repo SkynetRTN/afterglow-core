@@ -192,8 +192,6 @@ export default class Login extends Vue {
     params.append("client_id", plugin.clientId);
     params.append("redirect_uri", redirectUri);
 
-    console.log("LOGIN PAGE: ", next, state);
-
     return `${plugin.authorizeUrl}?${params.toString()}`;
   }
 
