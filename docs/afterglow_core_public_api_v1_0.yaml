@@ -2120,7 +2120,7 @@ components:
                     description: duplicate username
                     type: string
           example:
-            code: 403
+            code: 409
             subcode: 107
             message: "User with this username already exists"
 
@@ -2487,7 +2487,7 @@ components:
           schema:
             $ref: '#/components/schemas/AfterglowError'
           example:
-            code: 403
+            code: 409
             subcode: 1005
             message: "Asset already exists at the given path"
 
@@ -2694,7 +2694,7 @@ components:
                     description: session name
                     type: string
           example:
-            code: 400
+            code: 409
             subcode: 2006
             message: "Duplicate session name"
 
@@ -2756,7 +2756,7 @@ components:
                     description: requested data file name
                     type: string
           example:
-            code: 403
+            code: 409
             subcode: 2010
             message: "Duplicate data file name"
 
@@ -2773,7 +2773,7 @@ components:
                     description: requested data file group name
                     type: string
           example:
-            code: 403
+            code: 409
             subcode: 2011
             message: "Duplicate data file group name"
 
@@ -2878,7 +2878,7 @@ components:
                     description: field cal name
                     type: string
           example:
-            code: 400
+            code: 409
             subcode: 4001
             message: "Duplicate field cal name"
 

@@ -111,6 +111,7 @@ class DuplicateUsernameError(AuthError):
     Extra attributes::
         username: duplicate username
     """
+    code = 409
     subcode = 107
     message = 'User with this username already exists'
 
