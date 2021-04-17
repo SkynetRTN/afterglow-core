@@ -66,12 +66,12 @@
                     </button>
                   </div>
                   <div class="control">
-                    <router-link
+                    <!-- <router-link
                       to="/password-recovery"
                       class="button is-outlined is-black"
                     >
                       Forgot Password?
-                    </router-link>
+                    </router-link> -->
                   </div>
                 </b-field>
               </form>
