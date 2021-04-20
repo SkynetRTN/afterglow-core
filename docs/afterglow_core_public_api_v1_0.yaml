@@ -290,6 +290,10 @@ components:
         usage:
           description: current usage of the data provider storage, in bytes, if applicable
           type: number
+        pagination_strategy:
+          description: pagination strategy supported by data provider
+          type: string
+          enum: [none, page, keyset]
 
     DataProviderAsset:
       description: Definition of a data provider asset returned as a result of a query
@@ -2525,7 +2529,7 @@ components:
             message: 'Cannot delete non-empty collection asset without "force"'
 
     QuotaExceededError:
-      description: The user requested a GET with search keywords for an asset of a non-searchable data provider
+      description: Attempting to create/update an asset of a read-write data provider would exceed the user quota
       content:
         application/json:
           schema:

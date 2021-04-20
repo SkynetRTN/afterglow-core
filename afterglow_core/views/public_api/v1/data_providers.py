@@ -122,6 +122,13 @@ def data_providers_assets(id: Union[int, str]) -> Response:
         path = str(path)
 
     if request.method == 'GET':
+        # Get sorting/pagination parameters
+        sort_by = params.pop('sort', None)
+        page_size = params.pop('page[size]', None)
+        page = params.pop('page[number]', None)
+        page_after = params.pop('page[after]', None)
+        page_before = params.pop('page[before]', None)
+
         if params:
             # "Search" request
             if not provider.searchable:
@@ -131,9 +138,13 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             if path is not None and not provider.get_asset(path).collection:
                 raise CannotSearchInNonCollectionError()
 
+            assets, total_pages, first, last = provider.find_assets(
+                path=path, sort_by=sort_by, page_size=page_size, page=page,
+                page_after=page_after, page_before=page_before, **params)
             return json_response(
-                [DataProviderAssetSchema(asset)
-                 for asset in provider.find_assets(path=path, **params)])
+                [DataProviderAssetSchema(asset) for asset in assets],
+                include_pagination=True, total_pages=total_pages,
+                first=first, last=last)
 
         # "Get" request; assume empty path by default
         if path is None:
@@ -143,7 +154,13 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             # "Browse" request
             if not provider.browseable:
                 raise NonBrowseableDataProviderError(id=id)
-            return json_response(provider.get_child_assets(path))
+            assets, total_pages, first, last = provider.get_child_assets(
+                path, sort_by=sort_by, page_size=page_size, page=page,
+                page_after=page_after, page_before=page_before)
+            return json_response(
+                [DataProviderAssetSchema(asset) for asset in assets],
+                include_pagination=True, total_pages=total_pages,
+                first=first, last=last)
         return json_response([DataProviderAssetSchema(asset)])
 
     # POST/PUT/DELETE always work with asset(s) at the given path

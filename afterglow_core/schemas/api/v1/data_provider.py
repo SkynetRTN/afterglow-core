@@ -48,6 +48,8 @@ class DataProviderSchema(Resource):
         quota: data provider storage quota, in bytes, if applicable
         usage: current usage of the data provider storage, in bytes, if
             applicable
+        pagination_strategy: pagination strategy supported by data provider:
+            "none", "page", or "keyset"
     """
     __polymorphic_on__ = 'name'
     __get_view__ = 'data_providers'
@@ -67,6 +69,7 @@ class DataProviderSchema(Resource):
     readonly = Boolean(default=True)
     quota = Integer(default=None)
     usage = Integer(default=None)
+    pagination_strategy = String(default='none')
 
 
 class DataProviderAssetSchema(Resource):

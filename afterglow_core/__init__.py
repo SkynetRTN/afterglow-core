@@ -5,11 +5,12 @@ Afterglow Core: main app package
 import datetime
 import json
 import os
-from typing import Any, Dict as TDict, Optional
+from typing import Any, Dict as TDict, List as TList, Optional, Union
 
 from flask_cors import CORS
 from marshmallow import missing
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
+from werkzeug.urls import url_encode
 from flask import Flask, Response, request
 
 from .schemas import AfterglowSchema
@@ -35,7 +36,8 @@ class PrefixMiddleware(object):
 
 class AfterglowSchemaEncoder(json.JSONEncoder):
     """
-    JSON encoder that can serialize AfterglowSchema class instances
+    JSON encoder that can serialize AfterglowSchema class instances and datetime
+    objects
     """
     def default(self, obj):
         if isinstance(obj, type(missing)):
@@ -44,31 +46,64 @@ class AfterglowSchemaEncoder(json.JSONEncoder):
             return obj.dump(obj)
         if isinstance(obj, datetime.datetime):
             return obj.isoformat(' ')
-        return super(AfterglowSchemaEncoder, self).default(obj)
+        return super().default(obj)
 
 
-def json_response(obj: Any = '', status_code: Optional[int] = None,
-                  headers: Optional[TDict[str, str]] = None) -> Response:
+def json_response(data: Optional[Union[dict, AfterglowSchema, TList[dict],
+                                       TList[AfterglowSchema]]] = None,
+                  status_code: Optional[int] = None,
+                  headers: Optional[TDict[str, str]] = None,
+                  include_pagination: bool = False,
+                  total_pages: Optional[int] = None,
+                  first: Optional[Any] = None, last: Optional[Any] = None) \
+        -> Response:
     """
     Serialize a Python object to a JSON-type flask.Response
 
-    :param obj: object to serialize; can be a Resource instance or a compound
-        object (list, dict, ...) possibly including Resource instances
+    :param data: object(s) to serialize; can be a :class:`AfterglowSchema`
+        instance or a dict, a list of those, or None
     :param int status_code: optional HTTP status code; defaults to 200 - OK
     :param dict headers: optional extra HTTP headers
+    :param include_pagination: always include pagination links (first and last
+        page) even if no total/previous/next page info is provided
+    :param total_pages: optional extra pagination info: total number of pages
+    :param first: optional extra pagination info: key value for the first item
+        on the current page; used to construct the link to the previous page
+    :param last: optional extra pagination info: key value for the last item
+        on the current page; used to construct the link to the next page
 
     :return: Flask response object with mimetype set to application/json
     """
-    if obj == '' or status_code == 204:
-        resp = Response('', 204, headers=headers)
-        del resp.headers['Content-Type']
-        return resp
-
-    if status_code is None:
-        status_code = 200
+    links = {'self': request.url}
+    if include_pagination or (total_pages, first, last) != (None,)*3:
+        # Add pagination info
+        args_first = request.args.copy()
+        args_first['page[number]'] = 'first'
+        args_last = request.args.copy()
+        args_last['page[number]'] = 'last'
+        pagination = {
+            # Always have links to first and last pages
+            'first': '{}?{}'.format(request.path, url_encode(args_first)),
+            'last': '{}?{}'.format(request.path, url_encode(args_last)),
+        }
+        if total_pages is not None:
+            pagination['total_pages'] = total_pages
+        if first is not None:
+            args = request.args.copy()
+            args['page[before]'] = str(first)
+            pagination['prev'] = '{}?{}'.format(request.path, url_encode(args))
+        if last is not None:
+            args = request.args.copy()
+            args['page[after]'] = str(last)
+            pagination['next'] = '{}?{}'.format(request.path, url_encode(args))
+        links['pagination'] = pagination
+    envelope = {
+        'data': data,
+        'links': links,
+    }
     return Response(
-        json.dumps(obj, cls=AfterglowSchemaEncoder), status_code,
-        mimetype='application/json', headers=headers)
+        json.dumps(envelope, cls=AfterglowSchemaEncoder),
+        status_code or 200, mimetype='application/json', headers=headers)
 
 
 app = Flask(__name__)
@@ -114,5 +149,4 @@ if app.config.get('AUTH_ENABLED'):
 
 
 # Define API resources and endpoints
-from .resources import *
-from .views import *
+from . import resources, views

@@ -2,7 +2,7 @@
 Afterglow Core: imaging survey data provider plugin
 """
 
-from typing import List as TList, Optional, Tuple
+from typing import Any, List as TList, Optional, Tuple, Union
 
 from io import BytesIO
 from threading import Lock
@@ -37,6 +37,7 @@ class ImagingSurveyDataProvider(DataProvider):
     browseable = False
     readonly = True
     quota = usage = None
+    pagination_strategy = 'none'
     allow_multiple_instances = False
 
     _search_fields: dict = None
@@ -166,7 +167,12 @@ class ImagingSurveyDataProvider(DataProvider):
         return kwargs
 
     # noinspection PyShadowingBuiltins
-    def find_assets(self, path: Optional[str] = None, survey: str = 'DSS',
+    def find_assets(self, path: Optional[str] = None,
+                    sort_by: Optional[str] = None,
+                    page_size: int = 20,
+                    page: Optional[Union[int, str]] = None,
+                    page_after: Optional[Any] = None,
+                    page_before: Optional[Any] = None, survey: str = 'DSS',
                     ra_hours: Optional[float] = None,
                     dec_degs: Optional[float] = None,
                     object: Optional[str] = None,
@@ -180,6 +186,11 @@ class ImagingSurveyDataProvider(DataProvider):
         given FOV; otherwise, returns a single asset
 
         :param path: path to the collection asset to search in; ignored
+        :param sort_by: unused
+        :param page_size: unused
+        :param page: unused
+        :param page_after: unused
+        :param page_before: unused
         :param survey: survey name; should be one of those returned by
             the /imaging-surveys resource; default: DSS
         :param ra_hours: RA of image center in hours; used in conjunction
@@ -191,7 +202,7 @@ class ImagingSurveyDataProvider(DataProvider):
         :param width: image width in arcminutes
         :param height: image height in arcminutes; default: same as `width`
 
-        :return: list of 0 ro 1 :class:`DataProviderAsset` objects for assets
+        :return: list of 0 or 1 :class:`DataProviderAsset` objects for assets
             matching the query parameters
         """
         if all(item is None for item in (ra_hours, dec_degs, object)):

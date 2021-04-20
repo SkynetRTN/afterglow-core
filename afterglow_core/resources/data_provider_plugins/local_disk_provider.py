@@ -10,7 +10,7 @@ import bz2
 from errno import EEXIST
 from datetime import datetime
 from glob import glob
-from typing import List as TList, Optional, Union
+from typing import Any, List as TList, Optional, Tuple, Union
 import warnings
 
 import astropy.io.fits as pyfits
@@ -34,6 +34,7 @@ except ImportError:
 
 from ... import auth, errors
 from ...models import DataProvider, DataProviderAsset
+from ...errors import ValidationError
 from ...errors.data_provider import (
     AssetNotFoundError, AssetAlreadyExistsError,
     CannotUpdateCollectionAssetError)
@@ -46,6 +47,70 @@ __all__ = ['LocalDiskDataProvider', 'RestrictedRWLocalDiskDataProvider']
 
 warnings.filterwarnings('ignore', category=FITSFixedWarning)
 warnings.filterwarnings('ignore', category=VerifyWarning)
+
+MAX_PAGE_SIZE = 20
+
+
+def paginate(items: TList[Union[str, DataProviderAsset]],
+             page_size: Optional[Union[int, str]], key: str,
+             page: Optional[Union[int, str]]) \
+        -> Tuple[list, Optional[int], Optional[Any], Optional[Any]]:
+    """
+    Handle pagination for lists of objects
+
+    :param items: list of items to paginate
+    :param page_size: number of items per page
+    :param key: sorting key; must be an attribute of the class of `items`
+        elements
+    :param page: optional page number (for page-based pagination), "first",
+        or "last"
+
+    :return: list of items to return, total number of pages, key values for
+        the first and last items on the page
+    """
+    if not items:
+        return items, 0, None, None
+
+    if page_size:
+        try:
+            page_size = int(page_size)
+            if page_size <= 0:
+                raise ValueError()
+        except ValueError:
+            raise ValidationError('page[size]')
+        page_size = min(max(page_size, 1), MAX_PAGE_SIZE)
+    else:
+        page_size = MAX_PAGE_SIZE
+    total_pages = (len(items) - 1)//page_size + 1
+
+    reverse = key.startswith('-')
+    key = key.lstrip('+-')
+    if key != 'name':
+        raise ValidationError('sort')
+    if items:
+        if isinstance(items[0], str):
+            items.sort(
+                key=lambda fn: (os.path.isdir(fn) ^ (not reverse),
+                                os.path.basename(fn)),
+                reverse=reverse)
+        else:
+            items.sort(
+                key=lambda asset: (asset.collection ^ (not reverse),
+                                   getattr(asset, key)),
+                reverse=reverse)
+
+    if page == 'last':
+        items = items[-page_size:]
+    elif page is not None:
+        try:
+            offset = int(page)*page_size
+        except ValueError:
+            raise ValidationError('page[number]')
+        items = items[offset:offset + page_size]
+    else:
+        items = items[:page_size]
+
+    return items, total_pages, None, None
 
 
 class LocalDiskDataProvider(DataProvider):
@@ -67,6 +132,7 @@ class LocalDiskDataProvider(DataProvider):
         search_fields['type']['enum'].append('RAW')
 
     peruser: bool = False
+    pagination_strategy = 'page'
     root: str = '.'
 
     @property
@@ -333,41 +399,77 @@ class LocalDiskDataProvider(DataProvider):
 
         return self._get_asset(path, filename)
 
-    def get_child_assets(self, path: str) -> TList[DataProviderAsset]:
+    def get_child_assets(self, path: str, sort_by: Optional[str] = None,
+                         page_size: int = 20,
+                         page: Optional[Union[int, str]] = None,
+                         page_after: Optional[Any] = None,
+                         page_before: Optional[Any] = None) \
+            -> Tuple[TList[DataProviderAsset], Optional[int],
+                     Optional[Any], Optional[Any]]:
         """
         Return child assets of a collection asset at the given path
 
         :param path: asset path; must identify a collection asset
+        :param sort_by: optional sorting key
+        :param page_size: optional number of assets per page
+        :param page: optional 0-based page number, "first", or "last"
+        :param page_after: unused
+        :param page_before: unused
 
-        :return: list of :class:`DataProviderAsset` objects for child assets
+        :return: list of :class:`DataProviderAsset` objects for child assets,
+            total number of pages, and names of first and last asset on the page
         """
+        if page_after is not None:
+            raise ValidationError(
+                'page[after]', 'Keyset-based pagination not supported')
+        if page_before is not None:
+            raise ValidationError(
+                'page[before]', 'Keyset-based pagination not supported')
+
         filename = self._path_to_filename(path)
         if not os.path.isdir(filename):
             raise AssetNotFoundError(path=path)
 
         # Return directory contents
         root = self.abs_root
-        return [DataProviderAsset(
-            name=os.path.basename(fn),
-            collection=os.path.isdir(fn),
-            path=fn.split(root + os.path.sep)[1].replace('\\', '/'),
-            metadata=dict(
-                time=datetime.fromtimestamp(os.stat(fn).st_mtime).isoformat(),
-            )
-        ) for fn in glob(os.path.join(filename, '*'))]
+        filenames, total_pages, first, last = paginate(
+            glob(os.path.join(filename, '*')),
+            page_size, sort_by or 'name', page)
+
+        return (
+            [DataProviderAsset(
+                 name=os.path.basename(fn),
+                 collection=os.path.isdir(fn),
+                 path=fn.split(root + os.path.sep)[1].replace('\\', '/'),
+                 metadata=dict(
+                     time=datetime.fromtimestamp(os.stat(fn).st_mtime)
+                     .isoformat(),
+                 ),
+            ) for fn in filenames], total_pages, first, last)
 
     def find_assets(self, path: Optional[str] = None,
+                    sort_by: Optional[str] = None,
+                    page_size: int = 20,
+                    page: Optional[Union[int, str]] = None,
+                    page_after: Optional[Any] = None,
+                    page_before: Optional[Any] = None,
                     name: Optional[str] = None,
                     type: Optional[str] = None,
                     collection: Optional[Union[str, int, bool]] = None,
                     width: Optional[Union[str, int]] = None,
                     height: Optional[Union[str, int]] = None) \
-            -> TList[DataProviderAsset]:
+            -> Tuple[TList[DataProviderAsset], Optional[int],
+                     Optional[Any], Optional[Any]]:
         """
         Return a list of assets matching the given parameters
 
         :param path: optional path to the collection asset to search in;
             by default, search in the data provider root
+        :param sort_by: optional sorting key; see :meth:`get_child_assets`
+        :param page_size: optional number of assets per page
+        :param page: optional 0-based page number, "first", or "last"
+        :param page_after: unused
+        :param page_before: unused
         :param name: only return assets matching the given name; may include
             wildcards
         :param type: comma-separated list of data types ("FITS", "JPEG", etc.);
@@ -379,8 +481,16 @@ class LocalDiskDataProvider(DataProvider):
         :param height: match only images of the given height
 
         :return: list of :class:`DataProviderAsset` objects for assets matching
-            the search query parameters
+            the search query parameters, total number of pages, and names
+            of first and last asset on the page
         """
+        if page_after is not None:
+            raise ValidationError(
+                'page[after]', 'Keyset-based pagination not supported')
+        if page_before is not None:
+            raise ValidationError(
+                'page[before]', 'Keyset-based pagination not supported')
+
         # Set up filters
         if type:
             type = type.split(',')
@@ -465,7 +575,7 @@ class LocalDiskDataProvider(DataProvider):
             # All checks passed
             assets.append(asset)
 
-        return assets
+        return paginate(assets, page_size, sort_by or 'name', page)
 
     def get_asset_data(self, path: str) -> bytes:
         """

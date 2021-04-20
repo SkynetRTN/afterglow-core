@@ -6,7 +6,7 @@ A data provider plugin must subclass :class:`DataProvider`.
 
 from __future__ import annotations
 
-from typing import Any, Dict as TDict, List as TList, Optional
+from typing import Any, Dict as TDict, List as TList, Optional, Tuple, Union
 
 try:
     from PIL import Image as PILImage
@@ -104,7 +104,7 @@ class DataProvider(AfterglowSchema):
         get_asset_data(): return data for a non-collection asset at the given
             path; must be implemented by any data provider
         get_child_assets(): return child assets of a collection asset at the
-            given path; must be implemented by any browseable data provider
+            given path; must be implemented by any browsable data provider
         find_assets(): return assets matching the given parameters; must be
             implemented by any searchable data provider
         create_asset(): create a new non-collection asset from data file at the
@@ -153,6 +153,8 @@ class DataProvider(AfterglowSchema):
         quota: data provider storage quota, in bytes, if applicable
         usage: current usage of the data provider storage, in bytes, if
             applicable
+        pagination_strategy: pagination strategy supported by data provider:
+            "none", "page", or "keyset"
     """
     __polymorphic_on__ = 'name'
 
@@ -172,6 +174,8 @@ class DataProvider(AfterglowSchema):
     allow_upload: bool = Boolean(default=False)
     quota: int = Integer(default=None)
     usage: int = Integer(default=None)
+
+    pagination_strategy = 'none'
 
     def __init__(self, **kwargs):
         """
@@ -215,30 +219,72 @@ class DataProvider(AfterglowSchema):
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='get_assets')
 
-    def get_child_assets(self, path: str) -> TList[DataProviderAsset]:
+    def get_child_assets(self, path: str, sort_by: Optional[str] = None,
+                         page_size: Optional[int] = None,
+                         page: Optional[Union[int, str]] = None,
+                         page_after: Optional[Any] = None,
+                         page_before: Optional[Any] = None) \
+            -> Tuple[TList[DataProviderAsset], Optional[int],
+                     Optional[Any], Optional[Any]]:
         """
         Return child assets of a collection asset at the given path
 
         :param path: asset path; must identify a collection asset
+        :param sort_by: optional sorting key (e.g. column name); reverse sorting
+            is indicated by prepending a hyphen to the key; data provider may
+            assume a certain default sorting key
+        :param page_size: optional number of assets per page; data provider may
+            enforce a hard limit on the page size
+        :param page: for page-based pagination, optional 0-based page number;
+            data provider returns at most `page_size` assets sorted by
+            the sorting key at offset = `page`*`page_size`; two special values
+            "first" and "last" are used both for page and for keyset-based
+            pagination to indicate first and last page, respectively
+        :param page_after: for keyset-based pagination, key value for the last
+            item of the previous page; data provider returns at most `page_size`
+            assets with the value of `sort_by` key greater than `page_after`;
+            unused for page-based pagination and is mutually exclusive with
+            `page_before`
+        :param page_before: for keyset-based pagination, key value for the first
+            item of the next page; data provider returns at most `page_size`
+            assets with the value of the `sort_by` key smaller than
+            `page_before`; unused for page-based pagination and is mutually
+            exclusive with `page_after`
 
-        :return: list of :class:`DataProviderAsset` objects for child assets
+        :return: list of :class:`DataProviderAsset` objects for child assets,
+            optional total number of pages, and key values for the first and
+            last assets on the current page (used to construct links to
+            the previous and next pages in keyset-based pagination)
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='get_child_assets')
 
-    def find_assets(self, path: Optional[str] = None, **kwargs) \
-            -> TList[DataProviderAsset]:
+    def find_assets(self, path: Optional[str] = None,
+                    sort_by: Optional[str] = None,
+                    page_size: Optional[int] = None,
+                    page: Optional[Union[int, str]] = None,
+                    page_after: Optional[Any] = None,
+                    page_before: Optional[Any] = None,
+                    **kwargs) \
+            -> Tuple[TList[DataProviderAsset], Optional[int],
+                     Optional[Any], Optional[Any]]:
         """
         Return a list of assets matching the given parameters
 
         :param path: optional path to the collection asset to search in;
             by default (and for providers that do not have collection assets),
             search in the data provider root
+        :param sort_by: optional sorting key; see :meth:`get_child_assets`
+        :param page_size: optional number of assets per page
+        :param page: optional 0-based page number, "first", or "last"
+        :param page_after: key value for the last item of the previous page
+        :param page_before: key value for the first item of the next page
         :param kwargs: provider-specific keyword=value pairs defining the
             asset(s), like name, image type or dimensions
 
         :return: list of :class:`DataProviderAsset` objects for assets matching
-            the search query parameters
+            the search query parameters, optional total number of pages, and key
+            values for the first and last assets on the current page
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='find_assets')

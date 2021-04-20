@@ -169,10 +169,10 @@ def get_imaging_surveys(name: Optional[str] = None) -> Response:
                 data = data.byteswap()
             data = data.tobytes()
             mimetype = 'application/octet-stream'
-            return Response(data, 200, None, mimetype)
+            return Response(data, 200 if data else 204, None, mimetype)
 
         if allow_json:
-            return json_response(data.tolist(), 200)
+            return json_response(data.tolist())
 
         # Could not send data in any of the formats supported by the client
         raise NotAcceptedError(accepted_mimetypes=accepted_mimetypes)
