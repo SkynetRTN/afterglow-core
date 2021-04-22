@@ -65,8 +65,8 @@ def paginate(items: TList[Union[str, DataProviderAsset]],
     :param page: optional page number (for page-based pagination), "first",
         or "last"
 
-    :return: list of items to return, total number of pages, key values for
-        the first and last items on the page
+    :return: list of items to return, total number of pages, current page
+        number, and None, indicating page-based pagination
     """
     if not items:
         return items, 0, None, None
@@ -85,32 +85,43 @@ def paginate(items: TList[Union[str, DataProviderAsset]],
 
     reverse = key.startswith('-')
     key = key.lstrip('+-')
-    if key != 'name':
+    if key not in ('name', 'size', 'time'):
         raise ValidationError('sort')
     if items:
         if isinstance(items[0], str):
             items.sort(
-                key=lambda fn: (os.path.isdir(fn) ^ (not reverse),
-                                os.path.basename(fn)),
+                key=lambda fn: (
+                    os.path.isdir(fn) ^ (not reverse),
+                    os.path.basename(fn)
+                    if key == 'name' or key == 'size' and os.path.isdir(fn)
+                    else os.stat(fn).st_size if key == 'size'
+                    else os.stat(fn).st_mtime),
                 reverse=reverse)
         else:
             items.sort(
-                key=lambda asset: (asset.collection ^ (not reverse),
-                                   getattr(asset, key)),
+                key=lambda asset: (
+                    asset.collection ^ (not reverse),
+                    asset.name
+                    if key == 'name' or key == 'size' and asset.collection
+                    else asset.metadata['size'] if key == 'size'
+                    else asset.metadata['time']),
                 reverse=reverse)
 
     if page == 'last':
+        actual_page = max(total_pages - 1, 0)
         items = items[-page_size:]
     elif page is not None:
         try:
             offset = int(page)*page_size
         except ValueError:
             raise ValidationError('page[number]')
+        actual_page = int(page)
         items = items[offset:offset + page_size]
     else:
+        actual_page = 0
         items = items[:page_size]
 
-    return items, total_pages, None, None
+    return items, total_pages, actual_page, None
 
 
 class LocalDiskDataProvider(DataProvider):
@@ -132,7 +143,6 @@ class LocalDiskDataProvider(DataProvider):
         search_fields['type']['enum'].append('RAW')
 
     peruser: bool = False
-    pagination_strategy = 'page'
     root: str = '.'
 
     @property
