@@ -290,10 +290,6 @@ components:
         usage:
           description: current usage of the data provider storage, in bytes, if applicable
           type: number
-        pagination_strategy:
-          description: pagination strategy supported by data provider
-          type: string
-          enum: [none, page, keyset]
 
     DataProviderAsset:
       description: Definition of a data provider asset returned as a result of a query

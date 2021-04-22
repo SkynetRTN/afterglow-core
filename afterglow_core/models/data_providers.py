@@ -153,8 +153,6 @@ class DataProvider(AfterglowSchema):
         quota: data provider storage quota, in bytes, if applicable
         usage: current usage of the data provider storage, in bytes, if
             applicable
-        pagination_strategy: pagination strategy supported by data provider:
-            "none", "page", or "keyset"
     """
     __polymorphic_on__ = 'name'
 
@@ -174,8 +172,6 @@ class DataProvider(AfterglowSchema):
     allow_upload: bool = Boolean(default=False)
     quota: int = Integer(default=None)
     usage: int = Integer(default=None)
-
-    pagination_strategy = 'none'
 
     def __init__(self, **kwargs):
         """
@@ -252,9 +248,11 @@ class DataProvider(AfterglowSchema):
             exclusive with `page_after`
 
         :return: list of :class:`DataProviderAsset` objects for child assets,
-            optional total number of pages, and key values for the first and
-            last assets on the current page (used to construct links to
-            the previous and next pages in keyset-based pagination)
+            optional total number of pages; the last two items are used to
+            construct links to the previous and next pages and are key values
+            for the first and last assets on the current page for keyset-based
+            pagination, the actual current page number and None for page-based
+            pagination, or two None-s if no pagination is supported
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='get_child_assets')
@@ -285,6 +283,8 @@ class DataProvider(AfterglowSchema):
         :return: list of :class:`DataProviderAsset` objects for assets matching
             the search query parameters, optional total number of pages, and key
             values for the first and last assets on the current page
+            (keyset-based pagination), the actual current page number and None
+            (page-based pagination), or two None-s if no pagination is supported
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='find_assets')
