@@ -454,6 +454,7 @@ class LocalDiskDataProvider(DataProvider):
                  metadata=dict(
                      time=datetime.fromtimestamp(os.stat(fn).st_mtime)
                      .isoformat(),
+                     size=os.stat(fn).st_size,
                  ),
             ) for fn in filenames], total_pages, first, last)
 
