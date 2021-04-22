@@ -67,10 +67,13 @@ def json_response(data: Optional[Union[dict, AfterglowSchema, TList[dict],
     :param include_pagination: always include pagination links (first and last
         page) even if no total/previous/next page info is provided
     :param total_pages: optional extra pagination info: total number of pages
-    :param first: optional extra pagination info: key value for the first item
-        on the current page; used to construct the link to the previous page
-    :param last: optional extra pagination info: key value for the last item
-        on the current page; used to construct the link to the next page
+    :param first: optional extra pagination info: for keyset-nased pagination,
+        this is the key value for the first item on the current page; for
+        page-based pagination, this is the current page number; used
+        to construct the link to the previous page
+    :param last: optional extra pagination info: for keyset-based pagination,
+        this is the key value for the last item on the current page or None
+        otherwise; used to construct the link to the next page
 
     :return: Flask response object with mimetype set to application/json
     """
@@ -83,19 +86,35 @@ def json_response(data: Optional[Union[dict, AfterglowSchema, TList[dict],
         args_last['page[number]'] = 'last'
         pagination = {
             # Always have links to first and last pages
-            'first': '{}?{}'.format(request.path, url_encode(args_first)),
-            'last': '{}?{}'.format(request.path, url_encode(args_last)),
+            'first': '{}?{}'.format(request.base_url, url_encode(args_first)),
+            'last': '{}?{}'.format(request.base_url, url_encode(args_last)),
         }
         if total_pages is not None:
             pagination['total_pages'] = total_pages
         if first is not None:
-            args = request.args.copy()
-            args['page[before]'] = str(first)
-            pagination['prev'] = '{}?{}'.format(request.path, url_encode(args))
-        if last is not None:
-            args = request.args.copy()
-            args['page[after]'] = str(last)
-            pagination['next'] = '{}?{}'.format(request.path, url_encode(args))
+            if last is None:
+                # Page-based pagination; first is page number
+                if first > 0:
+                    args = request.args.copy()
+                    args['page[number]'] = str(first - 1)
+                    pagination['prev'] = '{}?{}'.format(
+                        request.base_url, url_encode(args))
+                if total_pages is None or first < total_pages - 1:
+                    args = request.args.copy()
+                    args['page[number]'] = str(first + 1)
+                    pagination['next'] = '{}?{}'.format(
+                        request.base_url, url_encode(args))
+            else:
+                # Keyset-based pagination; first and last are keys for previous
+                # and next pages
+                args = request.args.copy()
+                args['page[before]'] = str(first)
+                pagination['prev'] = '{}?{}'.format(
+                    request.base_url, url_encode(args))
+                args = request.args.copy()
+                args['page[after]'] = str(last)
+                pagination['next'] = '{}?{}'.format(
+                    request.base_url, url_encode(args))
         links['pagination'] = pagination
     envelope = {
         'data': data,
