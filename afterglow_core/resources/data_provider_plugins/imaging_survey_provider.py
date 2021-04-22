@@ -37,7 +37,6 @@ class ImagingSurveyDataProvider(DataProvider):
     browseable = False
     readonly = True
     quota = usage = None
-    pagination_strategy = 'none'
     allow_multiple_instances = False
 
     _search_fields: dict = None
@@ -178,7 +177,8 @@ class ImagingSurveyDataProvider(DataProvider):
                     object: Optional[str] = None,
                     width: Optional[float] = None,
                     height: Optional[float] = None) \
-            -> TList[DataProviderAsset]:
+            -> Tuple[TList[DataProviderAsset], Optional[int],
+                     Optional[Any], Optional[Any]]:
         """
         Return a list of assets matching the given parameters
 
@@ -203,7 +203,8 @@ class ImagingSurveyDataProvider(DataProvider):
         :param height: image height in arcminutes; default: same as `width`
 
         :return: list of 0 or 1 :class:`DataProviderAsset` objects for assets
-            matching the query parameters
+            matching the query parameters, and three None-s indicating that
+            no pagination is supported or required
         """
         if all(item is None for item in (ra_hours, dec_degs, object)):
             raise MissingFieldError('ra_hours,dec_degs|object')
@@ -253,7 +254,7 @@ class ImagingSurveyDataProvider(DataProvider):
         # noinspection PyProtectedMember
         if survey not in SkyView._valid_surveys:
             # Unknown survey
-            return []
+            return [], None, None, None
 
         if object is None:
             # Convert FOV center coordinates to standard form
@@ -270,10 +271,11 @@ class ImagingSurveyDataProvider(DataProvider):
             kwargs.pop('show_progress')
             res = SkyView.get_image_list(object, **kwargs)
         except Exception:
-            return []
+            return [], None, None, None
         if not res:
-            return []
-        return [self._get_asset(survey, object, width, height)]
+            return [], None, None, None
+        return ([self._get_asset(survey, object, width, height)],
+                None, None, None)
 
     def get_asset(self, path: str) -> DataProviderAsset:
         r"""
