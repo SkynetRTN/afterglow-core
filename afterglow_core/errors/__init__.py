@@ -50,7 +50,7 @@ def afterglow_error_handler(e: Exception) -> Response:
 
     return Response(
         json.dumps({
-            'errors': [error],
+            'error': error,
             'links': {'self': request.url},
         }), status, mimetype='application/json',
         headers=dict(getattr(e, 'headers', [])))
@@ -67,11 +67,11 @@ def unauthorized_error_handler(e: Exception) -> Response:
     """
     return Response(
         json.dumps({
-            'errors': [{
+            'error': {
                 'status': HTTP_STATUS_CODES[401],
                 'code': e.__class__.__name__,
                 'detail': str(e),
-            }],
+            },
             'links': {'self': request.url},
         }), 401, mimetype='application/json')
 
@@ -87,11 +87,11 @@ def forbidden_error_handler(e: Exception) -> Response:
     """
     return Response(
         json.dumps({
-            'errors': [{
+            'error': {
                 'status': HTTP_STATUS_CODES[403],
                 'code': e.__class__.__name__,
                 'detail': str(e),
-            }],
+            },
             'links': {'self': request.url},
         }), 403, mimetype='application/json')
 
@@ -108,11 +108,11 @@ def not_found_error_handler(e: Exception) -> Response:
     """
     return Response(
         json.dumps({
-            'errors': [{
+            'error': {
                 'status': HTTP_STATUS_CODES[404],
                 'code': e.__class__.__name__,
                 'detail': str(e),
-            }],
+            },
             'links': {'self': request.url},
         }), 404, mimetype='application/json')
 
@@ -129,14 +129,14 @@ def internal_server_error_handler(e: Exception) -> Response:
     """
     return Response(
         json.dumps({
-            'errors': [{
+            'error': {
                 'status': HTTP_STATUS_CODES[500],
                 'code': e.__class__.__name__,
                 'detail': str(e),
                 'meta': {
                     'traceback': traceback.format_tb(sys.exc_info()[-1]),
                 },
-            }],
+            },
             'links': {'self': request.url},
         }), 500, mimetype='application/json')
 
