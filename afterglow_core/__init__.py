@@ -94,6 +94,7 @@ def json_response(data: Optional[Union[dict, AfterglowSchema, TList[dict],
         if first is not None:
             if last is None:
                 # Page-based pagination; first is page number
+                pagination['current_page'] = first
                 if first > 0:
                     args = request.args.copy()
                     args['page[number]'] = str(first - 1)
