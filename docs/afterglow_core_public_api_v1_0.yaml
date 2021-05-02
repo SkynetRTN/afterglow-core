@@ -12,7 +12,7 @@ info:
     email: vkoupr@email.unc.edu
   license:
     name: Apache 2.0
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
   version: 1.0.0
 servers:
   - url: https://afterglow.skynet.unc.edu/api/v1
@@ -1043,6 +1043,18 @@ components:
           description: 'photometric zero point m0 applied to instrumental magnitudes: m = -2.5 log10(flux/Texp) + m0'
           type: number
           default: 0
+        fix_aper:
+          description: use the same aperture radius for all sources when doing automatic photometry
+          type: boolean
+          default: true
+        fix_ell:
+          description: use the same major to minor aperture axis ratio for all sources when doing automatic photometry
+          type: boolean
+          default: true
+        fix_rot:
+          description: use the same aperture position angle for all sources when doing automatic photometry
+          type: boolean
+          default: true
       nullable: true
       default: null
 

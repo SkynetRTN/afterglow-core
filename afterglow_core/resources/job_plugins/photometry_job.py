@@ -99,6 +99,9 @@ def run_photometry_job(job: Job, settings: PhotSettings,
             k=settings.a if settings.a > 0 else 2.5,
             k_in=settings.a_in,
             k_out=settings.a_out,
+            fix_aper=settings.fix_aper,
+            fix_ell=settings.fix_ell,
+            fix_rot=settings.fix_rot,
         )
     else:
         raise ValueError('Photometry mode must be "aperture" or "auto"')
