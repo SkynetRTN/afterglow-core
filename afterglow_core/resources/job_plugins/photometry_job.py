@@ -94,7 +94,7 @@ def run_photometry_job(job: Job, settings: PhotSettings,
             theta_out=settings.theta_out,
         )
     elif settings.mode == 'auto':
-        # Automatic (Kron-like) photometry
+        # Automatic (adaptive aperture) photometry
         phot_kw = dict(
             k=settings.a if settings.a else 2.5,
             k_in=settings.a_in,

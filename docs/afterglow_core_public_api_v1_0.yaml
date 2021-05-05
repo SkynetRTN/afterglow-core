@@ -986,11 +986,11 @@ components:
       type: object
       properties:
         mode:
-          description: 'Photometry mode: fixed-aperture vs adaptive (Kron)'
+          description: 'Photometry mode: fixed-aperture vs adaptive'
           type: string
           enum: [aperture, auto]
         a:
-          description: aperture radius/semi-major axis [pixels] for mode=aperture, Kron factor (defaulting to 2.5) for mode=auto; required for mode=aperture
+          description: aperture radius/semi-major axis [pixels] for mode=aperture, aperture scaling factor (defaulting to 2.5) for mode=auto; required for mode=aperture
           type: number
           minimum: 0
           exclusiveMinimum: true
@@ -1007,19 +1007,19 @@ components:
           nullable: true
           default: 0
         a_in:
-          description: inner annulus radius/semi-major axis [pixels], defaults to `a`*Kron factor*1.5
+          description: inner annulus radius/semi-major axis [pixels], defaults to aperture radius*1.5
           type: number
           minimum: 0
           exclusiveMinimum: true
           nullable: true
         a_out:
-          description: outer annulus radius/semi-major axis [pixels], defaults to `a`*Kron factor*2
+          description: outer annulus radius/semi-major axis [pixels], defaults to aperture radius*2
           type: number
           minimum: 0
           exclusiveMinimum: true
           nullable: true
         b_out:
-          description: outer annulus semi-minor axis [pixels], defaults to `b`*Kron factor*2
+          description: outer annulus semi-minor axis [pixels], defaults to aperture semi-minor axis*2
           type: number
           minimum: 0
           exclusiveMinimum: true
