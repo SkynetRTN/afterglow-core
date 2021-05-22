@@ -233,7 +233,8 @@ class LocalDiskDataProvider(DataProvider):
         # A FITS file?
         # noinspection PyBroadException
         try:
-            with pyfits.open(filename, 'readonly') as f:
+            with pyfits.open(filename, 'readonly',
+                             ignore_missing_end=True) as f:
                 layers = len(f)
                 imwidth = f[0].header['NAXIS1']
                 imheight = f[0].header['NAXIS2']
