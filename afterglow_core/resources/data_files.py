@@ -271,7 +271,7 @@ def save_data_file(adb, root: str, file_id: int,
     # Save FITS to data file directory
     fits.writeto(
         os.path.join(root, '{}.fits'.format(file_id)),
-        'silentfix', overwrite=True)
+        'silentfix+ignore', overwrite=True)
 
     # Update image dimensions and file modification timestamp
     db_data_file = adb.query(DbDataFile).get(file_id)
@@ -446,7 +446,11 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
         adb.add(db_data_file)
         adb.flush()  # obtain the new row ID by flushing db
 
-    save_data_file(adb, root, db_data_file.id, data, hdr, modified=False)
+    try:
+        save_data_file(adb, root, db_data_file.id, data, hdr, modified=False)
+    except Exception:
+        adb.rollback()
+        raise
 
     return db_data_file
 
@@ -483,7 +487,7 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
     # noinspection PyBroadException
     try:
         fp.seek(0)
-        with pyfits.open(fp, 'readonly') as fits:
+        with pyfits.open(fp, 'readonly', ignore_missing_end=True) as fits:
             # Store non-default primary HDU header cards to copy them to all
             # FITS files for separate extension HDUs
             primary_header = fits[0].header.copy()
@@ -969,7 +973,7 @@ def get_data_file_group_bytes(user_id: Optional[int], group_name: str,
                 fits.append(pyfits.ImageHDU.fromstring(data))
             else:
                 fits.append(pyfits.BinTableHDU.fromstring(data))
-        fits.writeto(buf, output_verify='silentfix')
+        fits.writeto(buf, output_verify='silentfix+ignore')
     elif PILImage is None:
         raise DataFileExportError(reason='Server does not support image export')
     else:

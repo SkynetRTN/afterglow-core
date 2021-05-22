@@ -138,7 +138,7 @@ def get_imaging_surveys(name: Optional[str] = None) -> Response:
     fmt = args.pop('fmt', 'raw').lower()
     if fmt == 'fits':
         buf = BytesIO()
-        res[0].writeto(buf, output_verify='silentfix')
+        res[0].writeto(buf, output_verify='silentfix+ignore')
         return Response(buf.getvalue(), 200, None, 'image/fits')
 
     data = res[0][0].data
