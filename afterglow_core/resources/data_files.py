@@ -258,7 +258,7 @@ def save_data_file(adb, root: str, file_id: int,
                  pyfits.ImageHDU(data.mask.astype(numpy.uint8), name='MASK')])
         else:
             # Treat normal arrays with NaN's as masked arrays
-            mask = numpy.isnan(data)
+            mask = numpy.isnan(data).astype(numpy.uint8)
             if mask.any():
                 fits = pyfits.HDUList(
                     [pyfits.PrimaryHDU(data, hdr),
