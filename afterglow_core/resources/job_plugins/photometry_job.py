@@ -105,6 +105,7 @@ def run_photometry_job(job: Job, settings: PhotSettings,
         )
     else:
         raise ValueError('Photometry mode must be "aperture" or "auto"')
+    phot_kw['apcorr_tol'] = settings.apcorr_tol
 
     # Extract file IDs from sources
     file_ids = {source.file_id for source in job_sources
