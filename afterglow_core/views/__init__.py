@@ -6,5 +6,6 @@ from . import public_api
 
 from .. import app
 if app.config.get('AUTH_ENABLED'):
-    from . import ajax_api, admin, default, oauth2, settings
+    from .ajax_api import *
+    from .oauth2 import *
 del app

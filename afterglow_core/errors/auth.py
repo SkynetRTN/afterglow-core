@@ -150,9 +150,10 @@ class HttpAuthFailedError(AuthError):
     code = 401
     subcode = 110
     message = 'Invalid or missing username/password or authentication token'
-    headers = [
-        ('WWW-Authenticate',
-         'Basic realm="{}"'.format('Local Afterglow Users Only'))]
+    # Causes browsers to pop-up login form upon failed login attempt
+    # headers = [
+    #     ('WWW-Authenticate',
+    #      'Basic realm="{}"'.format('Local Afterglow Users Only'))]
 
 
 class CannotDeleteCurrentUserError(AuthError):

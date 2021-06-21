@@ -1,0 +1,9 @@
+/* Buefy has Bulma included. So we import just that */
+@import "~buefy/src/scss/buefy-build";
+
+/* Perfect scrollbar */
+@import "~perfect-scrollbar/css/perfect-scrollbar.css";
+@import "perfect-scrollbar-customize";
+
+/* Spinkit */
+@import "spinkit";
