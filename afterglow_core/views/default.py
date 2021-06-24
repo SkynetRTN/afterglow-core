@@ -74,7 +74,6 @@ def initialize() -> Response:
                 email=request.args.get('email'),
                 first_name=request.args.get('first_name'),
                 last_name=request.args.get('last_name'),
-                birth_date=request.args.get('birth_date'),
                 active=True,
                 roles=[
                     DbRole.query.filter_by(name='admin').one(),
@@ -254,8 +253,6 @@ def oauth2_authorized(plugin_id: str) -> Response:
                     user_profile.get('first_name') or None
                 identity.user.last_name = user_profile.get('last_name') or None
                 identity.user.email = user_profile.get('email') or None
-                identity.user.birth_date = \
-                    user_profile.get('birth_date') or None
                 db.session.commit()
             except Exception:
                 db.session.rollback()
@@ -296,7 +293,6 @@ def oauth2_authorized(plugin_id: str) -> Response:
                 first_name=user_profile.get('first_name') or None,
                 last_name=user_profile.get('last_name') or None,
                 email=user_profile.get('email') or None,
-                birth_date=user_profile.get('birth_date') or None,
                 roles=[DbRole.query.filter_by(name='user').one()],
             )
             db.session.add(user)

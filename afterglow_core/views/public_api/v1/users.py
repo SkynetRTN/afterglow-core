@@ -8,7 +8,7 @@ from .... import app, json_response
 from ....auth import auth_required
 from ....models import User
 from ....resources.users import *
-from ....schemas.api.v1 import MinorUserSchema, UserSchema
+from ....schemas.api.v1 import UserSchema
 from ....errors.auth import (
     AdminOrSameUserRequiredError, AdminRequiredError,
     CannotDeactivateTheOnlyAdminError, CannotDeleteCurrentUserError)
@@ -28,7 +28,7 @@ def users() -> Response:
         - return the list of users matching the given criteria
 
     POST /users?username=...&password=...&roles=...&first_name=...&last_name=...
-        &email=...&birth_date=...&settings=...
+        &email=...&settings=...
         - create a new user account; roles may include "admin" and "user"
           (separated by comma if both)
 
@@ -42,7 +42,7 @@ def users() -> Response:
     if request.method == 'GET':
         # Return all users matching the given attributes
         return json_response(
-            [MinorUserSchema(u) if u.is_minor else UserSchema(u)
+            [UserSchema(u)
              for u in query_users(
                 username=request.args.get('username'),
                 active=request.args.get('active'),
@@ -66,7 +66,7 @@ def user(user_id: int) -> Response:
         - return the given user info; must be admin or same user
 
     PUT /users/[id]?username=...&password=...&active=...&roles=...
-        &first_name=...&last_name=...&email=...&birth_date=...&settings=...
+        &first_name=...&last_name=...&email=...&settings=...
         - update user account; must be admin or same user; non-admin users
           cannot change "username", "active", and "roles"
 
@@ -87,8 +87,7 @@ def user(user_id: int) -> Response:
     u = get_user(user_id)
 
     if request.method == 'GET':
-        return json_response(
-            MinorUserSchema(u) if u.is_minor else UserSchema(u))
+        return json_response(UserSchema(u))
 
     # At least one active admin must remain when deactivating admin account
     # or removing admin role from account
@@ -114,8 +113,7 @@ def user(user_id: int) -> Response:
                 raise CannotDeactivateTheOnlyAdminError()
 
         u1 = update_user(u.id, u1)
-        return json_response(
-            MinorUserSchema(u1) if u1.is_minor else UserSchema(u1))
+        return json_response(UserSchema(u1))
 
     if request.method == 'DELETE':
         if u.id == request.user.id:
@@ -139,8 +137,7 @@ def current_user() -> Response:
     GET /user
         - return the current user info
 
-    PUT /user?password=...&first_name=...&last_name=...&email=...&birth_date=...
-        &settings=...
+    PUT /user?password=...&first_name=...&last_name=...&email=...&settings=...
         - update user account info; non-admin users cannot change "username",
           "active", and "roles"
 

@@ -78,7 +78,6 @@ class DbUser(db.Model, UserMixin):
     last_name = db.Column(
         db.String,
         db.CheckConstraint('last_name is null or length(last_name) <= 255'))
-    birth_date = db.Column(Date)
     active = db.Column(db.Boolean, server_default='1')
     created_at = db.Column(DateTime, default=db.func.current_timestamp())
     modified_at = db.Column(
@@ -201,7 +200,6 @@ class AnonymousUser(object):
     full_name = ''
     email = ''
     password = ''
-    birth_date = None
     active = True
     created_at = None
     modified_at = None

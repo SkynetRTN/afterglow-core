@@ -7,10 +7,10 @@ from typing import List as ListType
 
 from marshmallow.fields import Integer, List, Nested, String
 
-from ... import AfterglowSchema, Boolean, Date, DateTime, Resource
+from ... import AfterglowSchema, Boolean, DateTime, Resource
 
 
-__all__ = ['RoleSchema', 'MinorUserSchema', 'UserSchema']
+__all__ = ['RoleSchema', 'UserSchema']
 
 
 class RoleSchema(AfterglowSchema):
@@ -19,7 +19,7 @@ class RoleSchema(AfterglowSchema):
     description: str = String()
 
 
-class MinorUserSchema(Resource):
+class UserSchema(Resource):
     __get_view__ = 'users'
 
     id: int = Integer()
@@ -29,10 +29,6 @@ class MinorUserSchema(Resource):
     modified_at: datetime = DateTime()
     roles: ListType[RoleSchema] = List(Nested(RoleSchema, only=['name']))
     settings: str = String()
-
-
-class UserSchema(MinorUserSchema):
     email: str = String()
     first_name: str = String()
     last_name: str = String()
-    birth_date: date = Date()

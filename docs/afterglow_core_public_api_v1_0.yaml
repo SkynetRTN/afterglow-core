@@ -109,10 +109,6 @@ components:
         last_name:
           description: user's last name
           type: string
-        birth_date:
-          description: user's birth date
-          type: string
-          format: 'date'
         active:
           description: user account active?
           type: boolean
