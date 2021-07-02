@@ -14,7 +14,7 @@ except ImportError:
     PILImage = None
 from marshmallow.fields import Dict, Integer, List, String
 
-from .. import app, auth, errors
+from .. import PaginationInfo, app, auth, errors
 from ..errors.auth import NotAuthenticatedError
 from ..errors.data_provider import (
     AssetNotFoundError, NonBrowseableDataProviderError, QuotaExceededError)
@@ -217,42 +217,31 @@ class DataProvider(AfterglowSchema):
 
     def get_child_assets(self, path: str, sort_by: Optional[str] = None,
                          page_size: Optional[int] = None,
-                         page: Optional[Union[int, str]] = None,
-                         page_after: Optional[Any] = None,
-                         page_before: Optional[Any] = None) \
-            -> Tuple[TList[DataProviderAsset], Optional[int],
-                     Optional[Any], Optional[Any]]:
+                         page: Optional[Union[int, str]] = None) \
+            -> Tuple[TList[DataProviderAsset], Optional[PaginationInfo]]:
         """
         Return child assets of a collection asset at the given path
 
         :param path: asset path; must identify a collection asset
         :param sort_by: optional sorting key (e.g. column name); reverse sorting
             is indicated by prepending a hyphen to the key; data provider may
-            assume a certain default sorting key
-        :param page_size: optional number of assets per page; data provider may
-            enforce a hard limit on the page size
-        :param page: for page-based pagination, optional 0-based page number;
-            data provider returns at most `page_size` assets sorted by
-            the sorting key at offset = `page`*`page_size`; two special values
-            "first" and "last" are used both for page and for keyset-based
-            pagination to indicate first and last page, respectively
-        :param page_after: for keyset-based pagination, key value for the last
-            item of the previous page; data provider returns at most `page_size`
-            assets with the value of `sort_by` key greater than `page_after`;
-            unused for page-based pagination and is mutually exclusive with
-            `page_before`
-        :param page_before: for keyset-based pagination, key value for the first
-            item of the next page; data provider returns at most `page_size`
-            assets with the value of the `sort_by` key smaller than
-            `page_before`; unused for page-based pagination and is mutually
-            exclusive with `page_after`
+            assume a certain default sorting mode and must return it in
+            the pagination info
+        :param page_size: optional number of assets per page; None means don't
+            use pagination (used only internally, never via the API);
+            if not None, data provider may enforce a hard limit on the page size
+        :param page: page-based pagination: optional 0-based page number (data
+            provider returns at most `page_size` assets sorted by the sorting
+            key at offset = `page`*`page_size`);
+            keyset-based pagination: ">value" = return at most `page_size`
+            assets with the value of `sort_by` key greater than the given value,
+            "<value": return at most `page_size` assets with the value
+            of the `sort_by` key smaller than the given value;
+            for any pagination type, two special values "first" and "last"
+            are used to return first and last page, respectively
 
-        :return: list of :class:`DataProviderAsset` objects for child assets,
-            optional total number of pages; the last two items are used to
-            construct links to the previous and next pages and are key values
-            for the first and last assets on the current page for keyset-based
-            pagination, the actual current page number and None for page-based
-            pagination, or two None-s if no pagination is supported
+        :return: list of :class:`DataProviderAsset` objects for child assets and
+            pagination info or None if pagination is not supported
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='get_child_assets')
@@ -261,11 +250,8 @@ class DataProvider(AfterglowSchema):
                     sort_by: Optional[str] = None,
                     page_size: Optional[int] = None,
                     page: Optional[Union[int, str]] = None,
-                    page_after: Optional[Any] = None,
-                    page_before: Optional[Any] = None,
                     **kwargs) \
-            -> Tuple[TList[DataProviderAsset], Optional[int],
-                     Optional[Any], Optional[Any]]:
+            -> Tuple[TList[DataProviderAsset], Optional[PaginationInfo]]:
         """
         Return a list of assets matching the given parameters
 
@@ -274,17 +260,14 @@ class DataProvider(AfterglowSchema):
             search in the data provider root
         :param sort_by: optional sorting key; see :meth:`get_child_assets`
         :param page_size: optional number of assets per page
-        :param page: optional 0-based page number, "first", or "last"
-        :param page_after: key value for the last item of the previous page
-        :param page_before: key value for the first item of the next page
+        :param page: optional 0-based page number, ">value", "<value", "first",
+            or "last"
         :param kwargs: provider-specific keyword=value pairs defining the
             asset(s), like name, image type or dimensions
 
         :return: list of :class:`DataProviderAsset` objects for assets matching
-            the search query parameters, optional total number of pages, and key
-            values for the first and last assets on the current page
-            (keyset-based pagination), the actual current page number and None
-            (page-based pagination), or two None-s if no pagination is supported
+            the search query parameters and pagination info or None
+            if pagination is not supported
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='find_assets')
@@ -451,7 +434,7 @@ class DataProvider(AfterglowSchema):
                 res = self.create_asset(dst_path, None, **kwargs)
 
             if not limit or _depth < limit - 1:
-                for child_asset in provider.get_child_assets(src_path):
+                for child_asset, _ in provider.get_child_assets(src_path):
                     # For each child asset of a collection asset, recursively
                     # copy its data; calculate the destination path by appending
                     # the source asset name; always create destination asset

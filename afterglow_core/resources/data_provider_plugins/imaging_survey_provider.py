@@ -2,7 +2,7 @@
 Afterglow Core: imaging survey data provider plugin
 """
 
-from typing import Any, List as TList, Optional, Tuple, Union
+from typing import List as TList, Optional, Tuple, Union
 
 from io import BytesIO
 from threading import Lock
@@ -168,17 +168,15 @@ class ImagingSurveyDataProvider(DataProvider):
     # noinspection PyShadowingBuiltins
     def find_assets(self, path: Optional[str] = None,
                     sort_by: Optional[str] = None,
-                    page_size: int = 20,
+                    page_size: Optional[int] = None,
                     page: Optional[Union[int, str]] = None,
-                    page_after: Optional[Any] = None,
-                    page_before: Optional[Any] = None, survey: str = 'DSS',
+                    survey: str = 'DSS',
                     ra_hours: Optional[float] = None,
                     dec_degs: Optional[float] = None,
                     object: Optional[str] = None,
                     width: Optional[float] = None,
                     height: Optional[float] = None) \
-            -> Tuple[TList[DataProviderAsset], Optional[int],
-                     Optional[Any], Optional[Any]]:
+            -> Tuple[TList[DataProviderAsset], None]:
         """
         Return a list of assets matching the given parameters
 
@@ -189,8 +187,6 @@ class ImagingSurveyDataProvider(DataProvider):
         :param sort_by: unused
         :param page_size: unused
         :param page: unused
-        :param page_after: unused
-        :param page_before: unused
         :param survey: survey name; should be one of those returned by
             the /imaging-surveys resource; default: DSS
         :param ra_hours: RA of image center in hours; used in conjunction
@@ -203,8 +199,7 @@ class ImagingSurveyDataProvider(DataProvider):
         :param height: image height in arcminutes; default: same as `width`
 
         :return: list of 0 or 1 :class:`DataProviderAsset` objects for assets
-            matching the query parameters, and three None-s indicating that
-            no pagination is supported or required
+            matching the query parameters, and None for the pagination info
         """
         if all(item is None for item in (ra_hours, dec_degs, object)):
             raise MissingFieldError('ra_hours,dec_degs|object')
@@ -254,7 +249,7 @@ class ImagingSurveyDataProvider(DataProvider):
         # noinspection PyProtectedMember
         if survey not in SkyView._valid_surveys:
             # Unknown survey
-            return [], None, None, None
+            return [], None
 
         if object is None:
             # Convert FOV center coordinates to standard form
@@ -271,11 +266,10 @@ class ImagingSurveyDataProvider(DataProvider):
             kwargs.pop('show_progress')
             res = SkyView.get_image_list(object, **kwargs)
         except Exception:
-            return [], None, None, None
+            return [], None
         if not res:
-            return [], None, None, None
-        return ([self._get_asset(survey, object, width, height)],
-                None, None, None)
+            return [], None
+        return [self._get_asset(survey, object, width, height)], None
 
     def get_asset(self, path: str) -> DataProviderAsset:
         r"""
