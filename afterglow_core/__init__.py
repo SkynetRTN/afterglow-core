@@ -17,7 +17,7 @@ from flask import Flask, Response, request
 from .schemas import AfterglowSchema
 
 
-__all__ = ['app', 'json_response']
+__all__ = ['app', 'json_response', 'PaginationInfo']
 
 
 class PrefixMiddleware(object):
@@ -51,37 +51,76 @@ class AfterglowSchemaEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-def json_response(data: Optional[Union[dict, AfterglowSchema, TList[dict],
-                                       TList[AfterglowSchema]]] = None,
-                  status_code: Optional[int] = None,
-                  headers: Optional[TDict[str, str]] = None,
-                  include_pagination: bool = False,
-                  total_pages: Optional[int] = None,
-                  first: Optional[Any] = None, last: Optional[Any] = None) \
-        -> Response:
+class PaginationInfo(object):
     """
-    Serialize a Python object to a JSON-type flask.Response
+    Pagination info structure provided by resources that return multiple objects
+    (e.g. data provider assets)
 
-    :param data: object(s) to serialize; can be a :class:`AfterglowSchema`
-        instance or a dict, a list of those, or None
-    :param int status_code: optional HTTP status code; defaults to 200 - OK
-    :param dict headers: optional extra HTTP headers
-    :param include_pagination: always include pagination links (first and last
-        page) even if no total/previous/next page info is provided
-    :param total_pages: optional extra pagination info: total number of pages
-    :param first: optional extra pagination info: for keyset-nased pagination,
-        this is the key value for the first item on the current page; for
-        page-based pagination, this is the current page number; used
-        to construct the link to the previous page
-    :param last: optional extra pagination info: for keyset-based pagination,
-        this is the key value for the last item on the current page or None
-        otherwise; used to construct the link to the next page
+    Pagination info is returned in the JSON response envelope in the following
+    way:
+        {
+            "data": [{object}, {object}, ...],
+            "links": {
+                "self": "resource URI",
+                "pagination": {
+                    "sort": "sorting mode (-mode = reverse)",
+                    "first": "URL of first page (always present)",
+                    "last": "URL of last page (always present)",
+                    "prev": "URL of previous page (present unless first page)",
+                    "next": "URL of next page (present unless last page)",
+                    "page_size": # of items per page (always present),
+                    "total_pages": optional total # of pages if known,
+                    "current_page": optional 0-based current page index
+                }
+            }
+        }
 
-    :return: Flask response object with mimetype set to application/json
+    Use :meth:`to_dict` to construct a JSON-serializable pagination structure.
     """
-    links = {'self': request.url}
-    if include_pagination or (total_pages, first, last) != (None,)*3:
-        # Add pagination info
+    sort: str = None  # sorting mode, optionally prefixed with + or -
+    page_size: int = None  # page size
+    total_pages: int = None  # total number of pages
+    current_page: int = None  # 0-based current page index (page-based)
+    first_item: str = None  # key value of the first item on page (keyset-based)
+    last_item: str = None  # key value of the last item on page (keyset-based)
+
+    def __init__(self, sort: Optional[str] = None,
+                 page_size: Optional[int] = None,
+                 total_pages: Optional[int] = None,
+                 current_page: Optional[int] = None,
+                 first_item: Optional[Any] = None,
+                 last_item: Optional[Any] = None):
+        """
+
+        :param sort: sorting mode, optionally prefixed with + or -
+        :param page_size: page size
+        :param total_pages: total number of pages
+        :param current_page: 0-based current page index (page-based pagination)
+        :param first_item: key value of the first item on page (keyset-based
+            pagination)
+        :param last_item: key value of the last item on page (keyset-based
+            pagination)
+        """
+        if sort is not None:
+            self.sort = str(sort)
+        if page_size is not None:
+            self.page_size = int(page_size)
+        if total_pages is not None:
+            self.total_pages = int(total_pages)
+        if current_page is not None:
+            self.current_page = int(current_page)
+        if first_item is not None:
+            self.first_item = str(first_item)
+        if last_item is not None:
+            self.last_item = str(last_item)
+
+    def to_dict(self) -> dict:
+        """
+        Return a JSON-serializable dict constructed from the actual pagination
+        info and request environment
+
+        :return: pagination structure as dictionary
+        """
         args_first = request.args.copy()
         args_first['page[number]'] = 'first'
         args_last = request.args.copy()
@@ -91,34 +130,65 @@ def json_response(data: Optional[Union[dict, AfterglowSchema, TList[dict],
             'first': '{}?{}'.format(request.base_url, url_encode(args_first)),
             'last': '{}?{}'.format(request.base_url, url_encode(args_last)),
         }
-        if total_pages is not None:
-            pagination['total_pages'] = total_pages
-        if first is not None:
-            if last is None:
-                # Page-based pagination; first is page number
-                pagination['current_page'] = first
-                if first > 0:
-                    args = request.args.copy()
-                    args['page[number]'] = str(first - 1)
-                    pagination['prev'] = '{}?{}'.format(
-                        request.base_url, url_encode(args))
-                if total_pages is None or first < total_pages - 1:
-                    args = request.args.copy()
-                    args['page[number]'] = str(first + 1)
-                    pagination['next'] = '{}?{}'.format(
-                        request.base_url, url_encode(args))
-            else:
-                # Keyset-based pagination; first and last are keys for previous
-                # and next pages
+
+        for attr in ('sort', 'page_size', 'total_pages', 'current_page'):
+            if getattr(self, attr, None) is not None:
+                pagination[attr] = getattr(self, attr)
+
+        if self.current_page is not None:
+            # Page-based pagination
+            if self.current_page > 0:
                 args = request.args.copy()
-                args['page[before]'] = str(first)
+                args['page[number]'] = str(self.current_page - 1)
                 pagination['prev'] = '{}?{}'.format(
                     request.base_url, url_encode(args))
+            if self.total_pages is None or \
+                    self.current_page < self.total_pages - 1:
                 args = request.args.copy()
-                args['page[after]'] = str(last)
+                args['page[number]'] = str(self.current_page + 1)
                 pagination['next'] = '{}?{}'.format(
                     request.base_url, url_encode(args))
-        links['pagination'] = pagination
+        else:
+            # Keyset-based pagination; first and last are keys for previous
+            # and next pages
+            if self.first_item is not None:
+                args = request.args.copy()
+                args['page[before]'] = str(self.first_item)
+                pagination['prev'] = '{}?{}'.format(
+                    request.base_url, url_encode(args))
+            if self.last_item is not None:
+                args = request.args.copy()
+                args['page[after]'] = str(self.last_item)
+                pagination['next'] = '{}?{}'.format(
+                    request.base_url, url_encode(args))
+
+        return pagination
+
+
+def json_response(data: Optional[Union[dict, AfterglowSchema, TList[dict],
+                                       TList[AfterglowSchema]]] = None,
+                  status_code: Optional[int] = None,
+                  headers: Optional[TDict[str, str]] = None,
+                  pagination: Optional[PaginationInfo] = None,
+                  force_pagination: bool = False) -> Response:
+    """
+    Serialize a Python object to a JSON-type flask.Response
+
+    :param data: object(s) to serialize; can be a :class:`AfterglowSchema`
+        instance or a dict, a list of those, or None
+    :param int status_code: optional HTTP status code; defaults to 200 - OK
+    :param dict headers: optional extra HTTP headers
+    :param pagination: optional pagination info
+    :param force_pagination: always include pagination links (first and last
+        page) even if no total/previous/next page info is provided
+
+    :return: Flask response object with mimetype set to application/json
+    """
+    links = {'self': request.url}
+    if pagination is None and force_pagination:
+        pagination = PaginationInfo()
+    if pagination is not None:
+        links['pagination'] = pagination.to_dict()
     envelope = {
         'data': data,
         'links': links,
