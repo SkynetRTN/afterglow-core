@@ -6,7 +6,7 @@ A data provider plugin must subclass :class:`DataProvider`.
 
 from __future__ import annotations
 
-from typing import Any, Dict as TDict, List as TList, Optional
+from typing import Any, Dict as TDict, List as TList, Optional, Tuple, Union
 
 try:
     from PIL import Image as PILImage
@@ -14,7 +14,7 @@ except ImportError:
     PILImage = None
 from marshmallow.fields import Dict, Integer, List, String
 
-from .. import app, auth, errors
+from .. import PaginationInfo, app, auth, errors
 from ..errors.auth import NotAuthenticatedError
 from ..errors.data_provider import (
     AssetNotFoundError, NonBrowseableDataProviderError, QuotaExceededError)
@@ -104,7 +104,7 @@ class DataProvider(AfterglowSchema):
         get_asset_data(): return data for a non-collection asset at the given
             path; must be implemented by any data provider
         get_child_assets(): return child assets of a collection asset at the
-            given path; must be implemented by any browseable data provider
+            given path; must be implemented by any browsable data provider
         find_assets(): return assets matching the given parameters; must be
             implemented by any searchable data provider
         create_asset(): create a new non-collection asset from data file at the
@@ -215,30 +215,59 @@ class DataProvider(AfterglowSchema):
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='get_assets')
 
-    def get_child_assets(self, path: str) -> TList[DataProviderAsset]:
+    def get_child_assets(self, path: str, sort_by: Optional[str] = None,
+                         page_size: Optional[int] = None,
+                         page: Optional[Union[int, str]] = None) \
+            -> Tuple[TList[DataProviderAsset], Optional[PaginationInfo]]:
         """
         Return child assets of a collection asset at the given path
 
         :param path: asset path; must identify a collection asset
+        :param sort_by: optional sorting key (e.g. column name); reverse sorting
+            is indicated by prepending a hyphen to the key; data provider may
+            assume a certain default sorting mode and must return it in
+            the pagination info
+        :param page_size: optional number of assets per page; None means don't
+            use pagination (used only internally, never via the API);
+            if not None, data provider may enforce a hard limit on the page size
+        :param page: page-based pagination: optional 0-based page number (data
+            provider returns at most `page_size` assets sorted by the sorting
+            key at offset = `page`*`page_size`);
+            keyset-based pagination: ">value" = return at most `page_size`
+            assets with the value of `sort_by` key greater than the given value,
+            "<value": return at most `page_size` assets with the value
+            of the `sort_by` key smaller than the given value;
+            for any pagination type, two special values "first" and "last"
+            are used to return first and last page, respectively
 
-        :return: list of :class:`DataProviderAsset` objects for child assets
+        :return: list of :class:`DataProviderAsset` objects for child assets and
+            pagination info or None if pagination is not supported
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='get_child_assets')
 
-    def find_assets(self, path: Optional[str] = None, **kwargs) \
-            -> TList[DataProviderAsset]:
+    def find_assets(self, path: Optional[str] = None,
+                    sort_by: Optional[str] = None,
+                    page_size: Optional[int] = None,
+                    page: Optional[Union[int, str]] = None,
+                    **kwargs) \
+            -> Tuple[TList[DataProviderAsset], Optional[PaginationInfo]]:
         """
         Return a list of assets matching the given parameters
 
         :param path: optional path to the collection asset to search in;
             by default (and for providers that do not have collection assets),
             search in the data provider root
+        :param sort_by: optional sorting key; see :meth:`get_child_assets`
+        :param page_size: optional number of assets per page
+        :param page: optional 0-based page number, ">value", "<value", "first",
+            or "last"
         :param kwargs: provider-specific keyword=value pairs defining the
             asset(s), like name, image type or dimensions
 
         :return: list of :class:`DataProviderAsset` objects for assets matching
-            the search query parameters
+            the search query parameters and pagination info or None
+            if pagination is not supported
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='find_assets')
@@ -405,7 +434,7 @@ class DataProvider(AfterglowSchema):
                 res = self.create_asset(dst_path, None, **kwargs)
 
             if not limit or _depth < limit - 1:
-                for child_asset in provider.get_child_assets(src_path):
+                for child_asset, _ in provider.get_child_assets(src_path):
                     # For each child asset of a collection asset, recursively
                     # copy its data; calculate the destination path by appending
                     # the source asset name; always create destination asset

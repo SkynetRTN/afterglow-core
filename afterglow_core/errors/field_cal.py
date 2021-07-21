@@ -29,5 +29,6 @@ class DuplicateFieldCalError(AfterglowError):
     Extra attributes::
         name: field cal name
     """
+    code = 409
     subcode = 4001
     message = 'Duplicate field cal name'

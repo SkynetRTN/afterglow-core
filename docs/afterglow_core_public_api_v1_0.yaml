@@ -12,7 +12,7 @@ info:
     email: vkoupr@email.unc.edu
   license:
     name: Apache 2.0
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
   version: 1.0.0
 servers:
   - url: https://afterglow.skynet.unc.edu/api/v1
@@ -982,11 +982,11 @@ components:
       type: object
       properties:
         mode:
-          description: 'Photometry mode: fixed-aperture vs adaptive (Kron)'
+          description: 'Photometry mode: fixed-aperture vs adaptive'
           type: string
           enum: [aperture, auto]
         a:
-          description: aperture radius/semi-major axis [pixels] for mode=aperture, Kron factor (defaulting to 2.5) for mode=auto; required for mode=aperture
+          description: aperture radius/semi-major axis [pixels] for mode=aperture, aperture scaling factor (defaulting to 2.5) for mode=auto; required for mode=aperture
           type: number
           minimum: 0
           exclusiveMinimum: true
@@ -1003,19 +1003,19 @@ components:
           nullable: true
           default: 0
         a_in:
-          description: inner annulus radius/semi-major axis [pixels], defaults to `a`*Kron factor*1.5
+          description: inner annulus radius/semi-major axis [pixels], defaults to aperture radius*1.5
           type: number
           minimum: 0
           exclusiveMinimum: true
           nullable: true
         a_out:
-          description: outer annulus radius/semi-major axis [pixels], defaults to `a`*Kron factor*2
+          description: outer annulus radius/semi-major axis [pixels], defaults to aperture radius*2
           type: number
           minimum: 0
           exclusiveMinimum: true
           nullable: true
         b_out:
-          description: outer annulus semi-minor axis [pixels], defaults to `b`*Kron factor*2
+          description: outer annulus semi-minor axis [pixels], defaults to aperture semi-minor axis*2
           type: number
           minimum: 0
           exclusiveMinimum: true
@@ -1039,6 +1039,18 @@ components:
           description: 'photometric zero point m0 applied to instrumental magnitudes: m = -2.5 log10(flux/Texp) + m0'
           type: number
           default: 0
+        fix_aper:
+          description: use the same aperture radius for all sources when doing automatic photometry
+          type: boolean
+          default: true
+        fix_ell:
+          description: use the same major to minor aperture axis ratio for all sources when doing automatic photometry
+          type: boolean
+          default: true
+        fix_rot:
+          description: use the same aperture position angle for all sources when doing automatic photometry
+          type: boolean
+          default: true
       nullable: true
       default: null
 
@@ -2116,7 +2128,7 @@ components:
                     description: duplicate username
                     type: string
           example:
-            code: 403
+            code: 409
             subcode: 107
             message: "User with this username already exists"
 
@@ -2483,7 +2495,7 @@ components:
           schema:
             $ref: '#/components/schemas/AfterglowError'
           example:
-            code: 403
+            code: 409
             subcode: 1005
             message: "Asset already exists at the given path"
 
@@ -2521,7 +2533,7 @@ components:
             message: 'Cannot delete non-empty collection asset without "force"'
 
     QuotaExceededError:
-      description: The user requested a GET with search keywords for an asset of a non-searchable data provider
+      description: Attempting to create/update an asset of a read-write data provider would exceed the user quota
       content:
         application/json:
           schema:
@@ -2690,7 +2702,7 @@ components:
                     description: session name
                     type: string
           example:
-            code: 400
+            code: 409
             subcode: 2006
             message: "Duplicate session name"
 
@@ -2752,7 +2764,7 @@ components:
                     description: requested data file name
                     type: string
           example:
-            code: 403
+            code: 409
             subcode: 2010
             message: "Duplicate data file name"
 
@@ -2769,7 +2781,7 @@ components:
                     description: requested data file group name
                     type: string
           example:
-            code: 403
+            code: 409
             subcode: 2011
             message: "Duplicate data file group name"
 
@@ -2874,7 +2886,7 @@ components:
                     description: field cal name
                     type: string
           example:
-            code: 400
+            code: 409
             subcode: 4001
             message: "Duplicate field cal name"
 

@@ -7,7 +7,7 @@ from typing import Optional
 from marshmallow.fields import Float, String
 import numpy
 
-from ..schemas import AfterglowSchema
+from ..schemas import AfterglowSchema, Boolean
 from .source_extraction import SourceExtractionData
 
 
@@ -53,6 +53,10 @@ class PhotSettings(AfterglowSchema):
     gain: float = Float(default=None)
     centroid_radius: float = Float(default=0)
     zero_point: float = Float(default=0)
+    fix_aper: bool = Boolean(default=False)
+    fix_ell: bool = Boolean(default=True)
+    fix_rot: bool = Boolean(default=True)
+    apcorr_tol: float = Float(default=0.0001)
 
 
 class PhotometryData(SourceExtractionData, IPhotometry, IAperture):
