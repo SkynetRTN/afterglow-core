@@ -4,7 +4,7 @@
 # General
 ################################################################################
 # Prefix URL which will be prepended to all routes
-APP_PREFIX = '/core'
+APPLICATION_ROOT = '/core'
 DASHBOARD_PREFIX = ''
 
 # Location of the general Afterglow Core data files
