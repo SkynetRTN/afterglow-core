@@ -12,27 +12,13 @@ from marshmallow import missing
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
 from werkzeug.urls import url_encode
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from flask import Flask, Response, request
 
 from .schemas import AfterglowSchema
 
 
 __all__ = ['app', 'json_response', 'PaginationInfo']
-
-
-class PrefixMiddleware(object):
-    def __init__(self, application, prefix=''):
-        self.app = application
-        self.prefix = prefix
-
-    def __call__(self, environ, start_response):
-        if environ['PATH_INFO'].startswith(self.prefix):
-            environ['PATH_INFO'] = environ['PATH_INFO'][len(self.prefix):]
-            environ['SCRIPT_NAME'] = self.prefix
-            return self.app(environ, start_response)
-        else:
-            start_response('404 NOT FOUND', [('Content-Type', 'text/plain')])
-            return ["This url does not belong to the app.".encode()]
 
 
 class AfterglowSchemaEncoder(json.JSONEncoder):
@@ -205,11 +191,13 @@ app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=True)
 
 proxy_count = app.config.get('APP_PROXY')
 if proxy_count:
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxy_count, x_proto=proxy_count, x_host=proxy_count, x_port=proxy_count, x_prefix=proxy_count)
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app, x_for=proxy_count, x_proto=proxy_count,
+        x_host=proxy_count, x_port=proxy_count, x_prefix=proxy_count)
 
-if app.config.get('APP_PREFIX'):
-    app.wsgi_app = PrefixMiddleware(
-        app.wsgi_app, prefix=app.config.get('APP_PREFIX'))
+if app.config.get('APPLICATION_ROOT'):
+    app.wsgi_app = DispatcherMiddleware(
+        app.wsgi_app, {app.config['APPLICATION_ROOT']: app.wsgi_app})
 
 if app.config.get('PROFILE'):
     # Enable profiling
