@@ -116,9 +116,10 @@ if __name__ == '__main__':
                 f.write(data)
             data = s.getvalue()
 
-    url = 'http{}://{}:{:d}/'.format(
+    url = 'http{}://{}:{:d}/core/'.format(
         's' if args.https else '', args.host, args.port)
-    if args.resource not in ('users/login', 'users/logout', 'users/tokens'):
+    if not args.resource.startswith('oauth2') and \
+            not args.resource.startswith('ajax'):
         url += 'api/v{}/'.format(args.api_version)
     url += args.resource
     print('\n{} {}'.format(method, url), file=sys.stderr)
