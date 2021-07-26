@@ -47,7 +47,7 @@ setup(
             'pytest-cov',
         ],
     },
-    install_requires=[
+    requires=[
         'alembic == 1.5.8',
         'Authlib == 0.15.3',
         'astropy == 4.2',

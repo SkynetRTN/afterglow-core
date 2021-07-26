@@ -11,8 +11,6 @@ from flask_cors import CORS
 from marshmallow import missing
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
 from werkzeug.urls import url_encode
-from werkzeug.middleware.proxy_fix import ProxyFix
-from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from flask import Flask, Response, request
 
 from .schemas import AfterglowSchema
@@ -191,11 +189,13 @@ app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=True)
 
 proxy_count = app.config.get('APP_PROXY')
 if proxy_count:
+    from werkzeug.middleware.proxy_fix import ProxyFix
     app.wsgi_app = ProxyFix(
         app.wsgi_app, x_for=proxy_count, x_proto=proxy_count,
         x_host=proxy_count, x_port=proxy_count, x_prefix=proxy_count)
 
 if app.config.get('APPLICATION_ROOT'):
+    from werkzeug.middleware.dispatcher import DispatcherMiddleware
     app.wsgi_app = DispatcherMiddleware(
         app.wsgi_app, {app.config['APPLICATION_ROOT']: app.wsgi_app})
 
