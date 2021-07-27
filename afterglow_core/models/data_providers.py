@@ -14,7 +14,7 @@ except ImportError:
     PILImage = None
 from marshmallow.fields import Dict, Integer, List, String
 
-from .. import PaginationInfo, app, auth, errors
+from .. import PaginationInfo, app, errors
 from ..errors.auth import NotAuthenticatedError
 from ..errors.data_provider import (
     AssetNotFoundError, NonBrowseableDataProviderError, QuotaExceededError)
@@ -370,6 +370,7 @@ class DataProvider(AfterglowSchema):
         # Check that any of the auth methods requested is present
         # in any of the user's identities
         for required_method in auth_methods:
+            from .. import auth
             if required_method == 'http':
                 # HTTP auth requires username and password being set
                 if auth.current_user.username and auth.current_user.password:
