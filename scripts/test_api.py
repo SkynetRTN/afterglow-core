@@ -28,6 +28,7 @@ if __name__ == '__main__':
         help='Afterglow API server port')
     parser.add_argument(
         '-s', '--https', action='store_true', help='use HTTPS instead of HTTP')
+    parser.add_argument('-r', '--root', default='', help='API root')
     parser.add_argument(
         '-v', '--api-version', default='1', help='server API version')
     parser.add_argument(
@@ -116,8 +117,13 @@ if __name__ == '__main__':
                 f.write(data)
             data = s.getvalue()
 
-    url = 'http{}://{}:{:d}/core/'.format(
-        's' if args.https else '', args.host, args.port)
+    root = args.root
+    if not root and args.host not in ('localhost', '127.0.0.1'):
+        root = '/core'
+    elif root and not root.startswith('/'):
+        root = '/' + root
+    url = 'http{}://{}:{:d}{}/'.format(
+        's' if args.https else '', args.host, args.port, root)
     if not args.resource.startswith('oauth2') and \
             not args.resource.startswith('ajax'):
         url += 'api/v{}/'.format(args.api_version)
