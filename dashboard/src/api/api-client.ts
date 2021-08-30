@@ -11,7 +11,7 @@ export const ajaxApiUrl = `${appConfig.coreUrl}/ajax`;
 
 export const apiClient = axios.create({
   timeout: 5000,
-  paramsSerializer: function(params) {
+  paramsSerializer: function (params) {
     return qs.stringify(params, { indices: false }); // param=value1&param=value2
   },
 });
@@ -34,7 +34,8 @@ apiClient.interceptors.response.use(
   (response) => {
     return {
       ...response,
-      data: camelCaseKeys(response.data, { deep: true }),
+      data: camelCaseKeys(response.data.data, { deep: true }),
+      links: response.data.links
     };
   },
   (error) => {
