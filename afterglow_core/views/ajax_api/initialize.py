@@ -1,20 +1,12 @@
 
-import json
-
-from flask import Response, request, render_template, redirect, url_for
-from flask_security.utils import hash_password, verify_password
+from flask import Response, request
+from flask_security.utils import hash_password
 
 from ... import app, json_response
-from ...auth import (
-    auth_required, clear_access_cookies, oauth_plugins, authenticate,
-    set_access_cookies)
-from ...resources.users import DbUser, DbRole, DbIdentity, db
+from ...resources.users import DbUser, DbRole, db
 from ...schemas.api.v1 import UserSchema
-from ...errors import ValidationError, MissingFieldError
-from ...errors.auth import (
-    HttpAuthFailedError, NotInitializedError, UnknownAuthMethodError,
-    NotAuthenticatedError, InitPageNotAvailableError)
-
+from ...errors import MissingFieldError
+from ...errors.auth import InitPageNotAvailableError
 from . import url_prefix
 
 
@@ -53,7 +45,6 @@ def initialize() -> Response:
                 email=request.args.get('email'),
                 first_name=request.args.get('first_name'),
                 last_name=request.args.get('last_name'),
-                birth_date=request.args.get('birth_date'),
                 active=True,
                 roles=[
                     DbRole.query.filter_by(name='admin').one(),

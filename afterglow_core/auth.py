@@ -25,13 +25,12 @@ import time
 from typing import Callable, Optional, Sequence, Union
 
 from werkzeug.urls import url_encode
-from flask import Response, request, make_response, redirect, url_for, escape
-from flask_wtf.csrf import generate_csrf, CSRFError
+from flask import Response, request, make_response, redirect
+from flask_wtf.csrf import generate_csrf
 
 from . import app
 from .errors.auth import NotAuthenticatedError
-from .resources.users import (
-    AnonymousUser, DbPersistentToken, DbUser, user_datastore)
+from .resources.users import AnonymousUser, DbPersistentToken, user_datastore
 from .oauth2 import Token, memory_session
 
 
@@ -76,17 +75,16 @@ USER_REALM = 'Registered Afterglow Users Only'
 
 
 # noinspection PyUnusedLocal
-def authenticate(roles: Optional[Union[str, Sequence[str]]] = None) \
-        -> AnonymousUser:
+def authenticate(roles: Optional[Union[str, Sequence[str]]] = None) -> None:
     """
-    Perform user authentication and return a User object
+    Perform user authentication
 
     :param roles: list of authenticated user role IDs or a single role ID
 
     :return: database object for the authenticated user; raises
         :class:`AuthError` on authentication error
     """
-    return anonymous_user
+    pass
 
 
 def _doublewrap(fn: Callable) -> Callable:
@@ -148,7 +146,9 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
             if kwargs.get('allow_redirect'):
                 dashboard_prefix = app.config.get("DASHBOARD_PREFIX")
                 args = url_encode(dict(next=request.url))
-                return redirect('{dashboard_prefix}/login?{args}'.format(dashboard_prefix=dashboard_prefix, args=args))
+                return redirect(
+                    '{dashboard_prefix}/login?{args}'
+                    .format(dashboard_prefix=dashboard_prefix, args=args))
             raise
 
         try:
@@ -237,42 +237,48 @@ def _init_auth() -> None:
         """
         expires_in = app.config.get('COOKIE_TOKEN_EXPIRES_IN', 86400)
         sess = memory_session()
-        if not access_token:
-            # Generate a temporary in-memory token
-            token = Token(
-                token_type='cookie',
-                access_token=secrets.token_hex(20),
-                user_id=request.user.id,
-            )
-            sess.add(token)
-        else:
-            # Check that the token provided by the user exists and not expired
-            token = sess.query(Token)\
-                .filter_by(
+        try:
+            if not access_token:
+                # Generate a temporary in-memory token
+                access_token = secrets.token_hex(20)
+                token = Token(
+                    token_type='cookie',
                     access_token=access_token,
                     user_id=request.user.id,
-                    token_type='cookie',
-                    revoked=False)\
-                .one_or_none()
-            if not token or not token.active:
-                return clear_access_cookies(response)
+                )
+                sess.add(token)
+            else:
+                # Check that the token provided by the user exists
+                # and not expired
+                token = sess.query(Token)\
+                    .filter_by(
+                        access_token=access_token,
+                        user_id=request.user.id,
+                        token_type='cookie',
+                        revoked=False)\
+                    .one_or_none()
+                if not token or not token.active:
+                    return clear_access_cookies(response)
 
-        token.expires_in = expires_in
-        token.issued_at = time.time()
-        sess.commit()
+            token.expires_in = expires_in
+            token.issued_at = time.time()
+            sess.commit()
+        except Exception:
+            sess.rollback()
+            raise
+        finally:
+            sess.close()
 
         csrf_token = generate_csrf()
         response.set_cookie('afterglow_core.csrf', csrf_token)
 
         response.set_cookie(
-            'afterglow_core_access_token', value=token.access_token,
-            max_age=expires_in,
-            secure=False, httponly=False)
+            'afterglow_core_access_token', value=access_token,
+            max_age=expires_in, secure=False, httponly=False)
 
         response.set_cookie(
             'afterglow_core_user_id', value=str(request.user.id),
-            max_age=expires_in,
-            secure=False, httponly=False)
+            max_age=expires_in, secure=False, httponly=False)
 
         return response
 
@@ -298,14 +304,11 @@ def _init_auth() -> None:
     clear_access_cookies = _clear_access_cookies
 
     def _authenticate(roles: Optional[Union[str, Sequence[str]]] = None) \
-            -> DbUser:
+            -> None:
         """
         Authenticate the user
 
         :param roles: list of authenticated user role IDs or a single role ID
-
-        :return: database object for the authenticated user; raises
-            :class:`AuthError` on authentication error
         """
         # If access token in HTTP Authorization header, verify and authorize.
         # otherwise, attempt to reconstruct token from cookies
@@ -331,35 +334,41 @@ def _init_auth() -> None:
 
         user = None
         error_msgs = []
+        user_roles = []
         sess = memory_session()
-        for token_type, access_token in tokens:
-            try:
-                if token_type == 'personal':
-                    # Should be an existing permanent token
-                    token = DbPersistentToken.query.filter_by(
-                        access_token=access_token,
-                        token_type=token_type).one_or_none()
+        try:
+            for token_type, access_token in tokens:
+                try:
+                    if token_type == 'personal':
+                        # Should be an existing permanent token
+                        token = DbPersistentToken.query.filter_by(
+                            access_token=access_token,
+                            token_type=token_type).one_or_none()
+                    else:
+                        token = sess.query(Token).filter_by(
+                            access_token=access_token,
+                            # token_type=token_type,
+                            revoked=False).one_or_none()
+                    if not token:
+                        raise ValueError('Token does not exist')
+                    if not token.active:
+                        raise ValueError('Token expired')
+
+                    user = token.user
+
+                    if user is None:
+                        raise ValueError('Unknown user ID')
+                    if not user.active:
+                        raise ValueError('The user is deactivated')
+
+                    user_roles = [user_role.name for user_role in user.roles]
+
+                except Exception as e:
+                    error_msgs.append('{} (type: {})'.format(e, token_type))
                 else:
-                    token = sess.query(Token).filter_by(
-                        access_token=access_token,
-                        # token_type=token_type,
-                        revoked=False).one_or_none()
-                if not token:
-                    raise ValueError('Token does not exist')
-                if not token.active:
-                    raise ValueError('Token expired')
-
-                user = token.user
-
-                if user is None:
-                    raise ValueError('Unknown user ID')
-                if not user.active:
-                    raise ValueError('The user is deactivated')
-
-            except Exception as e:
-                error_msgs.append('{} (type: {})'.format(e, token_type))
-            else:
-                break
+                    break
+        finally:
+            sess.close()
 
         if user is None:
             raise NotAuthenticatedError(error_msg='. '.join(error_msgs))
@@ -370,15 +379,13 @@ def _init_auth() -> None:
                 roles = roles.split(',')
             for role in roles:
                 role = role.strip()
-                if not any(user_role.name == role for user_role in user.roles):
+                if role not in user_roles:
                     raise NotAuthenticatedError(
                         error_msg='"{}" role required'.format(role))
 
         # Make the authenticated user object available via `current_user` and
         # request.user
         _request_ctx_stack.top.user = request.user = user
-
-        return user
 
     authenticate = _authenticate
 

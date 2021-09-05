@@ -113,7 +113,7 @@ def _init_oauth():
                 raise ValueError('Missing OAuth client name')
             if self.client_id is None:
                 raise ValueError('Missing OAuth client ID')
-            
+
             if not self.redirect_uris:
                 raise ValueError('Missing OAuth redirect URIs')
 
@@ -121,7 +121,8 @@ def _init_oauth():
                     'none', 'client_secret_post', 'client_secret_basic'):
                 raise ValueError('Invalid token endpoint auth method')
 
-            if self.token_endpoint_auth_method != 'none' and self.client_secret is None:
+            if self.token_endpoint_auth_method != 'none' and \
+                    self.client_secret is None:
                 raise ValueError('Missing OAuth client secret')
 
             if self.description is None:
@@ -250,7 +251,8 @@ def _init_oauth():
             try:
                 # noinspection PyArgumentList
                 code_challenge = request.data.get('code_challenge')
-                code_challenge_method = request.data.get('code_challenge_method')
+                code_challenge_method = request.data.get(
+                    'code_challenge_method')
 
                 sess.add(OAuth2AuthorizationCode(
                     code=code,
@@ -265,6 +267,8 @@ def _init_oauth():
             except Exception:
                 sess.rollback()
                 raise
+            finally:
+                sess.close()
 
         def query_authorization_code(self, code, client) \
                 -> OAuth2AuthorizationCode:
@@ -282,6 +286,8 @@ def _init_oauth():
             except Exception:
                 sess.rollback()
                 raise
+            finally:
+                sess.close()
 
         def authenticate_user(self, authorization_code) -> DbUser:
             return DbUser.query.get(authorization_code.user_id)
@@ -340,7 +346,8 @@ def _init_oauth():
     )
     oauth_server.register_grant(grants.ImplicitGrant)
     oauth_server.register_grant(grants.ClientCredentialsGrant)
-    oauth_server.register_grant(AuthorizationCodeGrant, [CodeChallenge(required=True)])
+    oauth_server.register_grant(
+        AuthorizationCodeGrant, [CodeChallenge(required=True)])
     oauth_server.register_grant(RefreshTokenGrant)
 
     app.logger.info('Initialized Afterglow OAuth2 Service')
