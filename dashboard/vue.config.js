@@ -2,7 +2,9 @@ const path = require("path");
 const name = "Vue Typescript Admin";
 
 module.exports = {
-  publicPath: "/",
+  publicPath: process.env.NODE_ENV === 'production'
+    ? '/core/'
+    : '/',
   lintOnSave: process.env.NODE_ENV === "development",
   pwa: {
     name: name,
