@@ -30,7 +30,8 @@ from flask_wtf.csrf import generate_csrf
 
 from . import app
 from .errors.auth import NotAuthenticatedError
-from .resources.users import AnonymousUser, DbPersistentToken, user_datastore
+from .resources.users import (
+    AnonymousUser, DbPersistentToken, db, user_datastore)
 from .oauth2 import Token, memory_session
 
 
@@ -363,7 +364,9 @@ def _init_auth() -> None:
 
                     user_roles = [user_role.name for user_role in user.roles]
 
+                    db.session.commit()
                 except Exception as e:
+                    db.session.rollback()
                     error_msgs.append('{} (type: {})'.format(e, token_type))
                 else:
                     break
