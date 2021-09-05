@@ -134,8 +134,11 @@ class LocalDiskDataProvider(DataProvider):
     display_name = description = 'Local Filesystem'
 
     search_fields = dict(
-        type=dict(label='Data File Type', type='multi_choice', enum=['FITS']),
         name=dict(label='File Name Pattern', type='text'),
+        type=dict(label='Data File Type', type='multi_choice', enum=['FITS']),
+        collection=dict(
+            label='Asset type', type='multi_choice',
+            enum=['file', 'directory', 'any']),
         width=dict(label='Image Width', type='int', min_val=1),
         height=dict(label='Image Height', type='int', min_val=1),
     )
@@ -456,6 +459,7 @@ class LocalDiskDataProvider(DataProvider):
                  ),
             ) for fn in filenames], pagination)
 
+    # noinspection PyShadowingBuiltins
     def find_assets(self, path: Optional[str] = None,
                     sort_by: Optional[str] = None,
                     page_size: Optional[int] = None,
@@ -480,7 +484,8 @@ class LocalDiskDataProvider(DataProvider):
             if specified, the query will match only data files of the given
             type(s)
         :param collection: if specified, match only the given asset type
-            (True | "1" = directories, False | "0" = files)
+            (True | "1" | "directory" = directories, False | "0" | "file" =
+            files)
         :param width: match only images of the given width
         :param height: match only images of the given height
 
@@ -500,14 +505,18 @@ class LocalDiskDataProvider(DataProvider):
             type = type.split(',')
         else:
             type = None
-        if collection:
+        if collection == 'directory':
+            collection = True
+        elif collection == 'file':
+            collection = False
+        elif collection in ('', 'any'):
+            collection = None
+        elif collection is not None:
             try:
                 collection = bool(int(collection))
             except ValueError:
                 raise errors.ValidationError(
                     'collection', 'Collection flag must be 0 or 1')
-        else:
-            collection = None
         if width:
             try:
                 width = int(width)
