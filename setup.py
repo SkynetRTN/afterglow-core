@@ -74,6 +74,9 @@ setup(
         'SQLAlchemy == 1.3.23',
         'Werkzeug == 1.0.1',
         # extra skynet dependencies
+        'pyslalib',
+        'jwt',
+        'mysqlclient',
         'cryptography == 3.4.6',
         'marshmallow_sqlalchemy == 0.24.2',
         'PyMySQL == 1.0.2',
