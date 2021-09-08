@@ -61,7 +61,7 @@ setup(
         'marshmallow == 3.10.0',
         'numpy == 1.20.1',
         'oauthlib == 2.1.0',
-        'Pillow == 8.2.0',
+        'Pillow == 8.3.2',
         'plaster_pastedeploy == 0.7',
         'pycryptodome == 3.10.1',
         'python_dateutil == 2.8.1',
