@@ -547,8 +547,15 @@ class LocalDiskDataProvider(DataProvider):
         if not os.path.isdir(abs_path):
             raise AssetNotFoundError(path=path)
 
-        # Look through all files within the path matching the given name
+        # Look through all files within the path with names containing the given
+        # substring (case-insensitive)
         assets = []
+        if name:
+            name = name.strip('*')
+            if name:
+                name = '*' + ''.join(
+                    '[{}{}]'.format(c.lower(), c.upper()) if c.isalpha() else c
+                    for c in name) + '*'
         if not name:
             name = '*'
         for filename in glob(os.path.join(abs_path, name)):
