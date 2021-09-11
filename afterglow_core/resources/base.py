@@ -21,6 +21,7 @@ class JSONType(types.TypeDecorator):
     both from a JSON structure and a JSON string
     """
     impl = types.UnicodeText
+    cache_ok = True
 
     def process_bind_param(self, value, dialect):
         if value is not None and not isinstance(value, str):
