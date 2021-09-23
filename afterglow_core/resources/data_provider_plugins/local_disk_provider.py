@@ -16,6 +16,7 @@ import warnings
 import astropy.io.fits as pyfits
 from astropy.wcs import FITSFixedWarning
 from astropy.io.fits.verify import VerifyWarning
+from flask import request
 
 try:
     from PIL import Image as PILImage, ExifTags
@@ -32,7 +33,7 @@ try:
 except ImportError:
     exifread = None
 
-from ... import PaginationInfo, auth, errors
+from ... import PaginationInfo, errors
 from ...models import DataProvider, DataProviderAsset
 from ...errors import ValidationError
 from ...errors.data_provider import (
@@ -172,7 +173,7 @@ class LocalDiskDataProvider(DataProvider):
         """
         p = os.path.abspath(os.path.expanduser(self.root))
         if self.peruser:
-            user_id = auth.current_user.id
+            user_id = request.user.id
             if user_id:
                 p = os.path.join(p, str(user_id))
 
@@ -428,7 +429,8 @@ class LocalDiskDataProvider(DataProvider):
         :param page: optional 0-based page number, "first", or "last"
 
         :return: list of :class:`DataProviderAsset` objects for child assets,
-            total number of pages, and names of first and last asset on the page
+            total number of pages, and names of first and last asset on the
+            page
         """
         if isinstance(page, str) and page.startswith('>'):
             raise ValidationError(
@@ -528,7 +530,8 @@ class LocalDiskDataProvider(DataProvider):
             try:
                 height = int(height)
             except ValueError:
-                raise errors.ValidationError('height', 'Height must be integer')
+                raise errors.ValidationError(
+                    'height', 'Height must be integer')
         else:
             height = None
 
@@ -547,8 +550,8 @@ class LocalDiskDataProvider(DataProvider):
         if not os.path.isdir(abs_path):
             raise AssetNotFoundError(path=path)
 
-        # Look through all files within the path with names containing the given
-        # substring (case-insensitive)
+        # Look through all files within the path with names containing
+        # the given substring (case-insensitive)
         assets = []
         if name:
             name = name.strip('*')
@@ -559,7 +562,8 @@ class LocalDiskDataProvider(DataProvider):
         if not name:
             name = '*'
         for filename in glob(os.path.join(abs_path, name)):
-            if collection is not None and os.path.isdir(filename) != collection:
+            if collection is not None and os.path.isdir(filename) != \
+                    collection:
                 # Fast path for searching collection or non-collection assets
                 continue
 
@@ -664,7 +668,8 @@ class LocalDiskDataProvider(DataProvider):
 
         return self._get_asset(path, filename)
 
-    def rename_asset(self, path: str, name: str, **kwargs) -> DataProviderAsset:
+    def rename_asset(self, path: str, name: str, **kwargs) \
+            -> DataProviderAsset:
         """
         Rename asset at the given path
 
@@ -763,7 +768,8 @@ class RestrictedRWLocalDiskDataProvider(LocalDiskDataProvider):
     Local disk data provider with restricted write access
     """
     name = 'restricted_local_disk'
-    display_name = description = 'Local Filesystem with Restricted Write Access'
+    display_name = description = \
+        'Local Filesystem with Restricted Write Access'
 
     writers = ()
 
@@ -771,6 +777,6 @@ class RestrictedRWLocalDiskDataProvider(LocalDiskDataProvider):
         if item == 'readonly':
             # Dynamic readonly attr implementation based on the currently
             # authenticated user's username
-            return auth.current_user.username not in object.__getattribute__(
+            return request.user.username not in object.__getattribute__(
                 self, 'writers')
         return super().__getattribute__(item)

@@ -374,22 +374,22 @@ class JobWorkerProcess(Process):
                     ))
                     continue
 
-                # Set auth.current_user to the actual db user
+                # Set request.user to the actual db user
                 if job.user_id is not None:
                     user_session = users.db.create_scoped_session()
                     try:
-                        auth.current_user = user_session.query(users.DbUser) \
+                        request.user = user_session.query(users.DbUser) \
                             .get(job.user_id)
                     except Exception:
                         print(
                             '!!! User db query error for user ID', job.user_id)
                         user_session.remove()
                         raise
-                    if auth.current_user is None:
+                    if request.user is None:
                         print('!!! No user for user ID', job.user_id)
-                        auth.current_user = auth.AnonymousUser()
+                        request.user = auth.AnonymousUser()
                 else:
-                    auth.current_user = auth.AnonymousUser()
+                    request.user = auth.AnonymousUser()
                     user_session = None
 
                 # Clear the possible cancel request
@@ -1196,7 +1196,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
         msg.update(dict(
             resource=resource,
             method=method,
-            user_id=getattr(auth.current_user, 'id', None),
+            user_id=getattr(request.user, 'id', None),
         ))
         msg = encrypt(json.dumps(msg).encode('utf8'))
 

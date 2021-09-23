@@ -27,8 +27,8 @@ def users() -> Response:
     GET /users?username=...&active=...&roles=...
         - return the list of users matching the given criteria
 
-    POST /users?username=...&password=...&roles=...&first_name=...&last_name=...
-        &email=...&settings=...
+    POST /users?username=...&password=...&roles=...&first_name=...
+        &last_name=...&email=...&settings=...
         - create a new user account; roles may include "admin" and "user"
           (separated by comma if both)
 
@@ -56,7 +56,8 @@ def users() -> Response:
             _set_defaults=True))), 201)
 
 
-@app.route(url_prefix + 'users/<int:user_id>', methods=['GET', 'PUT', 'DELETE'])
+@app.route(url_prefix + 'users/<int:user_id>',
+           methods=['GET', 'PUT', 'DELETE'])
 @auth_required
 def user(user_id: int) -> Response:
     """

@@ -13,6 +13,7 @@ try:
 except ImportError:
     PILImage = None
 from marshmallow.fields import Dict, Integer, List, String
+from flask import request
 
 from .. import PaginationInfo, app, errors
 from ..errors.auth import NotAuthenticatedError
@@ -124,8 +125,8 @@ class DataProvider(AfterglowSchema):
             like GET /data-providers/[id]/assets in place of the integer
             data provider ID
         auth_methods: list of data provider-specific authentication methods;
-            if None, defaults to DEFAULT_DATA_PROVIDER_AUTH -> DATA_FILE_AUTH ->
-            all auth methods available
+            if None, defaults to DEFAULT_DATA_PROVIDER_AUTH -> DATA_FILE_AUTH
+            -> all auth methods available
         icon: optional data provider icon name
         display_name: data provider plugin visible in the Afterglow UI
         description: a longer description of the data provider
@@ -134,8 +135,9 @@ class DataProvider(AfterglowSchema):
         sort_by: string - name of column to use for initial sort
         sort_asc: boolean - initial sort order should be ascending
         browseable: True if the data provider supports browsing (i.e. getting
-            child assets of a collection asset at the given path); automatically
-            set depending on whether the provider implements get_child_assets()
+            child assets of a collection asset at the given path);
+            automatically set depending on whether the provider implements
+            get_child_assets()
         searchable: True if the data provider supports searching (i.e. querying
             using the custom search keywords defined by `search_fields`);
             automatically set depending on whether the provider implements
@@ -181,9 +183,10 @@ class DataProvider(AfterglowSchema):
         """
         super(DataProvider, self).__init__(_set_defaults=True, **kwargs)
 
-        # Automatically set browseable, searchable, and readonly flags depending
-        # on what methods are reimplemented by provider; method attr of a class
-        # is an unbound method instance in Python 2 and a function in Python 3
+        # Automatically set browseable, searchable, and readonly flags
+        # depending on what methods are reimplemented by provider; method attr
+        # of a class is an unbound method instance in Python 2 and a function
+        # in Python 3
         if 'browseable' not in kwargs:
             self.browseable = is_overridden(
                 DataProvider, self, 'get_child_assets')
@@ -223,25 +226,26 @@ class DataProvider(AfterglowSchema):
         Return child assets of a collection asset at the given path
 
         :param path: asset path; must identify a collection asset
-        :param sort_by: optional sorting key (e.g. column name); reverse sorting
-            is indicated by prepending a hyphen to the key; data provider may
-            assume a certain default sorting mode and must return it in
-            the pagination info
+        :param sort_by: optional sorting key (e.g. column name); reverse
+            sorting is indicated by prepending a hyphen to the key; data
+            provider may assume a certain default sorting mode and must return
+            it in the pagination info
         :param page_size: optional number of assets per page; None means don't
             use pagination (used only internally, never via the API);
-            if not None, data provider may enforce a hard limit on the page size
+            if not None, data provider may enforce a hard limit on the page
+            size
         :param page: page-based pagination: optional 0-based page number (data
             provider returns at most `page_size` assets sorted by the sorting
             key at offset = `page`*`page_size`);
             keyset-based pagination: ">value" = return at most `page_size`
-            assets with the value of `sort_by` key greater than the given value,
-            "<value": return at most `page_size` assets with the value
+            assets with the value of `sort_by` key greater than the given
+            value, "<value": return at most `page_size` assets with the value
             of the `sort_by` key smaller than the given value;
             for any pagination type, two special values "first" and "last"
             are used to return first and last page, respectively
 
-        :return: list of :class:`DataProviderAsset` objects for child assets and
-            pagination info or None if pagination is not supported
+        :return: list of :class:`DataProviderAsset` objects for child assets
+            and pagination info or None if pagination is not supported
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='get_child_assets')
@@ -298,7 +302,8 @@ class DataProvider(AfterglowSchema):
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='create_asset')
 
-    def rename_asset(self, path: str, name: str, **kwargs) -> DataProviderAsset:
+    def rename_asset(self, path: str, name: str, **kwargs) \
+            -> DataProviderAsset:
         """
         Rename asset at the given path
 
@@ -373,13 +378,13 @@ class DataProvider(AfterglowSchema):
             from .. import auth
             if required_method == 'http':
                 # HTTP auth requires username and password being set
-                if auth.current_user.username and auth.current_user.password:
+                if auth.request.user.username and request.user.password:
                     return
                 continue
 
             # For non-HTTP methods, check identities
             try:
-                for identity in auth.current_user.identities:
+                for identity in request.user.identities:
                     if identity.auth_method == required_method:
                         return
             except AttributeError:
@@ -402,7 +407,8 @@ class DataProvider(AfterglowSchema):
         :param provider: source data provider; can be the same as the current
             provider
         :param src_path: asset path within the source data provider
-        :param dst_path: destination asset path within the current data provider
+        :param dst_path: destination asset path within the current data
+            provider
         :param move: delete source asset after successful copy
         :param update: update existing asset at `dst_path` vs create
             a new asset; None (default) means auto
@@ -410,7 +416,8 @@ class DataProvider(AfterglowSchema):
         :param limit: recursion limit for the copy
         :param _depth: current recursion depth; keep as is
         :param kwargs: optional provider-specific keyword arguments to
-            :meth:`create_asset`, :meth:`update_asset`, and :meth:`delete_asset`
+            :meth:`create_asset`, :meth:`update_asset`, and
+            :meth:`delete_asset`
 
         :return: new data provider asset
         """
@@ -437,9 +444,9 @@ class DataProvider(AfterglowSchema):
             if not limit or _depth < limit - 1:
                 for child_asset, _ in provider.get_child_assets(src_path):
                     # For each child asset of a collection asset, recursively
-                    # copy its data; calculate the destination path by appending
-                    # the source asset name; always create destination asset
-                    # since no asset exists there yet
+                    # copy its data; calculate the destination path by
+                    # appending the source asset name; always create
+                    # destination asset since no asset exists there yet
                     self.recursive_copy(
                         provider, child_asset.path,
                         dst_path + '/' + child_asset.name, move=move,

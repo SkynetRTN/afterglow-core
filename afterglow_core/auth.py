@@ -4,11 +4,11 @@ Afterglow Core: user authentication
 All endpoints that assume authorized access must be decorated with
 @auth_required; its explicit equivalent is :func:`authorize`.
 
-User authentication is based on the access tokens. The user's access token (and,
-optionally, refresh token and expiration time) is retrieved by making a request
-to auth/login, which invokes a chain of authentication methods. All other
-Afterglow resources require a valid access token supplied in the Authorization
-HTTP header.
+User authentication is based on the access tokens. The user's access token
+(and, optionally, refresh token and expiration time) is retrieved by making
+a request to auth/login, which invokes a chain of authentication methods. All
+other Afterglow resources require a valid access token supplied
+in the Authorization HTTP header.
 
 If user authentication is enabled in the app configuration (non-empty
 USER_AUTH), the module also provides the endpoint for user management.
@@ -26,6 +26,8 @@ from typing import Callable, Optional, Sequence, Union
 
 from werkzeug.urls import url_encode
 from flask import Response, request, make_response, redirect
+# noinspection PyProtectedMember
+from flask import _request_ctx_stack
 from flask_wtf.csrf import generate_csrf
 
 from . import app
@@ -37,7 +39,7 @@ from .oauth2 import Token, memory_session
 
 __all__ = [
     'oauth_plugins', 'auth_required', 'authenticate', 'security',
-    'current_user', 'anonymous_user', 'jwt_manager',
+    'anonymous_user', 'jwt_manager',
     'set_access_cookies', 'clear_access_cookies',
 ]
 
@@ -69,7 +71,7 @@ oauth_plugins = {}
 http_auth_plugins = {}
 
 security = None  # flask_security instance
-anonymous_user = current_user = AnonymousUser()
+anonymous_user = AnonymousUser()
 jwt_manager = None
 
 USER_REALM = 'Registered Afterglow Users Only'
@@ -85,7 +87,7 @@ def authenticate(roles: Optional[Union[str, Sequence[str]]] = None) -> None:
     :return: database object for the authenticated user; raises
         :class:`AuthError` on authentication error
     """
-    pass
+    _request_ctx_stack.top.user = request.user = AnonymousUser()
 
 
 def _doublewrap(fn: Callable) -> Callable:
@@ -174,7 +176,7 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
             try:
                 with data_files.data_files_engine_lock:
                     data_files.data_files_engine[
-                        data_files.get_root(current_user.id)
+                        data_files.get_root(request.user.id)
                     ].remove()
             except Exception:
                 pass
@@ -183,8 +185,8 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
 
 
 # noinspection PyUnusedLocal
-def set_access_cookies(response: Response, access_token: Optional[str] = None) \
-        -> Response:
+def set_access_cookies(response: Response,
+                       access_token: Optional[str] = None) -> Response:
     """
     Set access cookies for browser access
 
@@ -212,18 +214,14 @@ def _init_auth() -> None:
     """Initialize multi-user mode with authentication plugins"""
     # To reduce dependencies, only import marshmallow, flask-security, and
     # flask-sqlalchemy if user auth is enabled
-    # noinspection PyProtectedMember
-    from flask import _request_ctx_stack
-    from flask_security import Security, current_user as _current_user
+    from flask_security import Security
     from .plugins import load_plugins
     from .auth_plugins import (
         AuthnPluginBase, OAuthServerPluginBase, HttpAuthPluginBase)
 
     # noinspection PyGlobalUndefined
     global oauth_plugins, http_auth_plugins, authenticate, security, \
-        current_user, set_access_cookies, clear_access_cookies
-
-    current_user = _current_user
+        set_access_cookies, clear_access_cookies
 
     def _set_access_cookies(response: Response,
                             access_token: Optional[str] = None) -> Response:
@@ -289,8 +287,8 @@ def _init_auth() -> None:
         """
         Clears the access cookies
 
-        See: https://medium.com/lightrail/getting-token-authentication-right-in-
-        a-stateless-single-page-application-57d0c6474e3
+        See: https://medium.com/lightrail/getting-token-authentication-right-
+        in-a-stateless-single-page-application-57d0c6474e3
 
         :param response: Flask response
 
@@ -386,8 +384,7 @@ def _init_auth() -> None:
                     raise NotAuthenticatedError(
                         error_msg='"{}" role required'.format(role))
 
-        # Make the authenticated user object available via `current_user` and
-        # request.user
+        # Make the authenticated user object available via request.user
         _request_ctx_stack.top.user = request.user = user
 
     authenticate = _authenticate
