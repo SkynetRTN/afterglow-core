@@ -1,5 +1,5 @@
 
-from flask import request, session
+from flask import request, session, _request_ctx_stack
 from flask_security.utils import verify_password
 
 from ... import app, json_response
@@ -30,7 +30,7 @@ def post():
         raise HttpAuthFailedError()
 
     # Set token cookies
-    request.user = user
+    _request_ctx_stack.top.user = request.user = user
 
     return set_access_cookies(json_response())
 

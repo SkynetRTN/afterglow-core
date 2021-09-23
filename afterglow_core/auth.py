@@ -39,7 +39,7 @@ from .oauth2 import Token, memory_session
 
 __all__ = [
     'oauth_plugins', 'auth_required', 'authenticate', 'security',
-    'anonymous_user', 'jwt_manager',
+    'current_user', 'anonymous_user', 'jwt_manager',
     'set_access_cookies', 'clear_access_cookies',
 ]
 
@@ -71,7 +71,7 @@ oauth_plugins = {}
 http_auth_plugins = {}
 
 security = None  # flask_security instance
-anonymous_user = AnonymousUser()
+anonymous_user = current_user = AnonymousUser()
 jwt_manager = None
 
 USER_REALM = 'Registered Afterglow Users Only'
@@ -214,14 +214,17 @@ def _init_auth() -> None:
     """Initialize multi-user mode with authentication plugins"""
     # To reduce dependencies, only import marshmallow, flask-security, and
     # flask-sqlalchemy if user auth is enabled
-    from flask_security import Security
+    # noinspection PyProtectedMember
+    from flask_security import Security, current_user as _current_user
     from .plugins import load_plugins
     from .auth_plugins import (
         AuthnPluginBase, OAuthServerPluginBase, HttpAuthPluginBase)
 
     # noinspection PyGlobalUndefined
     global oauth_plugins, http_auth_plugins, authenticate, security, \
-        set_access_cookies, clear_access_cookies
+        current_user, set_access_cookies, clear_access_cookies
+
+    current_user = _current_user
 
     def _set_access_cookies(response: Response,
                             access_token: Optional[str] = None) -> Response:
@@ -384,7 +387,8 @@ def _init_auth() -> None:
                     raise NotAuthenticatedError(
                         error_msg='"{}" role required'.format(role))
 
-        # Make the authenticated user object available via request.user
+        # Make the authenticated user object available via `current_user` and
+        # request.user
         _request_ctx_stack.top.user = request.user = user
 
     authenticate = _authenticate

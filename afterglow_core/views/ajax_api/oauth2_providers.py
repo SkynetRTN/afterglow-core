@@ -2,22 +2,17 @@
 Afterglow Core: settings routes
 """
 
-import secrets
-import json
-
-from flask import Response, request, redirect
-from marshmallow.fields import Integer, String
+# noinspection PyProtectedMember
+from flask import Response, request, _request_ctx_stack
 
 from ...auth import oauth_plugins
 
 from ... import app, json_response
-from ...auth import auth_required, set_access_cookies
-from ...resources.users import DbPersistentToken, db, DbUser, DbIdentity, DbRole
-from ...schemas import Resource
-from ...errors import ValidationError, MissingFieldError
+from ...auth import set_access_cookies
+from ...resources.users import db, DbUser, DbIdentity, DbRole
+from ...errors import MissingFieldError
 from ...errors.auth import (
-    HttpAuthFailedError, UnknownTokenError, NotInitializedError, UnknownAuthMethodError,
-    NotAuthenticatedError, InitPageNotAvailableError)
+    NotInitializedError, UnknownAuthMethodError, NotAuthenticatedError)
 
 from . import url_prefix
 
@@ -32,9 +27,12 @@ def oauth2_providers() -> Response:
     """
 
     plugins = [dict(id=p.id, icon=p.icon, description=p.description,
-                    authorizeUrl=p.authorize_url, client_id=p.client_id, request_token_params=p.request_token_params) for p in oauth_plugins.values()]
+                    authorizeUrl=p.authorize_url, client_id=p.client_id,
+                    request_token_params=p.request_token_params)
+               for p in oauth_plugins.values()]
 
     return json_response(plugins)
+
 
 @app.route(url_prefix + '/oauth2/providers/<string:plugin_id>/authorized')
 def oauth2_authorized(plugin_id: str) -> Response:
@@ -83,7 +81,8 @@ def oauth2_authorized(plugin_id: str) -> Response:
             .one_or_none()
         if identity is not None:
             # First login via Skynet after migration: replace Identity.name =
-            # username with user ID to prevent a possible future account seizure
+            # username with user ID to prevent a possible future account
+            # seizure
             try:
                 identity.name = user_profile['id']
                 identity.data = user_profile
@@ -133,7 +132,6 @@ def oauth2_authorized(plugin_id: str) -> Response:
                 first_name=user_profile.get('first_name') or None,
                 last_name=user_profile.get('last_name') or None,
                 email=user_profile.get('email') or None,
-                birth_date=user_profile.get('birth_date') or None,
                 roles=[DbRole.query.filter_by(name='user').one()],
             )
             db.session.add(user)
@@ -161,7 +159,5 @@ def oauth2_authorized(plugin_id: str) -> Response:
                 db.session.rollback()
                 raise
 
-    request.user = user
+    _request_ctx_stack.top.user = request.user = user
     return set_access_cookies(json_response())
-
-

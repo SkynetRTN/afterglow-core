@@ -16,7 +16,6 @@ import warnings
 import astropy.io.fits as pyfits
 from astropy.wcs import FITSFixedWarning
 from astropy.io.fits.verify import VerifyWarning
-from flask import request
 
 try:
     from PIL import Image as PILImage, ExifTags
@@ -33,7 +32,7 @@ try:
 except ImportError:
     exifread = None
 
-from ... import PaginationInfo, errors
+from ... import PaginationInfo, auth, errors
 from ...models import DataProvider, DataProviderAsset
 from ...errors import ValidationError
 from ...errors.data_provider import (
@@ -173,7 +172,7 @@ class LocalDiskDataProvider(DataProvider):
         """
         p = os.path.abspath(os.path.expanduser(self.root))
         if self.peruser:
-            user_id = request.user.id
+            user_id = auth.current_user.id
             if user_id:
                 p = os.path.join(p, str(user_id))
 
@@ -777,6 +776,6 @@ class RestrictedRWLocalDiskDataProvider(LocalDiskDataProvider):
         if item == 'readonly':
             # Dynamic readonly attr implementation based on the currently
             # authenticated user's username
-            return request.user.username not in object.__getattribute__(
+            return auth.current_user.username not in object.__getattribute__(
                 self, 'writers')
         return super().__getattribute__(item)

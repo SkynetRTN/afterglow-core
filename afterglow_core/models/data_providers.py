@@ -378,13 +378,13 @@ class DataProvider(AfterglowSchema):
             from .. import auth
             if required_method == 'http':
                 # HTTP auth requires username and password being set
-                if auth.request.user.username and request.user.password:
+                if auth.current_user.username and auth.current_user.password:
                     return
                 continue
 
             # For non-HTTP methods, check identities
             try:
-                for identity in request.user.identities:
+                for identity in auth.current_user.identities:
                     if identity.auth_method == required_method:
                         return
             except AttributeError:
