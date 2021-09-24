@@ -28,7 +28,7 @@ from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
 from . import app, plugins
-from .errors import MissingFieldError
+from .errors import AfterglowError, MissingFieldError
 from .errors.job import *
 from .models import Job, JobResult, JobState, job_file_dir, job_file_path
 from .resources.base import Date, DateTime, JSONType, Time
