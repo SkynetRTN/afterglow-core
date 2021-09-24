@@ -889,9 +889,6 @@ def job_server(notify_queue):
     min_pool_size = app.config.get('JOB_POOL_MIN', 1)
     max_pool_size = app.config.get('JOB_POOL_MAX', 16)
     if min_pool_size > 0:
-        app.logger.info(
-            'Starting %d job worker process%s', min_pool_size,
-            '' if min_pool_size == 1 else 'es')
         pool = [JobWorkerProcessWrapper(job_queue, result_queue)
                 for _ in range(min_pool_size)]
     else:
@@ -899,8 +896,29 @@ def job_server(notify_queue):
     pool_lock = RWLock()
 
     try:
-        app.logger.info('Starting Afterglow job server (pid %d)', os.getpid())
+        # Start TCP server, listen on the configured port
+        tcp_server = ThreadingTCPServer(
+            ('localhost', app.config['JOB_SERVER_PORT']), JobRequestHandler)
+    except Exception as e:
+        notify_queue.put(('exception', e))
+        return
 
+    app.logger.info(
+        'Started Afterglow job server on port %d, pid %d',
+        app.config['JOB_SERVER_PORT'], os.getpid())
+    app.logger.info(
+        'Started %d job worker process%s', min_pool_size,
+        '' if min_pool_size == 1 else 'es')
+
+    # Set TCP server parameters
+    tcp_server.job_queue = job_queue
+    tcp_server.result_queue = result_queue
+    tcp_server.pool = pool
+    tcp_server.pool_lock = pool_lock
+    tcp_server.min_pool_size = min_pool_size
+    tcp_server.max_pool_size = max_pool_size
+
+    try:
         # Initialize job database
         # Create DbJob and DbJobResult subclasses for each job type based on
         # schema fields
@@ -1041,22 +1059,14 @@ def job_server(notify_queue):
             target=state_update_listener_body)
         state_update_listener.start()
 
-        # Start TCP server, listen on any available port
-        tcp_server = ThreadingTCPServer(
-            ('localhost', app.config['JOB_SERVER_PORT']), JobRequestHandler)
+        # Set TCP server attrs related to job database
         tcp_server.db_job_types = db_job_types
         tcp_server.db_job_result_types = db_job_result_types
         tcp_server.session_factory = session_factory
-        tcp_server.job_queue = job_queue
-        tcp_server.result_queue = result_queue
-        tcp_server.pool = pool
-        tcp_server.pool_lock = pool_lock
-        tcp_server.min_pool_size = min_pool_size
-        tcp_server.max_pool_size = max_pool_size
 
         # Send the actual port number to the main process
         notify_queue.put(('success', tcp_server.server_address[1]))
-        app.logger.info('Afterglow job server started')
+        app.logger.info('Afterglow job server initialized')
 
         # Serve job resource requests until requested to terminate
         tcp_server.serve_forever()
@@ -1099,8 +1109,15 @@ def init_jobs():
     # Wait for initialization
     response = notify_queue.get()
     if response[0] == 'exception':
-        return
-        # Job server initialization error
+        if isinstance(response[1], OSError) and \
+                response[1].errno == errno.EADDRINUSE:
+            # Address already in use -- means that the job server has been
+            # started by another WSGI process
+            p.join()
+            return
+
+        # Other job server initialization error
+        p.join()
         raise response[1]
 
     # Request job server to terminate on Flask shutdown
@@ -1114,6 +1131,7 @@ def init_jobs():
                 sock.sendall(struct.pack(msg_hdr, len(msg)) + msg)
             finally:
                 sock.close()
+            p.join()
         except Exception:
             pass
 
