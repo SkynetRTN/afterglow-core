@@ -34,7 +34,7 @@ from . import app
 from .errors.auth import NotAuthenticatedError
 from .resources.users import (
     AnonymousUser, DbPersistentToken, db, user_datastore)
-from .oauth2 import Token, memory_session
+from .oauth2 import Token
 
 
 __all__ = [
@@ -238,7 +238,6 @@ def _init_auth() -> None:
         :return: Flask response
         """
         expires_in = app.config.get('COOKIE_TOKEN_EXPIRES_IN', 86400)
-        sess = memory_session()
         try:
             if not access_token:
                 # Generate a temporary in-memory token
@@ -248,11 +247,11 @@ def _init_auth() -> None:
                     access_token=access_token,
                     user_id=request.user.id,
                 )
-                sess.add(token)
+                db.session.add(token)
             else:
                 # Check that the token provided by the user exists
                 # and not expired
-                token = sess.query(Token)\
+                token = Token.query \
                     .filter_by(
                         access_token=access_token,
                         user_id=request.user.id,
@@ -264,12 +263,10 @@ def _init_auth() -> None:
 
             token.expires_in = expires_in
             token.issued_at = time.time()
-            sess.commit()
+            db.session.commit()
         except Exception:
-            sess.rollback()
+            db.session.rollback()
             raise
-        finally:
-            sess.close()
 
         csrf_token = generate_csrf()
         response.set_cookie('afterglow_core.csrf', csrf_token)
@@ -337,42 +334,38 @@ def _init_auth() -> None:
         user = None
         error_msgs = []
         user_roles = []
-        sess = memory_session()
-        try:
-            for token_type, access_token in tokens:
-                try:
-                    if token_type == 'personal':
-                        # Should be an existing permanent token
-                        token = DbPersistentToken.query.filter_by(
-                            access_token=access_token,
-                            token_type=token_type).one_or_none()
-                    else:
-                        token = sess.query(Token).filter_by(
-                            access_token=access_token,
-                            # token_type=token_type,
-                            revoked=False).one_or_none()
-                    if not token:
-                        raise ValueError('Token does not exist')
-                    if not token.active:
-                        raise ValueError('Token expired')
-
-                    user = token.user
-
-                    if user is None:
-                        raise ValueError('Unknown user ID')
-                    if not user.active:
-                        raise ValueError('The user is deactivated')
-
-                    user_roles = [user_role.name for user_role in user.roles]
-
-                    db.session.commit()
-                except Exception as e:
-                    db.session.rollback()
-                    error_msgs.append('{} (type: {})'.format(e, token_type))
+        for token_type, access_token in tokens:
+            try:
+                if token_type == 'personal':
+                    # Should be an existing permanent token
+                    token = DbPersistentToken.query.filter_by(
+                        access_token=access_token,
+                        token_type=token_type).one_or_none()
                 else:
-                    break
-        finally:
-            sess.close()
+                    token = Token.query.filter_by(
+                        access_token=access_token,
+                        # token_type=token_type,
+                        revoked=False).one_or_none()
+                if not token:
+                    raise ValueError('Token does not exist')
+                if not token.active:
+                    raise ValueError('Token expired')
+
+                user = token.user
+
+                if user is None:
+                    raise ValueError('Unknown user ID')
+                if not user.active:
+                    raise ValueError('The user is deactivated')
+
+                user_roles = [user_role.name for user_role in user.roles]
+
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                error_msgs.append('{} (type: {})'.format(e, token_type))
+            else:
+                break
 
         if user is None:
             raise NotAuthenticatedError(error_msg='. '.join(error_msgs))

@@ -16,7 +16,7 @@ from .. import app
 from ..models import User
 from ..errors import MissingFieldError, ValidationError
 from ..errors.auth import DuplicateUsernameError, UnknownUserError
-from .base import Date, DateTime, JSONType
+from .base import DateTime, JSONType
 
 
 __all__ = [
@@ -218,10 +218,14 @@ class AnonymousUser(object):
 
 def _init_users():
     """Initialize Afterglow user datastore if AUTH_ENABLED = True"""
+    # noinspection PyUnresolvedReferences
+    from .. import oauth2  # register oauth token-related models
+
     # All imports put here to avoid unnecessary loading of packages on startup
     # if user auth is disabled
     try:
-        from alembic import config as alembic_config, context as alembic_context
+        from alembic import (
+            config as alembic_config, context as alembic_context)
         from alembic.script import ScriptDirectory
         from alembic.runtime.environment import EnvironmentContext
     except ImportError:
