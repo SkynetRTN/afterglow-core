@@ -21,8 +21,8 @@ __all__ = ['app', 'json_response', 'PaginationInfo']
 
 class AfterglowSchemaEncoder(json.JSONEncoder):
     """
-    JSON encoder that can serialize AfterglowSchema class instances and datetime
-    objects
+    JSON encoder that can serialize AfterglowSchema class instances and
+    datetime objects
     """
 
     def default(self, obj):
@@ -37,8 +37,8 @@ class AfterglowSchemaEncoder(json.JSONEncoder):
 
 class PaginationInfo(object):
     """
-    Pagination info structure provided by resources that return multiple objects
-    (e.g. data provider assets)
+    Pagination info structure provided by resources that return multiple
+    objects (e.g. data provider assets)
 
     Pagination info is returned in the JSON response envelope in the following
     way:
@@ -64,9 +64,9 @@ class PaginationInfo(object):
     sort: str = None  # sorting mode, optionally prefixed with + or -
     page_size: int = None  # page size
     total_pages: int = None  # total number of pages
-    current_page: int = None  # 0-based current page index (page-based)
-    first_item: str = None  # key value of the first item on page (keyset-based)
-    last_item: str = None  # key value of the last item on page (keyset-based)
+    current_page: int = None  # 0-based current page index, page-based
+    first_item: str = None  # key value of the first item on page, keyset-based
+    last_item: str = None  # key value of the last item on page, keyset-based
 
     def __init__(self, sort: Optional[str] = None,
                  page_size: Optional[int] = None,

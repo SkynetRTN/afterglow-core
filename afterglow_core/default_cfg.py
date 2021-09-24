@@ -113,9 +113,8 @@ ANET_INDEX_PATH = []
 # Job server options
 ################################################################################
 
-# Use encryption (if available) in the message exchange between Flask and job
-# server
-JOB_SERVER_ENCRYPTION = True
+# TCP port job server listens on
+JOB_SERVER_PORT = 2109
 
 # Initial job pool size
 JOB_POOL_MIN = 1
