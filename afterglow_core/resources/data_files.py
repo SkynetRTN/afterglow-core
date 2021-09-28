@@ -4,6 +4,7 @@ Afterglow Core: data-files resource implementation
 
 import sys
 import os
+import shutil
 from glob import glob
 from datetime import datetime
 import json
@@ -20,6 +21,9 @@ from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 # noinspection PyProtectedMember
 from sqlalchemy.engine import Engine
+from alembic import config as alembic_config, context as alembic_context
+from alembic.script import ScriptDirectory
+from alembic.runtime.environment import EnvironmentContext
 import numpy
 import astropy.io.fits as pyfits
 from astropy.wcs import FITSFixedWarning
@@ -46,14 +50,6 @@ try:
     import exifread
 except ImportError:
     exifread = None
-
-try:
-    from alembic import config as alembic_config, context as alembic_context
-    from alembic.script import ScriptDirectory
-    from alembic.runtime.environment import EnvironmentContext
-except ImportError:
-    ScriptDirectory = EnvironmentContext = None
-    alembic_config = alembic_context = None
 
 
 __all__ = [
@@ -177,33 +173,58 @@ def get_data_file_db(user_id: Optional[int]):
                         cursor.execute('PRAGMA foreign_keys=ON')
                         cursor.execute('PRAGMA journal_mode=WAL')
                         cursor.close()
+                db_path = 'sqlite:///{}'.format(
+                    os.path.join(root, 'data_files.db'))
                 engine = create_engine(
-                    'sqlite:///{}'.format(os.path.join(root, 'data_files.db')),
+                    db_path,
                     connect_args={'check_same_thread': False,
                                   'isolation_level': None},
                 )
 
-                # Create data_files table
-                if alembic_config is None:
-                    # Alembic not available, create table from SQLA metadata
-                    DataFileBase.metadata.create_all(bind=engine)
-                else:
-                    # Create/upgrade table via Alembic
-                    cfg = alembic_config.Config()
-                    cfg.set_main_option(
-                        'script_location',
-                        os.path.abspath(os.path.join(
-                            __file__, '..', '..', 'db_migration', 'data_files'))
-                    )
-                    script = ScriptDirectory.from_config(cfg)
+                # Create/upgrade data file db via Alembic
+                cfg = alembic_config.Config()
+                cfg.set_main_option(
+                    'script_location',
+                    os.path.abspath(os.path.join(
+                        __file__, '..', '..', 'db_migration',
+                        'data_files'))
+                )
+                script = ScriptDirectory.from_config(cfg)
 
+                # noinspection PyBroadException
+                try:
                     # noinspection PyProtectedMember
                     with EnvironmentContext(
-                                cfg, script, fn=lambda rev, _:
+                                cfg, script,
+                                fn=lambda rev, _:
                                 script._upgrade_revs('head', rev),
                                 as_sql=False, starting_rev=None,
                                 destination_rev='head', tag=None,
                             ), engine.connect() as connection:
+                        alembic_context.configure(connection=connection)
+
+                        with alembic_context.begin_transaction():
+                            alembic_context.run_migrations()
+                except Exception:
+                    # Data file db migration failed due to an incompatible
+                    # migration, wipe the user's data file dir and recreate
+                    # from scratch
+                    engine.dispose()
+                    shutil.rmtree(root)
+                    os.mkdir(root)
+                    engine = create_engine(
+                        db_path,
+                        connect_args={'check_same_thread': False,
+                                      'isolation_level': None},
+                    )
+                    # noinspection PyProtectedMember
+                    with EnvironmentContext(
+                            cfg, script,
+                            fn=lambda rev, _:
+                            script._upgrade_revs('head', rev),
+                            as_sql=False, starting_rev=None,
+                            destination_rev='head', tag=None,
+                    ), engine.connect() as connection:
                         alembic_context.configure(connection=connection)
 
                         with alembic_context.begin_transaction():
@@ -237,8 +258,8 @@ def save_data_file(adb, root: str, file_id: int,
     :param file_id: data file ID
     :param data: image or table data; image data can be a masked array
     :param hdr: FITS header
-    :param modified: if True, set the file modification flag; not set on initial
-        creation
+    :param modified: if True, set the file modification flag; not set
+        on initial creation
     """
     # Initialize header
     if hdr is None:
@@ -357,8 +378,8 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
     :param group_name: optional name of the file group; default: data file name
     :param group_order: 0-based order of the file in the group
     :param allow_duplicate_group_name: don't throw an error if the specified
-        group name already exists; useful when importing several files belonging
-        to the same group
+        group name already exists; useful when importing several files
+        belonging to the same group
 
     :return: data file instance
     """
@@ -596,7 +617,8 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                     sys.stderr = save_stderr
                 try:
                     asset_type = str(im.raw_type)
-                    asset_metadata['image_mode'] = im.color_desc.decode('ascii')
+                    asset_metadata['image_mode'] = im.color_desc.decode(
+                        'ascii')
                     asset_metadata['layers'] = im.num_colors
                     r, g, b = numpy.rollaxis(im.postprocess(output_bps=16), 2)
                 finally:
@@ -624,7 +646,8 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
             # Exposure length
             # noinspection PyBroadException
             try:
-                hdr['EXPOSURE'] = (exif['ExposureTime'], '[s] Integration time')
+                hdr['EXPOSURE'] = (exif['ExposureTime'],
+                                   '[s] Integration time')
             except Exception:
                 pass
 
@@ -756,7 +779,8 @@ def get_subframe(user_id: Optional[int], file_id: int,
         x0 = int(x0) - 1
         if x0 < 0 or x0 >= width:
             raise errors.ValidationError(
-                'x', 'X must be positive and not greater than image width', 422)
+                'x', 'X must be positive and not greater than image width',
+                422)
     except ValueError:
         raise errors.ValidationError('x', 'X must be a positive integer')
 
@@ -791,8 +815,8 @@ def get_subframe(user_id: Optional[int], file_id: int,
         if h <= 0 or h > height - y0:
             raise errors.ValidationError(
                 'height',
-                'Height must be positive and less than or equal to {:d}'.format(
-                    height - y0), 422)
+                'Height must be positive and less than or equal to {:d}'
+                .format(height - y0), 422)
     except ValueError:
         raise errors.ValidationError(
             'height', 'Height must be a positive integer')
@@ -845,8 +869,8 @@ def get_data_file_data(user_id: Optional[int], file_id: int) \
     :param file_id: data file ID
 
     :return: tuple (data, hdr); if the underlying FITS file contains a mask in
-        an extra image HDU, it is converted into a :class:`numpy.ma.MaskedArray`
-        instance
+        an extra image HDU, it is converted into
+        a :class:`numpy.ma.MaskedArray` instance
     """
     with get_data_file_fits(user_id, file_id) as fits:
         if fits[0].data is None:
@@ -897,8 +921,8 @@ def get_data_file_bytes(user_id: Optional[int], file_id: int,
 
     :param user_id: current user ID (None if user auth is disabled)
     :param file_id: data file ID
-    :param fmt: image export format: "FITS" or any supported by Pillow; default:
-        use the original import format
+    :param fmt: image export format: "FITS" or any supported by Pillow;
+        default: use the original import format
 
     :return: data file bytes
     """
@@ -914,7 +938,8 @@ def get_data_file_bytes(user_id: Optional[int], file_id: int,
             raise UnknownDataFileError(id=file_id)
 
     if PILImage is None:
-        raise DataFileExportError(reason='Server does not support image export')
+        raise DataFileExportError(
+            reason='Server does not support image export')
 
     # Export image via Pillow using the specified mode
     data = get_data_file_uint8(user_id, file_id)
@@ -930,13 +955,13 @@ def get_data_file_group_bytes(user_id: Optional[int], group_name: str,
                               fmt: Optional[str] = None,
                               mode: Optional[str] = None) -> bytes:
     """
-    Return data combined from a data file group in the original format, suitable
-    for exporting to data provider
+    Return data combined from a data file group in the original format,
+    suitable for exporting to data provider
 
     :param user_id: current user ID (None if user auth is disabled)
     :param group_name: data file group name
-    :param fmt: image export format: "FITS" or any supported by Pillow; default:
-        use the original import format
+    :param fmt: image export format: "FITS" or any supported by Pillow;
+        default: use the original import format
     :param mode: for non-FITS formats, Pillow image mode
         (https://pillow.readthedocs.io/en/stable/handbook/concepts.html);
         default: use the original import mode or guess from the number of files
@@ -964,7 +989,8 @@ def get_data_file_group_bytes(user_id: Optional[int], group_name: str,
 
     buf = BytesIO()
     if fmt == 'FITS':
-        # Assemble individual single-HDU data files into a single multi-HDU FITS
+        # Assemble individual single-HDU data files into a single multi-HDU
+        # FITS
         fits = pyfits.HDUList()
         for file_id, hdu_type in zip(data_file_ids, data_file_types):
             with open(get_data_file_path(user_id, file_id), 'rb') as f:
@@ -975,7 +1001,8 @@ def get_data_file_group_bytes(user_id: Optional[int], group_name: str,
                 fits.append(pyfits.BinTableHDU.fromstring(data))
         fits.writeto(buf, output_verify='silentfix+ignore')
     elif PILImage is None:
-        raise DataFileExportError(reason='Server does not support image export')
+        raise DataFileExportError(
+            reason='Server does not support image export')
     else:
         # Export image via Pillow using the specified mode
         if not mode:
@@ -1164,15 +1191,16 @@ def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
                       name: Optional[str] = None,
                       duplicates: str = 'ignore',
                       recurse: bool = False,
-                      width: Optional[int] = None, height: Optional[int] = None,
+                      width: Optional[int] = None,
+                      height: Optional[int] = None,
                       pixel_value: float = 0,
                       files: Optional[TDict[str, bytes]] = None) \
         -> TList[DataFile]:
     """
     Create, import, or upload data files defined by request parameters:
         `provider_id` = None:
-            `files` = None: create empty data file defined by `width`, `height`,
-                and `pixel_value`
+            `files` = None: create empty data file defined by `width`,
+                `height`, and `pixel_value`
             `files` != None: upload data files specified by `files`
         `provider_id` != None: import data files from `path` in the given
             provider
@@ -1440,7 +1468,8 @@ def delete_data_file(user_id: Optional[int], id: int) -> None:
                 else e)
 
 
-def get_session(user_id: Optional[int], session_id: Union[int, str]) -> Session:
+def get_session(user_id: Optional[int], session_id: Union[int, str]) \
+        -> Session:
     """
     Return session object with the given ID or name
 
