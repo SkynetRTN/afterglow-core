@@ -12,6 +12,7 @@ import sqlite3
 import struct
 import sys
 import threading
+import traceback
 import tracemalloc
 from datetime import datetime
 from glob import glob
