@@ -39,6 +39,9 @@ if __name__ == '__main__':
         if not os.path.isfile(db_path):
             continue
 
+        # Make sure that the db files are writable
+        os.system('sudo chmod g+w {}*'.format(db_path))
+
         print('Migrating', root, '...', end=' ', file=sys.stderr)
         db_url = 'sqlite:///{}'.format(db_path)
         engine = create_engine(
