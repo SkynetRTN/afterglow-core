@@ -71,7 +71,7 @@ setup(
         'scipy == 1.6.1',
         'sep == 1.0.3',
         'SkyLib >= 0.2.0',
-        'SQLAlchemy == 1.3.23',
+        'SQLAlchemy == 1.4.23',
         'Werkzeug == 1.0.1',
         # extra skynet dependencies
         'pyslalib',
@@ -81,7 +81,7 @@ setup(
         'marshmallow_sqlalchemy == 0.24.2',
         'PyMySQL == 1.0.2',
         'redis == 3.5.3',
-        'SQLAlchemy-Utils == 0.36.8',
+        'SQLAlchemy-Utils == 0.37.8',
         'WTForms == 2.3.3',
     ],
     entry_points={

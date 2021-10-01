@@ -75,7 +75,7 @@ class DbJobResult(JobBase):
     errors = Column(JSONType, nullable=False, default=[])
     warnings = Column(JSONType, nullable=False, default=[])
 
-    __mapper_args__ = {'polymorphic_on': type, 'polymorphic_identity': None}
+    __mapper_args__ = {'polymorphic_on': type, 'polymorphic_identity': ''}
 
 
 class DbJobFile(JobBase):
