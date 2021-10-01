@@ -156,6 +156,10 @@ class PaginationInfo(object):
             if self.first_item is not None:
                 args = request.args.copy()
                 try:
+                    del args['page[number]']
+                except KeyError:
+                    pass
+                try:
                     del args['page[after]']
                 except KeyError:
                     pass
@@ -164,6 +168,10 @@ class PaginationInfo(object):
                     request.base_url, url_encode(args))
             if self.last_item is not None:
                 args = request.args.copy()
+                try:
+                    del args['page[number]']
+                except KeyError:
+                    pass
                 try:
                     del args['page[before]']
                 except KeyError:
