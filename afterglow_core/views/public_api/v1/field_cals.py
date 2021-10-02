@@ -34,12 +34,12 @@ def field_cals() -> Response:
         # List all field cals
         return json_response(
             [FieldCalSchema(cal)
-             for cal in query_field_cals(auth.current_user.id)])
+             for cal in query_field_cals(request.user.id)])
 
     if request.method == 'POST':
         # Create field cal
         return json_response(FieldCalSchema(create_field_cal(
-            auth.current_user.id,
+            request.user.id,
             FieldCal(
                 FieldCalSchema(_set_defaults=True, **request.args.to_dict()),
                 _set_defaults=True))), 201)
@@ -66,7 +66,7 @@ def field_cal(id_or_name: str) -> Response:
         GET, PUT: JSON-serialized field cal
         DELETE: empty response
     """
-    cal = get_field_cal(auth.current_user.id, id_or_name)
+    cal = get_field_cal(request.user.id, id_or_name)
 
     if request.method == 'GET':
         # Return specific field cal resource
@@ -75,11 +75,11 @@ def field_cal(id_or_name: str) -> Response:
     if request.method == 'PUT':
         # Update field cal
         return json_response(FieldCalSchema(update_field_cal(
-            auth.current_user.id, cal.id,
+            request.user.id, cal.id,
             FieldCal(FieldCalSchema(**request.args.to_dict()),
                      only=list(request.args.keys())))))
 
     if request.method == 'DELETE':
         # Delete field cal
-        delete_field_cal(auth.current_user.id, cal.id)
+        delete_field_cal(request.user.id, cal.id)
         return json_response()

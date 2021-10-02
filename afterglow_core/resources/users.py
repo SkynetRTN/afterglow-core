@@ -16,7 +16,7 @@ from .. import app
 from ..models import User
 from ..errors import MissingFieldError, ValidationError
 from ..errors.auth import DuplicateUsernameError, UnknownUserError
-from .base import Date, DateTime, JSONType
+from .base import DateTime, JSONType
 
 
 __all__ = [
@@ -78,7 +78,6 @@ class DbUser(db.Model, UserMixin):
     last_name = db.Column(
         db.String,
         db.CheckConstraint('last_name is null or length(last_name) <= 255'))
-    birth_date = db.Column(Date)
     active = db.Column(db.Boolean, server_default='1')
     created_at = db.Column(DateTime, default=db.func.current_timestamp())
     modified_at = db.Column(
@@ -201,7 +200,6 @@ class AnonymousUser(object):
     full_name = ''
     email = ''
     password = ''
-    birth_date = None
     active = True
     created_at = None
     modified_at = None
@@ -220,10 +218,14 @@ class AnonymousUser(object):
 
 def _init_users():
     """Initialize Afterglow user datastore if AUTH_ENABLED = True"""
+    # noinspection PyUnresolvedReferences
+    from .. import oauth2  # register oauth token-related models
+
     # All imports put here to avoid unnecessary loading of packages on startup
     # if user auth is disabled
     try:
-        from alembic import config as alembic_config, context as alembic_context
+        from alembic import (
+            config as alembic_config, context as alembic_context)
         from alembic.script import ScriptDirectory
         from alembic.runtime.environment import EnvironmentContext
     except ImportError:

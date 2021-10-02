@@ -8,7 +8,8 @@ from numpy import array
 from astropy.wcs import WCS
 
 from .... import app, auth, errors, json_response
-from ....resources.data_files import get_exp_length, get_gain, get_data_file_data
+from ....resources.data_files import (
+    get_exp_length, get_gain, get_data_file_data)
 from ....resources.photometry import get_photometry
 from ....schemas.api.v1 import PhotometrySchema
 from ....errors.data_file import MissingWCSError
@@ -28,16 +29,16 @@ def data_file_photometry(id: int) -> Response:
 
     Request parameters::
         x: X position or a comma-separated list of positions of aperture
-            centers; the ending comma is ignored, so, if the caller wants a list
-            even in the case of a single input item, the input value can be
-            terminated with a comma
+            centers; the ending comma is ignored, so, if the caller wants
+            a list even in the case of a single input item, the input value can
+            be terminated with a comma
         y: Y position or a comma-separated list of positions of aperture
             centers; same length as `x`
         ra_hours: RA or a comma-separated list of RAs of aperture centers; can
             be passed instead of `x` and `y` provided the data file is
             astrometric-calibrated
-        dec_degs: Dec or a comma-separated list of Decs of aperture centers; can
-            be passed instead of `x` and `y` provided the data file is
+        dec_degs: Dec or a comma-separated list of Decs of aperture centers;
+            can be passed instead of `x` and `y` provided the data file is
             astrometric-calibrated
         a: aperture radius or semi-major axis (for elliptical aperture), in
             pixels
@@ -53,12 +54,12 @@ def data_file_photometry(id: int) -> Response:
         b_out: outer semi-minor axis of annulus; defaults to a_out*b/a, i.e.
             assumes the same ellipticity as the aperture
         theta_out: rotation angle of the outer semi-major annulus axis in
-            degrees counter-clockwise from the X axis; defaults to `theta`, i.e.
-            same rotation as the aperture
+            degrees counter-clockwise from the X axis; defaults to `theta`,
+            i.e. same rotation as the aperture
         centroid_radius: if given, then the input XY coordinates are treated as
             the initial guess, and the actual coordinates are calculated by
-            finding the photocenter around (`x`, `y`) within the given radius in
-            pixels
+            finding the photocenter around (`x`, `y`) within the given radius
+            in pixels
 
     :return: JSON response containing serialized Photometry object (single xy
         or RA/Dec value) or a list of Photometry objects otherwise
@@ -224,7 +225,7 @@ def data_file_photometry(id: int) -> Response:
         centroid_radius = None
 
     # Get image data
-    data, hdr = get_data_file_data(auth.current_user.id, id)
+    data, hdr = get_data_file_data(request.user.id, id)
 
     if ra is not None and dec is not None:
         # Convert RA/Dec to XY if we have astrometric calibration
@@ -235,8 +236,8 @@ def data_file_photometry(id: int) -> Response:
 
     res = [
         get_photometry(
-            data, get_exp_length(hdr), get_gain(hdr), _x, _y, a, b, theta, a_in,
-            a_out, b_out, theta_out, centroid_radius=centroid_radius)
+            data, get_exp_length(hdr), get_gain(hdr), _x, _y, a, b, theta,
+            a_in, a_out, b_out, theta_out, centroid_radius=centroid_radius)
         for _x, _y in zip(x, y)]
 
     if multiple:

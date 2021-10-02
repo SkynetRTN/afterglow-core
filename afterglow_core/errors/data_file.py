@@ -96,6 +96,7 @@ class DuplicateSessionNameError(AfterglowError):
     Extra attributes::
         name: session name
     """
+    code = 409
     subcode = 2006
     message = 'Duplicate session name'
 
@@ -143,7 +144,7 @@ class DuplicateDataFileNameError(AfterglowError):
     Extra attributes::
         name: requested data file name
     """
-    code = 403
+    code = 409
     subcode = 2010
     message = 'Duplicate data file name'
 
@@ -156,6 +157,6 @@ class DuplicateDataFileGroupNameError(AfterglowError):
     Extra attributes::
         group_name: requested data file group name
     """
-    code = 403
+    code = 409
     subcode = 2011
     message = 'Duplicate data file group name'

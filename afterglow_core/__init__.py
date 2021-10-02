@@ -5,38 +5,26 @@ Afterglow Core: main app package
 import datetime
 import json
 import os
-from typing import Any, Dict as TDict, Optional
+from typing import Any, Dict as TDict, List as TList, Optional, Union
 
 from flask_cors import CORS
 from marshmallow import missing
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
+from werkzeug.urls import url_encode
 from flask import Flask, Response, request
 
 from .schemas import AfterglowSchema
 
 
-__all__ = ['app', 'json_response']
-
-
-class PrefixMiddleware(object):
-    def __init__(self, application, prefix=''):
-        self.app = application
-        self.prefix = prefix
-
-    def __call__(self, environ, start_response):
-        if environ['PATH_INFO'].startswith(self.prefix):
-            environ['PATH_INFO'] = environ['PATH_INFO'][len(self.prefix):]
-            environ['SCRIPT_NAME'] = self.prefix
-            return self.app(environ, start_response)
-        else:
-            start_response('404', [('Content-Type', 'text/plain')])
-            return ["This url does not belong to the app.".encode()]
+__all__ = ['app', 'json_response', 'PaginationInfo']
 
 
 class AfterglowSchemaEncoder(json.JSONEncoder):
     """
-    JSON encoder that can serialize AfterglowSchema class instances
+    JSON encoder that can serialize AfterglowSchema class instances and
+    datetime objects
     """
+
     def default(self, obj):
         if isinstance(obj, type(missing)):
             return None
@@ -44,31 +32,188 @@ class AfterglowSchemaEncoder(json.JSONEncoder):
             return obj.dump(obj)
         if isinstance(obj, datetime.datetime):
             return obj.isoformat(' ')
-        return super(AfterglowSchemaEncoder, self).default(obj)
+        return super().default(obj)
 
 
-def json_response(obj: Any = '', status_code: Optional[int] = None,
-                  headers: Optional[TDict[str, str]] = None) -> Response:
+class PaginationInfo(object):
+    """
+    Pagination info structure provided by resources that return multiple
+    objects (e.g. data provider assets)
+
+    Pagination info is returned in the JSON response envelope in the following
+    way:
+        {
+            "data": [{object}, {object}, ...],
+            "links": {
+                "self": "resource URI",
+                "pagination": {
+                    "sort": "sorting mode (-mode = reverse)",
+                    "first": "URL of first page (always present)",
+                    "last": "URL of last page (always present)",
+                    "prev": "URL of previous page (present unless first page)",
+                    "next": "URL of next page (present unless last page)",
+                    "page_size": # of items per page (always present),
+                    "total_pages": optional total # of pages if known,
+                    "current_page": optional 0-based current page index
+                }
+            }
+        }
+
+    Use :meth:`to_dict` to construct a JSON-serializable pagination structure.
+    """
+    sort: str = None  # sorting mode, optionally prefixed with + or -
+    page_size: int = None  # page size
+    total_pages: int = None  # total number of pages
+    current_page: int = None  # 0-based current page index, page-based
+    first_item: str = None  # key value of the first item on page, keyset-based
+    last_item: str = None  # key value of the last item on page, keyset-based
+
+    def __init__(self, sort: Optional[str] = None,
+                 page_size: Optional[int] = None,
+                 total_pages: Optional[int] = None,
+                 current_page: Optional[int] = None,
+                 first_item: Optional[Any] = None,
+                 last_item: Optional[Any] = None):
+        """
+
+        :param sort: sorting mode, optionally prefixed with + or -
+        :param page_size: page size
+        :param total_pages: total number of pages
+        :param current_page: 0-based current page index (page-based pagination)
+        :param first_item: key value of the first item on page (keyset-based
+            pagination)
+        :param last_item: key value of the last item on page (keyset-based
+            pagination)
+        """
+        if sort is not None:
+            self.sort = str(sort)
+        if page_size is not None:
+            self.page_size = int(page_size)
+        if total_pages is not None:
+            self.total_pages = int(total_pages)
+        if current_page is not None:
+            self.current_page = int(current_page)
+        if first_item is not None:
+            self.first_item = str(first_item)
+        if last_item is not None:
+            self.last_item = str(last_item)
+
+    def to_dict(self) -> dict:
+        """
+        Return a JSON-serializable dict constructed from the actual pagination
+        info and request environment
+
+        :return: pagination structure as dictionary
+        """
+        args_first = request.args.copy()
+        try:
+            del args_first['page[before]']
+        except KeyError:
+            pass
+        try:
+            del args_first['page[after]']
+        except KeyError:
+            pass
+        args_first['page[number]'] = 'first'
+
+        args_last = request.args.copy()
+        try:
+            del args_last['page[before]']
+        except KeyError:
+            pass
+        try:
+            del args_last['page[after]']
+        except KeyError:
+            pass
+        args_last['page[number]'] = 'last'
+
+        pagination = {
+            # Always have links to first and last pages
+            'first': '{}?{}'.format(request.base_url, url_encode(args_first)),
+            'last': '{}?{}'.format(request.base_url, url_encode(args_last)),
+        }
+
+        for attr in ('sort', 'page_size', 'total_pages', 'current_page'):
+            if getattr(self, attr, None) is not None:
+                pagination[attr] = getattr(self, attr)
+
+        if self.current_page is not None:
+            # Page-based pagination
+            if self.current_page > 0:
+                args = request.args.copy()
+                args['page[number]'] = str(self.current_page - 1)
+                pagination['prev'] = '{}?{}'.format(
+                    request.base_url, url_encode(args))
+            if self.total_pages is None or \
+                    self.current_page < self.total_pages - 1:
+                args = request.args.copy()
+                args['page[number]'] = str(self.current_page + 1)
+                pagination['next'] = '{}?{}'.format(
+                    request.base_url, url_encode(args))
+        else:
+            # Keyset-based pagination; first and last are keys for previous
+            # and next pages
+            if self.first_item is not None:
+                args = request.args.copy()
+                try:
+                    del args['page[number]']
+                except KeyError:
+                    pass
+                try:
+                    del args['page[after]']
+                except KeyError:
+                    pass
+                args['page[before]'] = str(self.first_item)
+                pagination['prev'] = '{}?{}'.format(
+                    request.base_url, url_encode(args))
+            if self.last_item is not None:
+                args = request.args.copy()
+                try:
+                    del args['page[number]']
+                except KeyError:
+                    pass
+                try:
+                    del args['page[before]']
+                except KeyError:
+                    pass
+                args['page[after]'] = str(self.last_item)
+                pagination['next'] = '{}?{}'.format(
+                    request.base_url, url_encode(args))
+
+        return pagination
+
+
+def json_response(data: Optional[Union[dict, AfterglowSchema, TList[dict],
+                                       TList[AfterglowSchema]]] = None,
+                  status_code: Optional[int] = None,
+                  headers: Optional[TDict[str, str]] = None,
+                  pagination: Optional[PaginationInfo] = None,
+                  force_pagination: bool = False) -> Response:
     """
     Serialize a Python object to a JSON-type flask.Response
 
-    :param obj: object to serialize; can be a Resource instance or a compound
-        object (list, dict, ...) possibly including Resource instances
+    :param data: object(s) to serialize; can be a :class:`AfterglowSchema`
+        instance or a dict, a list of those, or None
     :param int status_code: optional HTTP status code; defaults to 200 - OK
     :param dict headers: optional extra HTTP headers
+    :param pagination: optional pagination info
+    :param force_pagination: always include pagination links (first and last
+        page) even if no total/previous/next page info is provided
 
     :return: Flask response object with mimetype set to application/json
     """
-    if obj == '' or status_code == 204:
-        resp = Response('', 204, headers=headers)
-        del resp.headers['Content-Type']
-        return resp
-
-    if status_code is None:
-        status_code = 200
+    links = {'self': request.url}
+    if pagination is None and force_pagination:
+        pagination = PaginationInfo()
+    if pagination is not None:
+        links['pagination'] = pagination.to_dict()
+    envelope = {
+        'data': data,
+        'links': links,
+    }
     return Response(
-        json.dumps(obj, cls=AfterglowSchemaEncoder), status_code,
-        mimetype='application/json', headers=headers)
+        json.dumps(envelope, cls=AfterglowSchemaEncoder),
+        status_code or 200, mimetype='application/json', headers=headers)
 
 
 app = Flask(__name__)
@@ -76,9 +221,17 @@ cors = CORS(app, resources={'/api/*': {'origins': '*'}})
 app.config.from_object('afterglow_core.default_cfg')
 app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=True)
 
-if app.config.get('APP_PREFIX'):
-    app.wsgi_app = PrefixMiddleware(
-        app.wsgi_app, prefix=app.config.get('APP_PREFIX'))
+proxy_count = app.config.get('APP_PROXY')
+if proxy_count:
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app, x_for=proxy_count, x_proto=proxy_count,
+        x_host=proxy_count, x_port=proxy_count, x_prefix=proxy_count)
+
+if app.config.get('APPLICATION_ROOT'):
+    from werkzeug.middleware.dispatcher import DispatcherMiddleware
+    app.wsgi_app = DispatcherMiddleware(
+        app.wsgi_app, {app.config['APPLICATION_ROOT']: app.wsgi_app})
 
 if app.config.get('PROFILE'):
     # Enable profiling
@@ -114,5 +267,4 @@ if app.config.get('AUTH_ENABLED'):
 
 
 # Define API resources and endpoints
-from .resources import *
-from .views import *
+from . import resources, views

@@ -7,7 +7,7 @@ from typing import Optional, Union
 from flask import Response, request
 
 from .... import app, errors, json_response
-from ....auth import auth_required, current_user
+from ....auth import auth_required
 from ....resources.data_providers import providers
 from ....resources.data_files import (
     get_data_file, get_data_file_bytes, get_data_file_group,
@@ -67,8 +67,8 @@ def data_providers(id: Optional[Union[int, str]] = None) -> Response:
         except (KeyError, ValueError):
             raise UnknownDataProviderError(id=id)
 
-    # If specific auth method(s) are requested for data provider, check that the
-    # user is authenticated with any of these methods
+    # If specific auth method(s) are requested for data provider, check that
+    # the user is authenticated with any of these methods
     provider.check_auth()
 
     return json_response(DataProviderSchema(provider))
@@ -122,6 +122,18 @@ def data_providers_assets(id: Union[int, str]) -> Response:
         path = str(path)
 
     if request.method == 'GET':
+        # Get sorting/pagination parameters
+        sort_by = params.pop('sort', None)
+        page_size = params.pop('page[size]', 20)
+        page = params.pop('page[number]', None)
+        page_after = params.pop('page[after]', None)
+        page_before = params.pop('page[before]', None)
+        if page is None:
+            if page_after is not None:
+                page = '>{}'.format(page_after)
+            elif page_before is not None:
+                page = '<{}'.format(page_before)
+
         if params:
             # "Search" request
             if not provider.searchable:
@@ -131,9 +143,12 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             if path is not None and not provider.get_asset(path).collection:
                 raise CannotSearchInNonCollectionError()
 
+            assets, pagination = provider.find_assets(
+                path=path, sort_by=sort_by, page_size=page_size, page=page,
+                **params)
             return json_response(
-                [DataProviderAssetSchema(asset)
-                 for asset in provider.find_assets(path=path, **params)])
+                [DataProviderAssetSchema(asset) for asset in assets],
+                pagination=pagination, force_pagination=True)
 
         # "Get" request; assume empty path by default
         if path is None:
@@ -143,7 +158,11 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             # "Browse" request
             if not provider.browseable:
                 raise NonBrowseableDataProviderError(id=id)
-            return json_response(provider.get_child_assets(path))
+            assets, pagination = provider.get_child_assets(
+                path, sort_by=sort_by, page_size=page_size, page=page)
+            return json_response(
+                [DataProviderAssetSchema(asset) for asset in assets],
+                pagination=pagination, force_pagination=True)
         return json_response([DataProviderAssetSchema(asset)])
 
     # POST/PUT/DELETE always work with asset(s) at the given path
@@ -168,7 +187,8 @@ def data_providers_assets(id: Union[int, str]) -> Response:
         # Check that the asset at the given path exists
         asset = provider.get_asset(path)
 
-        # "force" is required to recursively delete a non-empty collection asset
+        # "force" is required to recursively delete a non-empty collection
+        # asset
         if asset.collection and provider.get_child_assets(path) and not force:
             raise CannotDeleteNonEmptyCollectionAssetError()
 
@@ -176,7 +196,8 @@ def data_providers_assets(id: Union[int, str]) -> Response:
         return json_response()
 
 
-@app.route(resource_prefix + '<id>/assets/data', methods=('GET', 'POST', 'PUT'))
+@app.route(resource_prefix + '<id>/assets/data',
+           methods=('GET', 'POST', 'PUT'))
 @auth_required('user')
 def data_providers_assets_data(id: Union[int, str]) -> Response:
     """
@@ -195,8 +216,8 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
 
     POST /data-providers/[id]/assets/data?path=...&data_file_id=...[&fmt=...]
         - create a new non-collection asset at the given path from data file
-          using the specified file format (by default, same as the original file
-          if the data file was imported or FITS otherwise)
+          using the specified file format (by default, same as the original
+          file if the data file was imported or FITS otherwise)
 
     POST /data-providers/[id]/assets/data?path=...&group_name=...
         [&fmt=...&mode=...]
@@ -229,9 +250,9 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
 
     PUT /data-providers/[id]/assets?[path=...&]&group_name=...
         [&fmt=...&mode=...][&force]
-        - update existing asset at the given or the original path by overwriting
-          it with the given data file group combined into a single file
-          in the original or some other format
+        - update existing asset at the given or the original path
+          by overwriting it with the given data file group combined into
+          a single file in the original or some other format
 
     PUT /data-providers/[id]/assets/data?path=...&src_path=...
         [&src_provider_id=...][&move][&force]
@@ -270,7 +291,7 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
         # if available, same for all files in the group, and is in the same
         # data provider
         if params.get('group_name'):
-            group = get_data_file_group(current_user.id, params['group_name'])
+            group = get_data_file_group(request.user.id, params['group_name'])
             if not group:
                 UnknownDataFileGroupError(group_name=params['group_name'])
             if all(getattr(df, 'data_provider', None) == str(id)
@@ -279,7 +300,7 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
                     if getattr(df, 'asset_path', None))) == 1:
                 path = group[0].asset_path
         elif params.get('data_file_id'):
-            df = get_data_file(current_user.id, params['data_file_id'])
+            df = get_data_file(request.user.id, params['data_file_id'])
             if getattr(df, 'data_provider', None) == str(id):
                 path = getattr(df, 'asset_path', None)
         if not path:
@@ -324,11 +345,11 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
                         '"group_name" and "data_file_id" are mutually '
                         'exclusive')
                 data = get_data_file_group_bytes(
-                    current_user.id, group_name, fmt=fmt, mode=mode)
+                    request.user.id, group_name, fmt=fmt, mode=mode)
             elif data_file_id is not None:
                 # Exporting single data file in the given format
                 data = get_data_file_bytes(
-                    current_user.id, data_file_id, fmt=fmt)
+                    request.user.id, data_file_id, fmt=fmt)
             else:
                 # Creating/updating from uploaded data; use the first
                 # multipart/form-data file; if empty, creating an empty
@@ -354,17 +375,18 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
                     force = True
                 else:
                     force = bool(int(force))
-                asset = provider.update_asset(path, data, force=force, **params)
+                asset = provider.update_asset(
+                    path, data, force=force, **params)
 
             # Link the original data files to the new asset and reset
             # the modified flag on save
             if data_file_id is not None:
                 update_data_file_asset(
-                    current_user.id, data_file_id, id, asset.path,
+                    request.user.id, data_file_id, id, asset.path,
                     asset.metadata, asset.name)
             elif group_name is not None:
                 update_data_file_group_asset(
-                    current_user.id, group_name, id, asset.path,
+                    request.user.id, group_name, id, asset.path,
                     asset.metadata, asset.name)
 
             return json_response(

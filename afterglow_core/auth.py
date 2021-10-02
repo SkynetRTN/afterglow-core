@@ -4,11 +4,11 @@ Afterglow Core: user authentication
 All endpoints that assume authorized access must be decorated with
 @auth_required; its explicit equivalent is :func:`authorize`.
 
-User authentication is based on the access tokens. The user's access token (and,
-optionally, refresh token and expiration time) is retrieved by making a request
-to auth/login, which invokes a chain of authentication methods. All other
-Afterglow resources require a valid access token supplied in the Authorization
-HTTP header.
+User authentication is based on the access tokens. The user's access token
+(and, optionally, refresh token and expiration time) is retrieved by making
+a request to auth/login, which invokes a chain of authentication methods. All
+other Afterglow resources require a valid access token supplied
+in the Authorization HTTP header.
 
 If user authentication is enabled in the app configuration (non-empty
 USER_AUTH), the module also provides the endpoint for user management.
@@ -24,13 +24,17 @@ from functools import wraps
 import time
 from typing import Callable, Optional, Sequence, Union
 
-from flask import Response, request, make_response, redirect, url_for
+from werkzeug.urls import url_encode
+from flask import Response, request, make_response, redirect
+# noinspection PyProtectedMember
+from flask import _request_ctx_stack
+from flask_wtf.csrf import generate_csrf
 
 from . import app
 from .errors.auth import NotAuthenticatedError
 from .resources.users import (
-    AnonymousUser, DbPersistentToken, DbUser, user_datastore)
-from .oauth2 import Token, memory_session
+    AnonymousUser, DbPersistentToken, db, user_datastore)
+from .oauth2 import Token
 
 
 __all__ = [
@@ -74,17 +78,16 @@ USER_REALM = 'Registered Afterglow Users Only'
 
 
 # noinspection PyUnusedLocal
-def authenticate(roles: Optional[Union[str, Sequence[str]]] = None) \
-        -> AnonymousUser:
+def authenticate(roles: Optional[Union[str, Sequence[str]]] = None) -> None:
     """
-    Perform user authentication and return a User object
+    Perform user authentication
 
     :param roles: list of authenticated user role IDs or a single role ID
 
     :return: database object for the authenticated user; raises
         :class:`AuthError` on authentication error
     """
-    return anonymous_user
+    _request_ctx_stack.top.user = request.user = AnonymousUser()
 
 
 def _doublewrap(fn: Callable) -> Callable:
@@ -144,7 +147,11 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
 
         except NotAuthenticatedError:
             if kwargs.get('allow_redirect'):
-                return redirect(url_for('login', next=request.url))
+                dashboard_prefix = app.config.get("DASHBOARD_PREFIX")
+                args = url_encode(dict(next=request.url))
+                return redirect(
+                    '{dashboard_prefix}/login?{args}'
+                    .format(dashboard_prefix=dashboard_prefix, args=args))
             raise
 
         try:
@@ -169,7 +176,7 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
             try:
                 with data_files.data_files_engine_lock:
                     data_files.data_files_engine[
-                        data_files.get_root(current_user.id)
+                        data_files.get_root(request.user.id)
                     ].remove()
             except Exception:
                 pass
@@ -178,8 +185,8 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
 
 
 # noinspection PyUnusedLocal
-def set_access_cookies(response: Response, access_token: Optional[str] = None) \
-        -> Response:
+def set_access_cookies(response: Response,
+                       access_token: Optional[str] = None) -> Response:
     """
     Set access cookies for browser access
 
@@ -208,7 +215,6 @@ def _init_auth() -> None:
     # To reduce dependencies, only import marshmallow, flask-security, and
     # flask-sqlalchemy if user auth is enabled
     # noinspection PyProtectedMember
-    from flask import _request_ctx_stack
     from flask_security import Security, current_user as _current_user
     from .plugins import load_plugins
     from .auth_plugins import (
@@ -232,35 +238,46 @@ def _init_auth() -> None:
         :return: Flask response
         """
         expires_in = app.config.get('COOKIE_TOKEN_EXPIRES_IN', 86400)
-        sess = memory_session()
-        if not access_token:
-            # Generate a temporary in-memory token
-            token = Token(
-                token_type='cookie',
-                access_token=secrets.token_hex(20),
-                user_id=request.user.id,
-            )
-            sess.add(token)
-        else:
-            # Check that the token provided by the user exists and not expired
-            token = sess.query(Token)\
-                .filter_by(
+        try:
+            if not access_token:
+                # Generate a temporary in-memory token
+                access_token = secrets.token_hex(20)
+                token = Token(
+                    token_type='cookie',
                     access_token=access_token,
                     user_id=request.user.id,
-                    token_type='cookie',
-                    revoked=False)\
-                .one_or_none()
-            if not token or not token.active:
-                return clear_access_cookies(response)
+                )
+                db.session.add(token)
+            else:
+                # Check that the token provided by the user exists
+                # and not expired
+                token = Token.query \
+                    .filter_by(
+                        access_token=access_token,
+                        user_id=request.user.id,
+                        token_type='cookie',
+                        revoked=False)\
+                    .one_or_none()
+                if not token or not token.active:
+                    return clear_access_cookies(response)
 
-        token.expires_in = expires_in
-        token.issued_at = time.time()
-        sess.commit()
+            token.expires_in = expires_in
+            token.issued_at = time.time()
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+
+        csrf_token = generate_csrf()
+        response.set_cookie('afterglow_core.csrf', csrf_token)
 
         response.set_cookie(
-            'afterglow_core_access_token', value=token.access_token,
-            max_age=expires_in,
-            secure=False, httponly=False)
+            'afterglow_core_access_token', value=access_token,
+            max_age=expires_in, secure=False, httponly=False)
+
+        response.set_cookie(
+            'afterglow_core_user_id', value=str(request.user.id),
+            max_age=expires_in, secure=False, httponly=False)
 
         return response
 
@@ -270,32 +287,35 @@ def _init_auth() -> None:
         """
         Clears the access cookies
 
-        See: https://medium.com/lightrail/getting-token-authentication-right-in-
-        a-stateless-single-page-application-57d0c6474e3
+        See: https://medium.com/lightrail/getting-token-authentication-right-
+        in-a-stateless-single-page-application-57d0c6474e3
 
         :param response: Flask response
 
         :return: Flask response with access token removed from cookies
         """
         response.set_cookie('afterglow_core_access_token', '', expires=0)
+        response.set_cookie('afterglow_core_user_id', '', expires=0)
+        response.set_cookie('afterglow_core.csrf', '', expires=0)
 
         return response
 
     clear_access_cookies = _clear_access_cookies
 
     def _authenticate(roles: Optional[Union[str, Sequence[str]]] = None) \
-            -> DbUser:
+            -> None:
         """
         Authenticate the user
 
         :param roles: list of authenticated user role IDs or a single role ID
-
-        :return: database object for the authenticated user; raises
-            :class:`AuthError` on authentication error
         """
         # If access token in HTTP Authorization header, verify and authorize.
         # otherwise, attempt to reconstruct token from cookies
         tokens = []
+        token_param = request.args.get('token', None)
+        if token_param:
+            tokens.append(('personal', token_param))
+
         token_hdr = request.headers.get('Authorization')
         if token_hdr:
             parts = token_hdr.split()
@@ -313,7 +333,7 @@ def _init_auth() -> None:
 
         user = None
         error_msgs = []
-        sess = memory_session()
+        user_roles = []
         for token_type, access_token in tokens:
             try:
                 if token_type == 'personal':
@@ -322,7 +342,7 @@ def _init_auth() -> None:
                         access_token=access_token,
                         token_type=token_type).one_or_none()
                 else:
-                    token = sess.query(Token).filter_by(
+                    token = Token.query.filter_by(
                         access_token=access_token,
                         # token_type=token_type,
                         revoked=False).one_or_none()
@@ -338,7 +358,11 @@ def _init_auth() -> None:
                 if not user.active:
                     raise ValueError('The user is deactivated')
 
+                user_roles = [user_role.name for user_role in user.roles]
+
+                db.session.commit()
             except Exception as e:
+                db.session.rollback()
                 error_msgs.append('{} (type: {})'.format(e, token_type))
             else:
                 break
@@ -352,15 +376,13 @@ def _init_auth() -> None:
                 roles = roles.split(',')
             for role in roles:
                 role = role.strip()
-                if not any(user_role.name == role for user_role in user.roles):
+                if role not in user_roles:
                     raise NotAuthenticatedError(
                         error_msg='"{}" role required'.format(role))
 
         # Make the authenticated user object available via `current_user` and
         # request.user
         _request_ctx_stack.top.user = request.user = user
-
-        return user
 
     authenticate = _authenticate
 
