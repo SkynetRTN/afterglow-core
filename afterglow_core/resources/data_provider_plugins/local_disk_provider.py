@@ -10,9 +10,12 @@ import bz2
 from errno import EEXIST
 from datetime import datetime
 from glob import glob
-from typing import List as TList, Optional, Union
+from typing import List as TList, Optional, Tuple, Union
+import warnings
 
 import astropy.io.fits as pyfits
+from astropy.wcs import FITSFixedWarning
+from astropy.io.fits.verify import VerifyWarning
 
 try:
     from PIL import Image as PILImage, ExifTags
@@ -29,8 +32,9 @@ try:
 except ImportError:
     exifread = None
 
-from ... import auth, errors
+from ... import PaginationInfo, auth, errors
 from ...models import DataProvider, DataProviderAsset
+from ...errors import ValidationError
 from ...errors.data_provider import (
     AssetNotFoundError, AssetAlreadyExistsError,
     CannotUpdateCollectionAssetError)
@@ -41,6 +45,87 @@ from ...errors.data_file import UnrecognizedDataFormatError
 __all__ = ['LocalDiskDataProvider', 'RestrictedRWLocalDiskDataProvider']
 
 
+warnings.filterwarnings('ignore', category=FITSFixedWarning)
+warnings.filterwarnings('ignore', category=VerifyWarning)
+
+MAX_PAGE_SIZE = 100
+
+
+def paginate(items: TList[Union[str, DataProviderAsset]],
+             page_size: Optional[Union[int, str]], sort_by: str,
+             page: Optional[Union[int, str]]) \
+        -> Tuple[list, Optional[PaginationInfo]]:
+    """
+    Handle pagination for lists of objects
+
+    :param items: list of items to paginate
+    :param page_size: number of items per page
+    :param sort_by: sorting key: "name", "size", or "time", optionally prefixed
+        by "+" or "-", with "-" indicating reverse sorting
+    :param page: optional page number (for page-based pagination), "first",
+        or "last"
+
+    :return: list of items to return, total number of pages, current page
+        number, and None, indicating page-based pagination
+    """
+    if page_size is not None:
+        try:
+            page_size = int(page_size)
+            if page_size <= 0:
+                raise ValueError()
+        except ValueError:
+            raise ValidationError('page[size]')
+        page_size = min(max(page_size, 1), MAX_PAGE_SIZE)
+    else:
+        page_size = len(items)
+    if not items:
+        return [], PaginationInfo(
+            sort=sort_by, page_size=page_size or MAX_PAGE_SIZE, total_pages=0,
+            current_page=0)
+    total_pages = (len(items) - 1)//page_size + 1
+
+    reverse = sort_by.startswith('-')
+    key = sort_by.lstrip('+-')
+    if key not in ('name', 'size', 'time'):
+        raise ValidationError('sort')
+    if isinstance(items[0], str):
+        items.sort(
+            key=lambda fn: (
+                os.path.isdir(fn) ^ (not reverse),
+                os.path.basename(fn)
+                if key == 'name' or key == 'size' and os.path.isdir(fn)
+                else os.stat(fn).st_size if key == 'size'
+                else os.stat(fn).st_mtime),
+            reverse=reverse)
+    else:
+        items.sort(
+            key=lambda asset: (
+                asset.collection ^ (not reverse),
+                asset.name
+                if key == 'name' or key == 'size' and asset.collection
+                else asset.metadata['size'] if key == 'size'
+                else asset.metadata['time']),
+            reverse=reverse)
+
+    if page == 'last':
+        page = max(total_pages - 1, 0)
+        items = items[-page_size:]
+    elif page == 'first' or not page:
+        page = 0
+        items = items[:page_size]
+    else:
+        try:
+            page = int(page)
+        except ValueError:
+            raise ValidationError('page[number]')
+        offset = page*page_size
+        items = items[offset:offset + page_size]
+
+    return items, PaginationInfo(
+        sort=sort_by, page_size=page_size, total_pages=total_pages,
+        current_page=page)
+
+
 class LocalDiskDataProvider(DataProvider):
     """
     Local disk data provider plugin class
@@ -49,8 +134,11 @@ class LocalDiskDataProvider(DataProvider):
     display_name = description = 'Local Filesystem'
 
     search_fields = dict(
-        type=dict(label='Data File Type', type='multi_choice', enum=['FITS']),
         name=dict(label='File Name Pattern', type='text'),
+        type=dict(label='Data File Type', type='multi_choice', enum=['FITS']),
+        collection=dict(
+            label='Asset type', type='multi_choice',
+            enum=['file', 'directory', 'any']),
         width=dict(label='Image Width', type='int', min_val=1),
         height=dict(label='Image Height', type='int', min_val=1),
     )
@@ -150,7 +238,8 @@ class LocalDiskDataProvider(DataProvider):
         # A FITS file?
         # noinspection PyBroadException
         try:
-            with pyfits.open(filename, 'readonly') as f:
+            with pyfits.open(filename, 'readonly',
+                             ignore_missing_end=True) as f:
                 layers = len(f)
                 imwidth = f[0].header['NAXIS1']
                 imheight = f[0].header['NAXIS2']
@@ -326,67 +415,109 @@ class LocalDiskDataProvider(DataProvider):
 
         return self._get_asset(path, filename)
 
-    def get_child_assets(self, path: str) -> TList[DataProviderAsset]:
+    def get_child_assets(self, path: str, sort_by: Optional[str] = None,
+                         page_size: Optional[int] = None,
+                         page: Optional[Union[int, str]] = None) \
+            -> Tuple[TList[DataProviderAsset], Optional[PaginationInfo]]:
         """
         Return child assets of a collection asset at the given path
 
         :param path: asset path; must identify a collection asset
+        :param sort_by: optional sorting key
+        :param page_size: optional number of assets per page
+        :param page: optional 0-based page number, "first", or "last"
 
-        :return: list of :class:`DataProviderAsset` objects for child assets
+        :return: list of :class:`DataProviderAsset` objects for child assets,
+            total number of pages, and names of first and last asset on the
+            page
         """
+        if isinstance(page, str) and page.startswith('>'):
+            raise ValidationError(
+                'page[after]', 'Keyset-based pagination not supported')
+        if isinstance(page, str) and page.startswith('<'):
+            raise ValidationError(
+                'page[before]', 'Keyset-based pagination not supported')
+
         filename = self._path_to_filename(path)
         if not os.path.isdir(filename):
             raise AssetNotFoundError(path=path)
 
         # Return directory contents
         root = self.abs_root
-        return [DataProviderAsset(
-            name=os.path.basename(fn),
-            collection=os.path.isdir(fn),
-            path=fn.split(root + os.path.sep)[1].replace('\\', '/'),
-            metadata=dict(
-                time=datetime.fromtimestamp(os.stat(fn).st_mtime).isoformat(),
-            )
-        ) for fn in glob(os.path.join(filename, '*'))]
+        filenames, pagination = paginate(
+            glob(os.path.join(filename, '*')),
+            page_size, sort_by or 'name', page)
 
+        return (
+            [DataProviderAsset(
+                 name=os.path.basename(fn),
+                 collection=os.path.isdir(fn),
+                 path=fn.split(root + os.path.sep)[1].replace('\\', '/'),
+                 metadata=dict(
+                     time=datetime.fromtimestamp(os.stat(fn).st_mtime)
+                     .isoformat(),
+                     size=os.stat(fn).st_size,
+                 ),
+            ) for fn in filenames], pagination)
+
+    # noinspection PyShadowingBuiltins
     def find_assets(self, path: Optional[str] = None,
+                    sort_by: Optional[str] = None,
+                    page_size: Optional[int] = None,
+                    page: Optional[Union[int, str]] = None,
                     name: Optional[str] = None,
                     type: Optional[str] = None,
                     collection: Optional[Union[str, int, bool]] = None,
                     width: Optional[Union[str, int]] = None,
                     height: Optional[Union[str, int]] = None) \
-            -> TList[DataProviderAsset]:
+            -> Tuple[TList[DataProviderAsset], Optional[PaginationInfo]]:
         """
         Return a list of assets matching the given parameters
 
         :param path: optional path to the collection asset to search in;
             by default, search in the data provider root
+        :param sort_by: optional sorting key; see :meth:`get_child_assets`
+        :param page_size: optional number of assets per page
+        :param page: optional 0-based page number, "first", or "last"
         :param name: only return assets matching the given name; may include
             wildcards
         :param type: comma-separated list of data types ("FITS", "JPEG", etc.);
             if specified, the query will match only data files of the given
             type(s)
         :param collection: if specified, match only the given asset type
-            (True | "1" = directories, False | "0" = files)
+            (True | "1" | "directory" = directories, False | "0" | "file" =
+            files)
         :param width: match only images of the given width
         :param height: match only images of the given height
 
         :return: list of :class:`DataProviderAsset` objects for assets matching
-            the search query parameters
+            the search query parameters, total number of pages, and names
+            of first and last asset on the page
         """
+        if isinstance(page, str) and page.startswith('>'):
+            raise ValidationError(
+                'page[after]', 'Keyset-based pagination not supported')
+        if isinstance(page, str) and page.startswith('<'):
+            raise ValidationError(
+                'page[before]', 'Keyset-based pagination not supported')
+
         # Set up filters
         if type:
             type = type.split(',')
         else:
             type = None
-        if collection:
+        if collection == 'directory':
+            collection = True
+        elif collection == 'file':
+            collection = False
+        elif collection in ('', 'any'):
+            collection = None
+        elif collection is not None:
             try:
                 collection = bool(int(collection))
             except ValueError:
                 raise errors.ValidationError(
                     'collection', 'Collection flag must be 0 or 1')
-        else:
-            collection = None
         if width:
             try:
                 width = int(width)
@@ -398,7 +529,8 @@ class LocalDiskDataProvider(DataProvider):
             try:
                 height = int(height)
             except ValueError:
-                raise errors.ValidationError('height', 'Height must be integer')
+                raise errors.ValidationError(
+                    'height', 'Height must be integer')
         else:
             height = None
 
@@ -417,12 +549,20 @@ class LocalDiskDataProvider(DataProvider):
         if not os.path.isdir(abs_path):
             raise AssetNotFoundError(path=path)
 
-        # Look through all files within the path matching the given name
+        # Look through all files within the path with names containing
+        # the given substring (case-insensitive)
         assets = []
+        if name:
+            name = name.strip('*')
+            if name:
+                name = '*' + ''.join(
+                    '[{}{}]'.format(c.lower(), c.upper()) if c.isalpha() else c
+                    for c in name) + '*'
         if not name:
             name = '*'
         for filename in glob(os.path.join(abs_path, name)):
-            if collection is not None and os.path.isdir(filename) != collection:
+            if collection is not None and os.path.isdir(filename) != \
+                    collection:
                 # Fast path for searching collection or non-collection assets
                 continue
 
@@ -458,7 +598,7 @@ class LocalDiskDataProvider(DataProvider):
             # All checks passed
             assets.append(asset)
 
-        return assets
+        return paginate(assets, page_size, sort_by or 'name', page)
 
     def get_asset_data(self, path: str) -> bytes:
         """
@@ -527,7 +667,8 @@ class LocalDiskDataProvider(DataProvider):
 
         return self._get_asset(path, filename)
 
-    def rename_asset(self, path: str, name: str, **kwargs) -> DataProviderAsset:
+    def rename_asset(self, path: str, name: str, **kwargs) \
+            -> DataProviderAsset:
         """
         Rename asset at the given path
 
@@ -626,7 +767,8 @@ class RestrictedRWLocalDiskDataProvider(LocalDiskDataProvider):
     Local disk data provider with restricted write access
     """
     name = 'restricted_local_disk'
-    display_name = description = 'Local Filesystem with Restricted Write Access'
+    display_name = description = \
+        'Local Filesystem with Restricted Write Access'
 
     writers = ()
 

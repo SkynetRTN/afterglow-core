@@ -123,15 +123,15 @@ def data_files() -> Response:
 
     POST /data-files?provider_id=...&path=...&duplicates=...&recurse=...
                      session_id=...
-        - import file(s) to the given session (anonymous by default) from a data
-          provider asset at the given path; if the path identifies a collection
-          asset of a browseable data provider, import all non-collection child
-          assets (and, optionally, all collection assets too if recurse=1);
-          the `duplicates` argument defines the import behavior in the case when
-          a certain non-collection asset was already imported: "ignore"
-          (default) = skip already imported assets, "overwrite" = re-import,
-          "append" = always create a new data file; multiple asset paths can
-          be passed as a JSON list
+        - import file(s) to the given session (anonymous by default) from
+          a data provider asset at the given path; if the path identifies
+          a collection asset of a browseable data provider, import all
+          non-collection child assets (and, optionally, all collection assets
+          too if recurse=1); the `duplicates` argument defines the import
+          behavior in the case when a certain non-collection asset was already
+          imported: "ignore" (default) = skip already imported assets,
+          "overwrite" = re-import, "append" = always create a new data file;
+          multiple asset paths can be passed as a JSON list
 
     :return:
         GET: JSON response containing the list of serialized data file objects
@@ -143,14 +143,14 @@ def data_files() -> Response:
         return json_response([
             DataFileSchema(df)
             for df in query_data_files(
-                auth.current_user.id, request.args.get('session_id'))])
+                request.user.id, request.args.get('session_id'))])
 
     if request.method == 'POST':
         # Create data file(s)
         res = [
             DataFileSchema(df)
             for df in import_data_files(
-                auth.current_user.id, files=request.files,
+                request.user.id, files=request.files,
                 **request.args.to_dict())]
 
         return json_response(res, 201 if res else 200)
@@ -180,18 +180,18 @@ def data_file(id: int) -> Response:
     if request.method == 'GET':
         # Return specific data file resource
         return json_response(DataFileSchema(get_data_file(
-            auth.current_user.id, id)))
+            request.user.id, id)))
 
     if request.method == 'PUT':
         # Update data file
         return json_response(DataFileSchema(update_data_file(
-            auth.current_user.id, id,
+            request.user.id, id,
             DataFile(DataFileSchema(**request.args.to_dict()),
                      only=list(request.args.keys())))))
 
     if request.method == 'DELETE':
         # Delete data file
-        delete_data_file(auth.current_user.id, id)
+        delete_data_file(request.user.id, id)
         return json_response()
 
 
@@ -213,9 +213,9 @@ def data_files_header(id: int) -> Response:
         underlying FITS file header
     """
     if request.method == 'GET':
-        hdr = get_data_file_data(auth.current_user.id, id)[1]
+        hdr = get_data_file_data(request.user.id, id)[1]
     else:
-        with pyfits.open(get_data_file_path(auth.current_user.id, id),
+        with pyfits.open(get_data_file_path(request.user.id, id),
                          'update') as fits:
             hdr = fits[0].header
             modified = False
@@ -237,7 +237,7 @@ def data_files_header(id: int) -> Response:
                         modified = True
 
         if modified:
-            update_data_file(auth.current_user.id, id, DataFile(), force=True)
+            update_data_file(request.user.id, id, DataFile(), force=True)
 
     return json_response([
         dict(key=key, value=value, comment=hdr.comments[i])
@@ -265,9 +265,9 @@ def data_files_wcs(id: int) -> Response:
         header has no valid WCS info
     """
     if request.method == 'GET':
-        hdr = get_data_file_data(auth.current_user.id, id)[1]
+        hdr = get_data_file_data(request.user.id, id)[1]
     else:
-        with pyfits.open(get_data_file_path(auth.current_user.id, id),
+        with pyfits.open(get_data_file_path(request.user.id, id),
                          'update') as fits:
             hdr = fits[0].header
             modified = False
@@ -289,7 +289,7 @@ def data_files_wcs(id: int) -> Response:
                         modified = True
 
         if modified:
-            update_data_file(auth.current_user.id, id, DataFile(), force=True)
+            update_data_file(request.user.id, id, DataFile(), force=True)
 
     wcs_hdr = None
     # noinspection PyBroadException
@@ -329,7 +329,7 @@ def data_files_phot_cal(id: int) -> Response:
     """
     if request.method == 'GET':
         phot_cal = {}
-        with pyfits.open(get_data_file_path(auth.current_user.id, id),
+        with pyfits.open(get_data_file_path(request.user.id, id),
                          'readonly') as fits:
             hdr = fits[0].header
             for field, name in PHOT_CAL_MAPPING:
@@ -338,7 +338,7 @@ def data_files_phot_cal(id: int) -> Response:
                 except (KeyError, ValueError):
                     pass
     else:
-        with pyfits.open(get_data_file_path(auth.current_user.id, id),
+        with pyfits.open(get_data_file_path(request.user.id, id),
                          'update') as fits:
             phot_cal = {}
             try:
@@ -376,7 +376,7 @@ def data_files_phot_cal(id: int) -> Response:
                         modified = True
 
         if modified:
-            update_data_file(auth.current_user.id, id, DataFile(), force=True)
+            update_data_file(request.user.id, id, DataFile(), force=True)
 
     return json_response(phot_cal)
 
@@ -402,7 +402,7 @@ def data_files_hist(id: int) -> Response:
         containing the integer-valued histogram data array and the
         floating-point left and right histogram limits set from the data
     """
-    root = get_root(auth.current_user.id)
+    root = get_root(request.user.id)
 
     # noinspection PyBroadException
     try:
@@ -413,13 +413,13 @@ def data_files_hist(id: int) -> Response:
             hdr = hist[0].header
             min_bin, max_bin = hdr['MINBIN'], hdr['MAXBIN']
             data = hist[0].data
-            if get_data_file(auth.current_user.id, id).modified_on > \
+            if get_data_file(request.user.id, id).modified_on > \
                     datetime.strptime('%Y-%m-%dT%H:%M:%S.%f', hdr['DATE']):
                 raise Exception('Histogram outdated')
     except Exception:
         # Cached histogram not found or outdated, (re)calculate and return
         try:
-            data = get_data_file_data(auth.current_user.id, id)[0]
+            data = get_data_file_data(request.user.id, id)[0]
             if isinstance(data, numpy.ma.MaskedArray):
                 data = data.compressed()
             if data.size:
@@ -511,7 +511,7 @@ def data_files_pixels(id: int) -> Response:
     """
     try:
         return make_data_response(get_subframe(
-            auth.current_user.id, id,
+            request.user.id, id,
             x0=request.args.get('x', 1),
             y0=request.args.get('y', 1),
             w=request.args.get('width'),
@@ -548,7 +548,7 @@ def data_files_fits(id: int) -> Response:
     :return: depending on the Accept and Accept-Encoding HTTP headers (see
         above), either the gzipped or uncompressed FITS file data
     """
-    return make_data_response(get_data_file_bytes(auth.current_user.id, id))
+    return make_data_response(get_data_file_bytes(request.user.id, id))
 
 
 @app.route(resource_prefix + '<int:id>/<fmt>')
@@ -578,7 +578,7 @@ def data_files_image(id: int, fmt: str) -> Response:
     :return: depending on the Accept and Accept-Encoding HTTP headers (see
         above), either the gzipped or uncompressed image data
     """
-    data = get_data_file_bytes(auth.current_user.id, id, fmt=fmt)
+    data = get_data_file_bytes(request.user.id, id, fmt=fmt)
     from PIL import Image  # guaranteed to be available if export succeeded
     return make_data_response(
         data, mimetype=Image.MIME.get(fmt, Image.MIME.get(
@@ -605,14 +605,15 @@ def sessions() -> Response:
         # List all sessions
         return json_response(
             [SessionSchema(sess)
-             for sess in query_sessions(auth.current_user.id)])
+             for sess in query_sessions(request.user.id)])
 
     if request.method == 'POST':
         # Create session
         return json_response(SessionSchema(create_session(
-            auth.current_user.id,
-            Session(SessionSchema(_set_defaults=True, **request.args.to_dict()),
-                    _set_defaults=True))), 201)
+            request.user.id,
+            Session(SessionSchema(
+                _set_defaults=True, **request.args.to_dict()),
+                _set_defaults=True))), 201)
 
 
 @app.route(url_prefix + 'sessions/<id>', methods=['GET', 'PUT', 'DELETE'])
@@ -641,7 +642,7 @@ def session(id: Union[int, str]) -> Response:
     """
     # When getting, updating, or deleting specific session, check that it
     # exists
-    sess = get_session(auth.current_user.id, id)
+    sess = get_session(request.user.id, id)
 
     if request.method == 'GET':
         # Return specific session resource
@@ -650,11 +651,11 @@ def session(id: Union[int, str]) -> Response:
     if request.method == 'PUT':
         # Update data file
         return json_response(DataFileSchema(update_session(
-            auth.current_user.id, id,
+            request.user.id, id,
             Session(SessionSchema(**request.args.to_dict()),
                     only=list(request.args.keys())))))
 
     if request.method == 'DELETE':
         # Delete data file
-        delete_session(auth.current_user.id, id)
+        delete_session(request.user.id, id)
         return json_response()

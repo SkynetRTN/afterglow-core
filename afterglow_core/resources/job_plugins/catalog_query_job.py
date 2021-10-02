@@ -126,15 +126,15 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
     # overlap
     wcs_list = []
     for file_id in file_ids:
-        hdr = get_data_file_fits(job.user_id, file_id)[0].header
-        try:
-            wcs = WCS(hdr)
-        except Exception:
-            raise ValueError('Data file ID {} has no WCS'.format(file_id))
-        else:
-            if not wcs.has_celestial:
-                raise ValueError(
-                    'Invalid WCS for data file ID {}'.format(file_id))
+        with get_data_file_fits(job.user_id, file_id) as fits:
+            try:
+                wcs = WCS(fits[0].header)
+            except Exception:
+                raise ValueError('Data file ID {} has no WCS'.format(file_id))
+            else:
+                if not wcs.has_celestial:
+                    raise ValueError(
+                        'Invalid WCS for data file ID {}'.format(file_id))
         wcs_list.append(wcs)
 
     # Calculate bounding box centers and RA/Dec sizes for each of the FOVs

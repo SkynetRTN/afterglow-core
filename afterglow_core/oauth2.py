@@ -33,12 +33,9 @@ from . import app
 
 
 __all__ = [
-    'memory_session', 'oauth_clients', 'oauth_server', 'Token',
+    'oauth_clients', 'oauth_server', 'Token',
 ]
 
-
-memory_engine = None
-memory_session = None
 
 Token = None
 
@@ -52,21 +49,15 @@ def _init_oauth():
 
     :return: None
     """
-    import sqlite3
-    from sqlalchemy import Column, Integer, String, Text, create_engine, event
-    import sqlalchemy.orm.session
-    # noinspection PyProtectedMember
-    from sqlalchemy.engine import Engine
-    from sqlalchemy.ext.declarative import declarative_base
-    from sqlalchemy.pool import StaticPool
     from authlib.oauth2.rfc6749 import ClientMixin
     from authlib.oauth2.rfc6749 import grants
+    from authlib.oauth2.rfc7636 import CodeChallenge
     from authlib.integrations.sqla_oauth2 import (
         OAuth2AuthorizationCodeMixin, OAuth2TokenMixin, create_save_token_func)
     from authlib.integrations.flask_oauth2 import AuthorizationServer
-    from .resources.users import DbUser
+    from .resources.users import DbUser, db
 
-    global Token, memory_engine, memory_session, oauth_server
+    global Token, oauth_server
 
     class OAuth2Client(ClientMixin):
         """
@@ -112,14 +103,17 @@ def _init_oauth():
                 raise ValueError('Missing OAuth client name')
             if self.client_id is None:
                 raise ValueError('Missing OAuth client ID')
-            if self.client_secret is None:
-                raise ValueError('Missing OAuth client secret')
+
             if not self.redirect_uris:
                 raise ValueError('Missing OAuth redirect URIs')
 
             if self.token_endpoint_auth_method not in (
                     'none', 'client_secret_post', 'client_secret_basic'):
                 raise ValueError('Invalid token endpoint auth method')
+
+            if self.token_endpoint_auth_method != 'none' and \
+                    self.client_secret is None:
+                raise ValueError('Missing OAuth client secret')
 
             if self.description is None:
                 self.description = self.name
@@ -194,34 +188,33 @@ def _init_oauth():
             """
             return grant_type in self.allowed_grant_types
 
-    # noinspection PyPep8Naming
-    Base = declarative_base()
-
-    class OAuth2AuthorizationCode(Base, OAuth2AuthorizationCodeMixin):
+    class OAuth2AuthorizationCode(db.Model, OAuth2AuthorizationCodeMixin):
         __tablename__ = 'oauth_codes'
+        __table_args__ = dict(sqlite_autoincrement=True)
 
-        id = Column(Integer, primary_key=True)
-        user_id = Column(Integer, nullable=False)
+        id = db.Column(db.Integer, primary_key=True)
+        user_id = db.Column(
+            db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
+            nullable=False)
 
-        @property
-        def user(self) -> DbUser:
-            return DbUser.query.get(self.user_id)
+        user = db.relationship('DbUser', uselist=False, backref='oauth_codes')
 
-    class _Token(Base, OAuth2TokenMixin):
+    class _Token(db.Model, OAuth2TokenMixin):
         """
         Token object; stored in the memory database
         """
         __tablename__ = 'oauth_tokens'
+        __table_args__ = dict(sqlite_autoincrement=True)
 
-        id = Column(Integer, primary_key=True)
-        user_id = Column(Integer, nullable=False)
+        id = db.Column(db.Integer, primary_key=True)
+        user_id = db.Column(
+            db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
+            nullable=False)
         # override Mixin to set default=oauth2
-        token_type = Column(String(40), default='oauth2')
-        note = Column(Text, default='')
+        token_type = db.Column(db.String(40), default='oauth2')
+        note = db.Column(db.Text, default='')
 
-        @property
-        def user(self) -> DbUser:
-            return DbUser.query.get(self.user_id)
+        user = db.relationship('DbUser', uselist=False, backref='oauth_tokens')
 
         @property
         def active(self) -> bool:
@@ -243,36 +236,39 @@ def _init_oauth():
     class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
         def save_authorization_code(self, code, req) -> None:
             """Save authorization_code for later use"""
-            sess = memory_session()
             try:
                 # noinspection PyArgumentList
-                sess.add(OAuth2AuthorizationCode(
+                code_challenge = request.data.get('code_challenge')
+                code_challenge_method = request.data.get(
+                    'code_challenge_method')
+
+                db.session.add(OAuth2AuthorizationCode(
                     code=code,
                     client_id=req.client.client_id,
                     redirect_uri=req.redirect_uri,
                     scope=req.scope,
                     user_id=req.user.id,
+                    code_challenge=code_challenge,
+                    code_challenge_method=code_challenge_method,
                 ))
-                sess.commit()
+                db.session.commit()
             except Exception:
-                sess.rollback()
+                db.session.rollback()
                 raise
 
         def query_authorization_code(self, code, client) \
                 -> OAuth2AuthorizationCode:
-            sess = memory_session()
-            item = sess.query(OAuth2AuthorizationCode).filter_by(
+            item = OAuth2AuthorizationCode.query.filter_by(
                 code=code, client_id=client.client_id).first()
             if item and not item.is_expired():
                 return item
 
         def delete_authorization_code(self, authorization_code) -> None:
-            sess = memory_session()
             try:
-                sess.delete(authorization_code)
-                sess.commit()
+                db.session.delete(authorization_code)
+                db.session.commit()
             except Exception:
-                sess.rollback()
+                db.session.rollback()
                 raise
 
         def authenticate_user(self, authorization_code) -> DbUser:
@@ -280,8 +276,7 @@ def _init_oauth():
 
     class RefreshTokenGrant(grants.RefreshTokenGrant):
         def authenticate_refresh_token(self, refresh_token) -> Token:
-            sess = memory_session()
-            token = sess.query(Token) \
+            token = Token.query \
                 .filter_by(refresh_token=refresh_token) \
                 .first()
             if token and token.is_refresh_token_active():
@@ -302,21 +297,6 @@ def _init_oauth():
     for client_def in app.config.get('OAUTH_CLIENTS', []):
         oauth_clients[client_def.get('client_id')] = OAuth2Client(**client_def)
 
-    @event.listens_for(Engine, 'connect')
-    def set_sqlite_pragma(dbapi_connection, _rec):
-        if isinstance(dbapi_connection, sqlite3.Connection):
-            cursor = dbapi_connection.cursor()
-            cursor.execute('PRAGMA foreign_keys=ON')
-            cursor.execute('PRAGMA journal_mode=WAL')
-            cursor.close()
-    memory_engine = create_engine(
-        'sqlite://',
-        connect_args=dict(check_same_thread=False, isolation_level=None),
-        poolclass=StaticPool)
-    Base.metadata.create_all(bind=memory_engine)
-    memory_session = sqlalchemy.orm.scoped_session(
-        sqlalchemy.orm.session.sessionmaker(bind=memory_engine))
-
     def access_token_generator(*_):
         return secrets.token_hex(20)
 
@@ -328,11 +308,12 @@ def _init_oauth():
     oauth_server = AuthorizationServer(
         app,
         query_client=lambda client_id: oauth_clients.get(client_id),
-        save_token=create_save_token_func(memory_session, Token),
+        save_token=create_save_token_func(db.session, Token),
     )
     oauth_server.register_grant(grants.ImplicitGrant)
     oauth_server.register_grant(grants.ClientCredentialsGrant)
-    oauth_server.register_grant(AuthorizationCodeGrant)
+    oauth_server.register_grant(
+        AuthorizationCodeGrant, [CodeChallenge(required=True)])
     oauth_server.register_grant(RefreshTokenGrant)
 
     app.logger.info('Initialized Afterglow OAuth2 Service')

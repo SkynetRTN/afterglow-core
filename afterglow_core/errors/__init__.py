@@ -3,13 +3,15 @@ Afterglow Core: error system
 """
 
 import sys
+import json
 import traceback
 from typing import Optional
 
-from flask import Response
+from flask import Response, request
 from werkzeug import exceptions
+from werkzeug.http import HTTP_STATUS_CODES
 
-from .. import app, json_response
+from .. import app
 
 
 __all__ = [
@@ -29,109 +31,119 @@ def afterglow_error_handler(e: Exception) -> Response:
 
     :return: JSON response object
     """
-    if hasattr(e, 'payload') and e.payload:
-        payload = dict(e.payload)
-    else:
-        payload = {}
-    payload['exception'] = e.__class__.__name__
-    # noinspection PyUnresolvedReferences
-    payload['message'] = e.message if hasattr(e, 'message') and e.message \
-        else ', '.join(str(arg) for arg in e.args) if e.args else str(e)
+    status = int(getattr(e, 'code', 400))
 
-    if hasattr(e, 'subcode') and e.subcode:
-        payload['subcode'] = int(e.subcode)
+    error = {
+        'status': HTTP_STATUS_CODES.get(
+            status, '{} Unknown Error'.format(status)),
+        'code': str(getattr(e, 'subcode', e.__class__.__name__)),
+        'detail': str(e),
+    }
 
-    if getattr(e, 'code', 400) == 500:
-        payload['traceback'] = traceback.format_tb(sys.exc_info()[-1]),
+    meta = getattr(e, 'meta', None)
+    if meta:
+        error['meta'] = dict(meta)
 
-    response = json_response(
-        payload, int(e.code) if hasattr(e, 'code') and e.code else 400)
-    response.mimetype = 'application/json'
+    if status == 500:
+        error.setdefault('meta', {})['traceback'] = \
+            traceback.format_tb(sys.exc_info()[-1]),
 
-    if hasattr(e, 'headers') and e.headers:
-        for name, val in e.headers:
-            response.headers[name] = val
-
-    return response
+    return Response(
+        json.dumps({
+            'error': error,
+            'links': {'self': request.url},
+        }), status, mimetype='application/json',
+        headers=dict(getattr(e, 'headers', [])))
 
 
 @app.errorhandler(401)
 def unauthorized_error_handler(e: Exception) -> Response:
     """
-    Error handling function for HTTP 401 (UNAUTHORIZED)
+    Error handling function for non-Afterglow HTTP 401 (UNAUTHORIZED) errors
 
     :param e: exception instance
 
     :return: JSON response object
     """
-    # noinspection PyUnresolvedReferences
-    return json_response(
-        {
-            'exception': e.__class__.__name__,
-            'message': e.message if hasattr(e, 'message') and e.message
-            else ', '.join(str(arg) for arg in e.args) if e.args else str(e),
-        }, 401)
+    return Response(
+        json.dumps({
+            'error': {
+                'status': HTTP_STATUS_CODES[401],
+                'code': e.__class__.__name__,
+                'detail': str(e),
+            },
+            'links': {'self': request.url},
+        }), 401, mimetype='application/json')
 
 
 @app.errorhandler(403)
 def forbidden_error_handler(e: Exception) -> Response:
     """
-    Error handling function for HTTP 403 (FORBIDDEN)
+    Error handling function for non-Afterglow HTTP 403 (FORBIDDEN) errors
 
     :param e: exception instance
 
     :return: JSON response object
     """
-    # noinspection PyUnresolvedReferences
-    return json_response(
-        {
-            'exception': e.__class__.__name__,
-            'message': e.message if hasattr(e, 'message') and e.message
-            else ', '.join(str(arg) for arg in e.args) if e.args else str(e),
-        }, 403)
+    return Response(
+        json.dumps({
+            'error': {
+                'status': HTTP_STATUS_CODES[403],
+                'code': e.__class__.__name__,
+                'detail': str(e),
+            },
+            'links': {'self': request.url},
+        }), 403, mimetype='application/json')
 
 
 @app.errorhandler(404)
 def not_found_error_handler(e: Exception) -> Response:
     """
-    Error handling function for HTTP 404 (NOT FOUND); raised when a nonexistent
-    resource is requested
+    Error handling function for non-Afterglow HTTP 404 (NOT FOUND) errors;
+    raised when a nonexistent resource is requested
 
     :param e: exception instance
 
     :return: JSON response object
     """
-    # noinspection PyUnresolvedReferences
-    return json_response(
-        {
-            'exception': e.__class__.__name__,
-            'message': e.message if hasattr(e, 'message') and e.message
-            else ', '.join(str(arg) for arg in e.args) if e.args else str(e),
-        }, 404)
+    return Response(
+        json.dumps({
+            'error': {
+                'status': HTTP_STATUS_CODES[404],
+                'code': e.__class__.__name__,
+                'detail': str(e),
+            },
+            'links': {'self': request.url},
+        }), 404, mimetype='application/json')
 
 
 @app.errorhandler(500)
 def internal_server_error_handler(e: Exception) -> Response:
     """
-    Error handling function for HTTP 500 (INTERNAL SERVER ERROR)
+    Error handling function for non-Afterglow HTTP 500 (INTERNAL SERVER ERROR)
+    errors
 
     :param e: exception instance
 
     :return: JSON response object
     """
-    # noinspection PyUnresolvedReferences
-    return json_response(
-        {
-            'exception': e.__class__.__name__,
-            'message': e.message if hasattr(e, 'message') and e.message
-            else ', '.join(str(arg) for arg in e.args) if e.args else str(e),
-            'traceback': traceback.format_tb(sys.exc_info()[-1]),
-        }, 500)
+    return Response(
+        json.dumps({
+            'error': {
+                'status': HTTP_STATUS_CODES[500],
+                'code': e.__class__.__name__,
+                'detail': str(e),
+                'meta': {
+                    'traceback': traceback.format_tb(sys.exc_info()[-1]),
+                },
+            },
+            'links': {'self': request.url},
+        }), 500, mimetype='application/json')
 
 
 class AfterglowErrorMeta(type):
     """
-    Metaclass for `AfterglowError`; needed to automatically install error
+    Metaclass for class:`AfterglowError`; needed to automatically install error
     handler for each exception subclassing from `AfterglowError`, since Flask
     does not intercept subclassed exceptions in the base exception class handler
     """
@@ -151,15 +163,15 @@ class AfterglowError(exceptions.HTTPException, metaclass=AfterglowErrorMeta):
             "nmm", where the most significant digits ("n") define the Afterglow
             Core module and the two least significant digits ("mm") define
             specific exception within that module, from 0 to 99
-        payload: dictionary containing the optional exception attributes passed
+        meta: dictionary containing the optional exception attributes passed
             as keyword arguments when raising the exception and sent to the
             client in JSON
         headers: any additional HTTP headers to send
     """
     code = 400  # HTTP status code
-    subcode = None  # Afterglow-specific error code
-    payload = None  # additional error data
-    message = None  # error message
+    subcode: int = None  # Afterglow-specific error code
+    meta: dict = None  # additional error data
+    message: str = None  # error message
 
     def __init__(self, **kwargs):
         """
@@ -172,7 +184,7 @@ class AfterglowError(exceptions.HTTPException, metaclass=AfterglowErrorMeta):
         super(AfterglowError, self).__init__()
         if not self.description and self.__doc__:
             self.description = self.__doc__
-        self.payload = kwargs
+        self.meta = kwargs
 
     def __str__(self) -> str:
         """
@@ -182,10 +194,10 @@ class AfterglowError(exceptions.HTTPException, metaclass=AfterglowErrorMeta):
         :return: stringified Afterglow error
         """
         msg = self.message
-        if self.payload:
+        if self.meta:
             msg += ' ({})'.format(
                 ', '.join('{}={}'.format(name, val)
-                          for name, val in self.payload.items()))
+                          for name, val in self.meta.items()))
         return msg
 
 

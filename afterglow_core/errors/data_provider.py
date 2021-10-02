@@ -85,7 +85,7 @@ class AssetAlreadyExistsError(AfterglowError):
     Extra attributes::
         None
     """
-    code = 403
+    code = 409
     subcode = 1005
     message = 'Asset already exists at the given path'
 
