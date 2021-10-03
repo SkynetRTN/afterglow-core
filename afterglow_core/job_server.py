@@ -886,6 +886,19 @@ def job_server(notify_queue):
     terminate_listener_event = threading.Event()
     state_update_listener = None
 
+    # Start TCP server, listen on the configured port
+    try:
+        tcp_server = ThreadingTCPServer(
+            ('localhost', app.config['JOB_SERVER_PORT']), JobRequestHandler)
+    except Exception as e:
+        notify_queue.put(('exception', e))
+        return
+    tcp_server.job_queue = job_queue
+    tcp_server.result_queue = result_queue
+    app.logger.info(
+        'Started Afterglow job server on port %d, pid %d',
+        app.config['JOB_SERVER_PORT'], os.getpid())
+
     # Initialize worker process pool
     min_pool_size = app.config.get('JOB_POOL_MIN', 1)
     max_pool_size = app.config.get('JOB_POOL_MAX', 16)
@@ -895,29 +908,13 @@ def job_server(notify_queue):
     else:
         pool = []
     pool_lock = RWLock()
-
-    try:
-        # Start TCP server, listen on the configured port
-        tcp_server = ThreadingTCPServer(
-            ('localhost', app.config['JOB_SERVER_PORT']), JobRequestHandler)
-    except Exception as e:
-        notify_queue.put(('exception', e))
-        return
-
-    app.logger.info(
-        'Started Afterglow job server on port %d, pid %d',
-        app.config['JOB_SERVER_PORT'], os.getpid())
+    tcp_server.min_pool_size = min_pool_size
+    tcp_server.max_pool_size = max_pool_size
+    tcp_server.pool = pool
+    tcp_server.pool_lock = pool_lock
     app.logger.info(
         'Started %d job worker process%s', min_pool_size,
         '' if min_pool_size == 1 else 'es')
-
-    # Set TCP server parameters
-    tcp_server.job_queue = job_queue
-    tcp_server.result_queue = result_queue
-    tcp_server.pool = pool
-    tcp_server.pool_lock = pool_lock
-    tcp_server.min_pool_size = min_pool_size
-    tcp_server.max_pool_size = max_pool_size
 
     try:
         # Initialize job database

@@ -106,9 +106,27 @@ class PaginationInfo(object):
         :return: pagination structure as dictionary
         """
         args_first = request.args.copy()
+        try:
+            del args_first['page[before]']
+        except KeyError:
+            pass
+        try:
+            del args_first['page[after]']
+        except KeyError:
+            pass
         args_first['page[number]'] = 'first'
+
         args_last = request.args.copy()
+        try:
+            del args_last['page[before]']
+        except KeyError:
+            pass
+        try:
+            del args_last['page[after]']
+        except KeyError:
+            pass
         args_last['page[number]'] = 'last'
+
         pagination = {
             # Always have links to first and last pages
             'first': '{}?{}'.format(request.base_url, url_encode(args_first)),
@@ -137,11 +155,27 @@ class PaginationInfo(object):
             # and next pages
             if self.first_item is not None:
                 args = request.args.copy()
+                try:
+                    del args['page[number]']
+                except KeyError:
+                    pass
+                try:
+                    del args['page[after]']
+                except KeyError:
+                    pass
                 args['page[before]'] = str(self.first_item)
                 pagination['prev'] = '{}?{}'.format(
                     request.base_url, url_encode(args))
             if self.last_item is not None:
                 args = request.args.copy()
+                try:
+                    del args['page[number]']
+                except KeyError:
+                    pass
+                try:
+                    del args['page[before]']
+                except KeyError:
+                    pass
                 args['page[after]'] = str(self.last_item)
                 pagination['next'] = '{}?{}'.format(
                     request.base_url, url_encode(args))
