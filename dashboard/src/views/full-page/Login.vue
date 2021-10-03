@@ -5,7 +5,7 @@
         <img
           src="../../assets/logo-full.png"
           alt="Afterglow Logo"
-          style="max-width: 450px;"
+          style="max-width: 450px"
         />
       </a>
     </div>
@@ -14,7 +14,7 @@
       v-if="!showInitializationForm"
       class="columns is-multiline is-centered"
     >
-      <div class="column is-5-tablet is-4-desktop is-3-widescreen ">
+      <div class="column is-5-tablet is-4-desktop is-3-widescreen">
         <div class="panel has-text-left has-background-white">
           <p class="panel-heading">Log in</p>
           <div class="panel-block">
@@ -81,8 +81,8 @@
       </div>
 
       <div
-        v-if="oauthPluginsLoading || oauthPlugins.length > 1"
-        class="column is-5-tablet is-4-desktop is-3-widescreen "
+        v-if="oauthPluginsLoading || oauthPlugins.length > 0"
+        class="column is-5-tablet is-4-desktop is-3-widescreen"
       >
         <div class="panel has-text-left has-background-white">
           <p class="panel-heading">Login Services</p>
@@ -99,7 +99,7 @@
                 <span
                   v-if="plugin.icon"
                   class="icon is-small"
-                  style="margin-right: 0.75em;"
+                  style="margin-right: 0.75em"
                 >
                   <img v-bind:src="'assets/' + plugin.icon" />
                 </span>
@@ -111,7 +111,7 @@
       </div>
     </div>
     <div v-else class="columns is-multiline is-centered">
-      <div class="column is-7-tablet is-6-desktop is-5-widescreen ">
+      <div class="column is-7-tablet is-6-desktop is-5-widescreen">
         <div class="panel has-text-left has-background-white">
           <p class="panel-heading">Admin Account Initialization</p>
           <div class="panel-block">
