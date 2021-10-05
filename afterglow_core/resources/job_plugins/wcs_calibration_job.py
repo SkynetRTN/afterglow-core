@@ -83,6 +83,9 @@ class WcsCalibrationJobResult(JobResult):
     file_ids: TList[int] = List(Integer(), default=[])
 
 
+solver = None
+
+
 class WcsCalibrationJob(Job):
     """
     Astrometric calibration job
@@ -100,12 +103,15 @@ class WcsCalibrationJob(Job):
     inplace: bool = Boolean(default=False)
 
     def run(self):
+        global solver
+
         settings = self.settings
 
         if settings.ra_hours is not None and not 0 <= settings.ra_hours < 24:
             raise ValidationError(
                 'settings.ra_hours', 'RA not within range [0,24)', 422)
-        if settings.dec_degs is not None and not -90 <= settings.dec_degs <= 90:
+        if settings.dec_degs is not None and \
+                not -90 <= settings.dec_degs <= 90:
             raise ValidationError(
                 'settings.dec_degs', 'Dec not within range [-90,90]', 422)
         if settings.radius <= 0:
@@ -133,7 +139,10 @@ class WcsCalibrationJob(Job):
 
         root = get_root(self.user_id)
 
-        solver = Solver(app.config['ANET_INDEX_PATH'])
+        if solver is None:
+            # Initialize the solver on first use; job worker processes
+            # are single-threaded, so we shouldn't care about locking
+            solver = Solver(app.config['ANET_INDEX_PATH'])
 
         adb = get_data_file_db(self.user_id)
         try:
@@ -151,7 +160,8 @@ class WcsCalibrationJob(Job):
 
                     ra_hours, dec_degs = settings.ra_hours, settings.dec_degs
                     if ra_hours is None and dec_degs is None:
-                        # Guess starting RA and Dec from WCS in the image header
+                        # Guess starting RA and Dec from WCS in the image
+                        # header
                         # noinspection PyBroadException
                         try:
                             wcs = WCS(hdr, relax=True)
@@ -175,15 +185,16 @@ class WcsCalibrationJob(Job):
                             try:
                                 d, m, s = hdr[name].split(':')
                                 dec_degs = \
-                                    (abs(int(d)) + int(m)/60 + float(s)/3600) *\
+                                    (abs(int(d)) + int(m)/60 +
+                                     float(s)/3600) * \
                                     (1 - d.strip().startswith('-'))
                             except (KeyError, ValueError):
                                 pass
                             else:
                                 break
 
-                    # Run Astrometry.net; allow to abort the job by calling back
-                    # from the engine into Python code
+                    # Run Astrometry.net; allow to abort the job by calling
+                    # back from the engine into Python code
                     solution = solve_field(
                         solver, xy, fluxes,
                         width=width,
@@ -238,7 +249,8 @@ class WcsCalibrationJob(Job):
                             hdr.add_history(
                                 'Original data file ID: {:d}'.format(file_id))
                             file_id = create_data_file(
-                                adb, None, root, data, hdr, duplicates='append',
+                                adb, None, root, data, hdr,
+                                duplicates='append',
                                 session_id=self.session_id).id
                         adb.commit()
                     except Exception:
