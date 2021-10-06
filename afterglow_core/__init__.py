@@ -105,33 +105,36 @@ class PaginationInfo(object):
 
         :return: pagination structure as dictionary
         """
-        args_first = request.args.copy()
-        try:
-            del args_first['page[before]']
-        except KeyError:
-            pass
-        try:
-            del args_first['page[after]']
-        except KeyError:
-            pass
-        args_first['page[number]'] = 'first'
+        pagination = {}
 
-        args_last = request.args.copy()
-        try:
-            del args_last['page[before]']
-        except KeyError:
-            pass
-        try:
-            del args_last['page[after]']
-        except KeyError:
-            pass
-        args_last['page[number]'] = 'last'
+        if self.current_page is None or self.current_page > 0:
+            args = request.args.copy()
+            try:
+                del args['page[before]']
+            except KeyError:
+                pass
+            try:
+                del args['page[after]']
+            except KeyError:
+                pass
+            args['page[number]'] = 'first'
+            pagination['first'] = '{}?{}'.format(
+                request.base_url, url_encode(args))
 
-        pagination = {
-            # Always have links to first and last pages
-            'first': '{}?{}'.format(request.base_url, url_encode(args_first)),
-            'last': '{}?{}'.format(request.base_url, url_encode(args_last)),
-        }
+        if self.current_page is None or self.total_pages is None or \
+                self.current_page < self.total_pages - 1:
+            args = request.args.copy()
+            try:
+                del args['page[before]']
+            except KeyError:
+                pass
+            try:
+                del args['page[after]']
+            except KeyError:
+                pass
+            args['page[number]'] = 'last'
+            pagination['last'] = '{}?{}'.format(
+                request.base_url, url_encode(args))
 
         for attr in ('sort', 'page_size', 'total_pages', 'current_page'):
             if getattr(self, attr, None) is not None:
@@ -141,12 +144,28 @@ class PaginationInfo(object):
             # Page-based pagination
             if self.current_page > 0:
                 args = request.args.copy()
+                try:
+                    del args['page[before]']
+                except KeyError:
+                    pass
+                try:
+                    del args['page[after]']
+                except KeyError:
+                    pass
                 args['page[number]'] = str(self.current_page - 1)
                 pagination['prev'] = '{}?{}'.format(
                     request.base_url, url_encode(args))
             if self.total_pages is None or \
                     self.current_page < self.total_pages - 1:
                 args = request.args.copy()
+                try:
+                    del args['page[before]']
+                except KeyError:
+                    pass
+                try:
+                    del args['page[after]']
+                except KeyError:
+                    pass
                 args['page[number]'] = str(self.current_page + 1)
                 pagination['next'] = '{}?{}'.format(
                     request.base_url, url_encode(args))
