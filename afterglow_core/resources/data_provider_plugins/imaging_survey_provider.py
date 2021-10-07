@@ -65,7 +65,8 @@ class ImagingSurveyDataProvider(DataProvider):
                         label='Survey', type='multi_choice',
                         enum=SkyView._valid_surveys),
                     ra_hours=dict(
-                        label='Center RA', type='float', min_val=0, max_val=24),
+                        label='Center RA', type='float', min_val=0,
+                        max_val=24),
                     dec_degs=dict(
                         label='Center Dec', type='float',
                         min_val=-90, max_val=90),
@@ -95,8 +96,8 @@ class ImagingSurveyDataProvider(DataProvider):
                 width, height = float(width), float(height)
             else:
                 width = height = float(size)
-        except (TypeError, ValueError):
-            raise AssetNotFoundError(path=path)
+        except (TypeError, ValueError) as e:
+            raise AssetNotFoundError(path=path, reason=str(e))
         return survey, position, width, height
 
     @staticmethod
@@ -130,7 +131,8 @@ class ImagingSurveyDataProvider(DataProvider):
     @staticmethod
     def _get_query_args(survey: str, width: float, height: float) -> dict:
         """
-        Return extra astroquery.skyview query arguments for the given field size
+        Return extra astroquery.skyview query arguments for the given field
+        size
 
         :param survey: survey name
         :param width:  field width in arcminutes
@@ -218,7 +220,8 @@ class ImagingSurveyDataProvider(DataProvider):
                 if not 0 <= ra_hours < 23:
                     raise ValueError()
             except ValueError:
-                raise ValidationError('ra_hours', 'Expected 0 <= ra_hours < 23')
+                raise ValidationError(
+                    'ra_hours', 'Expected 0 <= ra_hours < 23')
         if dec_degs is not None:
             try:
                 dec_degs = float(dec_degs)
@@ -294,10 +297,11 @@ class ImagingSurveyDataProvider(DataProvider):
         try:
             res = SkyView.get_images(
                 position, **self._get_query_args(survey, width, height))
-        except Exception:
-            raise AssetNotFoundError(path=path)
+        except Exception as e:
+            raise AssetNotFoundError(path=path, reason=str(e))
         if not res:
-            raise AssetNotFoundError(path=path)
+            raise AssetNotFoundError(
+                path=path, reason='No images returned by SkyView')
         buf = BytesIO()
         res[0].writeto(buf, output_verify='silentfix+ignore')
         return buf.getvalue()

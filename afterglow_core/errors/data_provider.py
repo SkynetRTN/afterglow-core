@@ -72,6 +72,7 @@ class AssetNotFoundError(AfterglowError):
 
     Extra attributes::
         path: requested asset path
+        reason: optional extra error info
     """
     code = 404
     subcode = 1004
