@@ -240,14 +240,16 @@ def _init_auth() -> None:
         expires_in = app.config.get('COOKIE_TOKEN_EXPIRES_IN', 86400)
         try:
             if not access_token:
-                # Generate a temporary in-memory token
+                # Generate a new token
                 access_token = secrets.token_hex(20)
-                token = Token(
+                db.session.add(Token(
                     token_type='cookie',
                     access_token=access_token,
                     user_id=request.user.id,
-                )
-                db.session.add(token)
+                    expires_in=expires_in,
+                    issued_at=time.time(),
+                ))
+                db.session.commit()
             else:
                 # Check that the token provided by the user exists
                 # and not expired
@@ -260,10 +262,6 @@ def _init_auth() -> None:
                     .one_or_none()
                 if not token or not token.active:
                     return clear_access_cookies(response)
-
-            token.expires_in = expires_in
-            token.issued_at = time.time()
-            db.session.commit()
         except Exception:
             db.session.rollback()
             raise
