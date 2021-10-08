@@ -217,11 +217,11 @@ class ImagingSurveyDataProvider(DataProvider):
         if ra_hours is not None:
             try:
                 ra_hours = float(ra_hours)
-                if not 0 <= ra_hours < 23:
+                if not 0 <= ra_hours < 24:
                     raise ValueError()
             except ValueError:
                 raise ValidationError(
-                    'ra_hours', 'Expected 0 <= ra_hours < 23')
+                    'ra_hours', 'Expected 0 <= ra_hours < 24')
         if dec_degs is not None:
             try:
                 dec_degs = float(dec_degs)

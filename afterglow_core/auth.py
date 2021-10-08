@@ -257,10 +257,17 @@ def _init_auth() -> None:
                     .filter_by(
                         access_token=access_token,
                         user_id=request.user.id,
-                        token_type='cookie',
-                        revoked=False)\
+                        token_type='cookie') \
                     .one_or_none()
                 if not token or not token.active:
+                    if token:
+                        # Delete revoked/expired tokens from the db
+                        # noinspection PyBroadException
+                        try:
+                            db.session.delete(token)
+                            db.session.commit()
+                        except Exception:
+                            db.session.rollback()
                     return clear_access_cookies(response)
         except Exception:
             db.session.rollback()
