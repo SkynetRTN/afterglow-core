@@ -180,7 +180,7 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
                 with data_files.data_files_engine_lock:
                     data_files.data_files_engine[
                         data_files.get_root(user_id)
-                    ].remove()
+                    ][1].remove()
             except Exception:
                 pass
 
