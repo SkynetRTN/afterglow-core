@@ -84,6 +84,7 @@ DataFileBase = declarative_base()
 class DbDataFile(DataFileBase):
     __tablename__ = 'data_files'
     __table_args__ = dict(sqlite_autoincrement=True)
+    __mapper_args__ = dict(confirm_deleted_rows=False)
 
     id = Column(Integer, primary_key=True, nullable=False)
     type = Column(String)
