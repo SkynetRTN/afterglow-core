@@ -33,7 +33,7 @@ from flask_wtf.csrf import generate_csrf
 from . import app
 from .errors.auth import NotAuthenticatedError
 from .resources.users import (
-    AnonymousUser, DbPersistentToken, db, user_datastore)
+    AnonymousUser, DbPersistentToken, DbUser, db, user_datastore)
 from .oauth2 import Token
 
 
@@ -78,7 +78,8 @@ USER_REALM = 'Registered Afterglow Users Only'
 
 
 # noinspection PyUnusedLocal
-def authenticate(roles: Optional[Union[str, Sequence[str]]] = None) -> None:
+def authenticate(roles: Optional[Union[str, Sequence[str]]] = None) \
+        -> Union[DbUser, AnonymousUser]:
     """
     Perform user authentication
 
@@ -87,7 +88,8 @@ def authenticate(roles: Optional[Union[str, Sequence[str]]] = None) -> None:
     :return: database object for the authenticated user; raises
         :class:`AuthError` on authentication error
     """
-    _request_ctx_stack.top.user = request.user = AnonymousUser()
+    user = _request_ctx_stack.top.user = request.user = AnonymousUser()
+    return user
 
 
 def _doublewrap(fn: Callable) -> Callable:
@@ -135,7 +137,7 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
     @wraps(fn)
     def wrapper(*args, **kw):
         try:
-            authenticate(roles)
+            user_id = authenticate(roles).id
 
             # if not request.args.get('identity_confirmed') and \
             #         kwargs.get('confirm_identity'):
@@ -165,7 +167,8 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
             access_token = request.cookies.get('afterglow_core_access_token')
 
             if access_token:
-                result = set_access_cookies(result, access_token=access_token)
+                result = set_access_cookies(
+                    result, user_id, access_token=access_token)
 
             return result
         finally:
@@ -176,7 +179,7 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
             try:
                 with data_files.data_files_engine_lock:
                     data_files.data_files_engine[
-                        data_files.get_root(request.user.id)
+                        data_files.get_root(user_id)
                     ].remove()
             except Exception:
                 pass
@@ -185,12 +188,13 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
 
 
 # noinspection PyUnusedLocal
-def set_access_cookies(response: Response,
+def set_access_cookies(response: Response, user_id: Optional[int] = None,
                        access_token: Optional[str] = None) -> Response:
     """
     Set access cookies for browser access
 
     :param response: original Flask response object
+    :param user_id: authenticated user ID
     :param access_token: encoded access token; if None, create access token
         automatically
 
@@ -226,7 +230,7 @@ def _init_auth() -> None:
 
     current_user = _current_user
 
-    def _set_access_cookies(response: Response,
+    def _set_access_cookies(response: Response, user_id: Optional[int] = None,
                             access_token: Optional[str] = None) -> Response:
         """
         Adds session authorization cookie.
@@ -245,7 +249,7 @@ def _init_auth() -> None:
                 db.session.add(Token(
                     token_type='cookie',
                     access_token=access_token,
-                    user_id=request.user.id,
+                    user_id=user_id,
                     expires_in=expires_in,
                     issued_at=time.time(),
                 ))
@@ -256,7 +260,7 @@ def _init_auth() -> None:
                 token = Token.query \
                     .filter_by(
                         access_token=access_token,
-                        user_id=request.user.id,
+                        user_id=user_id,
                         token_type='cookie') \
                     .one_or_none()
                 if not token or not token.active:
@@ -281,7 +285,7 @@ def _init_auth() -> None:
             max_age=expires_in, secure=False, httponly=False)
 
         response.set_cookie(
-            'afterglow_core_user_id', value=str(request.user.id),
+            'afterglow_core_user_id', value=str(user_id),
             max_age=expires_in, secure=False, httponly=False)
 
         return response
@@ -308,7 +312,7 @@ def _init_auth() -> None:
     clear_access_cookies = _clear_access_cookies
 
     def _authenticate(roles: Optional[Union[str, Sequence[str]]] = None) \
-            -> None:
+            -> DbUser:
         """
         Authenticate the user
 
@@ -388,6 +392,7 @@ def _init_auth() -> None:
         # Make the authenticated user object available via `current_user` and
         # request.user
         _request_ctx_stack.top.user = request.user = user
+        return user
 
     authenticate = _authenticate
 

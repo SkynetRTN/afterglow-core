@@ -32,7 +32,7 @@ def post():
     # Set token cookies
     _request_ctx_stack.top.user = request.user = user
 
-    return set_access_cookies(json_response())
+    return set_access_cookies(json_response(), user.id)
 
 
 @app.route(url_prefix + 'sessions', methods=['DELETE'])
