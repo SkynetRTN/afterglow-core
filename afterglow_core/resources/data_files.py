@@ -13,6 +13,7 @@ from threading import Lock
 from io import BytesIO
 from typing import Dict as TDict, List as TList, Optional, Tuple, Union
 import warnings
+import traceback
 
 from sqlalchemy import (
     Boolean, CheckConstraint, Column, ForeignKey, Integer, String,
@@ -155,13 +156,13 @@ def get_data_file_db(user_id: Optional[int]):
     try:
         root = get_root(user_id)
 
-        # Make sure the user's data directory exists
-        if os.path.isfile(root):
-            os.remove(root)
-        if not os.path.isdir(root):
-            os.makedirs(root)
-
         with data_files_engine_lock:
+            # Make sure the user's data directory exists
+            if os.path.isfile(root):
+                os.remove(root)
+            if not os.path.isdir(root):
+                os.makedirs(root)
+
             try:
                 # Get engine from cache
                 session = data_files_engine[root][1]
@@ -210,6 +211,8 @@ def get_data_file_db(user_id: Optional[int]):
                     # Data file db migration failed due to an incompatible
                     # migration, wipe the user's data file dir and recreate
                     # from scratch
+                    print('Error running migration')
+                    traceback.print_exc()
                     engine.dispose()
                     shutil.rmtree(root)
                     os.mkdir(root)
@@ -238,7 +241,6 @@ def get_data_file_db(user_id: Optional[int]):
         return session
 
     except Exception as e:
-        import traceback
         traceback.print_exc()
         raise CannotCreateDataFileDirError(
             reason=e.message if hasattr(e, 'message') and e.message
