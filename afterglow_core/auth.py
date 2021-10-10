@@ -188,7 +188,7 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
 
 
 # noinspection PyUnusedLocal
-def set_access_cookies(response: Response, user_id: Optional[int],
+def set_access_cookies(response: Response, user_id: Optional[int] = None,
                        access_token: Optional[str] = None) -> Response:
     """
     Set access cookies for browser access
@@ -230,7 +230,7 @@ def _init_auth() -> None:
 
     current_user = _current_user
 
-    def _set_access_cookies(response: Response, user_id: Optional[int],
+    def _set_access_cookies(response: Response, user_id: Optional[int] = None,
                             access_token: Optional[str] = None) -> Response:
         """
         Adds session authorization cookie.

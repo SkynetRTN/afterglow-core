@@ -160,4 +160,4 @@ def oauth2_authorized(plugin_id: str) -> Response:
                 raise
 
     _request_ctx_stack.top.user = request.user = user
-    return set_access_cookies(json_response())
+    return set_access_cookies(json_response(), user.id)
