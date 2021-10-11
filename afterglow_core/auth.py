@@ -369,9 +369,9 @@ def _init_auth() -> None:
 
                 user_roles = [user_role.name for user_role in user.roles]
 
-                db.session.commit()
+                # db.session.commit()
             except Exception as e:
-                db.session.rollback()
+                # db.session.rollback()
                 error_msgs.append('{} (type: {})'.format(e, token_type))
             else:
                 break
