@@ -179,7 +179,7 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
             try:
                 with data_files.data_files_engine_lock:
                     data_files.data_files_engine[
-                        data_files.get_root(user_id)
+                        data_files.get_root(user_id), os.getpid()
                     ][1].remove()
             except Exception:
                 pass

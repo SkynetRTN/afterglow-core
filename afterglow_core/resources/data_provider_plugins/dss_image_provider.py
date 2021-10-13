@@ -103,7 +103,7 @@ class DSSImageDataProvider(DataProvider):
         else:
             size = '{},{}'.format(width, height)
         return DataProviderAsset(
-            name='{},{}'.format(ra, dec),
+            name='DSS_{},{}'.format(ra, dec),
             collection=False,
             path='{},{}\\{}'.format(ra, dec, size),
             metadata={

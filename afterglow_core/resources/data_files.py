@@ -144,6 +144,32 @@ data_files_engine = {}
 data_files_engine_lock = Lock()
 
 
+def create_data_file_engine(root: str) -> Engine:
+    """
+    Return a new database engine associated with the user's data files
+
+    :param root: user-specific data file root dir
+
+    :return: SQLAlchemy engine object
+    """
+    db_path = 'sqlite:///{}'.format(os.path.join(root, 'data_files.db'))
+    engine = create_engine(
+        db_path,
+        connect_args={'check_same_thread': False,
+                      'isolation_level': None},
+    )
+
+    @event.listens_for(engine, 'connect')
+    def set_sqlite_pragma(dbapi_connection, _connection_record):
+        if isinstance(dbapi_connection, sqlite3.Connection):
+            cursor = dbapi_connection.cursor()
+            cursor.execute('PRAGMA foreign_keys=ON')
+            cursor.execute('PRAGMA journal_mode=WAL')
+            cursor.close()
+
+    return engine
+
+
 def get_data_file_db(user_id: Optional[int]):
     """
     Initialize the given user's data file storage directory and database as
@@ -155,6 +181,7 @@ def get_data_file_db(user_id: Optional[int]):
     """
     try:
         root = get_root(user_id)
+        pid = os.getpid()
 
         with data_files_engine_lock:
             # Make sure the user's data directory exists
@@ -165,23 +192,10 @@ def get_data_file_db(user_id: Optional[int]):
 
             try:
                 # Get engine from cache
-                session = data_files_engine[root][1]
+                session = data_files_engine[root, pid][1]
             except KeyError:
-                # Engine does not exist, create it
-                @event.listens_for(Engine, 'connect')
-                def set_sqlite_pragma(dbapi_connection, _rec):
-                    if isinstance(dbapi_connection, sqlite3.Connection):
-                        cursor = dbapi_connection.cursor()
-                        cursor.execute('PRAGMA foreign_keys=ON')
-                        cursor.execute('PRAGMA journal_mode=WAL')
-                        cursor.close()
-                db_path = 'sqlite:///{}'.format(
-                    os.path.join(root, 'data_files.db'))
-                engine = create_engine(
-                    db_path,
-                    connect_args={'check_same_thread': False,
-                                  'isolation_level': None},
-                )
+                # Engine does not exist in the current process, create it
+                engine = create_data_file_engine(root)
 
                 # Create/upgrade data file db via Alembic
                 cfg = alembic_config.Config()
@@ -211,16 +225,12 @@ def get_data_file_db(user_id: Optional[int]):
                     # Data file db migration failed due to an incompatible
                     # migration, wipe the user's data file dir and recreate
                     # from scratch
-                    print('Error running migration')
+                    print(f'Error running migration for user {user_id}')
                     traceback.print_exc()
                     engine.dispose()
                     shutil.rmtree(root)
                     os.mkdir(root)
-                    engine = create_engine(
-                        db_path,
-                        connect_args={'check_same_thread': False,
-                                      'isolation_level': None},
-                    )
+                    engine = create_data_file_engine(root)
                     # noinspection PyProtectedMember
                     with EnvironmentContext(
                             cfg, script,
@@ -235,9 +245,12 @@ def get_data_file_db(user_id: Optional[int]):
                             alembic_context.run_migrations()
 
                 session = scoped_session(sessionmaker(bind=engine))
-                data_files_engine[root] = engine, session
+                data_files_engine[root, pid] = engine, session
 
+        # Instantiate scoped session in the current thread
         session()
+
+        # Return session registry instead of session
         return session
 
     except Exception as e:
@@ -1309,7 +1322,7 @@ def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
                     return sum(
                         [recursive_import(child_asset.path, depth + 1)
                          for child_asset in provider.get_child_assets(
-                            asset.path)], [])
+                            asset.path)[0]], [])
                 return import_data_file(
                     adb, root, provider_id, asset.path, asset.metadata,
                     BytesIO(provider.get_asset_data(asset.path)),

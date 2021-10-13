@@ -470,7 +470,7 @@ class JobWorkerProcess(Process):
                     try:
                         with data_files.data_files_engine_lock:
                             data_files.data_files_engine[
-                                data_files.get_root(job.user_id)
+                                data_files.get_root(job.user_id), os.getpid()
                             ][1].remove()
                     except Exception:
                         pass
