@@ -1,5 +1,5 @@
 """
-Afterglow Core: job errors (subcodes 3xx)
+Afterglow Core: job errors
 """
 
 from . import AfterglowError
@@ -20,7 +20,6 @@ class JobServerError(AfterglowError):
         reason: error message describing the reason of failure
     """
     code = 500
-    subcode = 300
     message = 'Internal job server error'
 
 
@@ -32,7 +31,6 @@ class UnknownJobError(AfterglowError):
         id: job ID
     """
     code = 404
-    subcode = 301
     message = 'Unknown job'
 
 
@@ -44,7 +42,6 @@ class UnknownJobFileError(AfterglowError):
         id: job file ID
     """
     code = 404
-    subcode = 302
     message = 'Unknown job file'
 
 
@@ -56,7 +53,6 @@ class UnknownJobTypeError(AfterglowError):
         type: job type
     """
     code = 400
-    subcode = 303
     message = 'Unknown job type'
 
 
@@ -69,7 +65,6 @@ class InvalidMethodError(AfterglowError):
         method: HTTP method requested
     """
     code = 405
-    subcode = 304
     message = 'Method is not supported'
 
 
@@ -81,7 +76,6 @@ class CannotSetJobStatusError(AfterglowError):
         status: job status
     """
     code = 403
-    subcode = 305
     message = 'Cannot set job status'
 
 
@@ -93,7 +87,6 @@ class CannotCancelJobError(AfterglowError):
         status: job status
     """
     code = 403
-    subcode = 306
     message = 'Cannot cancel job'
 
 
@@ -105,7 +98,6 @@ class CannotDeleteJobError(AfterglowError):
         status: job status
     """
     code = 403
-    subcode = 307
     message = 'Cannot delete job in its current state'
 
 
@@ -118,5 +110,4 @@ class CannotCreateJobFileError(AfterglowError):
         reason: error message describing the reason of failure
     """
     code = 500
-    subcode = 308
     message = 'Cannot create job file'

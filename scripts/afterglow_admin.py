@@ -159,7 +159,7 @@ Examples:
                 except (TypeError, IndexError, KeyError, AttributeError):
                     s = ''
                 try:
-                    s += '[{:d}] '.format(j.pop('subcode'))
+                    s += '[{}] '.format(j.pop('id'))
                 except (TypeError, IndexError, KeyError, AttributeError):
                     pass
                 try:

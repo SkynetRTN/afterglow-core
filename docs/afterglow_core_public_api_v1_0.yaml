@@ -59,10 +59,9 @@ components:
       description: Afterglow API error
       type: object
       properties:
-        subcode:
-          description: exception-specific error code; by convention, has the form "nmm", where the most significant digits ("n") define the Afterglow Core module and the two least significant digits ("mm") define specific exception within that module, from 0 to 99
-          type: integer
-          minimum: 0
+        id:
+          description: unique string error code
+          type: string
         exception:
           description: exception class name
           type: string
@@ -1980,7 +1979,7 @@ components:
                     type: string
           example:
             code: 501
-            subcode: 1
+            id: MethodNotImplementedError
             message: "Method not implemented"
 
     ValidationError:
@@ -1996,7 +1995,7 @@ components:
                     description: name of the field
                     type: string
           example:
-            subcode: 2
+            id: ValidationError
             message: "Validation failed"
 
     MissingFieldError:
@@ -2006,7 +2005,7 @@ components:
           schema:
             $ref: '#/components/responses/ValidationError'
           example:
-            subcode: 3
+            id: MissingFieldError
             message: "Missing required data"
 
     NotAcceptedError:
@@ -2023,7 +2022,7 @@ components:
                     type: string
           example:
             code: 406
-            subcode: 4
+            id: NotAcceptedError
             message: "Sending data in the format requested by HTTP Accept header is not supported"
 
     NotAuthenticatedError:
@@ -2040,7 +2039,7 @@ components:
                     type: string
           example:
             code: 401
-            subcode: 100
+            id: NotAuthenticatedError
             message: "Not authenticated"
 
     NoAdminRegisteredError:
@@ -2051,7 +2050,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 403
-            subcode: 101
+            id: NoAdminRegisteredError
             message: "No admins registered"
 
     AdminRequiredError:
@@ -2062,7 +2061,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 403
-            subcode: 102
+            id: AdminRequiredError
             message: "Must be admin to do that"
 
     AdminOrSameUserRequiredError:
@@ -2073,7 +2072,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 403
-            subcode: 103
+            id: AdminOrSameUserRequiredError
             message: "Must be admin or same user to do that"
 
     UnknownUserError:
@@ -2090,7 +2089,7 @@ components:
                     type: integer
           example:
             code: 404
-            subcode: 104
+            id: UnknownUserError
             message: "Unknown user"
 
     InactiveUserError:
@@ -2101,7 +2100,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 403
-            subcode: 105
+            id: InactiveUserError
             message: "The user is deactivated"
 
     CannotDeactivateTheOnlyAdminError:
@@ -2112,7 +2111,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 403
-            subcode: 106
+            id: CannotDeactivateTheOnlyAdminError
             message: "Cannot deactivate/delete the only admin in the system"
 
     DuplicateUsernameError:
@@ -2129,7 +2128,7 @@ components:
                     type: string
           example:
             code: 409
-            subcode: 107
+            id: DuplicateUsernameError
             message: "User with this username already exists"
 
     UnknownAuthMethodError:
@@ -2146,7 +2145,7 @@ components:
                     type: string
           example:
             code: 404
-            subcode: 108
+            id: UnknownAuthMethodError
             message: "Unknown authentication method"
 
     CannotSetProtectedUserDataError:
@@ -2163,7 +2162,7 @@ components:
                     type: string
           example:
             code: 403
-            subcode: 109
+            id: CannotSetProtectedUserDataError
             message: "Cannot modify protected user info"
 
     HttpAuthFailedError:
@@ -2174,7 +2173,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 401
-            subcode: 110
+            id: HttpAuthFailedError
             message: "Invalid or missing username/password or authentication token"
       headers:
         WWW-Authenticate:
@@ -2191,7 +2190,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 403
-            subcode: 111
+            id: CannotDeleteCurrentUserError
             message: "Cannot delete the currently authenticated user"
 
     InitPageNotAvailableError:
@@ -2202,7 +2201,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 403
-            subcode: 112
+            id: InitPageNotAvailableError
             message: "Afterglow Core has already been initialized"
 
     NotInitializedError:
@@ -2213,7 +2212,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 403
-            subcode: 113
+            id: NotInitializedError
             message: "Afterglow Core has not yet been initialized"
 
     UnknownTokenError:
@@ -2224,7 +2223,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 400
-            subcode: 114
+            id: UnknownTokenError
             message: "Unknown token"
 
     UnknownClientError:
@@ -2241,7 +2240,7 @@ components:
                     type: string
           example:
             code: 404
-            subcode: 200
+            id: UnknownClientError
             message: "Unknown OAuth2 client ID"
 
     JobServerError:
@@ -2258,7 +2257,7 @@ components:
                     type: string
           example:
             code: 500
-            subcode: 300
+            id: JobServerError
             message: "Internal job server error"
 
     UnknownJobError:
@@ -2275,7 +2274,7 @@ components:
                     type: integer
           example:
             code: 404
-            subcode: 301
+            id: UnknownJobError
             message: "Unknown job"
 
     UnknownJobFileError:
@@ -2292,7 +2291,7 @@ components:
                     type: string
           example:
             code: 404
-            subcode: 302
+            id: UnknownJobFileError
             message: "Unknown job file"
 
     UnknownJobTypeError:
@@ -2309,7 +2308,7 @@ components:
                     type: string
           example:
             code: 400
-            subcode: 303
+            id: UnknownJobTypeError
             message: "Unknown job type"
 
     InvalidMethodError:
@@ -2329,7 +2328,7 @@ components:
                     type: string
           example:
             code: 405
-            subcode: 304
+            id: InvalidMethodError
             message: "Method is not supported"
 
     CannotSetJobStatusError:
@@ -2346,7 +2345,7 @@ components:
                     type: string
           example:
             code: 403
-            subcode: 305
+            id: CannotSetJobStatusError
             message: "Cannot set job status"
 
     CannotCancelJobError:
@@ -2363,7 +2362,7 @@ components:
                     type: string
           example:
             code: 403
-            subcode: 306
+            id: CannotCancelJobError
             message: "Cannot cancel job"
 
     CannotDeleteJobError:
@@ -2380,7 +2379,7 @@ components:
                     type: string
           example:
             code: 403
-            subcode: 307
+            id: CannotDeleteJobError
             message: "Cannot delete job in its current state"
 
     CannotCreateJobFileError:
@@ -2400,7 +2399,7 @@ components:
                     type: string
           example:
             code: 500
-            subcode: 308
+            id: CannotCreateJobFileError
             message: "Cannot create job file"
 
     UnknownDataProviderError:
@@ -2417,7 +2416,7 @@ components:
                     type: integer
           example:
             code: 404
-            subcode: 1000
+            id: UnknownDataProviderError
             message: "Unknown data provider ID"
 
     ReadOnlyDataProviderError:
@@ -2434,7 +2433,7 @@ components:
                     type: integer
           example:
             code: 403
-            subcode: 1001
+            id: ReadOnlyDataProviderError
             message: "Read-only data provider"
 
     NonBrowseableDataProviderError:
@@ -2451,7 +2450,7 @@ components:
                     type: integer
           example:
             code: 403
-            subcode: 1002
+            id: NonBrowseableDataProviderError
             message: "Non-browseable data provider"
 
     NonSearchableDataProviderError:
@@ -2468,7 +2467,7 @@ components:
                     type: integer
           example:
             code: 403
-            subcode: 1003
+            id: NonSearchableDataProviderError
             message: "Non-searchable data provider"
 
     AssetNotFoundError:
@@ -2485,7 +2484,7 @@ components:
                     type: string
           example:
             code: 404
-            subcode: 1004
+            id: AssetNotFoundError
             message: "No asset found at the given path"
 
     AssetAlreadyExistsError:
@@ -2496,7 +2495,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 409
-            subcode: 1005
+            id: AssetAlreadyExistsError
             message: "Asset already exists at the given path"
 
     CannotSearchInNonCollectionError:
@@ -2507,7 +2506,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 403
-            subcode: 1006
+            id: CannotSearchInNonCollectionError
             message: "Can only search in collection assets"
 
     CannotUpdateCollectionAssetError:
@@ -2518,7 +2517,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 403
-            subcode: 1007
+            id: CannotUpdateCollectionAssetError
             message: "Cannot update a collection asset"
 
     CannotDeleteNonEmptyCollectionAssetError:
@@ -2529,7 +2528,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 403
-            subcode: 1008
+            id: CannotDeleteNonEmptyCollectionAssetError
             message: 'Cannot delete non-empty collection asset without "force"'
 
     QuotaExceededError:
@@ -2552,7 +2551,7 @@ components:
                     type: integer
           example:
             code: 403
-            subcode: 1009
+            id: QuotaExceededError
             message: "Storage quota exceeded"
 
     UploadNotAllowedError:
@@ -2563,7 +2562,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 403
-            subcode: 1010
+            id: UploadNotAllowedError
             message: "Upload not allowed"
 
     AssetOutsideRootError:
@@ -2574,7 +2573,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 404
-            subcode: 1100
+            id: AssetOutsideRootError
             message: "Asset path outside the data directory"
 
     FilesystemError:
@@ -2591,7 +2590,7 @@ components:
                     type: string
           example:
             code: 403
-            subcode: 1101
+            id: FilesystemError
             message: "Filesystem error"
 
     UnknownDataFileError:
@@ -2608,7 +2607,7 @@ components:
                     type: integer
           example:
             code: 404
-            subcode: 2000
+            id: UnknownDataFileError
             message: "Unknown data file ID"
 
     CannotCreateDataFileDirError:
@@ -2625,7 +2624,7 @@ components:
                     type: string
           example:
             code: 403
-            subcode: 2001
+            id: CannotCreateDataFileDirError
             message: "Cannot create data file storage directory"
 
     CannotImportFromCollectionAssetError:
@@ -2645,7 +2644,7 @@ components:
                     type: string
           example:
             code: 403
-            subcode: 2002
+            id: CannotImportFromCollectionAssetError
             message: "Cannot import from collection asset"
 
     UnrecognizedDataFormatError:
@@ -2656,7 +2655,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 403
-            subcode: 2003
+            id: UnrecognizedDataFormatError
             message: "Data file format not recognized"
 
     MissingWCSError:
@@ -2667,7 +2666,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 400
-            subcode: 2004
+            id: MissingWCSError
             message: "Missing WCS info"
 
     UnknownSessionError:
@@ -2686,7 +2685,7 @@ components:
                       - type: string
           example:
             code: 404
-            subcode: 2005
+            id: UnknownSessionError
             message: "Unknown session"
 
     DuplicateSessionNameError:
@@ -2703,7 +2702,7 @@ components:
                     type: string
           example:
             code: 409
-            subcode: 2006
+            id: DuplicateSessionNameError
             message: "Duplicate session name"
 
     UnknownDataFileGroupError:
@@ -2720,7 +2719,7 @@ components:
                     type: string
           example:
             code: 404
-            subcode: 2007
+            id: UnknownDataFileGroupError
             message: "Unknown data file group ID"
 
     DataFileExportError:
@@ -2737,7 +2736,7 @@ components:
                     type: string
           example:
             code: 400
-            subcode: 2008
+            id: DataFileExportError
             message: "Cannot export data file"
 
     DataFileUploadNotAllowedError:
@@ -2748,7 +2747,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 403
-            subcode: 2009
+            id: DataFileUploadNotAllowedError
             message: "Data file upload not allowed"
 
     DuplicateDataFileNameError:
@@ -2765,7 +2764,7 @@ components:
                     type: string
           example:
             code: 409
-            subcode: 2010
+            id: DuplicateDataFileNameError
             message: "Duplicate data file name"
 
     DuplicateDataFileGroupNameError:
@@ -2782,7 +2781,7 @@ components:
                     type: string
           example:
             code: 409
-            subcode: 2011
+            id: DuplicateDataFileGroupNameError
             message: "Duplicate data file group name"
 
     UnknownCatalogError:
@@ -2799,7 +2798,7 @@ components:
                     type: string
           example:
             code: 404
-            subcode: 3000
+            id: UnknownCatalogError
             message: "Unknown catalog"
 
     UnknownSurveyError:
@@ -2816,7 +2815,7 @@ components:
                     type: string
           example:
             code: 404
-            subcode: 3100
+            id: UnknownSurveyError
             message: "SkyView does not host the given survey"
 
     SkyViewQueryError:
@@ -2833,7 +2832,7 @@ components:
                     type: string
           example:
             code: 502
-            subcode: 3101
+            id: SkyViewQueryError
             message: "SkyView query error"
 
     NoSurveyDataError:
@@ -2853,7 +2852,7 @@ components:
                     type: string
           example:
             code: 404
-            subcode: 3102
+            id: NoSurveyDataError
             message: "No data at the given coordinates"
 
     UnknownFieldCalError:
@@ -2870,7 +2869,7 @@ components:
                     type: integer
           example:
             code: 400
-            subcode: 4000
+            id: UnknownFieldCalError
             message: "Unknown field cal"
 
     DuplicateFieldCalError:
@@ -2887,7 +2886,7 @@ components:
                     type: string
           example:
             code: 409
-            subcode: 4001
+            id: DuplicateFieldCalError
             message: "Duplicate field cal name"
 
 

@@ -27,6 +27,7 @@ from sqlalchemy import (
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+from werkzeug.http import HTTP_STATUS_CODES
 
 from . import app, plugins
 from .errors import AfterglowError, MissingFieldError
@@ -821,33 +822,30 @@ class JobRequestHandler(BaseRequestHandler):
         except AfterglowError as e:
             # Construct JSON error response in the same way as
             # errors.afterglow_error_handler()
+            http_status = int(getattr(e, 'code', 0)) or 400
             result = {
-                'exception': e.__class__.__name__,
-                'message': e.message if hasattr(e, 'message') and e.message
-                else ', '.join(str(arg) for arg in e.args) if e.args
-                else str(e),
+                'status': HTTP_STATUS_CODES.get(
+                    http_status, '{} Unknown Error'.format(http_status)),
+                'id': str(getattr(e, 'id', e.__class__.__name__)),
+                'detail': str(e),
             }
-            if hasattr(e, 'payload') and e.payload:
-                result.update(e.payload)
-            if hasattr(e, 'subcode') and e.subcode:
-                result['subcode'] = int(e.subcode)
-            if getattr(e, 'code', 400) == 500:
-                result['traceback'] = traceback.format_tb(sys.exc_info()[-1])
-            http_status = int(e.code) if hasattr(e, 'code') and e.code else 400
+            meta = getattr(e, 'meta', None)
+            if meta:
+                result['meta'] = dict(meta)
+            if http_status == 500:
+                result.setdefault('meta', {})['traceback'] = \
+                    traceback.format_tb(sys.exc_info()[-1]),
 
         except Exception as e:
             # Wrap other exceptions in JobServerError
             # noinspection PyUnresolvedReferences
-            result = {
-                'exception': JobServerError.__name__,
-                'message': JobServerError.message,
-                'reason': e.message if hasattr(e, 'message') and e.message
-                else ', '.join(str(arg) for arg in e.args) if e.args
-                else str(e),
-                'subcode': JobServerError.subcode,
-                'traceback': traceback.format_tb(sys.exc_info()[-1]),
-            }
             http_status = JobServerError.code
+            result = {
+                'status': HTTP_STATUS_CODES[http_status],
+                'id': e.__class__.__name__,
+                'detail': str(e),
+                'meta': {'traceback': traceback.format_tb(sys.exc_info()[-1])},
+            }
 
         # noinspection PyBroadException
         try:
