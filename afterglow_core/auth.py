@@ -177,8 +177,8 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
             from .resources import data_files
             # noinspection PyBroadException
             try:
-                with data_files.data_files_engine_lock:
-                    data_files.data_files_engine[
+                with data_files.data_file_thread_lock:
+                    data_files.data_file_engine[
                         data_files.get_root(user_id), os.getpid()
                     ][1].remove()
             except Exception:

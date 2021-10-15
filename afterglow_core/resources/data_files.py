@@ -29,6 +29,8 @@ import numpy
 import astropy.io.fits as pyfits
 from astropy.wcs import FITSFixedWarning
 from astropy.io.fits.verify import VerifyWarning
+from portalocker import Lock as FileLock, RedisLock
+import redis.exceptions
 
 from .. import app, errors
 from ..models import DataFile, Session
@@ -55,8 +57,8 @@ except ImportError:
 
 __all__ = [
     # Data file db
-    'DataFileBase', 'data_files_engine',
-    'data_files_engine_lock', 'get_data_file_db',
+    'DataFileBase', 'data_file_engine', 'data_file_thread_lock',
+    'get_data_file_db',
     # Paths
     'get_root', 'get_data_file_path',
     # Metadata
@@ -140,8 +142,9 @@ def get_root(user_id: Optional[int]) -> str:
 
 
 # SQLA database engine
-data_files_engine = {}
-data_files_engine_lock = Lock()
+data_file_engine = {}
+data_file_thread_lock = Lock()
+data_file_process_lock = {}
 
 
 def create_data_file_engine(root: str) -> Engine:
@@ -183,69 +186,105 @@ def get_data_file_db(user_id: Optional[int]):
         root = get_root(user_id)
         pid = os.getpid()
 
-        with data_files_engine_lock:
-            # Make sure the user's data directory exists
-            if os.path.isfile(root):
-                os.remove(root)
-            if not os.path.isdir(root):
-                os.makedirs(root)
-
+        # Prevent race condition occurring when the user's data file dir and db
+        # are initialized by multiple web server processes and threads
+        with data_file_thread_lock:  # thread locking within the same process
+            # Obtain inter-process lock
             try:
-                # Get engine from cache
-                session = data_files_engine[root, pid][1]
+                proc_lock = data_file_process_lock[root, pid]
             except KeyError:
-                # Engine does not exist in the current process, create it
-                engine = create_data_file_engine(root)
-
-                # Create/upgrade data file db via Alembic
-                cfg = alembic_config.Config()
-                cfg.set_main_option(
-                    'script_location',
-                    os.path.abspath(os.path.join(
-                        __file__, '..', '..', 'db_migration',
-                        'data_files'))
-                )
-                script = ScriptDirectory.from_config(cfg)
-
-                # noinspection PyBroadException
                 try:
-                    # noinspection PyProtectedMember
-                    with EnvironmentContext(
+                    # Try the more robust redis version first
+                    proc_lock = RedisLock(
+                        'afterglow_data_files_{}'.format(user_id))
+                    with proc_lock:
+                        pass
+                except redis.exceptions.ConnectionError:
+                    # Redis server not running, use file-based locking
+                    lock_path = os.path.split(root)[0]
+                    if os.path.isfile(lock_path):
+                        os.remove(lock_path)
+                    if not os.path.isdir(lock_path):
+                        os.makedirs(lock_path)
+                    proc_lock = FileLock(os.path.join(
+                        lock_path, '.{}.lock'.format(user_id or '')))
+                data_file_process_lock[root, pid] = proc_lock
+
+            # Prevent concurrent db initialization by multiple processes,
+            # including those not initiated via multiprocessing, e.g. WSGI
+            with proc_lock as _lock:
+                try:
+                    # Make sure the user's data directory exists
+                    if os.path.isfile(root):
+                        os.remove(root)
+                    if not os.path.isdir(root):
+                        os.makedirs(root)
+
+                    # Get engine from cache
+                    session = data_file_engine[root, pid][1]
+                except KeyError:
+                    # Engine does not exist in the current process, create it
+                    engine = create_data_file_engine(root)
+
+                    # Create/upgrade data file db via Alembic
+                    cfg = alembic_config.Config()
+                    cfg.set_main_option(
+                        'script_location',
+                        os.path.abspath(os.path.join(
+                            __file__, '..', '..', 'db_migration',
+                            'data_files'))
+                    )
+                    script = ScriptDirectory.from_config(cfg)
+
+                    # noinspection PyBroadException
+                    try:
+                        # noinspection PyProtectedMember
+                        with EnvironmentContext(
+                                    cfg, script,
+                                    fn=lambda rev, _:
+                                    script._upgrade_revs('head', rev),
+                                    as_sql=False, starting_rev=None,
+                                    destination_rev='head', tag=None,
+                                ), engine.connect() as connection:
+                            alembic_context.configure(connection=connection)
+
+                            with alembic_context.begin_transaction():
+                                alembic_context.run_migrations()
+                    except Exception:
+                        # Data file db migration failed due to an incompatible
+                        # migration, wipe the user's data file dir and recreate
+                        # from scratch
+                        print(f'Error running migration for user {user_id}')
+                        traceback.print_exc()
+                        engine.dispose()
+                        shutil.rmtree(root)
+                        os.mkdir(root)
+                        engine = create_data_file_engine(root)
+                        # noinspection PyProtectedMember
+                        with EnvironmentContext(
                                 cfg, script,
                                 fn=lambda rev, _:
                                 script._upgrade_revs('head', rev),
                                 as_sql=False, starting_rev=None,
                                 destination_rev='head', tag=None,
-                            ), engine.connect() as connection:
-                        alembic_context.configure(connection=connection)
+                        ), engine.connect() as connection:
+                            alembic_context.configure(connection=connection)
 
-                        with alembic_context.begin_transaction():
-                            alembic_context.run_migrations()
-                except Exception:
-                    # Data file db migration failed due to an incompatible
-                    # migration, wipe the user's data file dir and recreate
-                    # from scratch
-                    print(f'Error running migration for user {user_id}')
-                    traceback.print_exc()
-                    engine.dispose()
-                    shutil.rmtree(root)
-                    os.mkdir(root)
-                    engine = create_data_file_engine(root)
-                    # noinspection PyProtectedMember
-                    with EnvironmentContext(
-                            cfg, script,
-                            fn=lambda rev, _:
-                            script._upgrade_revs('head', rev),
-                            as_sql=False, starting_rev=None,
-                            destination_rev='head', tag=None,
-                    ), engine.connect() as connection:
-                        alembic_context.configure(connection=connection)
+                            with alembic_context.begin_transaction():
+                                alembic_context.run_migrations()
 
-                        with alembic_context.begin_transaction():
-                            alembic_context.run_migrations()
-
-                session = scoped_session(sessionmaker(bind=engine))
-                data_files_engine[root, pid] = engine, session
+                    session = scoped_session(sessionmaker(bind=engine))
+                    data_file_engine[root, pid] = engine, session
+                finally:
+                    if isinstance(proc_lock, FileLock):
+                        # noinspection PyBroadException
+                        try:
+                            # Some networked filesystems require this for file
+                            # locks
+                            _lock.flush()
+                            os.fsync(_lock.fileno())
+                        except Exception:
+                            pass
 
         # Instantiate scoped session in the current thread
         session()

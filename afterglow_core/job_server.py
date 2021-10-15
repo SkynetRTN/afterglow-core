@@ -360,7 +360,7 @@ class JobWorkerProcess(Process):
         # Close all possible data file db engine connections inherited from the
         # parent process
         from .resources import data_files
-        for engine, session in data_files.data_files_engine.values():
+        for engine, session in data_files.data_file_engine.values():
             session.close_all()
             engine.dispose()
         # noinspection PyTypeChecker
@@ -469,8 +469,8 @@ class JobWorkerProcess(Process):
                     # Close the possible data file db session
                     # noinspection PyBroadException
                     try:
-                        with data_files.data_files_engine_lock:
-                            data_files.data_files_engine[
+                        with data_files.data_file_thread_lock:
+                            data_files.data_file_engine[
                                 data_files.get_root(job.user_id), os.getpid()
                             ][1].remove()
                     except Exception:
