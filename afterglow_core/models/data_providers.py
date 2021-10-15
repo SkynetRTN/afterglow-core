@@ -442,7 +442,7 @@ class DataProvider(AfterglowSchema):
                 res = self.create_asset(dst_path, None, **kwargs)
 
             if not limit or _depth < limit - 1:
-                for child_asset, _ in provider.get_child_assets(src_path):
+                for child_asset in provider.get_child_assets(src_path)[0]:
                     # For each child asset of a collection asset, recursively
                     # copy its data; calculate the destination path by
                     # appending the source asset name; always create
