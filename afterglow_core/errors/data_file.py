@@ -134,6 +134,7 @@ class DuplicateDataFileNameError(AfterglowError):
 
     Extra attributes::
         name: requested data file name
+        file_id: ID of existing data file with the same name
     """
     code = 409
     message = 'Duplicate data file name'

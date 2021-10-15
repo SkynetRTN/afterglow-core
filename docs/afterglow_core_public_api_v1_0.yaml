@@ -2762,6 +2762,9 @@ components:
                   name:
                     description: requested data file name
                     type: string
+                  file_id:
+                    description: ID of existing data file with the same name
+                    type: integer
           example:
             code: 409
             id: DuplicateDataFileNameError
