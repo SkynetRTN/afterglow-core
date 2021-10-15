@@ -423,9 +423,12 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
             name_cand = '{}_{:03d}'.format(name, i)
             i += 1
         name = 'file_{}.fits'.format(name_cand)
-    elif adb.query(DbDataFile).filter_by(
-            session_id=session_id, name=name).count():
-        raise DuplicateDataFileNameError(name=name)
+    else:
+        existing_file = adb.query(DbDataFile).filter_by(
+            session_id=session_id, name=name).first()
+        if existing_file is not None:
+            raise DuplicateDataFileNameError(
+                name=name, file_id=existing_file.id)
 
     if group_name is None:
         # By default, set group name equal to data file name; make sure that
@@ -1326,7 +1329,8 @@ def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
                 return import_data_file(
                     adb, root, provider_id, asset.path, asset.metadata,
                     BytesIO(provider.get_asset_data(asset.path)),
-                    asset.name, duplicates, session_id=session_id)
+                    name or asset.name if len(path) == 1 else asset.name,
+                    duplicates, session_id=session_id)
 
             if not isinstance(path, list):
                 try:
