@@ -219,7 +219,7 @@ def run_cropping_job(job: Job,
 
                 new_file_ids.append(file_id)
             except Exception as e:
-                job.add_error('Data file ID {}: {}'.format(job_file_ids[i], e))
+                job.add_error(e, {'file_id': job_file_ids[i]})
             finally:
                 job.update_progress((i + 1)/len(job_file_ids)*100)
     finally:

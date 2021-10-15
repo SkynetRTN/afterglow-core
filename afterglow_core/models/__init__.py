@@ -42,6 +42,7 @@ Data Model -> Database     db_obj = DbObject(**obj.to_dict())     resources
 from .catalogs import *
 from .data_files import *
 from .data_providers import *
+from .errors import *
 from .field_cals import *
 from .jobs import *
 from .photometry import *

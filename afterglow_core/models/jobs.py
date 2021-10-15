@@ -10,11 +10,13 @@ from multiprocessing import Queue
 
 import errno
 from marshmallow.fields import Integer, List, Nested, String
+from werkzeug.http import HTTP_STATUS_CODES
 
 from .. import app
 from ..errors import MethodNotImplementedError
 from ..errors.job import CannotCreateJobFileError
 from ..schemas import AfterglowSchema, DateTime, Float
+from .errors import AfterglowError as AfterglowErrorSchema
 
 
 __all__ = ['Job', 'JobResult', 'JobState', 'job_file_dir', 'job_file_path']
@@ -56,8 +58,8 @@ class JobResult(AfterglowSchema):
     Base class for job results
 
     Attributes::
-        errors: list of error messages
-        warnings: list of warnings issued by :meth:`Job.run`
+        errors: list of errors
+        warnings: list of warning messages issued by :meth:`Job.run`
 
     The job plugin class usually subclasses :class:`JobResult` to define custom
     result fields in addition to the above:
@@ -66,7 +68,8 @@ class JobResult(AfterglowSchema):
         value1 = fields.Integer()
         value2 = fields.Float()
     """
-    errors: TList[str] = List(String())
+    errors: TList[Dict[str, Union[str, int, float, bool]]] = List(
+        Nested(AfterglowErrorSchema))
     warnings: TList[str] = List(String())
 
     def __init__(self, *args, **kwargs):
@@ -88,7 +91,7 @@ class Job(AfterglowSchema):
     """
     Base class for job plugins
 
-    Plugin modules are placed in the :mod:`afterglow_core.resources.job_plugins`
+    Plugin modules are placed in :mod:`afterglow_core.resources.job_plugins`
     subpackage and must subclass from :class:`Job`. A job plugin must define
     at least the job type name and implement :meth:`run`. Example:
 
@@ -166,8 +169,7 @@ class Job(AfterglowSchema):
                     ...  # process file
                     self.result.values.append(...)
                 except Exception as e:
-                    self.add_error(
-                        'Error processing file {}: {}'.format(file_id, e))
+                    self.add_error(e, {'file_id': file_id})
                     self.result.values.append(None)
                 finally:
                     self.update_progress((file_no + 1)/len(file_ids)*100)
@@ -208,14 +210,14 @@ class Job(AfterglowSchema):
     containing any data that does not fit in the database and should be
     transferred to the client via GET /jobs/[id]/result/files/[file_id] as
     a file with specific content type. An example is WAV files produced by
-    the sonification job. Within the job, multiple extra files are distinguished
-    by their IDs assigned by :meth:`run`. See :meth:`create_job_file` for more
-    info.
+    the sonification job. Within the job, multiple extra files
+    are distinguished by their IDs assigned by :meth:`run`.
+    See :meth:`create_job_file` for more info.
 
     When a job is canceled by the client via
     PUT /jobs/[id]/state?status=canceled, a KeyboardInterrupt is raised in
-    :meth:`run`. No special action is needed to handle this unless the job needs
-    to do some cleanup on cancellation; then :meth:`run` should catch
+    :meth:`run`. No special action is needed to handle this unless the job
+    needs to do some cleanup on cancellation; then :meth:`run` should catch
     KeyboardInterrupt and reraise it after all necessary cleanup measures are
     taken:
 
@@ -240,8 +242,8 @@ class Job(AfterglowSchema):
         type: job type name; used when submitting a job via
             POST /jobs?type=`name`
         user_id: ID of the user who submitted the job
-        session_id: ID of the client session (None = default anonymous session);
-            new data files will be created with this session ID
+        session_id: ID of the client session (None = default anonymous
+            session); new data files will be created with this session ID
         state: current job state, an instance of JobState
         result: job result structure, an instance of JobResult or its subclass
 
@@ -297,8 +299,8 @@ class Job(AfterglowSchema):
     def update(self) -> None:
         """
         Notify the job server about job state change; should be called after
-        modifying any of the JobState or JobResult fields while the job is still
-        in progress; also called automatically upon job completion
+        modifying any of the JobState or JobResult fields while the job
+        is still in progress; also called automatically upon job completion
         """
         # Serialize and enqueue the job state and result along with the job ID
         self._queue.put(dict(
@@ -307,17 +309,36 @@ class Job(AfterglowSchema):
             result=self.result.dump(self.result),
         ))
 
-    def add_error(self, msg: str) -> None:
+    def add_error(self, e: Exception,
+                  meta: Optional[Dict[str, Union[str, int, float, bool]]] =
+                  None) -> None:
         """
-        Add error message to Job.result.errors; in debug mode, also appends
-        exception traceback
+        Add error to Job.result.errors; in debug mode, error metadata also
+        includes exception traceback
 
-        :param msg: error message
+        :param e: exception
+        :param meta: optional additional exception metadata
         """
+        error = {}
+        status = getattr(e, 'code', None)
+        if status:
+            error['status'] = HTTP_STATUS_CODES.get(
+                status, '{} Unknown Error'.format(status))
+        error['id'] = str(getattr(e, 'id', e.__class__.__name__))
+        error['detail'] = str(e)
+        if meta is None:
+            meta = {}
+        meta.update(getattr(e, 'meta', {}))
+        if meta:
+            error['meta'] = dict(meta)
+
+        if status == 500:
+            error.setdefault('meta', {})['traceback'] = \
+                traceback.format_tb(sys.exc_info()[-1]),
         if app.config.get('DEBUG'):
-            msg = '{}\nTraceback (most recent call last):\n{}'.format(
-                msg, traceback.format_tb(sys.exc_info()[-1]))
-        self.result.errors.append(msg)
+            error.setdefault('meta', {})['traceback'] = \
+                traceback.format_tb(sys.exc_info()[-1]),
+        self.result.errors.append(error)
         self._queue.put(dict(
             id=self.id,
             result=dict(errors=self.result.errors),

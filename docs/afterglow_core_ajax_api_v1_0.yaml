@@ -60,17 +60,17 @@ components:
       description: Afterglow API error
       type: object
       properties:
+        status:
+          description: HTTP status
+          type: string
         id:
           description: unique string error code
           type: string
-        exception:
-          description: exception class name
-          type: string
-        message:
-          description: error message
-          type: string
-        traceback:
-          description: Python exception traceback; only returned for HTTP 500 Internal Server Error
+        detail:
+          description: detailed error description
+        meta:
+          description: optional error-specific metadata
+          type: object
 
     Token:
       description: personal access token

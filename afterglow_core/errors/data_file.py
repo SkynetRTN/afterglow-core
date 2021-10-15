@@ -20,7 +20,7 @@ class UnknownDataFileError(AfterglowError):
     Requested data file with unknown ID
 
     Extra attributes::
-        id: requested data file ID
+        file_id: requested data file ID
     """
     code = 404
     message = 'Unknown data file ID'

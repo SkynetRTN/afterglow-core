@@ -457,7 +457,7 @@ def data_files_hist(id: int) -> Response:
         except errors.AfterglowError:
             raise
         except Exception:
-            raise UnknownDataFileError(id=id)
+            raise UnknownDataFileError(file_id=id)
 
     return json_response(
         dict(data=data.tolist(), min_bin=min_bin, max_bin=max_bin))
@@ -519,7 +519,7 @@ def data_files_pixels(id: int) -> Response:
     except errors.AfterglowError:
         raise
     except Exception:
-        raise UnknownDataFileError(id=id)
+        raise UnknownDataFileError(file_id=id)
 
 
 @app.route(resource_prefix + '<int:id>/fits')

@@ -240,8 +240,7 @@ class AlignmentJob(Job):
                     if i != ref_image or ref_file_id in self.file_ids:
                         self.result.file_ids.append(file_id)
                 except Exception as e:
-                    self.add_error(
-                        'Data file ID {}: {}'.format(file_ids[i], e))
+                    self.add_error(e, {'file_id': file_ids[i]})
                 finally:
                     self.update_progress((i + 1)/len(file_ids)*100)
         finally:

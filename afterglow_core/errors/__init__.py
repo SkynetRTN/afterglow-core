@@ -193,7 +193,7 @@ class AfterglowError(exceptions.HTTPException, metaclass=AfterglowErrorMeta):
 
         :return: stringified Afterglow error
         """
-        msg = '{}: {}'.format(self.id, self.message)
+        msg = self.message
         if self.meta:
             msg += ' ({})'.format(
                 ', '.join('{}={}'.format(name, val)

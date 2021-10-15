@@ -125,7 +125,7 @@ class PixelOpsJob(Job):
                     except IndexError:
                         pass
                     except Exception as e:
-                        self.add_error('Image #{:d}: {}'.format(i, e))
+                        self.add_error(e, {'image_no': i})
                     finally:
                         self.update_progress((i + 1)/len(data_files)*100)
             else:
@@ -142,8 +142,7 @@ class PixelOpsJob(Job):
                 try:
                     self.handle_expr(expr, local_vars, self.file_ids[i])
                 except Exception as e:
-                    self.add_error(
-                        'Data file ID {}: {}'.format(self.file_ids[i], e))
+                    self.add_error(e, {'file_id': self.file_ids[i]})
                 finally:
                     self.update_progress((i + 1)/len(data_files)*100)
 

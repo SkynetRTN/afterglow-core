@@ -63,8 +63,8 @@ class StackingJob(Job):
                 settings.rejection.lower() not in ('none', 'chauvenet', 'iraf',
                                                    'minmax', 'sigclip'):
             raise ValueError(
-                'Rejection mode must be "none", "chauvenet", "iraf", "minmax", '
-                'or "sigclip"')
+                'Rejection mode must be "none", "chauvenet", "iraf", '
+                '"minmax", or "sigclip"')
         if settings.rejection is not None:
             settings.rejection = settings.rejection.lower()
             if settings.rejection == 'none':
@@ -96,9 +96,10 @@ class StackingJob(Job):
         for i, data_file in enumerate(list(data_files[1:])):
             if data_file[0].shape != shape:
                 self.add_error(
-                    'Data file {0} shape mismatch: expected {1[1]}x{1[0]}, got '
-                    '{2[1]}x{2[0]}'.format(
-                        self.file_ids[i + 1], shape, data_file[0].shape))
+                    ValueError(
+                        'Shape mismatch: expected {0[1]}x{0[0]}, got '
+                        '{1[1]}x{1[0]}'.format(shape, data_file[0].shape)),
+                    {'file_id': self.file_ids[i + 1]})
                 data_files.remove(data_file)
 
         # Combine using the given settings

@@ -259,8 +259,7 @@ class WcsCalibrationJob(Job):
 
                     self.result.file_ids.append(file_id)
                 except Exception as e:
-                    self.add_error(
-                        'Data file ID {}: {}'.format(self.file_ids[i], e))
+                    self.add_error(e, {'file_id': self.file_ids[i]})
                 finally:
                     self.update_progress((i + 1)/len(self.file_ids)*100)
         finally:

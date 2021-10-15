@@ -165,6 +165,6 @@ def run_source_extraction_job(job: Job,
             if update_progress:
                 job.update_progress((file_no + 1)/len(job_file_ids)*100)
         except Exception as e:
-            job.add_error('Data file ID {}: {}'.format(id, e))
+            job.add_error(e, {'file_id': id})
 
     return result_data

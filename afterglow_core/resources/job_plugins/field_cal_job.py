@@ -191,11 +191,11 @@ class FieldCalJob(Job):
                 if any(getattr(source, 'file_id', None) is None
                        for source in phot_data):
                     raise ValueError(
-                        '"file_id" is required for all sources when photometry '
-                        'is not enabled')
+                        '"file_id" is required for all sources when '
+                        'photometry is not enabled')
             else:
-                # Assume the same file ID for all sources if processing a single
-                # file
+                # Assume the same file ID for all sources if processing
+                # a single file
                 file_id = self.file_ids[0]
                 for source in phot_data:
                     if getattr(source, 'file_id', None) is None:
@@ -241,7 +241,8 @@ class FieldCalJob(Job):
                 raise RuntimeError('All sources violate SNR constraints')
 
         if getattr(field_cal, 'source_inclusion_percent', None):
-            # Keep only sources that are present in the given fraction of images
+            # Keep only sources that are present in the given fraction
+            # of images
             nmin = max(int(field_cal.source_inclusion_percent/100 *
                            len(self.file_ids) + 0.5), 1)
             source_ids_to_keep, source_ids_to_remove = [], []
@@ -267,9 +268,10 @@ class FieldCalJob(Job):
         # Initialize custom filter mapping
         filter_lookup = {
             catalog_name: known_catalogs[catalog_name].filter_lookup
-            for catalog_name in {catalog_source.catalog_name
-                                 for catalog_source in catalog_sources
-                                 if getattr(catalog_source, 'catalog_name', '')}
+            for catalog_name in {
+                catalog_source.catalog_name
+                for catalog_source in catalog_sources
+                if getattr(catalog_source, 'catalog_name', '')}
             if catalog_name in known_catalogs and
             getattr(known_catalogs[catalog_name], 'filter_lookup', None)
         }
@@ -312,7 +314,8 @@ class FieldCalJob(Job):
                                     raise Exception()
                                 else:
                                     # Calculate the resulting magnitude error
-                                    # by coadding contributions from each filter
+                                    # by coadding contributions from each
+                                    # filter
                                     err = 0
                                     for f, m in catalog_source.mags.items():
                                         e = getattr(m, 'error', None)
@@ -353,8 +356,8 @@ class FieldCalJob(Job):
                             sources.append(source)
                             break
             if not sources:
-                self.add_error('Data file ID {}: No calibration sources'.format(
-                    file_id))
+                self.add_error(
+                    ValueError('No calibration sources'), {'file_id': file_id})
                 continue
 
             mags, mag_errors, ref_mags, ref_mag_errors = numpy.transpose([

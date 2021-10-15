@@ -237,7 +237,7 @@ def run_photometry_job(job: Job, settings: PhotSettings,
                           row['mag'], row['mag_err']]).all()]
             job.update_progress((file_no + 1)/len(file_ids)*100)
         except Exception as e:
-            job.add_error('Data file ID {}: {}'.format(file_id, e))
+            job.add_error(e, {'file_id': file_id})
 
     return result_data
 

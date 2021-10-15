@@ -872,7 +872,7 @@ def get_data_file_fits(user_id: Optional[int], file_id: int,
     try:
         return pyfits.open(get_data_file_path(user_id, file_id), mode)
     except Exception:
-        raise UnknownDataFileError(id=file_id)
+        raise UnknownDataFileError(file_id=file_id)
 
 
 def get_data_file_data(user_id: Optional[int], file_id: int) \
@@ -951,7 +951,7 @@ def get_data_file_bytes(user_id: Optional[int], file_id: int,
             with open(get_data_file_path(user_id, file_id), 'rb') as f:
                 return f.read()
         except Exception:
-            raise UnknownDataFileError(id=file_id)
+            raise UnknownDataFileError(file_id=file_id)
 
     if PILImage is None:
         raise DataFileExportError(
@@ -1149,7 +1149,7 @@ def get_data_file(user_id: Optional[int], file_id: int) -> DataFile:
     except ValueError:
         db_data_file = None
     if db_data_file is None:
-        raise UnknownDataFileError(id=file_id)
+        raise UnknownDataFileError(file_id=file_id)
 
     # Convert to data model object
     return DataFile(db_data_file)
@@ -1364,7 +1364,7 @@ def update_data_file(user_id: Optional[int], data_file_id: int,
 
     db_data_file = adb.query(DbDataFile).get(data_file_id)
     if db_data_file is None:
-        raise UnknownDataFileError(id=data_file_id)
+        raise UnknownDataFileError(file_id=data_file_id)
 
     modified = force
     for key, val in data_file.to_dict().items():
@@ -1403,7 +1403,7 @@ def update_data_file_asset(user_id: Optional[int], data_file_id: int,
 
     db_data_file = adb.query(DbDataFile).get(data_file_id)
     if db_data_file is None:
-        raise UnknownDataFileError(id=data_file_id)
+        raise UnknownDataFileError(file_id=data_file_id)
 
     try:
         db_data_file.data_provider = provider_id
@@ -1463,7 +1463,7 @@ def delete_data_file(user_id: Optional[int], id: int) -> None:
 
     db_data_file = adb.query(DbDataFile).get(id)
     if db_data_file is None:
-        raise UnknownDataFileError(id=id)
+        raise UnknownDataFileError(file_id=id)
     try:
         adb.delete(db_data_file)
         adb.commit()

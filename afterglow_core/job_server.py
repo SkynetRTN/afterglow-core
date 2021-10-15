@@ -453,7 +453,7 @@ class JobWorkerProcess(Process):
                     job.state.status = 'canceled'
                 except Exception as e:
                     # Unexpected job exception
-                    job.result.errors.append(str(e))
+                    job.add_error(e)
                 finally:
                     if user_session is not None:
                         user_session.remove()
