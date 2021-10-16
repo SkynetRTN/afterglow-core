@@ -208,7 +208,7 @@ class DSSImageDataProvider(DataProvider):
                 url = 'https://stdatu.stsci.edu/cgi-bin/dss_search'
                 params = {
                     'v': 'poss2ukstu_red',
-                    'r': str(ra),
+                    'r': str(ra*15),
                     'd': str(dec),
                     'e': 'J2000',
                     'h': str(height),
@@ -221,7 +221,7 @@ class DSSImageDataProvider(DataProvider):
             else:
                 url = 'https://archive.eso.org/dss/dss/image'
                 params = {
-                    'ra': str(ra),
+                    'ra': str(ra*15),
                     'dec': str(dec),
                     'equinox': 'J2000',
                     'name': '',
