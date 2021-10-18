@@ -257,10 +257,7 @@ class ImagingSurveyDataProvider(DataProvider):
         if object is None:
             # Convert FOV center coordinates to standard form
             # noinspection PyUnresolvedReferences
-            object = '{}, {}'.format(
-                Angle(ra*u.hour).to_string(sep=' ', precision=3, pad=2),
-                Angle(dec*u.deg).to_string(sep=' ', precision=2,
-                                           alwayssign=True, pad=2))
+            object = '{},{}'.format(ra_hours*15, dec_degs)
 
         # Query SkyView; zero or one result is expected
         # noinspection PyBroadException
