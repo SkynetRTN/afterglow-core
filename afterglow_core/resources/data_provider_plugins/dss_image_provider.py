@@ -3,10 +3,12 @@ Afterglow Core: imaging survey data provider plugin
 """
 
 from typing import List as TList, Optional, Tuple, Union
+from io import BytesIO
 
 from marshmallow.fields import Float, String
 from marshmallow.validate import OneOf, Range
 import requests
+import astropy.io.fits as pyfits
 
 from ...models import DataProvider, DataProviderAsset
 from ...errors import MissingFieldError, ValidationError
@@ -244,4 +246,11 @@ class DSSImageDataProvider(DataProvider):
                 reason='Request failed (HTTP status {})'
                 .format(res.status_code))
 
+        buf = BytesIO(res.content)
+        with pyfits.open(buf, 'readonly') as f:
+            if len(f) > 1:
+                # Remove extension HDU
+                out = BytesIO()
+                f[0].writeto(out, output_verify='silentfix+ignore')
+                return out.getvalue()
         return res.content
