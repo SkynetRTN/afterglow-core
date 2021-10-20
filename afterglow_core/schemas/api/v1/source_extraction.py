@@ -34,6 +34,7 @@ class IAstrometrySchema(AfterglowSchema):
     pm_pos_angle_pixel: float = Float()
     pm_epoch: datetime = DateTime()
     flux: float = Float()
+    sat_pixels: int = Integer()
 
 
 class IFwhmSchema(AfterglowSchema):

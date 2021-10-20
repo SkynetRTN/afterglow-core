@@ -50,6 +50,7 @@ class IAstrometry(AfterglowSchema):
     pm_pos_angle_pixel: float = Float()
     pm_epoch: datetime = DateTime()
     flux: float = Float()
+    sat_pixels = Integer()
 
 
 class IFwhm(AfterglowSchema):
@@ -93,6 +94,10 @@ class SourceExtractionData(ISourceMeta, IAstrometry, IFwhm, ISourceId):
             self.fwhm_y = row['b']*sigma_to_fwhm
             self.theta = rad2deg(row['theta'])
             self.flux = row['flux']
+            try:
+                self.sat_pixels = row['saturated']
+            except ValueError:
+                pass
 
         if wcs is not None:
             # Apply astrometric calibration

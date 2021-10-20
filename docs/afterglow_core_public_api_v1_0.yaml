@@ -564,6 +564,10 @@ components:
           description: source flux [electrons] (or [counts] if gain is not known)
           type: number
           minimum: 0
+        sat_pixels:
+          description: number of saturated pixels
+          type: integer
+          minimum: 0
 
     IFWHM:
       description: Source shape information
@@ -874,6 +878,15 @@ components:
           minimum: 1
           nullable: true
           default: null
+        sat_level:
+          description: saturation level
+          type: number
+          default: 63000
+        discard_saturated:
+          description: discard sources containing the given number of pixels above sat_level; 0 = don't discard
+          type: integer
+          minimum: 0
+          default: 1
       nullable: true
       default: null
 
