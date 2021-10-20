@@ -30,6 +30,7 @@ import astropy.io.fits as pyfits
 from astropy.wcs import FITSFixedWarning
 from astropy.io.fits.verify import VerifyWarning
 from portalocker import Lock as FileLock, RedisLock
+import portalocker.exceptions
 import redis.exceptions
 
 from .. import app, errors
@@ -199,6 +200,9 @@ def get_data_file_db(user_id: Optional[int]):
                         'afterglow_data_files_{}'.format(user_id))
                     with proc_lock:
                         pass
+                except portalocker.exceptions.AlreadyLocked:
+                    # Works as expected
+                    pass
                 except redis.exceptions.ConnectionError:
                     # Redis server not running, use file-based locking
                     lock_path = os.path.split(root)[0]
