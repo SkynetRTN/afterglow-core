@@ -408,6 +408,7 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
                      session_id: Optional[int] = None,
                      group_name: Optional[str] = None,
                      group_order: Optional[int] = 0,
+                     allow_duplicate_file_name: bool = True,
                      allow_duplicate_group_name: bool = False) -> DbDataFile:
     """
     Create a database entry for a new data file and save it to data file
@@ -433,6 +434,8 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
     :param session_id: optional user session ID; defaults to anonymous session
     :param group_name: optional name of the file group; default: data file name
     :param group_order: 0-based order of the file in the group
+    :param allow_duplicate_file_name: don't throw an error if `name` is set,
+        and one of the existing data files has the same name
     :param allow_duplicate_group_name: don't throw an error if the specified
         group name already exists; useful when importing several files
         belonging to the same group
@@ -463,28 +466,29 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
             name_cand = '{}_{:03d}'.format(name, i)
             i += 1
         name = 'file_{}.fits'.format(name_cand)
-    else:
+    elif not allow_duplicate_file_name:
         existing_file = adb.query(DbDataFile).filter_by(
             session_id=session_id, name=name).first()
         if existing_file is not None:
             raise DuplicateDataFileNameError(
                 name=name, file_id=existing_file.id)
 
-    if group_name is None:
-        # By default, set group name equal to data file name; make sure that
-        # it is unique within the session
-        group_name = name
+    if group_name is None or not allow_duplicate_group_name:
+        if group_name is None:
+            # By default, set group name equal to data file name
+            group_name = name
+        # Make sure that group name is unique within the session
         name_cand, i = group_name, 1
         while adb.query(DbDataFile).filter_by(
                 session_id=session_id, group_name=name_cand).count():
             name_cand = append_suffix(group_name, '_{:03d}'.format(i))
             i += 1
         group_name = name_cand
-    elif not allow_duplicate_group_name and adb.query(DbDataFile).filter_by(
-            session_id=session_id, group_name=group_name).count():
-        # Cannot create a new data file with an explicitly set group name
-        # matching an existing group name
-        raise DuplicateDataFileGroupNameError(group_name=group_name)
+    # elif not allow_duplicate_group_name and adb.query(DbDataFile).filter_by(
+    #         session_id=session_id, group_name=group_name).count():
+    #     # Cannot create a new data file with an explicitly set group name
+    #     # matching an existing group name
+    #     raise DuplicateDataFileGroupNameError(group_name=group_name)
 
     # Create/update a database row
     sqla_fields = dict(
