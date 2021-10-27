@@ -30,7 +30,6 @@ import astropy.io.fits as pyfits
 from astropy.wcs import FITSFixedWarning
 from astropy.io.fits.verify import VerifyWarning
 from portalocker import Lock as FileLock, RedisLock
-import portalocker.exceptions
 import redis.exceptions
 
 from .. import app, errors
@@ -197,12 +196,9 @@ def get_data_file_db(user_id: Optional[int]):
                 try:
                     # Try the more robust redis version first
                     proc_lock = RedisLock(
-                        'afterglow_data_files_{}'.format(user_id))
+                        'afterglow_data_files_{}'.format(user_id), timeout=30)
                     with proc_lock:
                         pass
-                except portalocker.exceptions.AlreadyLocked:
-                    # Works as expected
-                    pass
                 except redis.exceptions.ConnectionError:
                     # Redis server not running, use file-based locking
                     lock_path = os.path.split(root)[0]
@@ -211,7 +207,8 @@ def get_data_file_db(user_id: Optional[int]):
                     if not os.path.isdir(lock_path):
                         os.makedirs(lock_path)
                     proc_lock = FileLock(os.path.join(
-                        lock_path, '.{}.lock'.format(user_id or '')))
+                        lock_path, '.{}.lock'.format(user_id or '')),
+                        timeout=30)
                 data_file_process_lock[root, pid] = proc_lock
 
             # Prevent concurrent db initialization by multiple processes,
