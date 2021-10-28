@@ -160,8 +160,8 @@ def run_source_extraction_job(job: Job,
             result_data += [
                 SourceExtractionData(
                     row=row,
-                    x0=settings.x,
-                    y0=settings.y,
+                    ofs_x=settings.x - 1,
+                    ofs_y=settings.y - 1,
                     wcs=wcs,
                     file_id=id,
                     time=epoch,
