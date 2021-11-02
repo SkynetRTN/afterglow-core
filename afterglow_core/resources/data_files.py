@@ -191,14 +191,19 @@ def get_data_file_db(user_id: Optional[int]):
         with data_file_thread_lock:  # thread locking within the same process
             # Obtain inter-process lock
             try:
-                proc_lock = data_file_process_lock[root, pid]
+                proc_lock = data_file_process_lock[user_id, pid]
             except KeyError:
                 try:
-                    # Try the more robust redis version first
-                    proc_lock = RedisLock(
-                        'afterglow_data_files_{}'.format(user_id), timeout=30)
-                    with proc_lock:
-                        pass
+                    # # Try the more robust redis version first
+                    # proc_lock = RedisLock(
+                    #     'afterglow_data_files_{}'.format(user_id),
+                    #     timeout=30)
+                    # with proc_lock:
+                    #     pass
+                    # Temporarily disable redis locks as they cause deadlocks
+                    # in the current version of portalocker
+                    # TODO: Reenable redis locks when upstream issue fixed
+                    raise redis.exceptions.ConnectionError()
                 except redis.exceptions.ConnectionError:
                     # Redis server not running, use file-based locking
                     lock_path = os.path.split(root)[0]
@@ -209,7 +214,7 @@ def get_data_file_db(user_id: Optional[int]):
                     proc_lock = FileLock(os.path.join(
                         lock_path, '.{}.lock'.format(user_id or '')),
                         timeout=30)
-                data_file_process_lock[root, pid] = proc_lock
+                data_file_process_lock[user_id, pid] = proc_lock
 
             # Prevent concurrent db initialization by multiple processes,
             # including those not initiated via multiprocessing, e.g. WSGI
@@ -222,7 +227,7 @@ def get_data_file_db(user_id: Optional[int]):
                         os.makedirs(root)
 
                     # Get engine from cache
-                    session = data_file_engine[root, pid][1]
+                    session = data_file_engine[user_id, pid][1]
                 except KeyError:
                     # Engine does not exist in the current process, create it
                     engine = create_data_file_engine(root)
@@ -275,7 +280,7 @@ def get_data_file_db(user_id: Optional[int]):
                                 alembic_context.run_migrations()
 
                     session = scoped_session(sessionmaker(bind=engine))
-                    data_file_engine[root, pid] = engine, session
+                    data_file_engine[user_id, pid] = engine, session
                 finally:
                     if isinstance(proc_lock, FileLock):
                         # noinspection PyBroadException
