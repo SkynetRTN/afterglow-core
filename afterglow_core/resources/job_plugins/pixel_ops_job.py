@@ -32,6 +32,8 @@ for _mod in (numpy, ndimage):
 for _name in ['fft', 'ifft', 'rfft', 'irfft', 'hfft', 'ihfft', 'rfftn',
               'irfftn', 'rfft2', 'irfft2', 'fft2', 'ifft2', 'fftn', 'ifftn']:
     context[_name] = getattr(numpy.fft, _name)
+# Keep a reference to numpy as some of its defs are overridden by scipy.ndimage
+context['np'] = numpy
 
 
 class PixelOpsJobResult(JobResult):
