@@ -63,6 +63,7 @@ setup(
         'oauthlib == 2.1.0',
         'Pillow == 8.3.2',
         'plaster_pastedeploy == 0.7',
+        'portalocker[redis]',
         'pycryptodome == 3.10.1',
         'python_dateutil == 2.8.1',
         'rawpy == 0.16.0',

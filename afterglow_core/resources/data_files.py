@@ -29,6 +29,8 @@ import numpy
 import astropy.io.fits as pyfits
 from astropy.wcs import FITSFixedWarning
 from astropy.io.fits.verify import VerifyWarning
+from portalocker import Lock as FileLock, RedisLock
+import redis.exceptions
 
 from .. import app, errors
 from ..models import DataFile, Session
@@ -55,8 +57,8 @@ except ImportError:
 
 __all__ = [
     # Data file db
-    'DataFileBase', 'data_files_engine',
-    'data_files_engine_lock', 'get_data_file_db',
+    'DataFileBase', 'data_file_engine', 'data_file_thread_lock',
+    'get_data_file_db',
     # Paths
     'get_root', 'get_data_file_path',
     # Metadata
@@ -140,8 +142,9 @@ def get_root(user_id: Optional[int]) -> str:
 
 
 # SQLA database engine
-data_files_engine = {}
-data_files_engine_lock = Lock()
+data_file_engine = {}
+data_file_thread_lock = Lock()
+data_file_process_lock = {}
 
 
 def create_data_file_engine(root: str) -> Engine:
@@ -183,69 +186,111 @@ def get_data_file_db(user_id: Optional[int]):
         root = get_root(user_id)
         pid = os.getpid()
 
-        with data_files_engine_lock:
-            # Make sure the user's data directory exists
-            if os.path.isfile(root):
-                os.remove(root)
-            if not os.path.isdir(root):
-                os.makedirs(root)
-
+        # Prevent race condition occurring when the user's data file dir and db
+        # are initialized by multiple web server processes and threads
+        with data_file_thread_lock:  # thread locking within the same process
+            # Obtain inter-process lock
             try:
-                # Get engine from cache
-                session = data_files_engine[root, pid][1]
+                proc_lock = data_file_process_lock[user_id, pid]
             except KeyError:
-                # Engine does not exist in the current process, create it
-                engine = create_data_file_engine(root)
-
-                # Create/upgrade data file db via Alembic
-                cfg = alembic_config.Config()
-                cfg.set_main_option(
-                    'script_location',
-                    os.path.abspath(os.path.join(
-                        __file__, '..', '..', 'db_migration',
-                        'data_files'))
-                )
-                script = ScriptDirectory.from_config(cfg)
-
-                # noinspection PyBroadException
                 try:
-                    # noinspection PyProtectedMember
-                    with EnvironmentContext(
+                    # # Try the more robust redis version first
+                    # proc_lock = RedisLock(
+                    #     'afterglow_data_files_{}'.format(user_id),
+                    #     timeout=30)
+                    # with proc_lock:
+                    #     pass
+                    # Temporarily disable redis locks as they cause deadlocks
+                    # in the current version of portalocker
+                    # TODO: Reenable redis locks when upstream issue fixed
+                    raise redis.exceptions.ConnectionError()
+                except redis.exceptions.ConnectionError:
+                    # Redis server not running, use file-based locking
+                    lock_path = os.path.split(root)[0]
+                    if os.path.isfile(lock_path):
+                        os.remove(lock_path)
+                    if not os.path.isdir(lock_path):
+                        os.makedirs(lock_path)
+                    proc_lock = FileLock(os.path.join(
+                        lock_path, '.{}.lock'.format(user_id or '')),
+                        timeout=30)
+                data_file_process_lock[user_id, pid] = proc_lock
+
+            # Prevent concurrent db initialization by multiple processes,
+            # including those not initiated via multiprocessing, e.g. WSGI
+            with proc_lock as _lock:
+                try:
+                    # Make sure the user's data directory exists
+                    if os.path.isfile(root):
+                        os.remove(root)
+                    if not os.path.isdir(root):
+                        os.makedirs(root)
+
+                    # Get engine from cache
+                    session = data_file_engine[user_id, pid][1]
+                except KeyError:
+                    # Engine does not exist in the current process, create it
+                    engine = create_data_file_engine(root)
+
+                    # Create/upgrade data file db via Alembic
+                    cfg = alembic_config.Config()
+                    cfg.set_main_option(
+                        'script_location',
+                        os.path.abspath(os.path.join(
+                            __file__, '..', '..', 'db_migration',
+                            'data_files'))
+                    )
+                    script = ScriptDirectory.from_config(cfg)
+
+                    # noinspection PyBroadException
+                    try:
+                        # noinspection PyProtectedMember
+                        with EnvironmentContext(
+                                    cfg, script,
+                                    fn=lambda rev, _:
+                                    script._upgrade_revs('head', rev),
+                                    as_sql=False, starting_rev=None,
+                                    destination_rev='head', tag=None,
+                                ), engine.connect() as connection:
+                            alembic_context.configure(connection=connection)
+
+                            with alembic_context.begin_transaction():
+                                alembic_context.run_migrations()
+                    except Exception:
+                        # Data file db migration failed due to an incompatible
+                        # migration, wipe the user's data file dir and recreate
+                        # from scratch
+                        print(f'Error running migration for user {user_id}')
+                        traceback.print_exc()
+                        engine.dispose()
+                        shutil.rmtree(root)
+                        os.mkdir(root)
+                        engine = create_data_file_engine(root)
+                        # noinspection PyProtectedMember
+                        with EnvironmentContext(
                                 cfg, script,
                                 fn=lambda rev, _:
                                 script._upgrade_revs('head', rev),
                                 as_sql=False, starting_rev=None,
                                 destination_rev='head', tag=None,
-                            ), engine.connect() as connection:
-                        alembic_context.configure(connection=connection)
+                        ), engine.connect() as connection:
+                            alembic_context.configure(connection=connection)
 
-                        with alembic_context.begin_transaction():
-                            alembic_context.run_migrations()
-                except Exception:
-                    # Data file db migration failed due to an incompatible
-                    # migration, wipe the user's data file dir and recreate
-                    # from scratch
-                    print(f'Error running migration for user {user_id}')
-                    traceback.print_exc()
-                    engine.dispose()
-                    shutil.rmtree(root)
-                    os.mkdir(root)
-                    engine = create_data_file_engine(root)
-                    # noinspection PyProtectedMember
-                    with EnvironmentContext(
-                            cfg, script,
-                            fn=lambda rev, _:
-                            script._upgrade_revs('head', rev),
-                            as_sql=False, starting_rev=None,
-                            destination_rev='head', tag=None,
-                    ), engine.connect() as connection:
-                        alembic_context.configure(connection=connection)
+                            with alembic_context.begin_transaction():
+                                alembic_context.run_migrations()
 
-                        with alembic_context.begin_transaction():
-                            alembic_context.run_migrations()
-
-                session = scoped_session(sessionmaker(bind=engine))
-                data_files_engine[root, pid] = engine, session
+                    session = scoped_session(sessionmaker(bind=engine))
+                    data_file_engine[user_id, pid] = engine, session
+                finally:
+                    if isinstance(proc_lock, FileLock):
+                        # noinspection PyBroadException
+                        try:
+                            # Some networked filesystems require this for file
+                            # locks
+                            _lock.flush()
+                            os.fsync(_lock.fileno())
+                        except Exception:
+                            pass
 
         # Instantiate scoped session in the current thread
         session()
@@ -368,6 +413,7 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
                      session_id: Optional[int] = None,
                      group_name: Optional[str] = None,
                      group_order: Optional[int] = 0,
+                     allow_duplicate_file_name: bool = True,
                      allow_duplicate_group_name: bool = False) -> DbDataFile:
     """
     Create a database entry for a new data file and save it to data file
@@ -393,6 +439,8 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
     :param session_id: optional user session ID; defaults to anonymous session
     :param group_name: optional name of the file group; default: data file name
     :param group_order: 0-based order of the file in the group
+    :param allow_duplicate_file_name: don't throw an error if `name` is set,
+        and one of the existing data files has the same name
     :param allow_duplicate_group_name: don't throw an error if the specified
         group name already exists; useful when importing several files
         belonging to the same group
@@ -423,25 +471,29 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
             name_cand = '{}_{:03d}'.format(name, i)
             i += 1
         name = 'file_{}.fits'.format(name_cand)
-    elif adb.query(DbDataFile).filter_by(
-            session_id=session_id, name=name).count():
-        raise DuplicateDataFileNameError(name=name)
+    elif not allow_duplicate_file_name:
+        existing_file = adb.query(DbDataFile).filter_by(
+            session_id=session_id, name=name).first()
+        if existing_file is not None:
+            raise DuplicateDataFileNameError(
+                name=name, file_id=existing_file.id)
 
-    if group_name is None:
-        # By default, set group name equal to data file name; make sure that
-        # it is unique within the session
-        group_name = name
+    if group_name is None or not allow_duplicate_group_name:
+        if group_name is None:
+            # By default, set group name equal to data file name
+            group_name = name
+        # Make sure that group name is unique within the session
         name_cand, i = group_name, 1
         while adb.query(DbDataFile).filter_by(
                 session_id=session_id, group_name=name_cand).count():
             name_cand = append_suffix(group_name, '_{:03d}'.format(i))
             i += 1
         group_name = name_cand
-    elif not allow_duplicate_group_name and adb.query(DbDataFile).filter_by(
-            session_id=session_id, group_name=group_name).count():
-        # Cannot create a new data file with an explicitly set group name
-        # matching an existing group name
-        raise DuplicateDataFileGroupNameError(group_name=group_name)
+    # elif not allow_duplicate_group_name and adb.query(DbDataFile).filter_by(
+    #         session_id=session_id, group_name=group_name).count():
+    #     # Cannot create a new data file with an explicitly set group name
+    #     # matching an existing group name
+    #     raise DuplicateDataFileGroupNameError(group_name=group_name)
 
     # Create/update a database row
     sqla_fields = dict(
@@ -872,7 +924,7 @@ def get_data_file_fits(user_id: Optional[int], file_id: int,
     try:
         return pyfits.open(get_data_file_path(user_id, file_id), mode)
     except Exception:
-        raise UnknownDataFileError(id=file_id)
+        raise UnknownDataFileError(file_id=file_id)
 
 
 def get_data_file_data(user_id: Optional[int], file_id: int) \
@@ -951,7 +1003,7 @@ def get_data_file_bytes(user_id: Optional[int], file_id: int,
             with open(get_data_file_path(user_id, file_id), 'rb') as f:
                 return f.read()
         except Exception:
-            raise UnknownDataFileError(id=file_id)
+            raise UnknownDataFileError(file_id=file_id)
 
     if PILImage is None:
         raise DataFileExportError(
@@ -1149,7 +1201,7 @@ def get_data_file(user_id: Optional[int], file_id: int) -> DataFile:
     except ValueError:
         db_data_file = None
     if db_data_file is None:
-        raise UnknownDataFileError(id=file_id)
+        raise UnknownDataFileError(file_id=file_id)
 
     # Convert to data model object
     return DataFile(db_data_file)
@@ -1326,7 +1378,8 @@ def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
                 return import_data_file(
                     adb, root, provider_id, asset.path, asset.metadata,
                     BytesIO(provider.get_asset_data(asset.path)),
-                    asset.name, duplicates, session_id=session_id)
+                    name or asset.name if len(path) == 1 else asset.name,
+                    duplicates, session_id=session_id)
 
             if not isinstance(path, list):
                 try:
@@ -1364,7 +1417,7 @@ def update_data_file(user_id: Optional[int], data_file_id: int,
 
     db_data_file = adb.query(DbDataFile).get(data_file_id)
     if db_data_file is None:
-        raise UnknownDataFileError(id=data_file_id)
+        raise UnknownDataFileError(file_id=data_file_id)
 
     modified = force
     for key, val in data_file.to_dict().items():
@@ -1403,7 +1456,7 @@ def update_data_file_asset(user_id: Optional[int], data_file_id: int,
 
     db_data_file = adb.query(DbDataFile).get(data_file_id)
     if db_data_file is None:
-        raise UnknownDataFileError(id=data_file_id)
+        raise UnknownDataFileError(file_id=data_file_id)
 
     try:
         db_data_file.data_provider = provider_id
@@ -1463,7 +1516,7 @@ def delete_data_file(user_id: Optional[int], id: int) -> None:
 
     db_data_file = adb.query(DbDataFile).get(id)
     if db_data_file is None:
-        raise UnknownDataFileError(id=id)
+        raise UnknownDataFileError(file_id=id)
     try:
         adb.delete(db_data_file)
         adb.commit()

@@ -1,5 +1,5 @@
 """
-Afterglow Core: data file errors (subcodes 20xx)
+Afterglow Core: data file errors
 """
 
 from . import AfterglowError
@@ -20,10 +20,9 @@ class UnknownDataFileError(AfterglowError):
     Requested data file with unknown ID
 
     Extra attributes::
-        id: requested data file ID
+        file_id: requested data file ID
     """
     code = 404
-    subcode = 2000
     message = 'Unknown data file ID'
 
 
@@ -33,10 +32,10 @@ class CannotCreateDataFileDirError(AfterglowError):
     writable or database creation error)
 
     Extra attributes::
-        reason: error message describing the reason why the operation has failed
+        reason: error message describing the reason why the operation
+            has failed
     """
     code = 403
-    subcode = 2001
     message = 'Cannot create data file storage directory'
 
 
@@ -49,7 +48,6 @@ class CannotImportFromCollectionAssetError(AfterglowError):
         path: requested asset path
     """
     code = 403
-    subcode = 2002
     message = 'Cannot import from collection asset'
 
 
@@ -61,7 +59,6 @@ class UnrecognizedDataFormatError(AfterglowError):
         none
     """
     code = 403
-    subcode = 2003
     message = 'Data file format not recognized'
 
 
@@ -73,7 +70,6 @@ class MissingWCSError(AfterglowError):
         none
     """
     code = 400
-    subcode = 2004
     message = 'Missing WCS info'
 
 
@@ -85,7 +81,6 @@ class UnknownSessionError(AfterglowError):
         id: session ID or name
     """
     code = 404
-    subcode = 2005
     message = 'Unknown session'
 
 
@@ -97,7 +92,6 @@ class DuplicateSessionNameError(AfterglowError):
         name: session name
     """
     code = 409
-    subcode = 2006
     message = 'Duplicate session name'
 
 
@@ -109,7 +103,6 @@ class UnknownDataFileGroupError(AfterglowError):
         group_name: requested data file group name
     """
     code = 404
-    subcode = 2007
     message = 'Unknown data file group'
 
 
@@ -120,7 +113,6 @@ class DataFileExportError(AfterglowError):
     Extra attributes::
         reason: error message describing the reason of failure
     """
-    subcode = 2008
     message = 'Cannot export data file'
 
 
@@ -132,7 +124,6 @@ class DataFileUploadNotAllowedError(AfterglowError):
         None
     """
     code = 403
-    subcode = 2009
     message = 'Data file upload not allowed'
 
 
@@ -143,9 +134,9 @@ class DuplicateDataFileNameError(AfterglowError):
 
     Extra attributes::
         name: requested data file name
+        file_id: ID of existing data file with the same name
     """
     code = 409
-    subcode = 2010
     message = 'Duplicate data file name'
 
 
@@ -158,5 +149,4 @@ class DuplicateDataFileGroupNameError(AfterglowError):
         group_name: requested data file group name
     """
     code = 409
-    subcode = 2011
     message = 'Duplicate data file group name'

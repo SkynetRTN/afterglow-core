@@ -50,6 +50,7 @@ class IAstrometry(AfterglowSchema):
     pm_pos_angle_pixel: float = Float()
     pm_epoch: datetime = DateTime()
     flux: float = Float()
+    sat_pixels = Integer()
 
 
 class IFwhm(AfterglowSchema):
@@ -67,7 +68,7 @@ class SourceExtractionData(ISourceMeta, IAstrometry, IFwhm, ISourceId):
     Description of object returned by source extraction
     """
     def __init__(self, source: Optional[SourceExtractionData] = None,
-                 row: Optional[void] = None, x0: int = 0, y0: int = 0,
+                 row: Optional[void] = None, ofs_x: int = 0, ofs_y: int = 0,
                  wcs: Optional[WCS] = None, **kwargs):
         """
         Create source extraction data class instance from another source
@@ -76,10 +77,10 @@ class SourceExtractionData(ISourceMeta, IAstrometry, IFwhm, ISourceId):
         :param source: create from another source extraction data object ("copy
             constructor")
         :param row: source table row
-        :param x0: X offset to convert from source table coordinates to global
-            image coordinates; used only with `row`
-        :param y0: Y offset to convert from source table coordinates to global
-            image coordinates; used only with `row`
+        :param ofs_x: X offset to convert from source table coordinates
+            to global image coordinates; used only with `row`
+        :param ofs_y: Y offset to convert from source table coordinates
+            to global image coordinates; used only with `row`
         :param wcs: optional WCS structure; if present, compute RA/Dec; used
             only with `row`
         :param kwargs: see :class:`ISourceMeta` and :class:`ISourceId`
@@ -87,12 +88,16 @@ class SourceExtractionData(ISourceMeta, IAstrometry, IFwhm, ISourceId):
         super().__init__(source, **kwargs)
 
         if row is not None:
-            self.x = row['x'] + x0
-            self.y = row['y'] + y0
+            self.x = row['x'] + ofs_x
+            self.y = row['y'] + ofs_y
             self.fwhm_x = row['a']*sigma_to_fwhm
             self.fwhm_y = row['b']*sigma_to_fwhm
             self.theta = rad2deg(row['theta'])
             self.flux = row['flux']
+            try:
+                self.sat_pixels = row['saturated']
+            except ValueError:
+                pass
 
         if wcs is not None:
             # Apply astrometric calibration

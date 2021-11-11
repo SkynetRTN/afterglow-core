@@ -12,7 +12,7 @@ info:
     email: vkoupr@email.unc.edu
   license:
     name: Apache 2.0
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
   version: 1.0.0
 servers:
   - url: https://afterglow.skynet.unc.edu/api/v1
@@ -60,18 +60,17 @@ components:
       description: Afterglow API error
       type: object
       properties:
-        subcode:
-          description: exception-specific error code; by convention, has the form "nmm", where the most significant digits ("n") define the Afterglow Core module and the two least significant digits ("mm") define specific exception within that module, from 0 to 99
-          type: integer
-          minimum: 0
-        exception:
-          description: exception class name
+        status:
+          description: HTTP status
           type: string
-        message:
-          description: error message
+        id:
+          description: unique string error code
           type: string
-        traceback:
-          description: Python exception traceback; only returned for HTTP 500 Internal Server Error
+        detail:
+          description: detailed error description
+        meta:
+          description: optional error-specific metadata
+          type: object
 
     Token:
       description: personal access token
@@ -124,7 +123,7 @@ components:
                     description: name of the field
                     type: string
           example:
-            subcode: 2
+            id: ValidationError
             message: "Validation failed"
 
     UnknownTokenError:
@@ -135,7 +134,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 400
-            subcode: 114
+            id: UnknownTokenError
             message: "Unknown token error"
 
     UnknownClientError:
@@ -152,7 +151,7 @@ components:
                     type: string
           example:
             code: 404
-            subcode: 200
+            id: UnknownClientError
             message: "Unknown OAuth2 client ID"
 
     MissingClientIdError:
@@ -163,7 +162,7 @@ components:
             $ref: '#/components/schemas/AfterglowError'
           example:
             code: 400
-            subcode: 201
+            id: MissingClientIdError
             message: "Missing client ID"
 
 

@@ -36,7 +36,7 @@ def afterglow_error_handler(e: Exception) -> Response:
     error = {
         'status': HTTP_STATUS_CODES.get(
             status, '{} Unknown Error'.format(status)),
-        'code': str(getattr(e, 'subcode', e.__class__.__name__)),
+        'id': str(getattr(e, 'id', e.__class__.__name__)),
         'detail': str(e),
     }
 
@@ -69,7 +69,7 @@ def unauthorized_error_handler(e: Exception) -> Response:
         json.dumps({
             'error': {
                 'status': HTTP_STATUS_CODES[401],
-                'code': e.__class__.__name__,
+                'id': e.__class__.__name__,
                 'detail': str(e),
             },
             'links': {'self': request.url},
@@ -89,7 +89,7 @@ def forbidden_error_handler(e: Exception) -> Response:
         json.dumps({
             'error': {
                 'status': HTTP_STATUS_CODES[403],
-                'code': e.__class__.__name__,
+                'id': e.__class__.__name__,
                 'detail': str(e),
             },
             'links': {'self': request.url},
@@ -110,7 +110,7 @@ def not_found_error_handler(e: Exception) -> Response:
         json.dumps({
             'error': {
                 'status': HTTP_STATUS_CODES[404],
-                'code': e.__class__.__name__,
+                'id': e.__class__.__name__,
                 'detail': str(e),
             },
             'links': {'self': request.url},
@@ -131,7 +131,7 @@ def internal_server_error_handler(e: Exception) -> Response:
         json.dumps({
             'error': {
                 'status': HTTP_STATUS_CODES[500],
-                'code': e.__class__.__name__,
+                'id': e.__class__.__name__,
                 'detail': str(e),
                 'meta': {
                     'traceback': traceback.format_tb(sys.exc_info()[-1]),
@@ -145,7 +145,8 @@ class AfterglowErrorMeta(type):
     """
     Metaclass for class:`AfterglowError`; needed to automatically install error
     handler for each exception subclassing from `AfterglowError`, since Flask
-    does not intercept subclassed exceptions in the base exception class handler
+    does not intercept subclassed exceptions in the base exception class
+    handler
     """
     def __new__(mcs, *args, **kwargs):
         c = type.__new__(mcs, *args, **kwargs)
@@ -159,17 +160,14 @@ class AfterglowError(exceptions.HTTPException, metaclass=AfterglowErrorMeta):
 
     :Attributes::
         code: HTTP status code for the exception, defaults to 400 (BAD REQUEST)
-        subcode: exception-specific error code; by convention, has the form
-            "nmm", where the most significant digits ("n") define the Afterglow
-            Core module and the two least significant digits ("mm") define
-            specific exception within that module, from 0 to 99
+        id: unique string error code, e.g. exception class name
         meta: dictionary containing the optional exception attributes passed
             as keyword arguments when raising the exception and sent to the
             client in JSON
         headers: any additional HTTP headers to send
     """
     code = 400  # HTTP status code
-    subcode: int = None  # Afterglow-specific error code
+    id: str = None  # Afterglow-specific error code
     meta: dict = None  # additional error data
     message: str = None  # error message
 
@@ -182,6 +180,8 @@ class AfterglowError(exceptions.HTTPException, metaclass=AfterglowErrorMeta):
             the error description text
         """
         super(AfterglowError, self).__init__()
+        if self.id is None:
+            self.id = self.__class__.__name__
         if not self.description and self.__doc__:
             self.description = self.__doc__
         self.meta = kwargs
@@ -212,7 +212,6 @@ class MethodNotImplementedError(AfterglowError):
         method_name: name of the method to implement
     """
     code = 501
-    subcode = 1
     message = 'Method not implemented'
 
 
@@ -224,7 +223,6 @@ class ValidationError(AfterglowError):
     Extra attributes::
         field: name of the field
     """
-    subcode = 2
     message = 'Validation failed'
 
     def __init__(self, field: str, message: Optional[str] = None,
@@ -242,7 +240,6 @@ class MissingFieldError(ValidationError):
     Extra attributes::
         field: name of the field
     """
-    subcode = 3
     message = 'Missing required data'
 
 
@@ -254,6 +251,5 @@ class NotAcceptedError(AfterglowError):
         accepted_mimetypes: Accept header value sent by the client
     """
     code = 406
-    subcode = 4
     message = 'Sending data in the format requested by HTTP Accept header ' \
         'is not supported'

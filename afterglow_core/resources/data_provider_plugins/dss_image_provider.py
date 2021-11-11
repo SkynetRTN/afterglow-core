@@ -3,10 +3,12 @@ Afterglow Core: imaging survey data provider plugin
 """
 
 from typing import List as TList, Optional, Tuple, Union
+from io import BytesIO
 
 from marshmallow.fields import Float, String
 from marshmallow.validate import OneOf, Range
 import requests
+import astropy.io.fits as pyfits
 
 from ...models import DataProvider, DataProviderAsset
 from ...errors import MissingFieldError, ValidationError
@@ -65,11 +67,11 @@ class DSSImageDataProvider(DataProvider):
         """
         try:
             position, size = path.split('\\')
-            ra, dec = position.split(',')
-            ra, dec = float(ra), float(dec)
-            if not 0 <= ra < 24:
-                raise ValueError('Expected 0 <= ra < 24')
-            if not -90 <= dec <= 90:
+            ra_degs, dec_degs = position.split(',')
+            ra_degs, dec_degs = float(ra_degs), float(dec_degs)
+            if not 0 <= ra_degs < 360:
+                raise ValueError('Expected 0 <= ra < 360')
+            if not -90 <= dec_degs <= 90:
                 raise ValueError('Expected -90 <= dec <= 90')
             if ',' in size:
                 width, height = size.split(',')
@@ -83,16 +85,16 @@ class DSSImageDataProvider(DataProvider):
         except (TypeError, ValueError) as e:
             raise ValidationError('path', str(e))
 
-        return ra, dec, width, height
+        return ra_degs, dec_degs, width, height
 
     @staticmethod
-    def _get_asset(ra: float, dec: float, width: float, height: float) \
-            -> DataProviderAsset:
+    def _get_asset(ra_degs: float, dec_degs: float, width: float,
+                   height: float) -> DataProviderAsset:
         """
         Return image survey data provider asset for the given parameters
 
-        :param ra: right ascension of field center in degrees
-        :param dec: declination of field center in degrees
+        :param ra_degs: right ascension of field center in degrees
+        :param dec_degs: declination of field center in degrees
         :param width: field width in arcminutes
         :param height: field height in arcminutes
 
@@ -103,11 +105,12 @@ class DSSImageDataProvider(DataProvider):
         else:
             size = '{},{}'.format(width, height)
         return DataProviderAsset(
-            name='DSS_{},{}'.format(ra, dec),
+            name='DSS_{},{}'.format(ra_degs, dec_degs),
             collection=False,
-            path='{},{}\\{}'.format(ra, dec, size),
+            path='{},{}\\{}'.format(ra_degs, dec_degs, size),
             metadata={
-                'type': 'FITS', 'ra': ra, 'dec': dec,
+                'type': 'FITS', 'survey': 'DSS',
+                'ra': ra_degs, 'dec': dec_degs,
                 'fov_ra': width, 'fov_dec': height,
                 'layers': 1,
             },
@@ -181,7 +184,7 @@ class DSSImageDataProvider(DataProvider):
         elif height is None:
             height = width
 
-        return [self._get_asset(ra_hours, dec_degs, width, height)], None
+        return [self._get_asset(ra_hours*15, dec_degs, width, height)], None
 
     def get_asset(self, path: str) -> DataProviderAsset:
         r"""
@@ -202,14 +205,14 @@ class DSSImageDataProvider(DataProvider):
 
         :return: asset data
         """
-        ra, dec, width, height = self._get_asset_params(path)
+        ra_degs, dec_degs, width, height = self._get_asset_params(path)
         try:
             if self.server == 'STScI':
                 url = 'https://stdatu.stsci.edu/cgi-bin/dss_search'
                 params = {
                     'v': 'poss2ukstu_red',
-                    'r': str(ra),
-                    'd': str(dec),
+                    'r': str(ra_degs),
+                    'd': str(dec_degs),
                     'e': 'J2000',
                     'h': str(height),
                     'w': str(width),
@@ -221,8 +224,8 @@ class DSSImageDataProvider(DataProvider):
             else:
                 url = 'https://archive.eso.org/dss/dss/image'
                 params = {
-                    'ra': str(ra),
-                    'dec': str(dec),
+                    'ra': str(ra_degs),
+                    'dec': str(dec_degs),
                     'equinox': 'J2000',
                     'name': '',
                     'x': str(width),
@@ -243,4 +246,11 @@ class DSSImageDataProvider(DataProvider):
                 reason='Request failed (HTTP status {})'
                 .format(res.status_code))
 
+        buf = BytesIO(res.content)
+        with pyfits.open(buf, 'readonly') as f:
+            if len(f) > 1:
+                # Remove extension HDU
+                out = BytesIO()
+                f[0].writeto(out, output_verify='silentfix+ignore')
+                return out.getvalue()
         return res.content

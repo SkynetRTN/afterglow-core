@@ -32,6 +32,8 @@ for _mod in (numpy, ndimage):
 for _name in ['fft', 'ifft', 'rfft', 'irfft', 'hfft', 'ihfft', 'rfftn',
               'irfftn', 'rfft2', 'irfft2', 'fft2', 'ifft2', 'fftn', 'ifftn']:
     context[_name] = getattr(numpy.fft, _name)
+# Keep a reference to numpy as some of its defs are overridden by scipy.ndimage
+context['np'] = numpy
 
 
 class PixelOpsJobResult(JobResult):
@@ -125,7 +127,7 @@ class PixelOpsJob(Job):
                     except IndexError:
                         pass
                     except Exception as e:
-                        self.add_error('Image #{:d}: {}'.format(i, e))
+                        self.add_error(e, {'image_no': i})
                     finally:
                         self.update_progress((i + 1)/len(data_files)*100)
             else:
@@ -142,8 +144,7 @@ class PixelOpsJob(Job):
                 try:
                     self.handle_expr(expr, local_vars, self.file_ids[i])
                 except Exception as e:
-                    self.add_error(
-                        'Data file ID {}: {}'.format(self.file_ids[i], e))
+                    self.add_error(e, {'file_id': self.file_ids[i]})
                 finally:
                     self.update_progress((i + 1)/len(data_files)*100)
 

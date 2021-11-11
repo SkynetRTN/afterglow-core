@@ -1,5 +1,5 @@
 """
-Afterglow Core: authentication errors (subcodes 1xx)
+Afterglow Core: authentication errors
 """
 
 from . import AfterglowError
@@ -30,7 +30,6 @@ class NotAuthenticatedError(AuthError):
         error_msg: authentication error message
     """
     code = 401
-    subcode = 100
     message = 'Not authenticated'
 
 
@@ -42,7 +41,6 @@ class NoAdminRegisteredError(AuthError):
     Extra attributes::
         None
     """
-    subcode = 101
     message = 'No admins registered'
 
 
@@ -53,7 +51,6 @@ class AdminRequiredError(AuthError):
     Extra attributes::
         None
     """
-    subcode = 102
     message = 'Must be admin to do that'
 
 
@@ -64,7 +61,6 @@ class AdminOrSameUserRequiredError(AuthError):
     Extra attributes::
         None
     """
-    subcode = 103
     message = 'Must be admin or same user to do that'
 
 
@@ -76,7 +72,6 @@ class UnknownUserError(AuthError):
         id: user ID
     """
     code = 404
-    subcode = 104
     message = 'Unknown user'
 
 
@@ -87,7 +82,6 @@ class InactiveUserError(AfterglowError):
     Extra attributes::
         None
     """
-    subcode = 105
     message = 'The user is deactivated'
 
 
@@ -99,7 +93,6 @@ class CannotDeactivateTheOnlyAdminError(AuthError):
     Extra attributes::
         None
     """
-    subcode = 106
     message = 'Cannot deactivate/delete the only admin in the system'
 
 
@@ -112,7 +105,6 @@ class DuplicateUsernameError(AuthError):
         username: duplicate username
     """
     code = 409
-    subcode = 107
     message = 'User with this username already exists'
 
 
@@ -124,7 +116,6 @@ class UnknownAuthMethodError(AuthError):
         method: auth method ID
     """
     code = 404
-    subcode = 108
     message = 'Unknown authentication method'
 
 
@@ -135,7 +126,6 @@ class CannotSetProtectedUserDataError(AfterglowError):
     Extra attributes::
         attr: read-only user attribute
     """
-    subcode = 109
     message = 'Cannot modify protected user info'
 
 
@@ -148,7 +138,6 @@ class HttpAuthFailedError(AuthError):
         None
     """
     code = 401
-    subcode = 110
     message = 'Invalid or missing username/password or authentication token'
     # Causes browsers to pop-up login form upon failed login attempt
     # headers = [
@@ -163,7 +152,6 @@ class CannotDeleteCurrentUserError(AuthError):
     Extra attributes::
         None
     """
-    subcode = 111
     message = 'Cannot delete the currently authenticated user'
 
 
@@ -174,7 +162,6 @@ class InitPageNotAvailableError(AuthError):
     Extra attributes::
         None
     """
-    subcode = 112
     message = 'Afterglow Core has already been initialized'
 
 
@@ -185,7 +172,6 @@ class NotInitializedError(AuthError):
     Extra attributes::
         None
     """
-    subcode = 113
     message = 'Afterglow Core has not yet been initialized'
 
 
@@ -197,5 +183,4 @@ class UnknownTokenError(AfterglowError):
         None
     """
     code = 400
-    subcode = 114
     message = 'Unknown token'

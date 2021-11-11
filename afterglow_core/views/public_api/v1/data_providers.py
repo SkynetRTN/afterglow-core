@@ -189,7 +189,8 @@ def data_providers_assets(id: Union[int, str]) -> Response:
 
         # "force" is required to recursively delete a non-empty collection
         # asset
-        if asset.collection and provider.get_child_assets(path) and not force:
+        if asset.collection and provider.get_child_assets(path)[0] and \
+                not force:
             raise CannotDeleteNonEmptyCollectionAssetError()
 
         provider.delete_asset(path, **params)

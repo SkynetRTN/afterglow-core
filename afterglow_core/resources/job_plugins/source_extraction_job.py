@@ -44,6 +44,8 @@ class SourceExtractionSettings(AfterglowSchema):
     clean: float = Float(default=1)
     centroid: bool = Boolean(default=True)
     limit: int = Integer(default=None)
+    sat_level: float = Float(default=63000)
+    discard_saturated: int = Integer(default=1)
 
 
 class SourceExtractionJobResult(JobResult):
@@ -109,6 +111,7 @@ def run_source_extraction_job(job: Job,
         deblend_contrast=settings.deblend_contrast,
         clean=settings.clean,
         centroid=settings.centroid,
+        discard_saturated=settings.discard_saturated,
     )
 
     result_data = []
@@ -131,9 +134,14 @@ def run_source_extraction_job(job: Job,
             flt = hdr.get('FILTER')
             scope = hdr.get('TELESCOP')
 
+            if settings.discard_saturated > 0:
+                sat_img = pixels >= settings.sat_level
+            else:
+                sat_img = None
+
             # Extract sources
             source_table, background, background_rms = extract_sources(
-                pixels, gain=gain, **extraction_kw)
+                pixels, gain=gain, sat_img=sat_img, **extraction_kw)
 
             if settings.limit and len(source_table) > settings.limit:
                 # Leave only the given number of the brightest sources
@@ -152,8 +160,8 @@ def run_source_extraction_job(job: Job,
             result_data += [
                 SourceExtractionData(
                     row=row,
-                    x0=settings.x,
-                    y0=settings.y,
+                    ofs_x=settings.x - 1,
+                    ofs_y=settings.y - 1,
                     wcs=wcs,
                     file_id=id,
                     time=epoch,
@@ -165,6 +173,6 @@ def run_source_extraction_job(job: Job,
             if update_progress:
                 job.update_progress((file_no + 1)/len(job_file_ids)*100)
         except Exception as e:
-            job.add_error('Data file ID {}: {}'.format(id, e))
+            job.add_error(e, {'file_id': id})
 
     return result_data

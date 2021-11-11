@@ -1,5 +1,5 @@
 """
-Afterglow Core: OAuth2 server errors (subcodes 2xx)
+Afterglow Core: OAuth2 server errors
 """
 
 from . import AfterglowError
@@ -18,7 +18,6 @@ class UnknownClientError(AfterglowError):
         id: client ID requested
     """
     code = 404
-    subcode = 200
     message = 'Unknown OAuth2 client ID'
 
 
@@ -30,5 +29,4 @@ class MissingClientIdError(AfterglowError):
         None
     """
     code = 400
-    subcode = 201
     message = 'Missing client ID'

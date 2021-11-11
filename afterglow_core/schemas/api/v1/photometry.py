@@ -55,7 +55,7 @@ class PhotSettingsSchema(AfterglowSchema):
     fix_aper: bool = Boolean(default=True)
     fix_ell: bool = Boolean(default=True)
     fix_rot: bool = Boolean(default=True)
-    apcorr_tol: float = Float(default=0)
+    apcorr_tol: float = Float(default=0.0001)
 
 
 class PhotometryDataSchema(SourceExtractionDataSchema, IPhotometrySchema,

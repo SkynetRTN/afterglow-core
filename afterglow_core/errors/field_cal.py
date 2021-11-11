@@ -1,5 +1,5 @@
 """
-Afterglow Core: photometric calibration errors (subcodes 40xx)
+Afterglow Core: photometric calibration errors
 """
 
 from . import AfterglowError
@@ -18,7 +18,6 @@ class UnknownFieldCalError(AfterglowError):
         id: requested field cal ID
     """
     code = 404
-    subcode = 4000
     message = 'Unknown field cal'
 
 
@@ -30,5 +29,4 @@ class DuplicateFieldCalError(AfterglowError):
         name: field cal name
     """
     code = 409
-    subcode = 4001
     message = 'Duplicate field cal name'

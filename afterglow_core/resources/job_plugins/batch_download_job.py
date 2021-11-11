@@ -49,7 +49,7 @@ class BatchDownloadJob(Job):
                 df = get_data_file(self.user_id, file_id)
                 groups.setdefault(df.group_name, set()).add((file_id, df.name))
             except Exception as e:
-                self.add_error('Data file ID {}: {}'.format(file_id, e))
+                self.add_error(e, {'file_id': file_id})
         for group_name in self.group_names:
             try:
                 group = get_data_file_group(self.user_id, group_name)
@@ -58,8 +58,7 @@ class BatchDownloadJob(Job):
                 for df in group:
                     groups.setdefault(group_name, set()).add((df.id, df.name))
             except Exception as e:
-                self.add_error(
-                    'Data file group "{}": {}'.format(group_name, e))
+                self.add_error(e, {'group_name': group_name})
 
         # Ensure unique filenames within the archive
         file_id_lists, filenames = list(zip(
@@ -84,11 +83,11 @@ class BatchDownloadJob(Job):
                     file_id = file_ids[0]
                     try:
                         zf.write(
-                            get_data_file_path(self.user_id, file_id), filename)
+                            get_data_file_path(self.user_id, file_id),
+                            filename)
                     except Exception as e:
                         self.add_error(
-                            'Data file ID {} ({}): {}'.format(
-                                file_id, filename, e))
+                            e, {'file_id': file_id, 'filename': filename})
                 else:
                     for i, file_id in enumerate(file_ids):
                         try:
@@ -97,8 +96,7 @@ class BatchDownloadJob(Job):
                                 filename + '/' + filename + '.' + str(i + 1))
                         except Exception as e:
                             self.add_error(
-                                'Data file ID {} ({}): {}'.format(
-                                    file_id, filename, e))
+                                e, {'file_id': file_id, 'filename': filename})
 
                 self.update_progress((file_no + 1)/len(filenames)*100)
 
@@ -137,7 +135,7 @@ class BatchAssetDownloadJob(Job):
             if a.collection:
                 if not provider.browseable:
                     raise NonBrowseableDataProviderError(id=provider.id)
-                for child_asset in provider.get_child_assets(asset_path):
+                for child_asset in provider.get_child_assets(asset_path)[0]:
                     walk(child_asset.path, name + '/' + child_asset.name)
             else:
                 assets.append((a, name))
@@ -160,8 +158,7 @@ class BatchAssetDownloadJob(Job):
                 try:
                     zf.writestr(filename, provider.get_asset_data(asset.path))
                 except Exception as e:
-                    self.add_error(
-                        'Asset "{}": {}'.format(asset.path, e))
+                    self.add_error(e, {'path': asset.path})
 
                 self.update_progress((file_no + 1)/len(assets)*100)
 

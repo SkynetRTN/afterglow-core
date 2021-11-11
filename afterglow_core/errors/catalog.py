@@ -1,5 +1,5 @@
 """
-Afterglow Core: catalog errors (subcodes 30xx)
+Afterglow Core: catalog errors
 """
 
 from . import AfterglowError
@@ -18,5 +18,4 @@ class UnknownCatalogError(AfterglowError):
         name: catalog name requested
     """
     code = 404
-    subcode = 3000
     message = 'Unknown catalog'

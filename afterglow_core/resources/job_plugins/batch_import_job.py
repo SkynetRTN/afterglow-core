@@ -67,7 +67,7 @@ class BatchImportJob(Job):
                             return sum(
                                 [recursive_import(child_asset.path, depth + 1)
                                  for child_asset in provider.get_child_assets(
-                                    asset.path)], [])
+                                    asset.path)[0]], [])
                         return [f.id for f in import_data_file(
                             adb, root, provider.id, asset.path, asset.metadata,
                             BytesIO(provider.get_asset_data(asset.path)),
@@ -85,7 +85,7 @@ class BatchImportJob(Job):
                     self.result.file_ids += sum(
                         [recursive_import(p) for p in asset_path], [])
                 except Exception as e:
-                    self.add_error('Data file #{}: {}'.format(i + 1, e))
+                    self.add_error(e, {'file_no': i + 1})
                 finally:
                     self.update_progress((i + 1)/nfiles*100)
 

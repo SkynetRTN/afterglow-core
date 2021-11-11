@@ -1,5 +1,5 @@
 """
-Afterglow Core: local disk data provider errors (subcodes 11xx)
+Afterglow Core: local disk data provider errors
 """
 
 from . import AfterglowError
@@ -15,7 +15,6 @@ class AssetOutsideRootError(AfterglowError):
     An asset requested that is outside the root data directory
     """
     code = 404
-    subcode = 1100
     message = 'Asset path outside the data directory'
 
 
@@ -28,5 +27,4 @@ class FilesystemError(AfterglowError):
         reason: error message describing the reason of failure
     """
     code = 403
-    subcode = 1101
     message = 'Filesystem error'

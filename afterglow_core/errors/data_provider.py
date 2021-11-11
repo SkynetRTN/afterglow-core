@@ -1,5 +1,5 @@
 """
-Afterglow Core: data provider errors (subcodes 10xx)
+Afterglow Core: data provider errors
 """
 
 from . import AfterglowError
@@ -23,7 +23,6 @@ class UnknownDataProviderError(AfterglowError):
         id: data provider ID requested
     """
     code = 404
-    subcode = 1000
     message = 'Unknown data provider ID'
 
 
@@ -36,7 +35,6 @@ class ReadOnlyDataProviderError(AfterglowError):
         id: data provider ID requested
     """
     code = 403
-    subcode = 1001
     message = 'Read-only data provider'
 
 
@@ -49,7 +47,6 @@ class NonBrowseableDataProviderError(AfterglowError):
         id: data provider ID requested
     """
     code = 403
-    subcode = 1002
     message = 'Non-browseable data provider'
 
 
@@ -62,7 +59,6 @@ class NonSearchableDataProviderError(AfterglowError):
         id: data provider ID requested
     """
     code = 403
-    subcode = 1003
     message = 'Non-searchable data provider'
 
 
@@ -75,7 +71,6 @@ class AssetNotFoundError(AfterglowError):
         reason: optional extra error info
     """
     code = 404
-    subcode = 1004
     message = 'No asset found at the given path'
 
 
@@ -87,7 +82,6 @@ class AssetAlreadyExistsError(AfterglowError):
         None
     """
     code = 409
-    subcode = 1005
     message = 'Asset already exists at the given path'
 
 
@@ -99,7 +93,6 @@ class CannotSearchInNonCollectionError(AfterglowError):
         None
     """
     code = 403
-    subcode = 1006
     message = 'Can only search in collection assets'
 
 
@@ -111,7 +104,6 @@ class CannotUpdateCollectionAssetError(AfterglowError):
         None
     """
     code = 403
-    subcode = 1007
     message = 'Cannot update a collection asset'
 
 
@@ -123,7 +115,6 @@ class CannotDeleteNonEmptyCollectionAssetError(AfterglowError):
         None
     """
     code = 403
-    subcode = 1008
     message = 'Cannot delete non-empty collection asset without "force"'
 
 
@@ -138,7 +129,6 @@ class QuotaExceededError(AfterglowError):
         size: size of asset being created or updated
     """
     code = 403
-    subcode = 1009
     message = 'Storage quota exceeded'
 
 
@@ -151,5 +141,4 @@ class UploadNotAllowedError(AfterglowError):
         None
     """
     code = 403
-    subcode = 1010
     message = 'Upload not allowed'
