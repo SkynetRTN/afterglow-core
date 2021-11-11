@@ -37,6 +37,8 @@ class SourceExtractionSettingsSchema(AfterglowSchema):
     clean: float = Float(default=1)
     centroid: bool = Boolean(default=True)
     limit: int = Integer(default=None)
+    sat_level: float = Float(default=63000)
+    discard_saturated: int = Integer(default=1)
 
 
 class SourceExtractionJobResultSchema(JobResultSchema):
