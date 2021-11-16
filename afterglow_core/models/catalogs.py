@@ -63,7 +63,8 @@ class Catalog(AfterglowSchema):
             ...
 
     Methods:
-        query_objects: return a list of catalog objects with the specified names
+        query_objects: return a list of catalog objects with the specified
+            names
         query_box: return catalog objects within the specified rectangular
             region
         query_circ: return catalog objects within the specified circular
@@ -116,12 +117,13 @@ class Catalog(AfterglowSchema):
         :param ra_hours: right ascension of region center in hours
         :param dec_degs: declination of region center in degrees
         :param width_arcmins: width of region in arcminutes
-        :param height_arcmins: optional height of region in arcminutes; defaults
-            to `width_arcmins`
+        :param height_arcmins: optional height of region in arcminutes;
+            defaults to `width_arcmins`
         :param constraints: optional constraints on the column values
         :param limit: optional limit on the number of objects to return
 
-        :return: list of catalog objects within the specified rectangular region
+        :return: list of catalog objects within the specified rectangular
+            region
         """
         raise errors.MethodNotImplementedError(
             class_name=self.__class__.__name__, method_name='query_rect')

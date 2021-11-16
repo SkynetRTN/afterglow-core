@@ -31,7 +31,8 @@ class VizierCatalog(Catalog):
         col_mapping: mapping between :class:`CatalogObject` attributes
             and VizieR column names; the values are either column names as is
             (e.g. {'dec_degs': 'DEJ2000'}) or expressions involving these names
-            and possibly any NumPy exports, e.g. {'some_attr': 'sqrt(some_col)'}
+            and possibly any NumPy exports,
+            e.g. {'some_attr': 'sqrt(some_col)'}
         extra_cols: optional extra column names that should be added to query
             arguments but don't map to any :class:`CatalogObject` attributes
     """
@@ -69,7 +70,8 @@ class VizierCatalog(Catalog):
                     # Bad column mapping expression
                     raise ValueError(
                         'Bad column definition "{}" for attribute "{}" of '
-                        'catalog "{}": {}'.format(expr, attrname, self.name, e))
+                        'catalog "{}": {}'
+                        .format(expr, attrname, self.name, e))
 
         if self.extra_cols:
             self._columns += self.extra_cols
@@ -161,9 +163,12 @@ class VizierCatalog(Catalog):
 
         :return: list of catalog objects with the given names
         """
+        kwargs = {}
+        if self.vizier_server:
+            kwargs['vizier_server'] = self.vizier_server
         viz = Vizier(
-            vizier_server=self.vizier_server, catalog=self.vizier_catalog,
-            columns=self._columns, row_limit=1)
+            catalog=self.vizier_catalog, columns=self._columns,
+            row_limit=len(names), **kwargs)
         rows = []
         for name in names:
             resp = viz.query_object(name, catalog=viz.catalog, cache=False)
@@ -185,13 +190,20 @@ class VizierCatalog(Catalog):
 
         :return: list of catalog objects within the specified region
         """
+        kwargs = {}
+        if self.vizier_server:
+            kwargs['vizier_server'] = self.vizier_server
+        if not limit:
+            limit = self.row_limit
+        if limit:
+            kwargs['row_limit'] = limit
         viz = Vizier(
-            vizier_server=self.vizier_server, catalog=self.vizier_catalog,
-            columns=self._columns, row_limit=limit or self.row_limit,
+            catalog=self.vizier_catalog, columns=self._columns,
             column_filters={name: val for name, val in constraints.items()
                             if val is not None} if constraints else {},
             keywords=[name for name, val in constraints.items() if val is None]
-            if constraints else None)
+            if constraints else None,
+            **kwargs)
         resp = viz.query_region(
             SkyCoord(ra=ra_hours, dec=dec_degs, unit=(hour, deg), frame='fk5'),
             catalog=viz.catalog, cache=False, **region)
@@ -209,17 +221,19 @@ class VizierCatalog(Catalog):
         :param ra_hours: right ascension of region center in hours
         :param dec_degs: declination of region center in degrees
         :param width_arcmins: width of region in arcminutes
-        :param height_arcmins: optional height of region in arcminutes; defaults
-            to `width_arcmins`
+        :param height_arcmins: optional height of region in arcminutes;
+            defaults to `width_arcmins`
         :param constraints: optional constraints on the column values
         :param limit: maximum number of rows to return
 
-        :return: list of catalog objects within the specified rectangular region
+        :return: list of catalog objects within the specified rectangular
+            region
         """
         return self.query_region(
             ra_hours, dec_degs, constraints, limit,
             width=width_arcmins*arcmin,
-            height=(height_arcmins if height_arcmins else width_arcmins)*arcmin)
+            height=(height_arcmins if height_arcmins
+                    else width_arcmins)*arcmin)
 
     def query_circ(self, ra_hours: float, dec_degs: float,
                    radius_arcmins: float,
