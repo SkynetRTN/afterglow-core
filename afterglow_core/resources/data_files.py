@@ -4,6 +4,7 @@ Afterglow Core: data-files resource implementation
 
 import sys
 import os
+import re
 import shutil
 from glob import glob
 from datetime import datetime
@@ -29,7 +30,7 @@ import numpy
 import astropy.io.fits as pyfits
 from astropy.wcs import FITSFixedWarning
 from astropy.io.fits.verify import VerifyWarning
-from portalocker import Lock as FileLock, RedisLock
+from portalocker import Lock as FileLock  # , RedisLock
 import redis.exceptions
 
 from .. import app, errors
@@ -599,10 +600,49 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                             any(not d for d in imshape):
                         continue
                     if len(imshape) > 2:
-                        # Eliminate extra dimensions
+                        # Remove the possible WCS keywords for degenerate
+                        # (NAXISn = 1) axes
+                        hdr = hdu.header
+                        axis1, axis2 = [i + 1
+                                        for i, n in enumerate(imshape[::-1])
+                                        if n != 1]
+                        for kw in list(hdr.keys()):
+                            for pattern in (
+                                    r'(CTYPE)([1-9])()', r'(CRPIX)([1-9])()',
+                                    r'(CRVAL)([1-9])()', r'(CUNIT)([1-9])()',
+                                    r'(CDELT)([1-9])()', r'(CROTA)([1-9])()',
+                                    r'(CD)([1-9])(_[1-9])',
+                                    r'(CD[1-9]_)([1-9])()',
+                                    r'(PC)([1-9])(_[1-9])',
+                                    r'(PC[1-9]_)([1-9])()',
+                            ):
+                                m = re.match(pattern + '$', kw)
+                                if not m:
+                                    continue
+                                axis = int(m[2])
+                                if axis in (axis1, axis2):
+                                    if axis not in (1, 2):
+                                        if axis == axis1:
+                                            new_axis = 1
+                                        else:
+                                            new_axis = 2
+                                        new_kw = m.re.sub(
+                                            r'\g<1>{}\g<3>'.format(new_axis),
+                                            kw)
+                                        hdr[new_kw] = hdr[kw]
+                                        try:
+                                            hdr.comments[new_kw] = \
+                                                hdr.comments[kw]
+                                        except KeyError:
+                                            pass
+                                        del hdr[kw]
+                                else:
+                                    del hdr[kw]
+
+                        # Eliminate degenerate axes
                         imshape = tuple([d for d in imshape if d != 1])
-                        hdu.header['NAXIS'] = 2
-                        hdu.header['NAXIS2'], hdu.header['NAXIS1'] = imshape
+                        hdr['NAXIS'] = 2
+                        hdr['NAXIS2'], hdr['NAXIS1'] = imshape
                         hdu.data = hdu.data.reshape(imshape)
 
                 # Obtain the unique layer name: filter name, extension name, or
@@ -630,6 +670,19 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                             except KeyError:
                                 pass
                     hdu.header.update(h)
+
+                # Convert DATEOBS (sometimes used) to DATE-OBS (standard)
+                if 'DATE-OBS' not in hdu.header:
+                    try:
+                        hdu.header['DATE-OBS'] = hdu.header['DATEOBS']
+                    except KeyError:
+                        pass
+                    else:
+                        try:
+                            hdu.header.comments['DATE-OBS'] = \
+                                hdu.header.comments['DATEOBS']
+                        except KeyError:
+                            pass
 
                 all_data_files.append(create_data_file(
                     adb, name, root, hdu.data, hdu.header, provider_id,
