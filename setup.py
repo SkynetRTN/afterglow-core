@@ -47,7 +47,7 @@ setup(
             'pytest-cov',
         ],
     },
-    requires=[
+    install_requires=[
         'alembic == 1.5.8',
         'Authlib == 0.15.3',
         'astropy == 4.2',
@@ -71,7 +71,7 @@ setup(
         'requests-oauthlib == 1.1.0',
         'scipy == 1.6.1',
         'sep == 1.0.3',
-        'SkyLib >= 0.2.0',
+        # 'SkyLib >= 0.2.0',
         'SQLAlchemy == 1.4.23',
         'Werkzeug == 1.0.1',
         # extra skynet dependencies
