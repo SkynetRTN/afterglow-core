@@ -1478,7 +1478,8 @@ def update_data_file(user_id: Optional[int], data_file_id: int,
             continue
         if val != getattr(db_data_file, key):
             setattr(db_data_file, key, val)
-            modified = True
+            if key not in ('group_name', 'group_order'):
+                modified = True
     if modified:
         try:
             db_data_file.modified = True
