@@ -1286,6 +1286,16 @@ components:
           type: number
           minimum: 0
           default: 5
+        max_star_rms:
+          description: keep only refstars having a lower image-to-image RMS; 0 = disable RMS check
+          type: number
+          minimum: 0
+          default: 0
+        max_stars:
+          description: keep only this number of refstars with lowest RMS; 0 = disable RMS check
+          type: integer
+          minimum: 0
+          default: 0
 
     FieldCalResult:
       description: Result of field calibration for a data file

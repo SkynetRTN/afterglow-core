@@ -3,7 +3,7 @@ Afterglow Core: photometric calibration job plugin
 """
 
 from datetime import datetime
-from typing import List as TList
+from typing import List as TList, Tuple
 
 from marshmallow.fields import Integer, List, Nested
 import numpy
@@ -11,7 +11,7 @@ from astropy.wcs import WCS
 
 from ...models import (
     Job, JobResult, FieldCal, FieldCalResult, Mag, PhotSettings,
-    get_source_radec, get_source_xy)
+    PhotometryData, get_source_radec, get_source_xy)
 from ..data_files import get_data_file_fits, get_image_time
 from ..field_cals import get_field_cal
 from ..catalogs import catalogs as known_catalogs
@@ -57,6 +57,18 @@ class FieldCalJob(Job):
                     setattr(stored_field_cal, name, val)
             field_cal = stored_field_cal
 
+        source_extraction_settings = getattr(
+            self, 'source_extraction_settings', None)
+        if source_extraction_settings is not None:
+            # Detect sources using settings provided
+            detected_sources = run_source_extraction_job(
+                self, self.source_extraction_settings, self.file_ids,
+                update_progress=False)
+            if not detected_sources:
+                raise RuntimeError('Could not detect any sources')
+        else:
+            detected_sources = []
+
         catalog_sources = getattr(field_cal, 'catalog_sources', None)
         if not catalog_sources and not getattr(field_cal, 'catalogs', None):
             raise ValueError(
@@ -100,8 +112,6 @@ class FieldCalJob(Job):
 
         wcss, epochs = {}, {}
         variable_check_tol = getattr(field_cal, 'variable_check_tol', 5)
-        source_extraction_settings = getattr(
-            self, 'source_extraction_settings', None)
         if variable_check_tol and any(
                 None in (getattr(source, 'ra_hours', None),
                          getattr(source, 'dec_degs'))
@@ -174,9 +184,9 @@ class FieldCalJob(Job):
                         catalog_sources.remove(source)
                         break
 
-        if source_extraction_settings is not None:
-            # Detect sources using settings provided and match them to input
-            # catalog sources by XY position in each image
+        if detected_sources:
+            #  Match detected sources to input catalog sources by XY position
+            #  in each image
             tol = getattr(field_cal, 'source_match_tol', None)
             if tol is None:
                 raise ValueError('Missing catalog source match tolerance')
@@ -184,11 +194,6 @@ class FieldCalJob(Job):
                 raise ValueError(
                     'Positive catalog source match tolerance expected')
             matching_catalog_sources = []
-            detected_sources = run_source_extraction_job(
-                self, self.source_extraction_settings, self.file_ids,
-                update_progress=False)
-            if not detected_sources:
-                raise RuntimeError('Could not detect any sources')
             for source in detected_sources:
                 file_id = source.file_id
                 catalog_source, match_found = None, False
@@ -294,31 +299,6 @@ class FieldCalJob(Job):
             if not phot_data:
                 raise RuntimeError('All sources violate SNR constraints')
 
-        if getattr(field_cal, 'source_inclusion_percent', None):
-            # Keep only sources that are present in the given fraction
-            # of images
-            nmin = max(int(field_cal.source_inclusion_percent/100 *
-                           len(self.file_ids) + 0.5), 1)
-            source_ids_to_keep, source_ids_to_remove = [], []
-            for source in phot_data:
-                id = source.id
-                if id in source_ids_to_keep or id in source_ids_to_remove:
-                    continue
-                if len([s for s in phot_data if s.id == id]) < nmin:
-                    source_ids_to_remove.append(id)
-                else:
-                    source_ids_to_keep.append(id)
-            if source_ids_to_remove:
-                if source_ids_to_keep:
-                    phot_data = [source for source in phot_data
-                                 if source.id in source_ids_to_keep]
-                else:
-                    raise ValueError(
-                        'No sources found that are present in ' +
-                        'all images' if nmin == len(self.file_ids) else
-                        'at least one image' if nmin == 1 else
-                        'at least {:d} images'.format(nmin))
-
         # Initialize custom filter mapping
         filter_lookup = {
             catalog_name: known_catalogs[catalog_name].filter_lookup
@@ -335,9 +315,10 @@ class FieldCalJob(Job):
 
         # For each data file ID, match photometry results to catalog sources
         # and use (mag, ref_mag) pairs to obtain zero point
-        result_data = []
         context = dict(numpy.__dict__)
         eps = 1e-7
+        all_sources = []
+        cal_results = {}
         for file_id in self.file_ids:
             sources = []
             for source in phot_data:
@@ -379,9 +360,8 @@ class FieldCalJob(Job):
                                             ctx[f] += eps
                                             # noinspection PyBroadException
                                             try:
-                                                err += ((
-                                                    eval(expr, ctx, {}) -
-                                                    mag.value)/eps*e)**2
+                                                err += ((eval(expr, ctx, {}) -
+                                                         mag.value)/eps*e)**2
                                             except Exception:
                                                 pass
                                             finally:
@@ -413,30 +393,94 @@ class FieldCalJob(Job):
                 self.add_error(
                     ValueError('No calibration sources'), {'file_id': file_id})
                 continue
+            m0, m0_error = calc_solution(sources)
+            cal_results[file_id] = (m0, m0_error, sources)
+            all_sources += sources
 
-            mags, mag_errors, ref_mags, ref_mag_errors = numpy.transpose([
-                (source.mag, getattr(source, 'mag_error', None) or 0,
-                 source.ref_mag, getattr(source, 'ref_mag_error', None) or 0)
-                for source in sources
-            ])
-            n = len(sources)
-            while True:
-                d = ref_mags - mags
-                m0 = d.mean()
-                m0_error = numpy.sqrt((mag_errors**2 +
-                                       ref_mag_errors**2).sum())/n
-                good = (d.abs() < 3*d.std()).nonzero()[0]
-                n_good = len(good)
-                if n_good == n or n_good < 3:
-                    break
-                n = n_good
-                mags, mag_errors = mags[good], mag_errors[good]
-                ref_mags, ref_mag_errors = ref_mags[good], ref_mag_errors[good]
-            if abs(m0_error) < 1e-7:
-                if n > 1:
-                    m0_error = d.std()/numpy.sqrt(n)
+        source_inclusion_percent = getattr(
+            field_cal, 'source_inclusion_percent', None)
+        if source_inclusion_percent:
+            # Keep only sources that are present in the given fraction
+            # of images
+            nmin = max(int(source_inclusion_percent/100 *
+                           len(cal_results) + 0.5), 1)
+            source_ids_to_keep, source_ids_to_remove = [], []
+            for source in all_sources:
+                id = source.id
+                if id in source_ids_to_keep or id in source_ids_to_remove:
+                    continue
+                if len([s for s in all_sources if s.id == id]) < nmin:
+                    source_ids_to_remove.append(id)
                 else:
-                    m0_error = None
+                    source_ids_to_keep.append(id)
+            if source_ids_to_remove:
+                if source_ids_to_keep:
+                    all_sources = [source for source in all_sources
+                                   if source.id in source_ids_to_keep]
+                    for file_id in list(cal_results.keys()):
+                        m0, m0_error, sources = cal_results[file_id]
+                        sources = [source for source in sources
+                                   if source.id in source_ids_to_keep]
+                        if sources:
+                            cal_results[file_id] = (m0, m0_error, sources)
+                        else:
+                            del cal_results[file_id]
+                            self.add_error(ValueError(
+                                'No calibration sources satisfy inclusion '
+                                'percent constraint'), {'file_id': file_id})
+                else:
+                    raise ValueError(
+                        'No sources found that are present in ' +
+                        'all images' if nmin == len(self.file_ids) else
+                        'at least one image' if nmin == 1 else
+                        'at least {:d} images'.format(nmin))
+
+        max_star_rms = getattr(field_cal, 'max_star_rms', 0)
+        max_stars = getattr(field_cal, 'max_stars', 0)
+        if len(cal_results) > 1 and (max_star_rms > 0 or max_stars > 0):
+            # Recalculate the calibration using only best stars in terms of
+            # RMS for all images
+            sources_used = {
+                id: [source for source in all_sources if source.id == id]
+                for id in set(source.id for source in all_sources)
+            }
+            sources_used = {id: sources for id, sources in sources_used.items()
+                            if len(sources) > 1}
+            if not sources_used:
+                raise ValueError(
+                    'No sources common to at least two data files, cannot '
+                    'calculate corrected refstar magnitude RMS; disable max '
+                    'star RMS and max star number constraints')
+            source_ids = numpy.array(list(sources_used.keys()))
+            source_rms = numpy.array(
+                [numpy.array(
+                    [source.mag + cal_results[source.file_id][0]
+                     for source in sources_used[id]]).std()
+                 for id in source_ids])
+            order = numpy.argsort(source_rms)
+            source_ids = source_ids[order]
+            source_rms = source_rms[order]
+            if max_star_rms > 0:
+                source_ids = source_ids[source_rms < max_star_rms]
+                if not len(source_ids):
+                    raise ValueError(
+                        'No sources satisfy max star RMS constraint')
+            if max_stars > 0:
+                source_ids = source_ids[:max_stars]
+                for file_id in list(cal_results.keys()):
+                    sources = [source for source in cal_results[file_id][-1]
+                               if source.id in source_ids]
+                    if sources:
+                        m0, m0_error = calc_solution(sources)
+                        cal_results[file_id] = (m0, m0_error, sources)
+                    else:
+                        del cal_results[file_id]
+                        self.add_error(ValueError(
+                            'No calibration sources satisfy RMS constraints'),
+                            {'file_id': file_id})
+
+        result_data = []
+        for file_id, (m0, m0_error, sources) in cal_results.items():
             result_data.append(FieldCalResult(
                 file_id=file_id,
                 phot_results=sources,
@@ -462,3 +506,43 @@ class FieldCalJob(Job):
                     'info to FITS header'.format(file_id, e))
 
         self.result.data = result_data
+
+
+def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
+    """
+    Calculate photometric solution (zero point and error) given a list of
+    sources with instrumental and catalog magnitudes
+
+    :param sources: list of sources; each one must contain at least `mag`
+        (instrumental magnitude) and `ref_mag` (catalog magnitude) attributes
+        and optionally `mag_error` and `ref_mag_error` for the corresponding
+        errors
+
+    :return: zero point and its error
+    """
+    # noinspection PyUnresolvedReferences
+    mags, mag_errors, ref_mags, ref_mag_errors = numpy.transpose([
+        (source.mag, getattr(source, 'mag_error', None) or 0,
+         source.ref_mag, getattr(source, 'ref_mag_error', None) or 0)
+        for source in sources
+    ])
+
+    n = len(sources)
+    while True:
+        d = ref_mags - mags
+        m0 = d.mean()
+        m0_error = numpy.sqrt((mag_errors**2 + ref_mag_errors**2).sum())/n
+        good = (numpy.abs(d - m0) < 3*d.std()).nonzero()[0]
+        n_good = len(good)
+        if n_good == n or n_good < 3:
+            break
+        n = n_good
+        mags, mag_errors = mags[good], mag_errors[good]
+        ref_mags, ref_mag_errors = ref_mags[good], ref_mag_errors[good]
+    if abs(m0_error) < 1e-7:
+        if n > 1:
+            m0_error = d.std()/numpy.sqrt(n)
+        else:
+            m0_error = None
+
+    return m0, m0_error
