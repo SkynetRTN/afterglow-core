@@ -10,8 +10,8 @@ import numpy
 from astropy.wcs import WCS
 
 from ...models import (
-    Job, JobResult, FieldCal, FieldCalResult, Mag, PhotSettings,
-    PhotometryData, get_source_radec, get_source_xy)
+    Job, JobResult, CatalogSource, FieldCal, FieldCalResult, Mag, PhotSettings,
+    PhotometryData, SourceExtractionData, get_source_radec, get_source_xy)
 from ..data_files import get_data_file_fits, get_image_time
 from ..field_cals import get_field_cal
 from ..catalogs import catalogs as known_catalogs
@@ -84,11 +84,36 @@ class FieldCalJob(Job):
                 for name, val in getattr(source, 'mags', {}).items():
                     if isinstance(val, dict):
                         source.mags[name] = Mag(**val)
+                self.run_for_sources(catalog_sources, detected_sources)
         else:
-            # No input catalog sources, query the specified catalogs
-            catalog_sources = run_catalog_query_job(
-                self, field_cal.catalogs, file_ids=self.file_ids)
+            # No input catalog sources, query the specified catalogs, stop
+            # if succeeded
+            for i, catalog in enumerate(field_cal.catalogs):
+                try:
+                    catalog_sources = run_catalog_query_job(
+                        self, [catalog], file_ids=self.file_ids)
+                    self.run_for_sources(catalog_sources, detected_sources)
+                except Exception as e:
+                    if i < len(field_cal.catalogs):
+                        self.add_warning(
+                            'Calibration failed for catalog "{}" [{}]'
+                            .format(catalog, e))
+                    else:
+                        raise
 
+    def run_for_sources(self, catalog_sources: TList[CatalogSource],
+                        detected_sources: TList[SourceExtractionData]) -> None:
+        """
+        Perform calibration given a list of catalog sources (either supplied by
+        the caller or retrieved from a single catalog) and an optional list of
+        detected sources
+
+        :param catalog_sources: list of catalog sources
+        :param detected_sources: list of detected sources obtained from
+            :func:`run_source_extraction_job`
+
+        :return: None
+        """
         # Make sure that each input catalog source has a unique ID; it will
         # be used later to match photometry results to catalog sources
         prefix = '{}_{}_'.format(
@@ -111,12 +136,12 @@ class FieldCalJob(Job):
             source_ids.add(id)
 
         wcss, epochs = {}, {}
-        variable_check_tol = getattr(field_cal, 'variable_check_tol', 5)
+        variable_check_tol = getattr(self.field_cal, 'variable_check_tol', 5)
         if variable_check_tol and any(
                 None in (getattr(source, 'ra_hours', None),
                          getattr(source, 'dec_degs'))
                 for source in catalog_sources) or \
-                source_extraction_settings is not None:
+                getattr(self, 'source_extraction_settings', None) is not None:
             for file_id in self.file_ids:
                 # noinspection PyBroadException
                 try:
@@ -187,7 +212,7 @@ class FieldCalJob(Job):
         if detected_sources:
             #  Match detected sources to input catalog sources by XY position
             #  in each image
-            tol = getattr(field_cal, 'source_match_tol', None)
+            tol = getattr(self.field_cal, 'source_match_tol', None)
             if tol is None:
                 raise ValueError('Missing catalog source match tolerance')
             if tol <= 0:
@@ -281,8 +306,8 @@ class FieldCalJob(Job):
                         source.filter = None
                     filters[file_id] = source.filter
 
-        min_snr = getattr(field_cal, 'min_snr', None)
-        max_snr = getattr(field_cal, 'max_snr', None)
+        min_snr = getattr(self.field_cal, 'min_snr', None)
+        max_snr = getattr(self.field_cal, 'max_snr', None)
         if min_snr or max_snr:
             # Exclude sources based on SNR
             if not min_snr:
@@ -310,7 +335,7 @@ class FieldCalJob(Job):
             getattr(known_catalogs[catalog_name], 'filter_lookup', None)
         }
         for catalog_name, lookup in getattr(
-                field_cal, 'custom_filter_lookup', {}).items():
+                self.field_cal, 'custom_filter_lookup', {}).items():
             filter_lookup.setdefault(catalog_name, {}).update(lookup)
 
         # For each data file ID, match photometry results to catalog sources
@@ -398,7 +423,7 @@ class FieldCalJob(Job):
             all_sources += sources
 
         source_inclusion_percent = getattr(
-            field_cal, 'source_inclusion_percent', None)
+            self.field_cal, 'source_inclusion_percent', None)
         if source_inclusion_percent:
             # Keep only sources that are present in the given fraction
             # of images
@@ -435,8 +460,8 @@ class FieldCalJob(Job):
                         'at least one image' if nmin == 1 else
                         'at least {:d} images'.format(nmin))
 
-        max_star_rms = getattr(field_cal, 'max_star_rms', 0)
-        max_stars = getattr(field_cal, 'max_stars', 0)
+        max_star_rms = getattr(self.field_cal, 'max_star_rms', 0)
+        max_stars = getattr(self.field_cal, 'max_stars', 0)
         if len(cal_results) > 1 and (max_star_rms > 0 or max_stars > 0):
             # Recalculate the calibration using only best stars in terms of
             # RMS for all images
@@ -496,14 +521,14 @@ class FieldCalJob(Job):
                     if m0_error:
                         hdr['PHOT_M0E'] = (
                             m0_error, 'Photometric zero point error')
-                    if getattr(field_cal, 'name', None):
-                        hdr['PHOT_CAL'] = field_cal.name, 'Field cal name'
-                    elif getattr(field_cal, 'id', None):
-                        hdr['PHOT_CAL'] = field_cal.id, 'Field cal ID'
+                    if getattr(self.field_cal, 'name', None):
+                        hdr['PHOT_CAL'] = self.field_cal.name, 'Field cal name'
+                    elif getattr(self.field_cal, 'id', None):
+                        hdr['PHOT_CAL'] = self.field_cal.id, 'Field cal ID'
             except Exception as e:
                 self.add_warning(
                     'Data file ID {}: Error saving photometric calibration '
-                    'info to FITS header'.format(file_id, e))
+                    'info to FITS header [{}]'.format(file_id, e))
 
         self.result.data = result_data
 

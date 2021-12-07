@@ -105,8 +105,8 @@ class SourceExtractionData(ISourceMeta, IAstrometry, IFwhm, ISourceId):
             self.ra_hours /= 15
 
 
-def get_source_xy(source: SourceExtractionData, epoch: datetime,
-                  wcs: Optional[WCS]) -> Tuple[float, float]:
+def get_source_xy(source, epoch: datetime, wcs: Optional[WCS]) \
+        -> Tuple[float, float]:
     """
     Calculate XY coordinates of a source in the current image, possibly taking
     proper motion into account
@@ -142,8 +142,8 @@ def get_source_xy(source: SourceExtractionData, epoch: datetime,
     return source.x, source.y
 
 
-def get_source_radec(source: SourceExtractionData, epoch: datetime,
-                     wcs: Optional[WCS]) -> Tuple[float, float]:
+def get_source_radec(source, epoch: datetime, wcs: Optional[WCS]) \
+        -> Tuple[float, float]:
     """
     Calculate RA and Dec of a source in the current image, possibly taking
     proper motion into account
