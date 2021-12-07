@@ -1281,6 +1281,11 @@ components:
           type: number
           minimum: 0
           default: 0
+        variable_check_tol:
+          description: variable star catalog matching tolerance [arcseconds]; 0 = disable variability check
+          type: number
+          minimum: 0
+          default: 5
 
     FieldCalResult:
       description: Result of field calibration for a data file

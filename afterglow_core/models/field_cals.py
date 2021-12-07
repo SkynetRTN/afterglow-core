@@ -28,6 +28,9 @@ class FieldCal(AfterglowSchema):
     min_snr: float = Float()
     max_snr: float = Float()
     source_match_tol: float = Float()
+    variable_check_tol: float = Float()
+    # edge_margin: int = Integer()
+    # best_stars: int = Integer()
 
 
 class FieldCalResult(AfterglowSchema):

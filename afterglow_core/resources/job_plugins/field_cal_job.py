@@ -10,14 +10,15 @@ import numpy
 from astropy.wcs import WCS
 
 from ...models import (
-    Job, JobResult, FieldCal, FieldCalResult, Mag, PhotSettings)
+    Job, JobResult, FieldCal, FieldCalResult, Mag, PhotSettings,
+    get_source_radec, get_source_xy)
 from ..data_files import get_data_file_fits, get_image_time
 from ..field_cals import get_field_cal
 from ..catalogs import catalogs as known_catalogs
 from .catalog_query_job import run_catalog_query_job
 from .source_extraction_job import (
     SourceExtractionSettings, run_source_extraction_job)
-from .photometry_job import get_source_xy, run_photometry_job
+from .photometry_job import run_photometry_job
 
 
 __all__ = ['FieldCalJob']
@@ -97,7 +98,83 @@ class FieldCalJob(Job):
                     raise ValueError('Non-unique source ID "{}"'.format(id))
             source_ids.add(id)
 
-        if getattr(self, 'source_extraction_settings', None) is not None:
+        wcss, epochs = {}, {}
+        variable_check_tol = getattr(field_cal, 'variable_check_tol', 5)
+        source_extraction_settings = getattr(
+            self, 'source_extraction_settings', None)
+        if variable_check_tol and any(
+                None in (getattr(source, 'ra_hours', None),
+                         getattr(source, 'dec_degs'))
+                for source in catalog_sources) or \
+                source_extraction_settings is not None:
+            for file_id in self.file_ids:
+                # noinspection PyBroadException
+                try:
+                    with get_data_file_fits(self.user_id, file_id) as f:
+                        hdr = f[0].header
+                except Exception:
+                    pass
+                else:
+                    # noinspection PyBroadException
+                    try:
+                        epoch = get_image_time(hdr)
+                    except Exception:
+                        epoch = None
+                    if epoch is not None:
+                        epochs[file_id] = epoch
+                    # noinspection PyBroadException
+                    try:
+                        wcs = WCS(hdr)
+                        if not wcs.has_celestial:
+                            wcs = None
+                    except Exception:
+                        wcs = None
+                    if wcs is not None:
+                        wcss[file_id] = wcs
+
+        if variable_check_tol:
+            # To exclude known variable stars from the list of catalog sources,
+            # get all variable stars in all fields
+            var_stars = {
+                file_id: run_catalog_query_job(
+                    self, ['VSX'], file_ids=[file_id])
+                for file_id in self.file_ids}
+            unique_var_stars = list(
+                {star.id: star for star in sum(var_stars.values(), [])}
+                .values())
+            for i, source in enumerate(list(catalog_sources)):
+                file_id = getattr(source, 'file_id', None)
+                if file_id is None:
+                    epoch = wcs = None
+                else:
+                    epoch = epochs.get(source.file_id, None)
+                    wcs = wcss.get(source.file_id, None)
+                try:
+                    ra, dec = numpy.radians(
+                        get_source_radec(source, epoch, wcs))
+                    ra *= 15
+                except Exception as e:
+                    self.add_warning(
+                        'Could not check variability for source {}: not '
+                        'enough info to calculate source RA/Dec [{}]'
+                        .format(getattr(source, 'id', None) or
+                                '#'.format(i + 1), e))
+                    continue
+                file_id = getattr(source, 'file_id', None)
+                for star in var_stars[file_id] if file_id is not None \
+                        else unique_var_stars:
+                    star_ra, star_dec = numpy.radians(
+                        [star.ra_hours*15, star.dec_degs])
+                    if numpy.degrees(
+                            2*numpy.arcsin(numpy.sqrt(
+                                numpy.sin((star_dec - dec)/2)**2 +
+                                numpy.cos(star_dec)*numpy.cos(dec) *
+                                numpy.sin((star_ra - ra)/2)**2)))*3600 < \
+                            variable_check_tol:
+                        catalog_sources.remove(source)
+                        break
+
+        if source_extraction_settings is not None:
             # Detect sources using settings provided and match them to input
             # catalog sources by XY position in each image
             tol = getattr(field_cal, 'source_match_tol', None)
@@ -106,7 +183,6 @@ class FieldCalJob(Job):
             if tol <= 0:
                 raise ValueError(
                     'Positive catalog source match tolerance expected')
-            epochs, wcss = {}, {}
             matching_catalog_sources = []
             detected_sources = run_source_extraction_job(
                 self, self.source_extraction_settings, self.file_ids,
@@ -119,31 +195,9 @@ class FieldCalJob(Job):
                 for catalog_source in catalog_sources:
                     if getattr(catalog_source, 'file_id', None) is None or \
                             catalog_source.file_id == file_id:
-                        try:
-                            epoch = epochs[file_id]
-                        except KeyError:
-                            # noinspection PyBroadException
-                            try:
-                                with get_data_file_fits(
-                                        self.user_id, file_id) as f:
-                                    epoch = get_image_time(f[0].header)
-                            except Exception:
-                                epoch = None
-                            epochs[file_id] = epoch
-                        try:
-                            wcs = wcss[file_id]
-                        except KeyError:
-                            # noinspection PyBroadException
-                            try:
-                                with get_data_file_fits(
-                                        self.user_id, file_id) as f:
-                                    wcs = WCS(f[0].header)
-                                    if not wcs.has_celestial:
-                                        wcs = None
-                            except Exception:
-                                wcs = None
-                            wcss[file_id] = wcs
-                        x, y = get_source_xy(catalog_source, epoch, wcs)
+                        x, y = get_source_xy(
+                            catalog_source, epochs.get(file_id, None),
+                            wcss.get(file_id, None))
                         if numpy.hypot(x - source.x, y - source.y) < tol:
                             if any(source1.id == catalog_source.id and
                                    (getattr(source1, 'file_id', None) is
