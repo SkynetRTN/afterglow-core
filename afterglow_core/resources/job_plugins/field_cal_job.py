@@ -420,9 +420,18 @@ class FieldCalJob(Job):
                 for source in sources
             ])
             n = len(sources)
-            d = ref_mags - mags
-            m0 = d.mean()
-            m0_error = numpy.sqrt((mag_errors**2 + ref_mag_errors**2).sum())/n
+            while True:
+                d = ref_mags - mags
+                m0 = d.mean()
+                m0_error = numpy.sqrt((mag_errors**2 +
+                                       ref_mag_errors**2).sum())/n
+                good = (d.abs() < 3*d.std()).nonzero()[0]
+                n_good = len(good)
+                if n_good == n or n_good < 3:
+                    break
+                n = n_good
+                mags, mag_errors = mags[good], mag_errors[good]
+                ref_mags, ref_mag_errors = ref_mags[good], ref_mag_errors[good]
             if abs(m0_error) < 1e-7:
                 if n > 1:
                     m0_error = d.std()/numpy.sqrt(n)
