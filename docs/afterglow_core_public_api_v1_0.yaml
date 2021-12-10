@@ -1309,8 +1309,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PhotometryData'
-        zero_point:
-          description: photometric zero point for the data file
+        zero_point_corr:
+          description: photometric zero point correction relative to PhotSettings.zero_point
           type: number
         zero_point_error:
           description: error of `zero_point`

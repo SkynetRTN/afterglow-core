@@ -257,13 +257,14 @@ class FieldCalJob(Job):
                     'sources provided')
             catalog_sources = matching_catalog_sources
 
-        if getattr(self, 'photometry_settings', None) is not None:
+        photometry_settings = getattr(self, 'photometry_settings', None)
+        if photometry_settings is not None:
             # Do batch photometry using refstar positions; explicitly disable
             # photometric calibration even if present in data file headers
             # by setting field_cal_results to False since we need raw
             # (uncalibrated) mags here
             phot_data = [source for source in run_photometry_job(
-                self, self.photometry_settings, self.file_ids, catalog_sources)
+                self, photometry_settings, self.file_ids, catalog_sources)
                 if source.mag]
             if not phot_data:
                 raise RuntimeError('No catalog sources could be photometered')
@@ -509,15 +510,19 @@ class FieldCalJob(Job):
             result_data.append(FieldCalResult(
                 file_id=file_id,
                 phot_results=sources,
-                zero_point=m0,
+                zero_point_corr=m0,
                 zero_point_error=m0_error,
             ))
 
-            # Update photometric calibration info in data file header
+            # Update photometric calibration info in data file header; use the
+            # absolute zero point value instead of the correction relative to
+            # PhotometrySettings.zero_point
             try:
                 with get_data_file_fits(self.user_id, file_id, 'update') as f:
                     hdr = f[0].header
-                    hdr['PHOT_M0'] = m0, 'Photometric zero point'
+                    hdr['PHOT_M0'] = (
+                        m0 + getattr(photometry_settings, 'zero_point', 0),
+                        'Photometric zero point')
                     if m0_error:
                         hdr['PHOT_M0E'] = (
                             m0_error, 'Photometric zero point error')
