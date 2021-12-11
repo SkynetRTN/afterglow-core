@@ -347,74 +347,76 @@ class FieldCalJob(Job):
         cal_results = {}
         for file_id in self.file_ids:
             sources = []
-            for source in phot_data:
-                if source.file_id == file_id:
-                    for catalog_source in catalog_sources:
-                        if catalog_source.id == source.id:
-                            # Get reference magnitude for the current filter
-                            flt = getattr(source, 'filter', None)
-                            # noinspection PyBroadException
-                            try:
-                                source.catalog_name = \
-                                    catalog_source.catalog_name
-                                expr = filter_lookup[source.catalog_name][flt]
-                                # Evaluate magnitude expression in the
-                                # NumPy-enabled context extended with mags
-                                # available for the current catalog source
-                                ctx = dict(context)
-                                ctx.update(
-                                    {f: m.value
-                                     for f, m in catalog_source.mags.items()})
-                                try:
-                                    mag = Mag(value=eval(expr, ctx, {}))
-                                except Exception:
-                                    # Could not compute reference magnitude
-                                    # (e.g. missing the given filter); retry
-                                    # by getting magnitude directly by filter
-                                    # name
-                                    raise Exception()
-                                else:
-                                    # Calculate the resulting magnitude error
-                                    # by coadding contributions from each
-                                    # filter
-                                    err = 0
-                                    for f, m in catalog_source.mags.items():
-                                        e = getattr(m, 'error', None)
-                                        if e:
-                                            # Partial derivative of final mag
-                                            # with resp. to the current filter
-                                            ctx[f] += eps
-                                            # noinspection PyBroadException
-                                            try:
-                                                err += ((eval(expr, ctx, {}) -
-                                                         mag.value)/eps*e)**2
-                                            except Exception:
-                                                pass
-                                            finally:
-                                                ctx[f] = m.value
-                                    if err:
-                                        mag.error = numpy.sqrt(err)
-                            except Exception:
-                                # No custom filter expression for the current
-                                # filter+catalog combination; try filter name
-                                # as is
-                                try:
-                                    mag = catalog_source.mags[flt]
-                                except (AttributeError, KeyError):
-                                    # No magnitude available for the current
-                                    # filter+catalog; skip this source
-                                    continue
+            for source in [source for source in phot_data
+                           if source.file_id == file_id]:
+                try:
+                    catalog_source = [catalog_source
+                                      for catalog_source in catalog_sources
+                                      if catalog_source.id == source.id][0]
+                except IndexError:
+                    continue
 
-                            m = getattr(mag, 'value', None)
-                            if m is None:
-                                # Missing catalog magnitude value
-                                continue
-                            source.ref_mag = m
-                            e = getattr(mag, 'error', None)
+                # Get reference magnitude for the current filter
+                flt = getattr(source, 'filter', None)
+                try:
+                    mag = catalog_source.mags[flt]
+                except (AttributeError, KeyError):
+                    # No magnitude available for the current filter+catalog;
+                    # try custom filter lookup
+                    # noinspection PyBroadException
+                    try:
+                        try:
+                            expr = filter_lookup[
+                                catalog_source.catalog_name][flt]
+                        except KeyError:
+                            # For unknown filters, try the default
+                            # mapping if any
+                            expr = filter_lookup[
+                                catalog_source.catalog_name]['*']
+                        # Evaluate magnitude expression in the NumPy-enabled
+                        # context extended with mags available for the current
+                        # catalog source
+                        ctx = dict(context)
+                        ctx.update(
+                            {f: m.value
+                             for f, m in catalog_source.mags.items()})
+                        mag = Mag(value=eval(expr, ctx, {}))
+
+                        # Calculate the resulting magnitude error by coadding
+                        # contributions from each filter
+                        err = 0
+                        for f, m in catalog_source.mags.items():
+                            e = getattr(m, 'error', None)
                             if e:
-                                source.ref_mag_error = e
-                            sources.append(source)
-                            break
+                                # Partial derivative of final mag with resp. to
+                                # the current filter
+                                ctx[f] += eps
+                                # noinspection PyBroadException
+                                try:
+                                    err += ((eval(expr, ctx, {}) -
+                                             mag.value)/eps*e)**2
+                                except Exception:
+                                    pass
+                                finally:
+                                    ctx[f] = m.value
+                        if err:
+                            mag.error = numpy.sqrt(err)
+                    except Exception:
+                        # No magnitude available for the current
+                        # filter+catalog; skip this source
+                        continue
+
+                m = getattr(mag, 'value', None)
+                if m is None:
+                    # Missing catalog magnitude value
+                    continue
+                source.ref_mag = m
+                e = getattr(mag, 'error', None)
+                if e:
+                    source.ref_mag_error = e
+                source.catalog_name = catalog_source.catalog_name
+                sources.append(source)
+
             if not sources:
                 self.add_error(
                     ValueError('No calibration sources'), {'file_id': file_id})

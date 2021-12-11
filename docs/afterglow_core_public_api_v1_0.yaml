@@ -1254,11 +1254,13 @@ components:
           items:
             type: string
         custom_filter_lookup:
-          description: override for the default catalog filter mapping
+          description: 'override for the default catalog filter mapping {"catalog": {"filter": "expression"}}'
           type: object
           additionalProperties:
+            description: mapping from custom filter name to expression involving catalog bandpasses; "*" means match any unknown filter
             type: object
             additionalProperties:
+              description: magnitude expression involving catalog bandpasses
               type: string
         source_inclusion_percent:
           description: fraction of images which must contain cal source for it to be included
