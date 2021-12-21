@@ -287,6 +287,19 @@ class VizierCatalog(Catalog):
         :return: list of catalog objects within the specified rectangular
             region
         """
+        if self.cache:
+            # Enforce field center and size granularity to avoid cache misses
+            # for querying the same field with tiny differences in RA/Dec and
+            # size
+            ra_hours = round(ra_hours*5400)/5400 % 24  # 10 arcsecs
+            dec_degs = round(dec_degs*360)/360
+            if dec_degs > 90:
+                dec_degs = 90
+            elif dec_degs < -90:
+                dec_degs = -90
+            width_arcmins = numpy.ceil(width_arcmins*5)/5  # 0.2 arcmins
+            if height_arcmins is not None:
+                height_arcmins = numpy.ceil(height_arcmins*5)/5
         return self.query_region(
             ra_hours, dec_degs, constraints, limit,
             width=width_arcmins*arcmin,
@@ -308,6 +321,14 @@ class VizierCatalog(Catalog):
 
         :return: list of catalog objects within the specified circular region
         """
+        if self.cache:
+            ra_hours = round(ra_hours*5400)/5400 % 24
+            dec_degs = round(dec_degs*360)/360
+            if dec_degs > 90:
+                dec_degs = 90
+            elif dec_degs < -90:
+                dec_degs = -90
+            radius_arcmins = numpy.ceil(radius_arcmins*5)/5
         return self.query_region(
             ra_hours, dec_degs, constraints, limit,
             radius=radius_arcmins*arcmin)
