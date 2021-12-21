@@ -80,6 +80,9 @@ HISTOGRAM_BINS = 1024
 # Default VizieR server address for all catalogs; no protocol and path
 VIZIER_SERVER = 'vizier.cfa.harvard.edu'
 
+# Cache VizieR queries (may eventually take a lot of disk space)
+VIZIER_CACHE = True
+
 # Catalog-specific options:
 # CATALOG_OPTIONS = {
 #   'APASS': {'vizier_server': 'vizier.u-strasbg.fr',

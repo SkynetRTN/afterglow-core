@@ -9,6 +9,7 @@ import numpy
 from astropy.coordinates import SkyCoord
 from astropy.table import Table
 from astropy.units import arcmin, deg, hour
+from astroquery import query
 from astroquery.vizier import Vizier
 
 from ... import app
@@ -16,6 +17,41 @@ from ...models import Catalog, CatalogSource, Mag
 
 
 __all__ = ['VizierCatalog']
+
+
+# Monkey-patch astroquery to not raise an exception if caching a query fails
+# (e.g. due to concurrent access)
+_to_cache = query.to_cache
+_AstroQuery = query.AstroQuery
+
+
+def to_cache(*args, **kwargs):
+    # noinspection PyBroadException
+    try:
+        _to_cache(*args, **kwargs)
+    except Exception:
+        pass
+
+
+class AstroQuery(_AstroQuery):
+    def from_cache(self, *args, **kwargs):
+        # noinspection PyBroadException
+        try:
+            return super().from_cache(*args, **kwargs)
+        except Exception:
+            pass
+
+    def remove_cache_file(self, *args, **kwargs):
+        # noinspection PyBroadException
+        try:
+            # noinspection PyUnresolvedReferences
+            return super().remove_cache_file(*args, **kwargs)
+        except Exception:
+            pass
+
+
+query.to_cache = to_cache
+query.AstroQuery = AstroQuery
 
 
 class VizierCatalog(Catalog):
@@ -37,6 +73,7 @@ class VizierCatalog(Catalog):
             arguments but don't map to any :class:`CatalogObject` attributes
     """
     vizier_server = None
+    cache: bool = False
     vizier_catalog = None
     row_limit = None
     col_mapping = {'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000'}
@@ -51,7 +88,9 @@ class VizierCatalog(Catalog):
         :param kwargs: catalog plugin initialization parameters
         """
         kwargs.setdefault('vizier_server', app.config.get(
-            'VIZIER_SERVER', 'http://vizier.cfa.harvard.edu/viz-bin/VizieR-4'))
+            'VIZIER_SERVER',
+            'https://vizier.cfa.harvard.edu/viz-bin/VizieR-4'))
+        kwargs.setdefault('cache', app.config.get('VIZIER_CACHE', True))
         super().__init__(**kwargs)
 
         # Save the list of VizieR column names derived from column mapping
@@ -171,7 +210,8 @@ class VizierCatalog(Catalog):
             row_limit=len(names), **kwargs)
         rows = []
         for name in names:
-            resp = viz.query_object(name, catalog=viz.catalog, cache=False)
+            resp = viz.query_object(
+                name, catalog=viz.catalog, cache=self.cache)
             if resp:
                 rows.append(resp[0][0])
         return self.table_to_sources(rows)
@@ -206,7 +246,7 @@ class VizierCatalog(Catalog):
             **kwargs)
         resp = viz.query_region(
             SkyCoord(ra=ra_hours, dec=dec_degs, unit=(hour, deg), frame='fk5'),
-            catalog=viz.catalog, cache=False, **region)
+            catalog=viz.catalog, cache=self.cache, **region)
         if resp:
             return self.table_to_sources(resp[0])
         return []
