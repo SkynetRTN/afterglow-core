@@ -80,8 +80,12 @@ HISTOGRAM_BINS = 1024
 # Default VizieR server address for all catalogs; no protocol and path
 VIZIER_SERVER = 'vizier.cfa.harvard.edu'
 
-# Cache VizieR queries (may eventually take a lot of disk space)
+# Cache VizieR queries (may eventually take a lot of disk space unless
+# VIZIER_CACHE_AGE is set to a reasonable value)
 VIZIER_CACHE = True
+
+# Maximum age of queries in disk cache in days
+VIZIER_CACHE_AGE = 30
 
 # Catalog-specific options:
 # CATALOG_OPTIONS = {

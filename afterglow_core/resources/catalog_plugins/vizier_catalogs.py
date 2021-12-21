@@ -2,11 +2,16 @@
 Afterglow Core: VizieR catalog plugins
 """
 
+import os
 import re
+import time
+from datetime import timedelta
+from glob import glob
 from typing import Dict as TDict, List as TList, Optional, Union
 
 import numpy
 from astropy.coordinates import SkyCoord
+from astropy.config.paths import get_cache_dir
 from astropy.table import Table
 from astropy.units import arcmin, deg, hour
 from astroquery import query
@@ -26,6 +31,19 @@ _AstroQuery = query.AstroQuery
 
 
 def to_cache(*args, **kwargs):
+    """Cache a query; erase old cache items"""
+    max_age = app.config.get('VIZIER_CACHE_AGE', timedelta(days=30))
+    if not isinstance(max_age, timedelta):
+        max_age = timedelta(days=max_age)
+    cutoff = time.time() - max_age.total_seconds()
+    for fn in glob(os.path.join(get_cache_dir(), 'astroquery', 'Vizier', '*')):
+        # noinspection PyBroadException
+        try:
+            if os.stat(fn).st_mtime < cutoff:
+                os.unlink(fn)
+        except Exception:
+            pass
+
     # noinspection PyBroadException
     try:
         _to_cache(*args, **kwargs)
