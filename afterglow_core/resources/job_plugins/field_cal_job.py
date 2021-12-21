@@ -84,7 +84,7 @@ class FieldCalJob(Job):
                 for name, val in getattr(source, 'mags', {}).items():
                     if isinstance(val, dict):
                         source.mags[name] = Mag(**val)
-                self.run_for_sources(catalog_sources, detected_sources)
+            self.run_for_sources(catalog_sources, detected_sources)
         else:
             # No input catalog sources, query the specified catalogs, stop
             # if succeeded
@@ -446,10 +446,11 @@ class FieldCalJob(Job):
                     all_sources = [source for source in all_sources
                                    if source.id in source_ids_to_keep]
                     for file_id in list(cal_results.keys()):
-                        m0, m0_error, sources = cal_results[file_id]
-                        sources = [source for source in sources
+                        sources = [source
+                                   for source in cal_results[file_id][-1]
                                    if source.id in source_ids_to_keep]
                         if sources:
+                            m0, m0_error = calc_solution(sources)
                             cal_results[file_id] = (m0, m0_error, sources)
                         else:
                             del cal_results[file_id]
