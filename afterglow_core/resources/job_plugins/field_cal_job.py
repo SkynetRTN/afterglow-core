@@ -7,11 +7,15 @@ from typing import List as TList, Tuple
 
 from marshmallow.fields import Integer, List, Nested
 import numpy
+from numpy import (
+    arcsin, argsort, array, asarray, clip, cos, deg2rad, degrees, inf,
+    isfinite, nan, radians, sin, sqrt, transpose)
+from scipy.spatial import cKDTree
 from astropy.wcs import WCS
 
 from ...models import (
     Job, JobResult, CatalogSource, FieldCal, FieldCalResult, Mag, PhotSettings,
-    PhotometryData, SourceExtractionData, get_source_radec, get_source_xy)
+    PhotometryData, SourceExtractionData, get_source_radec)
 from ..data_files import get_data_file_fits, get_image_time
 from ..field_cals import get_field_cal
 from ..catalogs import catalogs as known_catalogs
@@ -114,6 +118,8 @@ class FieldCalJob(Job):
 
         :return: None
         """
+        file_ids = self.file_ids  # alias
+
         # Make sure that each input catalog source has a unique ID; it will
         # be used later to match photometry results to catalog sources
         prefix = '{}_{}_'.format(
@@ -142,7 +148,7 @@ class FieldCalJob(Job):
                          getattr(source, 'dec_degs'))
                 for source in catalog_sources) or \
                 getattr(self, 'source_extraction_settings', None) is not None:
-            for file_id in self.file_ids:
+            for file_id in file_ids:
                 # noinspection PyBroadException
                 try:
                     with get_data_file_fits(self.user_id, file_id) as f:
@@ -173,7 +179,7 @@ class FieldCalJob(Job):
             var_stars = {
                 file_id: run_catalog_query_job(
                     self, ['VSX'], file_ids=[file_id])
-                for file_id in self.file_ids}
+                for file_id in file_ids}
             unique_var_stars = list(
                 {star.id: star for star in sum(var_stars.values(), [])}
                 .values())
@@ -185,8 +191,7 @@ class FieldCalJob(Job):
                     epoch = epochs.get(source.file_id, None)
                     wcs = wcss.get(source.file_id, None)
                 try:
-                    ra, dec = numpy.radians(
-                        get_source_radec(source, epoch, wcs))
+                    ra, dec = radians(get_source_radec(source, epoch, wcs))
                     ra *= 15
                 except Exception as e:
                     self.add_warning(
@@ -198,13 +203,13 @@ class FieldCalJob(Job):
                 file_id = getattr(source, 'file_id', None)
                 for star in var_stars[file_id] if file_id is not None \
                         else unique_var_stars:
-                    star_ra, star_dec = numpy.radians(
+                    star_ra, star_dec = radians(
                         [star.ra_hours*15, star.dec_degs])
-                    if numpy.degrees(
-                            2*numpy.arcsin(numpy.sqrt(
-                                numpy.sin((star_dec - dec)/2)**2 +
-                                numpy.cos(star_dec)*numpy.cos(dec) *
-                                numpy.sin((star_ra - ra)/2)**2)))*3600 < \
+                    if degrees(
+                            2*arcsin(sqrt(
+                                sin((star_dec - dec)/2)**2 +
+                                cos(star_dec)*cos(dec) *
+                                sin((star_ra - ra)/2)**2)))*3600 < \
                             variable_check_tol:
                         catalog_sources.remove(source)
                         break
@@ -219,29 +224,123 @@ class FieldCalJob(Job):
                 raise ValueError(
                     'Positive catalog source match tolerance expected')
             matching_catalog_sources = []
+            catalog_sources_for_file = {file_id: [] for file_id in file_ids}
+            for catalog_source in catalog_sources:
+                catalog_source_file_id = getattr(
+                    catalog_source, 'file_id', None)
+                if getattr(catalog_source, 'x', None) is None or \
+                        getattr(catalog_source, 'y', None) is None:
+                    # Require RA/Dec for a source and WCS for each data file
+                    if getattr(catalog_source, 'ra_hours', None) is None or \
+                            getattr(catalog_source, 'dec_degs', None) is None \
+                            or catalog_source_file_id is not None and \
+                            wcss.get(catalog_source_file_id, None) is None or \
+                            catalog_source_file_id is None and any(
+                                wcss.get(file_id, None) is None
+                                for file_id in file_ids):
+                        continue
+                if catalog_source_file_id is None:
+                    for file_id in file_ids:
+                        catalog_sources_for_file[file_id].append(
+                            catalog_source)
+                else:
+                    catalog_sources_for_file[catalog_source.file_id].append(
+                        catalog_source)
+            catalog_source_kdtree_for_file = {}
+            for file_id, catalog_source_list in catalog_sources_for_file \
+                    .items():
+                if not catalog_source_list:
+                    catalog_source_kdtree_for_file[file_id] = None
+                    continue
+                epoch, wcs = epochs.get(file_id, None), wcss.get(file_id, None)
+                data = []
+                for source in catalog_source_list:
+                    x = getattr(source, 'x', None)
+                    if x is None:
+                        x = nan
+                    y = getattr(source, 'y', None)
+                    if y is None:
+                        y = nan
+                    if wcs is None:
+                        ra = dec = pm_epoch = nan
+                        pm_sky = pm_pos_angle_sky = 0
+                        pm_pixel = pm_pos_angle_pixel = 0
+                    else:
+                        ra = getattr(source, 'ra_hours', None)
+                        if ra is None:
+                            ra = nan
+                        else:
+                            ra *= 15  # WCS calculations are in degrees
+                        dec = getattr(source, 'dec_degs', None)
+                        if dec is None:
+                            dec = nan
+                        if epoch is None:
+                            pm_epoch = nan
+                            pm_sky = pm_pos_angle_sky = 0
+                            pm_pixel = pm_pos_angle_pixel = 0
+                        else:
+                            pm_epoch = getattr(source, 'pm_epoch', None)
+                            if pm_epoch is None:
+                                pm_epoch = nan
+                                pm_sky = pm_pos_angle_sky = 0
+                                pm_pixel = pm_pos_angle_pixel = 0
+                            else:
+                                pm_sky = getattr(source, 'pm_sky', 0)
+                                pm_pos_angle_sky = getattr(
+                                    source, 'pm_pos_angle_sky', 0)
+                                pm_pixel = getattr(source, 'pm_pixel', 0)
+                                pm_pos_angle_pixel = getattr(
+                                    source, 'pm_pos_angle_pixel', 0)
+                    data.append(
+                        [x, y, ra, dec, pm_epoch, pm_sky, pm_pos_angle_sky,
+                         pm_pixel, pm_pos_angle_pixel])
+                x, y, ra, dec, pm_epoch, pm_sky, pm_pos_angle_sky, pm_pixel, \
+                    pm_pos_angle_pixel = transpose(data)
+                if wcs is not None:
+                    # Prefer RA/Dec to XY if available and have a WCS
+                    have_radec = isfinite(ra) & isfinite(dec)
+                    if have_radec.any():
+                        # Apply RA/Dec proper motions if present and have epoch
+                        if epoch is not None:
+                            have_pm = have_radec & isfinite(pm_epoch)
+                            if have_pm.any():
+                                mu = pm_sky*array(
+                                    [dt.total_seconds()
+                                     for dt in (epoch - pm_epoch[have_pm])])
+                                theta = deg2rad(pm_pos_angle_sky[have_pm])
+                                cd = clip(
+                                    cos(deg2rad(dec[have_pm])), 1e-7, None)
+                                ra[have_pm] += mu*sin(theta)/cd
+                                ra[have_pm] %= 360
+                                dec[have_pm] = clip(
+                                    dec[have_pm] + mu*cos(theta), -90, 90)
+                        x[have_radec], y[have_radec] = wcs.all_world2pix(
+                            ra[have_radec], dec[have_radec], 1)
+                if epoch is not None:
+                    # Also apply proper motion in pixels, assuming that it does
+                    # not conflict with RA/Dec PM
+                    have_pm = isfinite(pm_epoch) & (pm_pixel != 0)
+                    if have_pm.any():
+                        mu = pm_pixel[have_pm]*asarray(
+                            [dt.total_seconds()
+                             for dt in (epoch - pm_epoch[have_pm])])
+                        theta = deg2rad(pm_pos_angle_pixel[have_pm])
+                        x[have_pm] += mu*cos(theta)
+                        y[have_pm] += mu*sin(theta)
+                # Build k-d tree from catalog source XYs
+                catalog_source_kdtree_for_file[file_id] = cKDTree(
+                    transpose([x, y]))
             for source in detected_sources:
                 file_id = source.file_id
                 catalog_source, match_found = None, False
-                for catalog_source in catalog_sources:
-                    if getattr(catalog_source, 'file_id', None) is None or \
-                            catalog_source.file_id == file_id:
-                        x, y = get_source_xy(
-                            catalog_source, epochs.get(file_id, None),
-                            wcss.get(file_id, None))
-                        if numpy.hypot(x - source.x, y - source.y) < tol:
-                            if any(source1.id == catalog_source.id and
-                                   (getattr(source1, 'file_id', None) is
-                                    None or source1.file_id == file_id)
-                                   for source1 in matching_catalog_sources):
-                                self.add_warning(
-                                    'Data file ID {}: Multiple matches for '
-                                    'catalog source "{}" within {} '
-                                    'pixel{}'.format(
-                                        file_id, catalog_source.id, tol,
-                                        '' if tol == 1 else 's'))
-                                break
-                            match_found = True
-                            break
+                tree = catalog_source_kdtree_for_file[file_id]
+                if tree is not None:
+                    catalog_source_list = catalog_sources_for_file[file_id]
+                    i = tree.query(
+                        [source.x, source.y], distance_upper_bound=tol)[1]
+                    if i < len(catalog_source_list):
+                        match_found = True
+                        catalog_source = catalog_source_list[i]
                 if match_found:
                     # Copy catalog source data to extracted source and set
                     # the latter as a new catalog source
@@ -264,7 +363,7 @@ class FieldCalJob(Job):
             # by setting field_cal_results to False since we need raw
             # (uncalibrated) mags here
             phot_data = [source for source in run_photometry_job(
-                self, photometry_settings, self.file_ids, catalog_sources)
+                self, photometry_settings, file_ids, catalog_sources)
                 if source.mag]
             if not phot_data:
                 raise RuntimeError('No catalog sources could be photometered')
@@ -272,7 +371,7 @@ class FieldCalJob(Job):
             # If photometry is disabled, use instrumental magnitudes provided
             # by the user
             phot_data = catalog_sources
-            if len(self.file_ids) > 1:
+            if len(file_ids) > 1:
                 if any(getattr(source, 'file_id', None) is None
                        for source in phot_data):
                     raise ValueError(
@@ -281,7 +380,7 @@ class FieldCalJob(Job):
             else:
                 # Assume the same file ID for all sources if processing
                 # a single file
-                file_id = self.file_ids[0]
+                file_id = file_ids[0]
                 for source in phot_data:
                     if getattr(source, 'file_id', None) is None:
                         source.file_id = file_id
@@ -314,7 +413,7 @@ class FieldCalJob(Job):
             if not min_snr:
                 min_snr = 0
             if not max_snr:
-                max_snr = numpy.inf
+                max_snr = inf
             new_phot_data = []
             for source in phot_data:
                 mag_error = getattr(source, 'mag_error', 0)
@@ -345,7 +444,7 @@ class FieldCalJob(Job):
         eps = 1e-7
         all_sources = []
         cal_results = {}
-        for file_id in self.file_ids:
+        for file_id in file_ids:
             sources = []
             for source in [source for source in phot_data
                            if source.file_id == file_id]:
@@ -400,7 +499,7 @@ class FieldCalJob(Job):
                                 finally:
                                     ctx[f] = m.value
                         if err:
-                            mag.error = numpy.sqrt(err)
+                            mag.error = sqrt(err)
                     except Exception:
                         # No magnitude available for the current
                         # filter+catalog; skip this source
@@ -460,7 +559,7 @@ class FieldCalJob(Job):
                 else:
                     raise ValueError(
                         'No sources found that are present in ' +
-                        'all images' if nmin == len(self.file_ids) else
+                        'all images' if nmin == len(file_ids) else
                         'at least one image' if nmin == 1 else
                         'at least {:d} images'.format(nmin))
 
@@ -480,13 +579,13 @@ class FieldCalJob(Job):
                     'No sources common to at least two data files, cannot '
                     'calculate corrected refstar magnitude RMS; disable max '
                     'star RMS and max star number constraints')
-            source_ids = numpy.array(list(sources_used.keys()))
-            source_rms = numpy.array(
-                [numpy.array(
+            source_ids = array(list(sources_used.keys()))
+            source_rms = array(
+                [array(
                     [source.mag + cal_results[source.file_id][0]
                      for source in sources_used[id]]).std()
                  for id in source_ids])
-            order = numpy.argsort(source_rms)
+            order = argsort(source_rms)
             source_ids = source_ids[order]
             source_rms = source_rms[order]
             if max_star_rms > 0:
@@ -554,7 +653,7 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
     :return: zero point and its error
     """
     # noinspection PyUnresolvedReferences
-    mags, mag_errors, ref_mags, ref_mag_errors = numpy.transpose([
+    mags, mag_errors, ref_mags, ref_mag_errors = transpose([
         (source.mag, getattr(source, 'mag_error', None) or 0,
          source.ref_mag, getattr(source, 'ref_mag_error', None) or 0)
         for source in sources
@@ -564,8 +663,8 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
     while True:
         d = ref_mags - mags
         m0 = d.mean()
-        m0_error = numpy.sqrt((mag_errors**2 + ref_mag_errors**2).sum())/n
-        good = (numpy.abs(d - m0) < 3*d.std()).nonzero()[0]
+        m0_error = sqrt((mag_errors**2 + ref_mag_errors**2).sum())/n
+        good = (abs(d - m0) < 3*d.std()).nonzero()[0]
         n_good = len(good)
         if n_good == n or n_good < 3:
             break
@@ -574,7 +673,7 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
         ref_mags, ref_mag_errors = ref_mags[good], ref_mag_errors[good]
     if abs(m0_error) < 1e-7:
         if n > 1:
-            m0_error = d.std()/numpy.sqrt(n)
+            m0_error = d.std()/sqrt(n)
         else:
             m0_error = None
 
