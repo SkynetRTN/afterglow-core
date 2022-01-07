@@ -132,9 +132,9 @@ def get_source_xy(source, epoch: datetime, wcs: Optional[WCS]) \
                 clip(dec + mu*cos(theta), -90, 90), 1)
         return wcs.all_world2pix(ra, dec, 1)
 
-    if None not in [getattr(source, name, None)
-                    for name in ('pm_pixel', 'pm_pos_angle_pixel',
-                                 'pm_epoch', 'epoch')]:
+    if epoch is not None and None not in [
+            getattr(source, name, None)
+            for name in ('pm_pixel', 'pm_pos_angle_pixel', 'pm_epoch')]:
         mu = source.pm_pixel*(epoch - source.pm_epoch).total_seconds()
         theta = deg2rad(source.pm_pos_angle_pixel)
         return source.x + mu*cos(theta), source.y + mu*sin(theta)
