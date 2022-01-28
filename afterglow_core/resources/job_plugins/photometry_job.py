@@ -80,8 +80,7 @@ def run_photometry_job(job: Job, settings: PhotSettings,
         # same source ID
         if not job_file_ids:
             raise ValueError('Missing data file IDs')
-        if job_file_ids:
-            file_ids = set(job_file_ids)
+        file_ids = set(job_file_ids)
         prefix = '{}_{}_'.format(
             datetime.utcnow().strftime('%Y%m%d%H%M%S'), job.id)
         sources = {
@@ -106,7 +105,7 @@ def run_photometry_job(job: Job, settings: PhotSettings,
     m0 = getattr(settings, 'zero_point', None) or 0
 
     result_data = []
-    for file_no, file_id in enumerate(job_file_ids):
+    for file_no, file_id in enumerate(file_ids):
         try:
             data, hdr = get_data_file_data(job.user_id, file_id)
 
@@ -199,7 +198,7 @@ def run_photometry_job(job: Job, settings: PhotSettings,
                 if row['flag'] & (0xF0 & ~sep.APER_HASMASKED) == 0 and
                 isfinite([row['x'], row['y'], row['flux'], row['flux_err'],
                           row['mag'], row['mag_err']]).all()]
-            job.update_progress((file_no + 1)/len(job_file_ids)*100)
+            job.update_progress((file_no + 1)/len(file_ids)*100)
         except Exception as e:
             job.add_error(e, {'file_id': file_id})
 
