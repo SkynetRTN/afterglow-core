@@ -591,6 +591,7 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
             # Import each HDU as a separate data file
             layers = []
             for i, hdu in enumerate(fits):
+                hdr = hdu.header
                 if isinstance(hdu, pyfits.ImageHDU.__base__):
                     # Image HDU; eliminate redundant extra dimensions if any,
                     # skip non-2D images
@@ -602,7 +603,6 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                     if len(imshape) > 2:
                         # Remove the possible WCS keywords for degenerate
                         # (NAXISn = 1) axes
-                        hdr = hdu.header
                         axis1, axis2 = [i + 1
                                         for i, n in enumerate(imshape[::-1])
                                         if n != 1]
@@ -647,8 +647,8 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
 
                 # Obtain the unique layer name: filter name, extension name, or
                 # just the HDU index
-                layer = hdu.header.get('FILTER') or \
-                    hdu.header.get('EXTNAME') or str(i + 1)
+                layer = hdr.get('FILTER') or \
+                    hdr.get('EXTNAME') or str(i + 1)
                 layer_base, layer_no = layer, 1
                 while layer in layers:
                     layer = '{}.{}'.format(layer_base, layer_no)
@@ -663,31 +663,37 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                 if i and primary_header:
                     # Copy primary header cards to extension header
                     h = primary_header.copy()
-                    for kw in hdu.header:
+                    for kw in hdr:
                         if kw not in ('COMMENT', 'HISTORY'):
                             try:
                                 del h[kw]
                             except KeyError:
                                 pass
-                    hdu.header.update(h)
+                    hdr.update(h)
 
                 # Convert DATEOBS (sometimes used) to DATE-OBS (standard)
-                if 'DATE-OBS' not in hdu.header:
+                if 'DATE-OBS' not in hdr:
                     try:
-                        hdu.header['DATE-OBS'] = hdu.header['DATEOBS']
+                        hdr['DATE-OBS'] = hdr['DATEOBS']
                     except KeyError:
                         pass
                     else:
                         try:
-                            hdu.header.comments['DATE-OBS'] = \
-                                hdu.header.comments['DATEOBS']
+                            hdr.comments['DATE-OBS'] = hdr.comments['DATEOBS']
                         except KeyError:
                             pass
 
+                # Remove AMD* astrometric parameters, which are incorrectly
+                # interpreted by Astropy/WCSLib
+                expr = re.compile(r'AMD[XY]\d+$')
+                for kw in list(hdr.keys()):
+                    if expr.match(kw):
+                        del hdr[kw]
+
                 all_data_files.append(create_data_file(
-                    adb, name, root, hdu.data, hdu.header, provider_id,
-                    asset_path, 'FITS', asset_metadata, layer, duplicates,
-                    session_id, group_name=group_name, group_order=i,
+                    adb, name, root, hdu.data, hdr, provider_id, asset_path,
+                    'FITS', asset_metadata, layer, duplicates, session_id,
+                    group_name=group_name, group_order=i,
                     allow_duplicate_group_name=i > 0))
 
     except errors.AfterglowError:
