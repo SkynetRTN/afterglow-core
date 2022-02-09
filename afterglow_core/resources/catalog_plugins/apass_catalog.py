@@ -28,7 +28,11 @@ class APASSCatalog(VizierCatalog):
         'id': 'recno', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
     }
     filter_lookup = {
+        # naming
         "g'": 'gprime', "r'": 'rprime', "i'": 'iprime',
+        # Jester et al. (2005), Jordi et al. (2005)
+        'U': 'B + 0.78*(uprime - gprime) - 0.88',
+        # Lupton (2005)
         'R': "rprime - 0.2936*(rprime - iprime) - 0.1439",
         'I': "iprime - 0.3136*(rprime - iprime) - 0.3539",
     }
