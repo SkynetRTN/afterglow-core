@@ -63,7 +63,8 @@ def jobs() -> Response:
         # Submit a job
         msg = job_server_request(
             'jobs', method,
-            **JobSchema(_set_defaults=True, **request.args.to_dict()).to_dict())
+            **JobSchema(_set_defaults=True, **request.args.to_dict())
+            .to_dict())
         if msg['status'] != 201:
             return error_response(msg)
         return json_response(JobSchema(**msg['json']))
@@ -149,11 +150,11 @@ def jobs_result(id: Union[int, str]) -> Response:
 
     # Find the appropriate job result type from the job schema's "result" field
     job_type = msg['json'].pop('type')
-    try:
-        job_schema = [j for j in JobSchema.__subclasses__()
-                      if j.type == job_type][0]
-    except IndexError:
-        job_schema = JobSchema
+    job_schema = JobSchema
+    for j in JobSchema.__subclasses__():
+        if j.type == job_type:
+            job_schema = j
+            break
     return json_response(
         job_schema().fields['result'].nested(**msg['json']))
 
@@ -171,7 +172,8 @@ def jobs_result_files(id: Union[int, str], file_id: str) -> Response:
 
     :return: binary data in the response body with the appropriate MIME type
     """
-    msg = job_server_request('jobs/result/files', 'GET', id=id, file_id=file_id)
+    msg = job_server_request(
+        'jobs/result/files', 'GET', id=id, file_id=file_id)
     if msg['status'] != 200:
         return error_response(msg)
     return send_file(
