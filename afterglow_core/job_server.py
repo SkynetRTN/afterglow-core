@@ -1034,13 +1034,13 @@ def job_server(notify_queue):
 
                     # noinspection PyBroadException
                     try:
-                        # Update job state
-                        for name, val in job_state.items():
-                            setattr(job.state, name, val)
-
                         # Update job result
                         for name, val in job_result.items():
                             setattr(job.result, name, val)
+
+                        # Update job state
+                        for name, val in job_state.items():
+                            setattr(job.state, name, val)
 
                         sess.commit()
                     except Exception:
