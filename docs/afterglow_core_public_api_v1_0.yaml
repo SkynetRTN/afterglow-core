@@ -879,9 +879,13 @@ components:
           nullable: true
           default: null
         sat_level:
-          description: saturation level
+          description: manual saturation level; ignored if auto_sat_level is set unless there is not enough data to reliably estimate the saturation level
           type: number
           default: 63000
+        auto_sat_level:
+          description: estimate saturation level automatically
+          type: boolean
+          default: true
         discard_saturated:
           description: discard sources containing the given number of pixels above sat_level; 0 = don't discard
           type: integer
