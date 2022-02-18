@@ -219,7 +219,7 @@ def data_files_header(id: int) -> Response:
         hdr = get_data_file_data(request.user.id, id)[1]
     else:
         with pyfits.open(get_data_file_path(request.user.id, id),
-                         'update') as fits:
+                         'update', memmap=False) as fits:
             hdr = fits[0].header
             modified = False
             for name, val in request.args.items():
@@ -271,7 +271,7 @@ def data_files_wcs(id: int) -> Response:
         hdr = get_data_file_data(request.user.id, id)[1]
     else:
         with pyfits.open(get_data_file_path(request.user.id, id),
-                         'update') as fits:
+                         'update', memmap=False) as fits:
             hdr = fits[0].header
             modified = False
             for name, val in request.args.items():
@@ -333,7 +333,7 @@ def data_files_phot_cal(id: int) -> Response:
     if request.method == 'GET':
         phot_cal = {}
         with pyfits.open(get_data_file_path(request.user.id, id),
-                         'readonly') as fits:
+                         'readonly', memmap=False) as fits:
             hdr = fits[0].header
             for field, name in PHOT_CAL_MAPPING:
                 try:
@@ -342,7 +342,7 @@ def data_files_phot_cal(id: int) -> Response:
                     pass
     else:
         with pyfits.open(get_data_file_path(request.user.id, id),
-                         'update') as fits:
+                         'update', memmap=False) as fits:
             phot_cal = {}
             try:
                 phot_cal['m0'] = (float(request.args['m0']),
@@ -412,7 +412,7 @@ def data_files_hist(id: int) -> Response:
         # First try using the cached histogram
         with pyfits.open(
                 os.path.join(root, '{}.fits.hist'.format(id)), 'readonly',
-                uint=True) as hist:
+                memmap=False) as hist:
             hdr = hist[0].header
             min_bin, max_bin = hdr['MINBIN'], hdr['MAXBIN']
             data = hist[0].data

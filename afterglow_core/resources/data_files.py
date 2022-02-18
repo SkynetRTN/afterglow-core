@@ -577,7 +577,8 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
     # noinspection PyBroadException
     try:
         fp.seek(0)
-        with pyfits.open(fp, 'readonly', ignore_missing_end=True) as fits:
+        with pyfits.open(fp, 'readonly', memmap=False,
+                         ignore_missing_end=True) as fits:
             # Store non-default primary HDU header cards to copy them to all
             # FITS files for separate extension HDUs
             primary_header = fits[0].header.copy()
@@ -981,7 +982,8 @@ def get_data_file_fits(user_id: Optional[int], file_id: int,
     :return: FITS file object
     """
     try:
-        return pyfits.open(get_data_file_path(user_id, file_id), mode)
+        return pyfits.open(
+            get_data_file_path(user_id, file_id), mode, memmap=False)
     except Exception:
         raise UnknownDataFileError(file_id=file_id)
 
