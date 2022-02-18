@@ -2,6 +2,7 @@
 Afterglow Core: image alignment job plugin
 """
 
+from datetime import datetime
 from typing import List as TList
 
 from marshmallow.fields import String, Integer, List, Nested
@@ -181,8 +182,9 @@ class AlignmentJob(Job):
                             hist_msg = 'WCS'
 
                         hdr.add_history(
-                            'Aligned using {} with respect to data file '
-                            '{:d}'.format(hist_msg, ref_file_id))
+                            '[{}] Aligned by Afterglow using {} with respect '
+                            'to data file {:d}'
+                            .format(datetime.utcnow(), hist_msg, ref_file_id))
 
                         # Copy WCS from reference image if any
                         if ref_wcs is not None:
@@ -231,7 +233,8 @@ class AlignmentJob(Job):
                     elif i != ref_image:  # not replacing reference image
                         try:
                             save_data_file(
-                                adb, get_root(self.user_id), file_id, data, hdr)
+                                adb, get_root(self.user_id), file_id, data,
+                                hdr)
                             adb.commit()
                         except Exception:
                             adb.rollback()

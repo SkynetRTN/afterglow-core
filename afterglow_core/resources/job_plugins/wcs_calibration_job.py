@@ -221,9 +221,9 @@ class WcsCalibrationJob(Job):
                             del hdr[name]
 
                     hdr.add_history(
-                        'WCS calibration obtained at {} with index {} from {} '
-                        'sources; matched sources: {}, conflicts: {}, '
-                        'log-odds: {}'.format(
+                        '[{}] WCS calibration obtained by Afterglow with '
+                        'index {} from {} sources; matched sources: {}, '
+                        'conflicts: {}, log-odds: {}'.format(
                             datetime.utcnow(), solution.index_name,
                             solution.n_field, solution.n_match,
                             solution.n_conflict, solution.log_odds))
