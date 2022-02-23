@@ -31,6 +31,8 @@ app.config.setdefault(
     'SQLALCHEMY_DATABASE_URI', 'sqlite:///{}'.format(os.path.join(
         os.path.abspath(app.config['DATA_ROOT']), 'afterglow.db')))
 app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
+app.config.setdefault(
+    'SQLALCHEMY_ENGINE_OPTIONS', {'connect_args': {'timeout': 15}})
 
 user_datastore = None
 

@@ -949,7 +949,7 @@ def job_server(notify_queue):
         engine = create_engine(
             'sqlite:///{}'.format(db_path),
             connect_args={'check_same_thread': False, 'isolation_level': None,
-                          'timeout': 10},
+                          'timeout': 15},
         )
         JobBase.metadata.create_all(bind=engine)
         session_factory = scoped_session(sessionmaker(bind=engine))
