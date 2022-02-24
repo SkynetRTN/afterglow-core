@@ -304,7 +304,7 @@ except IOError:
 app.config['SECRET_KEY'] = key
 # Fernet requires 32-byte key, while Afterglow has been historically using
 # 24-byte key
-cipher = Fernet(urlsafe_b64encode(app.config['SECRET_KEY'] + b'Afterglo'))
+cipher = Fernet(urlsafe_b64encode(key + b'Afterglo'))
 del f, key, keyfile
 
 
