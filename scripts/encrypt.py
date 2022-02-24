@@ -21,4 +21,4 @@ if __name__ == '__main__':
     with open(keyfile, 'rb') as f:
         key = f.read()
     cipher = Fernet(urlsafe_b64encode(key + b'Afterglo'))
-    print(cipher.encrypt(input().encode('utf8')))
+    print(cipher.encrypt(input().encode('utf8')).decode('ascii'))
