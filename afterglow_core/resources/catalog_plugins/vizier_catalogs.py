@@ -106,8 +106,7 @@ class VizierCatalog(Catalog):
         :param kwargs: catalog plugin initialization parameters
         """
         kwargs.setdefault('vizier_server', app.config.get(
-            'VIZIER_SERVER',
-            'https://vizier.cfa.harvard.edu/viz-bin/VizieR-4'))
+            'VIZIER_SERVER', 'vizier.cfa.harvard.edu'))
         kwargs.setdefault('cache', app.config.get('VIZIER_CACHE', True))
         super().__init__(**kwargs)
 
