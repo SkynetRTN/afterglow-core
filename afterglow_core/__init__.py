@@ -5,6 +5,8 @@ Afterglow Core: main app package
 import datetime
 import json
 import os
+import errno
+from base64 import urlsafe_b64encode
 from typing import Any, Dict as TDict, List as TList, Optional, Union
 
 from flask_cors import CORS
@@ -12,11 +14,12 @@ from marshmallow import missing
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
 from werkzeug.urls import url_encode
 from flask import Flask, Response, request
+from cryptography.fernet import Fernet
 
 from .schemas import AfterglowSchema
 
 
-__all__ = ['app', 'json_response', 'PaginationInfo']
+__all__ = ['app', 'cipher', 'json_response', 'PaginationInfo']
 
 
 class AfterglowSchemaEncoder(json.JSONEncoder):
@@ -277,6 +280,32 @@ def resolve_request_body() -> None:
     # Replace immutable Request.args with the combined args dict
     # noinspection PyPropertyAccess
     request.args = CombinedMultiDict(ds)
+
+
+# Read/create secret key
+keyfile = os.path.join(
+    os.path.abspath(app.config['DATA_ROOT']), 'AFTERGLOW_CORE_KEY')
+try:
+    with open(keyfile, 'rb') as f:
+        key = f.read()
+except IOError:
+    key = os.urandom(24)
+    d = os.path.dirname(keyfile)
+    if os.path.isfile(d):
+        os.remove(d)
+    try:
+        os.makedirs(d)
+    except OSError as _e:
+        if _e.errno != errno.EEXIST:
+            raise
+    del d
+    with open(keyfile, 'wb') as f:
+        f.write(key)
+app.config['SECRET_KEY'] = key
+# Fernet requires 32-byte key, while Afterglow has been historically using
+# 24-byte key
+cipher = Fernet(urlsafe_b64encode(app.config['SECRET_KEY'] + b'Afterglo'))
+del f, key, keyfile
 
 
 if app.config.get('AUTH_ENABLED'):

@@ -926,31 +926,43 @@ def job_server(notify_queue):
                 DbJobResult, job_schema.fields['result'].nested(),
                 job_schema.type)
 
-        # Enable foreign keys in sqlite; required for ON DELETE CASCADE to work
-        # when deleting jobs; set journal mode to WAL to allow concurrent
-        # access from multiple Apache processes
-        @event.listens_for(Engine, 'connect')
-        def set_sqlite_pragma(dbapi_connection, _):
-            if isinstance(dbapi_connection, sqlite3.Connection):
-                cursor = dbapi_connection.cursor()
-                cursor.execute('PRAGMA foreign_keys=ON')
-                cursor.execute('PRAGMA journal_mode=WAL')
-                cursor.close()
+        if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
+            # Enable foreign keys in sqlite; required for ON DELETE CASCADE
+            # to work when deleting jobs; set journal mode to WAL to allow
+            # concurrent access from multiple Apache processes
+            @event.listens_for(Engine, 'connect')
+            def set_sqlite_pragma(dbapi_connection, _):
+                if isinstance(dbapi_connection, sqlite3.Connection):
+                    cursor = dbapi_connection.cursor()
+                    cursor.execute('PRAGMA foreign_keys=ON')
+                    cursor.execute('PRAGMA journal_mode=WAL')
+                    cursor.close()
 
-        # Recreate the job db on startup; also erase shared memory and journal
-        # files
-        db_path = os.path.join(
-            os.path.abspath(app.config['DATA_ROOT']), 'jobs.db')
-        for fp in glob(db_path + '*'):
-            try:
-                os.remove(fp)
-            except OSError:
-                pass
-        engine = create_engine(
-            'sqlite:///{}'.format(db_path),
-            connect_args={'check_same_thread': False, 'isolation_level': None,
-                          'timeout': 15},
-        )
+            # Recreate the job db file on startup; also erase shared memory and
+            # journal files
+            db_path = os.path.join(
+                os.path.abspath(app.config['DATA_ROOT']), 'jobs.db')
+            for fp in glob(db_path + '*'):
+                try:
+                    os.remove(fp)
+                except OSError:
+                    pass
+            engine = create_engine(
+                'sqlite:///{}'.format(db_path),
+                connect_args={'check_same_thread': False,
+                              'isolation_level': None,
+                              'timeout': 15},
+            )
+        else:
+            # If using database server instead of sqlite, reuse the same
+            # database engine as the main Afterglow database; drop and recreate
+            # all job tables on startup
+            from .resources import users
+            users.db.engine.dispose()
+            # noinspection PyTypeChecker
+            reload(users)
+            engine = users.db.engine
+            JobBase.metadata.drop_all(bind=engine)
         JobBase.metadata.create_all(bind=engine)
         session_factory = scoped_session(sessionmaker(bind=engine))
 

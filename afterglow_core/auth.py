@@ -18,7 +18,6 @@ retrieved via :func:`auth_plugins` associated with the "auth" endpoint.
 
 import secrets
 import os
-import errno
 from datetime import timedelta
 from functools import wraps
 import time
@@ -42,29 +41,6 @@ __all__ = [
     'current_user', 'anonymous_user', 'jwt_manager',
     'set_access_cookies', 'clear_access_cookies',
 ]
-
-
-# Read/create secret key
-keyfile = os.path.join(
-    os.path.abspath(app.config['DATA_ROOT']), 'AFTERGLOW_CORE_KEY')
-try:
-    with open(keyfile, 'rb') as f:
-        key = f.read()
-except IOError:
-    key = os.urandom(24)
-    d = os.path.dirname(keyfile)
-    if os.path.isfile(d):
-        os.remove(d)
-    try:
-        os.makedirs(d)
-    except OSError as _e:
-        if _e.errno != errno.EEXIST:
-            raise
-    del d
-    with open(keyfile, 'wb') as f:
-        f.write(key)
-app.config['SECRET_KEY'] = key
-del f, key, keyfile
 
 
 oauth_plugins = {}
