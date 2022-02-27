@@ -2,6 +2,7 @@
 Afterglow Core: pixel operations job plugin
 """
 
+from datetime import datetime
 from types import ModuleType
 from typing import List as TList
 
@@ -21,8 +22,8 @@ from ..data_files import (
 __all__ = ['PixelOpsJob']
 
 
-# Fixed part of the expression evaluation context; disable builtins for security
-# reasons; add numpy and scipy.ndimage non-module defs
+# Fixed part of the expression evaluation context; disable builtins for
+# security reasons; add numpy and scipy.ndimage non-module defs
 context = {'__builtins__': None}
 for _mod in (numpy, ndimage):
     for _name in _mod.__all__:
@@ -50,8 +51,8 @@ class PixelOpsJob(Job):
     "imgs[i]") and their FITS headers ("hdr" or "hdrs[i]"). The following
     categories of operations are supported::
 
-        - one output image per input image (e.g. individual image transformation
-          like adding a constant or resampling)::
+        - one output image per input image (e.g. individual image
+          transformation like adding a constant or resampling)::
             F(img)  # apply F() to all images, e.g. img = img + 1
 
         - reduce input images into a single output image (e.g. add)::
@@ -63,17 +64,17 @@ class PixelOpsJob(Job):
           must be present in the expression)::
             F(imgs[i], imgs[i+1] ...)  # e.g. imgs[i+1] - imgs[i]
 
-    The expression F() may include any Python operators and constants plus Numpy
-    and Scipy.ndimage definitions. It should evaluate either to a 2D image or
-    to a scalar. In the latter case, the resulting value is appended
+    The expression F() may include any Python operators and constants plus
+    Numpy and Scipy.ndimage definitions. It should evaluate either to a 2D
+    image or to a scalar. In the latter case, the resulting value is appended
     to PixelOpsJob.result.data. Whether a new data file(s) are created or the
     input ones are replaced by the output 2D image is controlled by the
     `inplace` job parameter; this does not apply to the third case above and if
     F() yields a scalar value. The expression may also include the variables
     "aux_imgs" and "aux_hdrs", which are set to the lists of image data and
-    headers for data files listed in the `aux_file_ids` job parameter; the first
-    auxiliary image/header is also available via "aux_img" and "aux_hdr"
-    variables.
+    headers for data files listed in the `aux_file_ids` job parameter;
+    the first auxiliary image/header is also available via "aux_img" and
+    "aux_hdr" variables.
     """
     type = 'pixel_ops'
     description = 'Pixel Operations'
@@ -177,7 +178,8 @@ class PixelOpsJob(Job):
                 if self.inplace:
                     hdr = get_data_file_data(self.user_id, file_id)[1]
                     hdr.add_history(
-                        'Updated by evaluating expression "{}"'.format(expr))
+                        '[{}] Updated by Afterglow by evaluating expression '
+                        '"{}"'.format(datetime.utcnow(), expr))
 
                     try:
                         save_data_file(
@@ -190,13 +192,14 @@ class PixelOpsJob(Job):
                     if file_id is None:
                         hdr = pyfits.Header()
                         hdr.add_history(
-                            'Created by evaluating expression "{}"'
-                            .format(expr))
+                            '[{}] Created by Afterglow by evaluating '
+                            'expression "{}"'.format(datetime.utcnow(), expr))
                     else:
                         hdr = get_data_file_data(self.user_id, file_id)[1]
                         hdr.add_history(
-                            'Created from data file {:d} by evaluating '
-                            'expression "{}"'.format(file_id, expr))
+                            '[{}] Created by Afterglow from data file {:d} by '
+                            'evaluating expression "{}"'
+                            .format(datetime.utcnow(), file_id, expr))
 
                     try:
                         # Create data file in the same session as input data

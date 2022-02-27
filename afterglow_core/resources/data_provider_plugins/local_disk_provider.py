@@ -238,7 +238,7 @@ class LocalDiskDataProvider(DataProvider):
         # A FITS file?
         # noinspection PyBroadException
         try:
-            with pyfits.open(filename, 'readonly',
+            with pyfits.open(filename, 'readonly', memmap=False,
                              ignore_missing_end=True) as f:
                 layers = len(f)
                 imwidth = f[0].header['NAXIS1']
@@ -684,14 +684,17 @@ class LocalDiskDataProvider(DataProvider):
 
         new_filename = os.path.join(
             os.path.dirname(filename), os.path.basename(name))
-        if os.path.exists(new_filename):
-            raise AssetAlreadyExistsError()
+        if new_filename != filename:
+            if os.path.exists(new_filename) and \
+                    new_filename.lower() != filename.lower():
+                raise AssetAlreadyExistsError()
 
-        # Rename file or directory
-        try:
-            os.rename(filename, new_filename)
-        except Exception as e:
-            raise FilesystemError(reason=str(e))
+            # Rename file or directory
+            try:
+                os.rename(filename, new_filename)
+            except Exception as e:
+                if new_filename.lower() != filename.lower():
+                    raise FilesystemError(reason=str(e))
 
         return self._get_asset(
             new_filename.split(self.abs_root + os.path.sep)[1]

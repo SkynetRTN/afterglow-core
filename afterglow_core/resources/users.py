@@ -12,7 +12,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_security import UserMixin, RoleMixin, SQLAlchemyUserDatastore
 from flask_security.utils import hash_password
 
-from .. import app
+from .. import app, cipher
 from ..models import User
 from ..errors import MissingFieldError, ValidationError
 from ..errors.auth import DuplicateUsernameError, UnknownUserError
@@ -27,9 +27,27 @@ __all__ = [
 ]
 
 
-app.config.setdefault(
-    'SQLALCHEMY_DATABASE_URI', 'sqlite:///{}'.format(os.path.join(
-        os.path.abspath(app.config['DATA_ROOT']), 'afterglow.db')))
+if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
+    app.config.setdefault(
+        'SQLALCHEMY_DATABASE_URI', 'sqlite:///{}'.format(os.path.join(
+            os.path.abspath(app.config['DATA_ROOT']), 'afterglow.db')))
+    app.config.setdefault(
+        'SQLALCHEMY_ENGINE_OPTIONS', {'connect_args': {'timeout': 15}})
+else:
+    _db_pass = app.config.get('DB_PASS', '')
+    if _db_pass:
+        if not isinstance(_db_pass, bytes):
+            _db_pass = _db_pass.encode('ascii')
+        _db_pass = cipher.decrypt(_db_pass).decode('utf8')
+    app.config.setdefault(
+        'SQLALCHEMY_DATABASE_URI', '{}://{}{}@{}:{}/{}'.format(
+            app.config.get('DB_BACKEND'),
+            app.config.get('DB_USER', 'admin'),
+            ':' + _db_pass if _db_pass else '',
+            app.config.get('DB_HOST', 'localhost'),
+            app.config.get('DB_PORT', 3306),  # default for MySQL
+            app.config.get('DB_SCHEMA', 'afterglow')))
+    del _db_pass
 app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
 
 user_datastore = None
@@ -223,15 +241,10 @@ def _init_users():
 
     # All imports put here to avoid unnecessary loading of packages on startup
     # if user auth is disabled
-    try:
-        from alembic import (
-            config as alembic_config, context as alembic_context)
-        from alembic.script import ScriptDirectory
-        from alembic.runtime.environment import EnvironmentContext
-    except ImportError:
-        # noinspection PyPep8Naming
-        ScriptDirectory = EnvironmentContext = None
-        alembic_config = alembic_context = None
+    from alembic import (
+        config as alembic_config, context as alembic_context)
+    from alembic.script import ScriptDirectory
+    from alembic.runtime.environment import EnvironmentContext
 
     global user_datastore
 
@@ -244,31 +257,26 @@ def _init_users():
         if e.errno != errno.EEXIST:
             raise
 
-    # Create data_files table
-    if alembic_config is None:
-        # Alembic not available, create table from SQLA metadata
-        db.create_all()
-    else:
-        # Create/upgrade tables via Alembic
-        cfg = alembic_config.Config()
-        cfg.set_main_option(
-            'script_location',
-            os.path.abspath(os.path.join(
-                __file__, '../..', 'db_migration', 'users'))
-        )
-        script = ScriptDirectory.from_config(cfg)
+    # Create/upgrade tables via Alembic
+    cfg = alembic_config.Config()
+    cfg.set_main_option(
+        'script_location',
+        os.path.abspath(os.path.join(
+            __file__, '../..', 'db_migration', 'users'))
+    )
+    script = ScriptDirectory.from_config(cfg)
 
-        # noinspection PyProtectedMember
-        with EnvironmentContext(
-                cfg, script,
-                fn=lambda rev, _: script._upgrade_revs('head', rev),
-                as_sql=False, starting_rev=None, destination_rev='head',
-                tag=None,
-        ), db.engine.connect() as connection:
-            alembic_context.configure(connection=connection)
+    # noinspection PyProtectedMember
+    with EnvironmentContext(
+            cfg, script,
+            fn=lambda rev, _: script._upgrade_revs('head', rev),
+            as_sql=False, starting_rev=None, destination_rev='head',
+            tag=None,
+    ), db.engine.connect() as connection:
+        alembic_context.configure(connection=connection)
 
-            with alembic_context.begin_transaction():
-                alembic_context.run_migrations()
+        with alembic_context.begin_transaction():
+            alembic_context.run_migrations()
 
     # Initialize user roles if missing
     try:
@@ -360,13 +368,15 @@ def create_user(user: User) -> User:
         for role in kw['roles'].split(','):
             r = DbRole.query.filter_by(name=role).one_or_none()
             if r is None:
-                raise ValidationError('roles', 'Unknown role "{}"'.format(role))
+                raise ValidationError(
+                    'roles', 'Unknown role "{}"'.format(role))
             role_objs.append(r)
         kw['roles'] = role_objs
     else:
         kw['roles'] = []
 
     try:
+        # noinspection PyArgumentList
         db_user = DbUser(**kw)
         db.session.add(db_user)
         db.session.flush()

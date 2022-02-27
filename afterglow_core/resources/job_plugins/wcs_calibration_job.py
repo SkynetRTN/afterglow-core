@@ -176,7 +176,8 @@ class WcsCalibrationJob(Job):
                         for name in ('OBJRA', 'TELRA', 'RA'):
                             try:
                                 h, m, s = hdr[name].split(':')
-                                ra_hours = int(h) + int(m)/60 + float(s)/3600
+                                ra_hours = int(h) + int(m)/60 + \
+                                    float(s.replace(',', '.'))/3600
                             except (KeyError, ValueError):
                                 pass
                             else:
@@ -186,7 +187,7 @@ class WcsCalibrationJob(Job):
                                 d, m, s = hdr[name].split(':')
                                 dec_degs = \
                                     (abs(int(d)) + int(m)/60 +
-                                     float(s)/3600) * \
+                                     float(s.replace(',', '.'))/3600) * \
                                     (1 - d.strip().startswith('-'))
                             except (KeyError, ValueError):
                                 pass
@@ -220,9 +221,9 @@ class WcsCalibrationJob(Job):
                             del hdr[name]
 
                     hdr.add_history(
-                        'WCS calibration obtained at {} with index {} from {} '
-                        'sources; matched sources: {}, conflicts: {}, '
-                        'log-odds: {}'.format(
+                        '[{}] WCS calibration obtained by Afterglow with '
+                        'index {} from {} sources; matched sources: {}, '
+                        'conflicts: {}, log-odds: {}'.format(
                             datetime.utcnow(), solution.index_name,
                             solution.n_field, solution.n_match,
                             solution.n_conflict, solution.log_odds))

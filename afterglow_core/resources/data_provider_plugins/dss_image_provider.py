@@ -247,7 +247,7 @@ class DSSImageDataProvider(DataProvider):
                 .format(res.status_code))
 
         buf = BytesIO(res.content)
-        with pyfits.open(buf, 'readonly') as f:
+        with pyfits.open(buf, 'readonly', memmap=False) as f:
             if len(f) > 1:
                 # Remove extension HDU
                 out = BytesIO()

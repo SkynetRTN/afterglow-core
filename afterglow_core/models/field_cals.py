@@ -28,6 +28,9 @@ class FieldCal(AfterglowSchema):
     min_snr: float = Float()
     max_snr: float = Float()
     source_match_tol: float = Float()
+    variable_check_tol: float = Float()
+    max_star_rms: float = Float()
+    max_stars: int = Integer()
 
 
 class FieldCalResult(AfterglowSchema):
@@ -37,5 +40,5 @@ class FieldCalResult(AfterglowSchema):
     file_id: int = Integer()
     phot_results: TList[PhotometryData] = List(
         Nested(PhotometryData), default=[])
-    zero_point: float = Float()
+    zero_point_corr: float = Float()
     zero_point_error: float = Float()

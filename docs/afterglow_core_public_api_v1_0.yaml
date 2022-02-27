@@ -879,9 +879,13 @@ components:
           nullable: true
           default: null
         sat_level:
-          description: saturation level
+          description: manual saturation level; ignored if auto_sat_level is set unless there is not enough data to reliably estimate the saturation level
           type: number
           default: 63000
+        auto_sat_level:
+          description: estimate saturation level automatically
+          type: boolean
+          default: false
         discard_saturated:
           description: discard sources containing the given number of pixels above sat_level; 0 = don't discard
           type: integer
@@ -1254,11 +1258,13 @@ components:
           items:
             type: string
         custom_filter_lookup:
-          description: override for the default catalog filter mapping
+          description: 'override for the default catalog filter mapping {"catalog": {"filter": "expression"}}'
           type: object
           additionalProperties:
+            description: mapping from custom filter name to expression involving catalog bandpasses; "*" means match any unknown filter
             type: object
             additionalProperties:
+              description: magnitude expression involving catalog bandpasses
               type: string
         source_inclusion_percent:
           description: fraction of images which must contain cal source for it to be included
@@ -1281,6 +1287,21 @@ components:
           type: number
           minimum: 0
           default: 0
+        variable_check_tol:
+          description: variable star catalog matching tolerance [arcseconds]; 0 = disable variability check
+          type: number
+          minimum: 0
+          default: 5
+        max_star_rms:
+          description: keep only refstars having a lower image-to-image RMS; 0 = disable RMS check
+          type: number
+          minimum: 0
+          default: 0
+        max_stars:
+          description: keep only this number of refstars with lowest RMS; 0 = disable RMS check
+          type: integer
+          minimum: 0
+          default: 0
 
     FieldCalResult:
       description: Result of field calibration for a data file
@@ -1294,8 +1315,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PhotometryData'
-        zero_point:
-          description: photometric zero point for the data file
+        zero_point_corr:
+          description: photometric zero point correction relative to PhotSettings.zero_point
           type: number
         zero_point_error:
           description: error of `zero_point`

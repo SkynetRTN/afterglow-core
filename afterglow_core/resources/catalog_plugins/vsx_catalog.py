@@ -6,7 +6,7 @@ from typing import List as TList, Union
 
 from astropy.table import Table
 
-from ...models import CatalogSource, Mag
+from ...models import CatalogSource
 from .vizier_catalogs import VizierCatalog
 
 

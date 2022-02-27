@@ -17,7 +17,7 @@ __all__ = ['SDSSCatalog']
 
 class SDSSCatalog(VizierCatalog):
     """
-    SDSS/VizieR catalog plugin
+    SDSS catalog plugin
     """
     name = 'SDSS'
     display_name = 'Sloan Digital Sky Survey Data Release 15'

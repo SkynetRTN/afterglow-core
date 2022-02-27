@@ -7,7 +7,7 @@ from typing import List as TList
 from marshmallow.fields import Integer, List, Nested
 from astropy.wcs import WCS
 
-from skylib.extraction import extract_sources
+from skylib.extraction import auto_sat_level, extract_sources
 
 from ...models import Job, JobResult, SourceExtractionData
 from ...schemas import AfterglowSchema, Boolean, Float
@@ -45,6 +45,7 @@ class SourceExtractionSettings(AfterglowSchema):
     centroid: bool = Boolean(default=True)
     limit: int = Integer(default=None)
     sat_level: float = Float(default=63000)
+    auto_sat_level: bool = Boolean(default=False)
     discard_saturated: int = Integer(default=1)
 
 
@@ -135,7 +136,13 @@ def run_source_extraction_job(job: Job,
             scope = hdr.get('TELESCOP')
 
             if settings.discard_saturated > 0:
-                sat_img = pixels >= settings.sat_level
+                if settings.auto_sat_level:
+                    sat_level = auto_sat_level(pixels)
+                    if sat_level is None:
+                        sat_level = settings.sat_level
+                else:
+                    sat_level = settings.sat_level
+                sat_img = pixels >= sat_level
             else:
                 sat_img = None
 

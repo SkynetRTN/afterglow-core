@@ -49,7 +49,8 @@ class Catalog(AfterglowSchema):
         num_sources = 1000000
         mags = {'B': ('Bmag', 'eBmag'), 'V': ('Vmag', 'eVmag'),
                 'R': ('Rmag', 'eRmag'), 'I': ('Imag', 'eImag')}
-        filter_lookup = {'Open': '(3*B + 5*R)/8'}
+        filter_lookup = {'Open': '(3*B + 5*R)/8', '*': 'R'}
+        # '*' stands for "use this for any unknown filter"
 
         def query_objects(self, names):  # optional
             ...

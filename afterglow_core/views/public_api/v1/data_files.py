@@ -14,6 +14,8 @@ import numpy
 from flask import Response, request
 from astropy.wcs import WCS
 
+from skylib.extraction import histogram
+
 from .... import app, json_response, auth, errors
 from ....models import DataFile, Session
 from ....errors.data_file import UnknownDataFileError
@@ -74,8 +76,8 @@ def make_data_response(data: Union[bytes, numpy.ndarray, numpy.ma.MaskedArray],
                     data.fill_value != numpy.nan:
                 # Replace masked values with a crazy large value
                 data = numpy.ma.masked_array(data, fill_value=numpy.nan)
-            # Make sure data are in little-endian byte order before sending over
-            # the net
+            # Make sure data are in little-endian byte order before sending
+            # over the net
             if data.dtype.byteorder == '>' or \
                     data.dtype.byteorder == '=' and sys.byteorder == 'big':
                 data = data.astype(data.dtype.newbyteorder('<'))
@@ -113,7 +115,8 @@ def data_files() -> Response:
         - return a list of all user's data files associated with the given
           session or with the default anonymous session if unspecified
 
-    POST /data-files?name=...&width=...&height=...&pixel_value=...session_id=...
+    POST /data-files?name=...&width=...&height=...&pixel_value=...&
+        session_id=...
         - create a single data file of the given width and height, with data
           values set to pixel_value (0 by default); associate with the given
           session (anonymous if not set)
@@ -216,7 +219,7 @@ def data_files_header(id: int) -> Response:
         hdr = get_data_file_data(request.user.id, id)[1]
     else:
         with pyfits.open(get_data_file_path(request.user.id, id),
-                         'update') as fits:
+                         'update', memmap=False) as fits:
             hdr = fits[0].header
             modified = False
             for name, val in request.args.items():
@@ -260,15 +263,15 @@ def data_files_wcs(id: int) -> Response:
 
     :return: JSON-serialized structure
         [{"key": key, "value": value, "comment": comment}, ...]
-        containing the data file header cards pertaining to the WCS in the order
-        they are returned by WCSLib; empty if the existing or updated FITS
-        header has no valid WCS info
+        containing the data file header cards pertaining to the WCS
+        in the order they are returned by WCSLib; empty if the existing
+        or updated FITS header has no valid WCS info
     """
     if request.method == 'GET':
         hdr = get_data_file_data(request.user.id, id)[1]
     else:
         with pyfits.open(get_data_file_path(request.user.id, id),
-                         'update') as fits:
+                         'update', memmap=False) as fits:
             hdr = fits[0].header
             modified = False
             for name, val in request.args.items():
@@ -330,7 +333,7 @@ def data_files_phot_cal(id: int) -> Response:
     if request.method == 'GET':
         phot_cal = {}
         with pyfits.open(get_data_file_path(request.user.id, id),
-                         'readonly') as fits:
+                         'readonly', memmap=False) as fits:
             hdr = fits[0].header
             for field, name in PHOT_CAL_MAPPING:
                 try:
@@ -339,7 +342,7 @@ def data_files_phot_cal(id: int) -> Response:
                     pass
     else:
         with pyfits.open(get_data_file_path(request.user.id, id),
-                         'update') as fits:
+                         'update', memmap=False) as fits:
             phot_cal = {}
             try:
                 phot_cal['m0'] = (float(request.args['m0']),
@@ -409,7 +412,7 @@ def data_files_hist(id: int) -> Response:
         # First try using the cached histogram
         with pyfits.open(
                 os.path.join(root, '{}.fits.hist'.format(id)), 'readonly',
-                uint=True) as hist:
+                memmap=False) as hist:
             hdr = hist[0].header
             min_bin, max_bin = hdr['MINBIN'], hdr['MAXBIN']
             data = hist[0].data
@@ -419,31 +422,9 @@ def data_files_hist(id: int) -> Response:
     except Exception:
         # Cached histogram not found or outdated, (re)calculate and return
         try:
-            data = get_data_file_data(request.user.id, id)[0]
-            if isinstance(data, numpy.ma.MaskedArray):
-                data = data.compressed()
-            if data.size:
-                min_bin, max_bin = float(data.min()), float(data.max())
-                bins = app.config['HISTOGRAM_BINS']
-                if isinstance(bins, int) and not (data % 1).any():
-                    if max_bin - min_bin < 0x100:
-                        # 8-bit integer data; use 256 bins maximum
-                        bins = min(bins, 0x100)
-                    elif max_bin - min_bin < 0x10000:
-                        # 16-bit integer data; use 65536 bins maximum
-                        bins = min(bins, 0x10000)
-                if max_bin == min_bin:
-                    # Constant data, use unit bin size if the number of bins
-                    # is fixed or unit range otherwise
-                    if isinstance(bins, int):
-                        max_bin = min_bin + bins
-                    else:
-                        max_bin = min_bin + 1
-                data = numpy.histogram(data, bins, (min_bin, max_bin))[0]
-            else:
-                # Empty or fully masked image
-                data = numpy.array([], numpy.float32)
-                min_bin, max_bin = 0.0, 65535.0
+            data, min_bin, max_bin = histogram(
+                get_data_file_data(request.user.id, id)[0],
+                app.config['HISTOGRAM_BINS'])
 
             # Cache histogram and limits
             hist = pyfits.PrimaryHDU(data)

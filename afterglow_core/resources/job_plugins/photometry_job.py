@@ -3,10 +3,10 @@ Afterglow Core: batch photometry job plugin
 """
 
 from datetime import datetime
-from typing import List as TList, Tuple
+from typing import List as TList
 
 from marshmallow.fields import Integer, List, Nested
-from numpy import clip, concatenate, cos, deg2rad, isfinite, sin, zeros
+from numpy import concatenate, deg2rad, isfinite, zeros
 from astropy.wcs import WCS
 import sep
 
@@ -15,49 +15,12 @@ from skylib.extraction.centroiding import centroid_sources
 
 from ...models import (
     Job, JobResult, SourceExtractionData, PhotSettings, PhotometryData,
-    sigma_to_fwhm)
+    sigma_to_fwhm, get_source_xy)
 from ..data_files import (
     get_data_file_data, get_exp_length, get_gain, get_image_time)
 
 
-__all__ = ['PhotometryJob', 'get_source_xy', 'run_photometry_job']
-
-
-def get_source_xy(source: SourceExtractionData, epoch: datetime, wcs: WCS) \
-        -> Tuple[float, float]:
-    """
-    Calculate XY coordinates of a source in the current image, possibly taking
-    proper motion into account
-
-    :param source: source definition
-    :param epoch: exposure start time
-    :param wcs: WCS structure from image header
-
-    :return: XY coordinates of the source, 1-based
-    """
-    if None not in (getattr(source, 'ra_hours', None),
-                    getattr(source, 'dec_degs', None), wcs):
-        # Prefer RA/Dec if WCS is present
-        ra, dec = source.ra_hours*15, source.dec_degs
-        if epoch is not None and None not in [
-                getattr(source, name, None)
-                for name in ('pm_sky', 'pm_pos_angle_sky', 'pm_epoch')]:
-            mu = source.pm_sky*(epoch - source.pm_epoch).total_seconds()
-            theta = deg2rad(source.pm_pos_angle_sky)
-            cd = cos(deg2rad(dec))
-            return wcs.all_world2pix(
-                ((ra + mu*sin(theta)/cd) if cd else ra) % 360,
-                clip(dec + mu*cos(theta), -90, 90), 1)
-        return wcs.all_world2pix(ra, dec, 1)
-
-    if None not in [getattr(source, name, None)
-                    for name in ('pm_pixel', 'pm_pos_angle_pixel',
-                                 'pm_epoch', 'epoch')]:
-        mu = source.pm_pixel*(epoch - source.pm_epoch).total_seconds()
-        theta = deg2rad(source.pm_pos_angle_pixel)
-        return source.x + mu*cos(theta), source.y + mu*sin(theta)
-
-    return source.x, source.y
+__all__ = ['PhotometryJob', 'run_photometry_job']
 
 
 def run_photometry_job(job: Job, settings: PhotSettings,
@@ -83,7 +46,8 @@ def run_photometry_job(job: Job, settings: PhotSettings,
             raise ValueError(
                 'Missing aperture radius/semi-major axis for mode="aperture"')
         if settings.a <= 0:
-            raise ValueError('Aperture radius/semi-major axis must be positive')
+            raise ValueError(
+                'Aperture radius/semi-major axis must be positive')
         phot_kw = dict(
             a=settings.a,
             b=settings.b,
@@ -114,10 +78,9 @@ def run_photometry_job(job: Job, settings: PhotSettings,
         # Same source object for all images specified in file_ids;
         # replicate each source to all images; merge them by assigning the
         # same source ID
-        if not job_file_ids and not file_ids:
+        if not job_file_ids:
             raise ValueError('Missing data file IDs')
-        if job_file_ids:
-            file_ids = set(job_file_ids)
+        file_ids = set(job_file_ids)
         prefix = '{}_{}_'.format(
             datetime.utcnow().strftime('%Y%m%d%H%M%S'), job.id)
         sources = {

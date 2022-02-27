@@ -6,7 +6,7 @@ from typing import Dict as TDict, List as TList
 
 from marshmallow.fields import String, Integer, Dict, Nested, List
 
-from ... import AfterglowSchema, Resource, Float
+from ... import AfterglowSchema, Float, Resource
 from .catalog import CatalogSourceSchema
 from .photometry import PhotometryDataSchema
 
@@ -31,6 +31,9 @@ class FieldCalSchema(Resource):
     min_snr: float = Float()
     max_snr: float = Float()
     source_match_tol: float = Float()
+    variable_check_tol: float = Float()
+    max_star_rms: float = Float()
+    max_stars: int = Integer()
 
 
 class FieldCalResultSchema(AfterglowSchema):
@@ -40,5 +43,5 @@ class FieldCalResultSchema(AfterglowSchema):
     file_id: int = Integer()
     phot_results: TList[PhotometryDataSchema] = List(
         Nested(PhotometryDataSchema), default=[])
-    zero_point: float = Float()
+    zero_point_corr: float = Float()
     zero_point_error: float = Float()

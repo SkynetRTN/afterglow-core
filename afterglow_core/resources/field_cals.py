@@ -13,8 +13,8 @@ from .data_files import DataFileBase, get_data_file_db
 
 
 __all__ = [
-    'query_field_cals', 'get_field_cal', 'create_field_cal', 'update_field_cal',
-    'delete_field_cal',
+    'query_field_cals', 'get_field_cal', 'create_field_cal',
+    'update_field_cal', 'delete_field_cal',
 ]
 
 
@@ -31,6 +31,9 @@ class DbFieldCal(DataFileBase):
     min_snr = Column(Float, server_default='0')
     max_snr = Column(Float, server_default='0')
     source_match_tol = Column(Float)
+    variable_check_tol = Column(Float, server_default='5')
+    max_star_rms = Column(Float, server_default='0')
+    max_stars = Column(Integer, server_default='0')
 
 
 def query_field_cals(user_id: Optional[int]) -> TList[FieldCal]:

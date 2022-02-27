@@ -2,13 +2,19 @@
 Afterglow Core: VizieR catalog plugins
 """
 
+import os
 import re
+import time
+from datetime import timedelta
+from glob import glob
 from typing import Dict as TDict, List as TList, Optional, Union
 
 import numpy
 from astropy.coordinates import SkyCoord
+from astropy.config.paths import get_cache_dir
 from astropy.table import Table
 from astropy.units import arcmin, deg, hour
+from astroquery import query
 from astroquery.vizier import Vizier
 
 from ... import app
@@ -16,6 +22,54 @@ from ...models import Catalog, CatalogSource, Mag
 
 
 __all__ = ['VizierCatalog']
+
+
+# Monkey-patch astroquery to not raise an exception if caching a query fails
+# (e.g. due to concurrent access)
+_to_cache = query.to_cache
+_AstroQuery = query.AstroQuery
+
+
+def to_cache(*args, **kwargs):
+    """Cache a query; erase old cache items"""
+    max_age = app.config.get('VIZIER_CACHE_AGE', timedelta(days=30))
+    if not isinstance(max_age, timedelta):
+        max_age = timedelta(days=max_age)
+    cutoff = time.time() - max_age.total_seconds()
+    for fn in glob(os.path.join(get_cache_dir(), 'astroquery', 'Vizier', '*')):
+        # noinspection PyBroadException
+        try:
+            if os.stat(fn).st_mtime < cutoff:
+                os.unlink(fn)
+        except Exception:
+            pass
+
+    # noinspection PyBroadException
+    try:
+        _to_cache(*args, **kwargs)
+    except Exception:
+        pass
+
+
+class AstroQuery(_AstroQuery):
+    def from_cache(self, *args, **kwargs):
+        # noinspection PyBroadException
+        try:
+            return super().from_cache(*args, **kwargs)
+        except Exception:
+            pass
+
+    def remove_cache_file(self, *args, **kwargs):
+        # noinspection PyBroadException
+        try:
+            # noinspection PyUnresolvedReferences
+            return super().remove_cache_file(*args, **kwargs)
+        except Exception:
+            pass
+
+
+query.to_cache = to_cache
+query.AstroQuery = AstroQuery
 
 
 class VizierCatalog(Catalog):
@@ -37,6 +91,7 @@ class VizierCatalog(Catalog):
             arguments but don't map to any :class:`CatalogObject` attributes
     """
     vizier_server = None
+    cache: bool = False
     vizier_catalog = None
     row_limit = None
     col_mapping = {'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000'}
@@ -51,7 +106,8 @@ class VizierCatalog(Catalog):
         :param kwargs: catalog plugin initialization parameters
         """
         kwargs.setdefault('vizier_server', app.config.get(
-            'VIZIER_SERVER', 'http://vizier.cfa.harvard.edu/viz-bin/VizieR-4'))
+            'VIZIER_SERVER', 'vizier.cfa.harvard.edu'))
+        kwargs.setdefault('cache', app.config.get('VIZIER_CACHE', True))
         super().__init__(**kwargs)
 
         # Save the list of VizieR column names derived from column mapping
@@ -171,7 +227,8 @@ class VizierCatalog(Catalog):
             row_limit=len(names), **kwargs)
         rows = []
         for name in names:
-            resp = viz.query_object(name, catalog=viz.catalog, cache=False)
+            resp = viz.query_object(
+                name, catalog=viz.catalog, cache=self.cache)
             if resp:
                 rows.append(resp[0][0])
         return self.table_to_sources(rows)
@@ -206,7 +263,7 @@ class VizierCatalog(Catalog):
             **kwargs)
         resp = viz.query_region(
             SkyCoord(ra=ra_hours, dec=dec_degs, unit=(hour, deg), frame='fk5'),
-            catalog=viz.catalog, cache=False, **region)
+            catalog=viz.catalog, cache=self.cache, **region)
         if resp:
             return self.table_to_sources(resp[0])
         return []
@@ -229,6 +286,19 @@ class VizierCatalog(Catalog):
         :return: list of catalog objects within the specified rectangular
             region
         """
+        if self.cache:
+            # Enforce field center and size granularity to avoid cache misses
+            # for querying the same field with tiny differences in RA/Dec and
+            # size
+            ra_hours = round(ra_hours*5400)/5400 % 24  # 10 arcsecs
+            dec_degs = round(dec_degs*360)/360
+            if dec_degs > 90:
+                dec_degs = 90
+            elif dec_degs < -90:
+                dec_degs = -90
+            width_arcmins = numpy.ceil(width_arcmins*5)/5  # 0.2 arcmins
+            if height_arcmins is not None:
+                height_arcmins = numpy.ceil(height_arcmins*5)/5
         return self.query_region(
             ra_hours, dec_degs, constraints, limit,
             width=width_arcmins*arcmin,
@@ -250,6 +320,14 @@ class VizierCatalog(Catalog):
 
         :return: list of catalog objects within the specified circular region
         """
+        if self.cache:
+            ra_hours = round(ra_hours*5400)/5400 % 24
+            dec_degs = round(dec_degs*360)/360
+            if dec_degs > 90:
+                dec_degs = 90
+            elif dec_degs < -90:
+                dec_degs = -90
+            radius_arcmins = numpy.ceil(radius_arcmins*5)/5
         return self.query_region(
             ra_hours, dec_degs, constraints, limit,
             radius=radius_arcmins*arcmin)

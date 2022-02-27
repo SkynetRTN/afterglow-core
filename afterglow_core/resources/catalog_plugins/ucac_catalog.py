@@ -23,6 +23,7 @@ class UCAC5Catalog(VizierCatalog):
         'Open': ('f.mag',), 'G': ('Gmag',), 'R': ('Rmag',), 'J': ('Jmag',),
         'H': ('Hmag',), 'K': ('Kmag',),
     }
+    filter_lookup = {'*': 'Open'}  # map all unknown mags to integral bandpass
     col_mapping = {
         'id': 'SrcIDgaia', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
     }

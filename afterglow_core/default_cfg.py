@@ -1,8 +1,8 @@
 # Default Afterglow Core Configuration
 
-################################################################################
+###############################################################################
 # General
-################################################################################
+###############################################################################
 # Prefix URL which will be prepended to all routes
 APPLICATION_ROOT = '/core'
 DASHBOARD_PREFIX = ''
@@ -11,9 +11,31 @@ DASHBOARD_PREFIX = ''
 DATA_ROOT = '.'
 
 
-################################################################################
+###############################################################################
+# Database engine options
+###############################################################################
+
+# Database backend: "sqlite", "Mysql", "mysql+mysqldb", etc.; see
+# https://docs.sqlalchemy.org/en/14/core/engines.html
+# Default is 'sqlite', which requires no further configuration
+DB_BACKEND = 'sqlite'
+
+# For non-sqlite backends, this is the database server address
+DB_HOST = 'localhost'
+DB_PORT = 3306
+
+# Database server username/password
+DB_USER = 'afterglow_core'
+# Password must be encrypted using afterglow_core/scripts/encrypt.py
+DB_PASS = ''
+
+# Database schema containing all Afterglow Core tables
+DB_SCHEMA = 'afterglow'
+
+
+###############################################################################
 # Security options
-################################################################################
+###############################################################################
 
 AUTH_ENABLED = True
 
@@ -37,9 +59,9 @@ OAUTH2_PROVIDER_TOKEN_EXPIRES_IN = 3600
 # Cookie token expiration time in seconds
 COOKIE_TOKEN_EXPIRES_IN = 86400
 
-################################################################################
+###############################################################################
 # Data provider options
-################################################################################
+###############################################################################
 
 # Default data provider auth methods; defaults to any method registered in
 # USER_AUTH
@@ -54,9 +76,9 @@ DATA_PROVIDERS = [
 ]
 
 
-################################################################################
+###############################################################################
 # Data file options
-################################################################################
+###############################################################################
 
 # Root directory for data file storage
 DATA_FILE_ROOT = DATA_ROOT
@@ -73,12 +95,19 @@ DATA_FILE_UPLOAD = False
 HISTOGRAM_BINS = 1024
 
 
-################################################################################
+###############################################################################
 # Catalog options
-################################################################################
+###############################################################################
 
 # Default VizieR server address for all catalogs; no protocol and path
 VIZIER_SERVER = 'vizier.cfa.harvard.edu'
+
+# Cache VizieR queries (may eventually take a lot of disk space unless
+# VIZIER_CACHE_AGE is set to a reasonable value)
+VIZIER_CACHE = True
+
+# Maximum age of queries in disk cache in days
+VIZIER_CACHE_AGE = 30
 
 # Catalog-specific options:
 # CATALOG_OPTIONS = {
@@ -94,8 +123,8 @@ CATALOG_OPTIONS = {}
 #      'col_mapping': {
 #          'id': 'NOMAD1', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
 #      },
-#      'mags': {'B': 'Bmag', 'V': 'Vmag', 'R': 'Rmag', 'J': 'Jmag', 'H': 'Hmag',
-#               'K': 'Kmag'},
+#      'mags': {'B': 'Bmag', 'V': 'Vmag', 'R': 'Rmag', 'J': 'Jmag',
+#               'H': 'Hmag', 'K': 'Kmag'},
 #     },
 #     ...
 # ]
@@ -109,9 +138,9 @@ CUSTOM_VIZIER_CATALOGS = []
 ANET_INDEX_PATH = []
 
 
-################################################################################
+###############################################################################
 # Job server options
-################################################################################
+###############################################################################
 
 # TCP port job server listens on
 JOB_SERVER_PORT = 2109

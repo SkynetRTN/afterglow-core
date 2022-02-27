@@ -4,6 +4,7 @@ Afterglow Core: image cropping job plugin
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import List as TList, Optional, Tuple
 
 from marshmallow.fields import Integer, List, Nested
@@ -39,7 +40,8 @@ def max_rectangle(histogram: ndarray) -> Tuple[int, int, int]:
                 stack.append((start, h))
             elif stack and h < stack[-1][1]:
                 top_start, top_height = stack[-1]
-                if (pos - top_start + 1)*top_height > (right - left + 1)*height:
+                if (pos - top_start + 1)*top_height > \
+                        (right - left + 1)*height:
                     left, right, height = top_start, pos, top_height
                 start = stack.pop()[0]
                 continue
@@ -168,8 +170,9 @@ def run_cropping_job(job: Job,
                 if any([left, right, top, bottom]):
                     data = data[bottom:-(top + 1), left:-(right + 1)]
                     hdr.add_history(
-                        'Cropped with margins: left={}, right={}, top={}, '
-                        'bottom={}'.format(left, right, top, bottom))
+                        '[{}] Cropped by Afterglow with margins: left={}, '
+                        'right={}, top={}, bottom={}'
+                        .format(datetime.utcnow(), left, right, top, bottom))
 
                     # Move CRPIXn if present
                     if left:
