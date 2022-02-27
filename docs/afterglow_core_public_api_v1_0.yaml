@@ -885,7 +885,7 @@ components:
         auto_sat_level:
           description: estimate saturation level automatically
           type: boolean
-          default: true
+          default: false
         discard_saturated:
           description: discard sources containing the given number of pixels above sat_level; 0 = don't discard
           type: integer

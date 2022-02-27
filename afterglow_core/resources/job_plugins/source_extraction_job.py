@@ -45,7 +45,7 @@ class SourceExtractionSettings(AfterglowSchema):
     centroid: bool = Boolean(default=True)
     limit: int = Integer(default=None)
     sat_level: float = Float(default=63000)
-    auto_sat_level: bool = Boolean(default=True)
+    auto_sat_level: bool = Boolean(default=False)
     discard_saturated: int = Integer(default=1)
 
 
