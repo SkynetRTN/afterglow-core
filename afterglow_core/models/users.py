@@ -39,7 +39,8 @@ class User(AfterglowSchema):
     modified_at: datetime = DateTime()
     roles: TList[Role] = List(Nested(Role, only=['name']))
     settings: str = String()
-    identities: TList[Identity] = List(Nested(Identity, only=['id', 'name']))
+    identities: TList[Identity] = List(Nested(
+        Identity, only=['id', 'name', 'auth_method', 'data']))
 
 
 class Token(AfterglowSchema):

@@ -31,8 +31,9 @@ from werkzeug.http import HTTP_STATUS_CODES
 
 from . import app, plugins
 from .errors import AfterglowError, MissingFieldError
+from .errors.auth import UnknownUserError
 from .errors.job import *
-from .models import Job, JobResult, JobState, job_file_dir, job_file_path
+from .models import Job, JobResult, JobState, User, job_file_dir, job_file_path
 from .resources.base import Date, DateTime, JSONType, Time
 from .schemas import (
     AfterglowSchema, Boolean as BooleanField, Date as DateField,
@@ -367,13 +368,6 @@ class JobWorkerProcess(Process):
         reload(data_files)
 
         from . import auth
-        from .resources import users
-        users.db.engine.dispose()
-        # noinspection PyTypeChecker
-        reload(users)
-        if app.config.get('AUTH_ENABLED'):
-            # noinspection PyProtectedMember
-            users._init_users()
 
         # Memory leak detection support
         trace_malloc = app.config.get('JOB_TRACE_MALLOC')
@@ -395,6 +389,10 @@ class JobWorkerProcess(Process):
                     break
                 app.logger.debug('%s Got job request: %s', prefix, job_descr)
 
+                # Save user object proxy from the job server to app context
+                # for the duration of the job
+                auth.current_user = job_descr.pop('user', None)
+
                 # Create job object from description; job_descr is guaranteed
                 # to contain at least type, ID, and user ID, and
                 # the corresponding job plugin is guaranteed to exist
@@ -411,24 +409,6 @@ class JobWorkerProcess(Process):
                         result=dict(errors=[str(e)]),
                     ))
                     continue
-
-                # Set auth.current_user to the actual db user
-                if job.user_id is not None:
-                    user_session = users.db.create_scoped_session()
-                    try:
-                        auth.current_user = user_session.query(users.DbUser) \
-                            .get(job.user_id)
-                    except Exception:
-                        print(
-                            '!!! User db query error for user ID', job.user_id)
-                        user_session.remove()
-                        raise
-                    if auth.current_user is None:
-                        print('!!! No user for user ID', job.user_id)
-                        auth.current_user = auth.AnonymousUser()
-                else:
-                    auth.current_user = auth.AnonymousUser()
-                    user_session = None
 
                 # Clear the possible cancel request
                 if WINDOWS:
@@ -455,9 +435,6 @@ class JobWorkerProcess(Process):
                     # Unexpected job exception
                     job.add_error(e)
                 finally:
-                    if user_session is not None:
-                        user_session.remove()
-
                     # Notify the job server about job completion
                     if job.state.status != 'canceled':
                         job.state.status = 'completed'
@@ -604,10 +581,7 @@ class JobRequestHandler(BaseRequestHandler):
             except Exception:
                 raise JobServerError(reason='Missing resource ID')
 
-            try:
-                user_id = msg['user_id']
-            except Exception:
-                raise JobServerError(reason='Missing user ID')
+            user_id = msg.get('user_id')
 
             if resource == 'jobs':
                 if method == 'get':
@@ -661,6 +635,18 @@ class JobRequestHandler(BaseRequestHandler):
                                 server.pool.append(JobWorkerProcessWrapper(
                                     server.job_queue, server.result_queue))
 
+                    # Obtain a user database object proxy used in the job
+                    # worker process for authentication purposes instead of
+                    # the original database object to avoid excessive and
+                    # long-lived database connections in worker processes
+                    from .resources import users
+                    if user_id is None:
+                        user = users.AnonymousUser()
+                    else:
+                        db_user = session.query(users.DbUser).get(user_id)
+                        if db_user is None:
+                            raise UnknownUserError(id=user_id)
+                        user = User(db_user)
                     try:
                         # Convert message arguments to polymorphic job model
                         # and create an appropriate db job class instance
@@ -673,8 +659,10 @@ class JobRequestHandler(BaseRequestHandler):
                         )
                         session.add(db_job)
                         session.flush()
-                        result = Job(db_job).to_dict()
-                        server.job_queue.put(result)
+                        job_descr = Job(db_job).to_dict()
+                        result = dict(job_descr)
+                        job_descr['user'] = user
+                        server.job_queue.put(job_descr)
                         session.commit()
                     except Exception:
                         session.rollback()
