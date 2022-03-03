@@ -20,7 +20,7 @@ class JSONType(types.TypeDecorator):
     :class:`sqlalchemy_utils.types.json.JSONType`, which can be initialized
     both from a JSON structure and a JSON string
     """
-    impl = types.UnicodeText
+    impl = types.UnicodeText(1 << 31)
     cache_ok = True
 
     def process_bind_param(self, value, dialect):
