@@ -3,8 +3,8 @@ import atexit
 import cProfile
 import ctypes
 import errno
-import json
 import os
+import pickle
 import shutil
 import signal
 import socket
@@ -559,11 +559,11 @@ class JobRequestHandler(BaseRequestHandler):
                 msg += self.request.recv(msg_len - len(msg))
 
             try:
-                msg = json.loads(msg)
+                msg = pickle.loads(msg)
                 if not isinstance(msg, dict):
                     raise Exception()
             except Exception:
-                raise JobServerError(reason='JSON dict expected')
+                raise JobServerError(reason='A dict expected')
 
             try:
                 method = msg.pop('method').lower()
@@ -851,7 +851,7 @@ class JobRequestHandler(BaseRequestHandler):
 
         # noinspection PyBroadException
         try:
-            msg = json.dumps(msg).encode('utf8')
+            msg = pickle.dumps(msg)
             self.request.sendall(struct.pack(msg_hdr, len(msg)) + msg)
         except Exception:
             # noinspection PyBroadException
@@ -1125,7 +1125,7 @@ def init_jobs():
     def terminate_server():
         # noinspection PyBroadException
         try:
-            msg = json.dumps(dict(method='terminate')).encode('ascii')
+            msg = pickle.dumps(dict(method='terminate'))
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect(('localhost', app.config['JOB_SERVER_PORT']))
             try:

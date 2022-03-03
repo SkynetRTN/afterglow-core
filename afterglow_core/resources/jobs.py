@@ -4,7 +4,7 @@ Afterglow Core: job resources
 Job types are defined in afterglow_core.job_plugins.
 """
 
-import json
+import pickle
 import struct
 import socket
 from typing import Any, Dict as TDict
@@ -38,7 +38,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
             method=method,
             user_id=getattr(auth.current_user, 'id', None),
         ))
-        msg = json.dumps(msg).encode('utf8')
+        msg = pickle.dumps(msg)
 
         # Send message
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -67,10 +67,10 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
             else ', '.join(str(arg) for arg in e.args) if e.args else str(e))
 
     try:
-        msg = json.loads(msg)
+        msg = pickle.loads(msg)
         if not isinstance(msg, dict):
             raise Exception()
     except Exception:
-        raise JobServerError(reason='JSON structure expected')
+        raise JobServerError(reason='A dict expected')
 
     return msg
