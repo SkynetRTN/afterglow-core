@@ -837,9 +837,14 @@ class JobRequestHandler(BaseRequestHandler):
 
         # noinspection PyBroadException
         try:
-            session.remove()
+            session.close()
         except Exception:
-            pass
+            # noinspection PyBroadException
+            try:
+                app.logger.warning(
+                    'Error closing job request handler session', exc_info=True)
+            except Exception:
+                pass
 
         # Format response message and send back to Flask
         msg = {'json': result, 'status': http_status}
@@ -939,7 +944,7 @@ def job_server(notify_queue):
                 'sqlite:///{}'.format(db_path),
                 connect_args={'check_same_thread': False,
                               'isolation_level': None,
-                              'timeout': 15},
+                              'timeout': app.config.get('DB_TIMEOUT', 30)},
             )
         else:
             # If using database server instead of sqlite, reuse the same
@@ -1099,7 +1104,7 @@ def init_jobs():
     """
     # Start job server process
     notify_queue = Queue()
-    p = Process(target=job_server, args=(notify_queue,))
+    p = Process(target=job_server, name='JobServer', args=(notify_queue,))
     p.start()
 
     # Wait for initialization

@@ -378,7 +378,9 @@ class DataProvider(AfterglowSchema):
             from .. import auth
             if required_method == 'http':
                 # HTTP auth requires username and password being set
-                if auth.current_user.username and auth.current_user.password:
+                if auth.current_user is not None and \
+                        auth.current_user.username and \
+                        auth.current_user.password:
                     return
                 continue
 

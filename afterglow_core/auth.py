@@ -21,7 +21,7 @@ import os
 from datetime import timedelta
 from functools import wraps
 import time
-from typing import Callable, Optional, Sequence, Union
+from typing import Any, Callable, Optional, Sequence, Union
 
 from werkzeug.urls import url_encode
 from flask import Response, request, make_response, redirect
@@ -31,14 +31,11 @@ from flask_wtf.csrf import generate_csrf
 
 from . import app
 from .errors.auth import NotAuthenticatedError
-from .resources.users import (
-    AnonymousUser, DbPersistentToken, DbUser, db, user_datastore)
-from .oauth2 import Token
 
 
 __all__ = [
-    'oauth_plugins', 'auth_required', 'authenticate', 'security',
-    'current_user', 'anonymous_user', 'jwt_manager',
+    'oauth_plugins', 'auth_required', 'authenticate',
+    'current_user', 'jwt_manager',
     'set_access_cookies', 'clear_access_cookies',
 ]
 
@@ -46,16 +43,14 @@ __all__ = [
 oauth_plugins = {}
 http_auth_plugins = {}
 
-security = None  # flask_security instance
-anonymous_user = current_user = AnonymousUser()
+current_user: Any = None
 jwt_manager = None
 
 USER_REALM = 'Registered Afterglow Users Only'
 
 
 # noinspection PyUnusedLocal
-def authenticate(roles: Optional[Union[str, Sequence[str]]] = None) \
-        -> Union[DbUser, AnonymousUser]:
+def authenticate(roles: Optional[Union[str, Sequence[str]]] = None):
     """
     Perform user authentication
 
@@ -64,6 +59,7 @@ def authenticate(roles: Optional[Union[str, Sequence[str]]] = None) \
     :return: database object for the authenticated user; raises
         :class:`AuthError` on authentication error
     """
+    from .resources.users import AnonymousUser
     user = _request_ctx_stack.top.user = request.user = AnonymousUser()
     return user
 
@@ -195,14 +191,14 @@ def _init_auth() -> None:
     # To reduce dependencies, only import marshmallow, flask-security, and
     # flask-sqlalchemy if user auth is enabled
     # noinspection PyProtectedMember
-    from flask_security import Security, current_user as _current_user
+    from flask_security import current_user as _current_user
     from .plugins import load_plugins
     from .auth_plugins import (
         AuthnPluginBase, OAuthServerPluginBase, HttpAuthPluginBase)
 
     # noinspection PyGlobalUndefined
-    global oauth_plugins, http_auth_plugins, authenticate, security, \
-        current_user, set_access_cookies, clear_access_cookies
+    global oauth_plugins, http_auth_plugins, authenticate, current_user, \
+        set_access_cookies, clear_access_cookies
 
     current_user = _current_user
 
@@ -217,6 +213,8 @@ def _init_auth() -> None:
 
         :return: Flask response
         """
+        from .resources.users import db
+        from .oauth2 import Token
         expires_in = app.config.get('COOKIE_TOKEN_EXPIRES_IN', 86400)
         try:
             if not access_token:
@@ -287,13 +285,15 @@ def _init_auth() -> None:
 
     clear_access_cookies = _clear_access_cookies
 
-    def _authenticate(roles: Optional[Union[str, Sequence[str]]] = None) \
-            -> DbUser:
+    def _authenticate(roles: Optional[Union[str, Sequence[str]]] = None):
         """
         Authenticate the user
 
         :param roles: list of authenticated user role IDs or a single role ID
         """
+        from .resources.users import DbPersistentToken
+        from .oauth2 import Token
+
         # If access token in HTTP Authorization header, verify and authorize.
         # otherwise, attempt to reconstruct token from cookies
         tokens = []
@@ -390,8 +390,6 @@ def _init_auth() -> None:
     app.config.setdefault('SECURITY_DEFAULT_HTTP_AUTH_REALM', USER_REALM)
     app.config.setdefault('ACCESS_TOKEN_EXPIRES', timedelta(days=1))
     app.config.setdefault('REFRESH_TOKEN_EXPIRES', None)
-
-    security = Security(app, user_datastore, register_blueprint=False)
 
 
 if app.config.get('AUTH_ENABLED'):

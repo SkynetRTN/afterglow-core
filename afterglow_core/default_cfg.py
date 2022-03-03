@@ -32,6 +32,17 @@ DB_PASS = ''
 # Database schema containing all Afterglow Core tables
 DB_SCHEMA = 'afterglow'
 
+# Database connection/pool timeout in seconds
+DB_TIMEOUT = 30
+
+# Max number of db connections for the API; set to at least the number
+# of WSGI threads
+DB_POOL_SIZE = 10
+
+# Max number of db connections for the job server; set to at least one plus
+# the number of WSGI processes times the number of WSGI threads
+JOB_DB_POOL_SIZE = 10
+
 
 ###############################################################################
 # Security options

@@ -21,13 +21,15 @@ OAUTH_CLIENTS config option:
 All attributes except `client_id`, `client_secret`, `redirect_uris`, and
 `consent_uri` are optional.
 
-Additionally, the user must set the OAUTH2_PROVIDER_ERROR_URI option to redirect
-OAuth2 errors. OAUTH2_PROVIDER_TOKEN_EXPIRES_IN controls the token expiration
-time.
+Additionally, the user must set the OAUTH2_PROVIDER_ERROR_URI option
+to redirect OAuth2 errors. OAUTH2_PROVIDER_TOKEN_EXPIRES_IN controls the token
+expiration time.
 """
 
 import time
 import secrets
+
+from flask import request
 
 from . import app
 
@@ -90,8 +92,8 @@ def _init_oauth():
                     - token_endpoint_auth_method: RFC7591 token endpoint
                         authentication method: "none" (public client),
                         "client_secret_post" (client uses the HTTP POST
-                        parameters), or "client_secret_basic" (client uses basic
-                        HTTP auth)
+                        parameters), or "client_secret_basic" (client uses
+                        basic HTTP auth)
                     - allowed_grant_types: list of allowed grant types,
                         including "authorization_code", "implicit",
                         "client_credentials", and "password"
@@ -242,6 +244,7 @@ def _init_oauth():
                 code_challenge_method = request.data.get(
                     'code_challenge_method')
 
+                # noinspection PyArgumentList
                 db.session.add(OAuth2AuthorizationCode(
                     code=code,
                     client_id=req.client.client_id,

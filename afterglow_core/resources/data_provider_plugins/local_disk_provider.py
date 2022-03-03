@@ -172,7 +172,8 @@ class LocalDiskDataProvider(DataProvider):
         """
         p = os.path.abspath(os.path.expanduser(self.root))
         if self.peruser:
-            user_id = auth.current_user.id
+            user_id = auth.current_user.id \
+                if auth.current_user is not None else None
             if user_id:
                 p = os.path.join(p, str(user_id))
 

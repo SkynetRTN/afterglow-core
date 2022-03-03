@@ -6,10 +6,12 @@ import os
 import time
 import errno
 import shutil
+import multiprocessing
 from typing import List as TList, Optional
 
 from flask_sqlalchemy import SQLAlchemy
-from flask_security import UserMixin, RoleMixin, SQLAlchemyUserDatastore
+from flask_security import (
+    Security, UserMixin, RoleMixin, SQLAlchemyUserDatastore)
 from flask_security.utils import hash_password
 
 from .. import app, cipher
@@ -28,29 +30,37 @@ __all__ = [
 
 
 if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
-    app.config.setdefault(
-        'SQLALCHEMY_DATABASE_URI', 'sqlite:///{}'.format(os.path.join(
-            os.path.abspath(app.config['DATA_ROOT']), 'afterglow.db')))
-    app.config.setdefault(
-        'SQLALCHEMY_ENGINE_OPTIONS', {'connect_args': {'timeout': 15}})
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///{}'.format(os.path.join(
+            os.path.abspath(app.config['DATA_ROOT']), 'afterglow.db'))
+    app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {}).setdefault(
+        'connect_args', {})['timeout'] = app.config.get('DB_TIMEOUT', 30)
 else:
     _db_pass = app.config.get('DB_PASS', '')
     if _db_pass:
         if not isinstance(_db_pass, bytes):
             _db_pass = _db_pass.encode('ascii')
         _db_pass = cipher.decrypt(_db_pass).decode('utf8')
-    app.config.setdefault(
-        'SQLALCHEMY_DATABASE_URI', '{}://{}{}@{}:{}/{}'.format(
+    app.config['SQLALCHEMY_DATABASE_URI'] = '{}://{}{}@{}:{}/{}'.format(
             app.config.get('DB_BACKEND'),
             app.config.get('DB_USER', 'admin'),
             ':' + _db_pass if _db_pass else '',
             app.config.get('DB_HOST', 'localhost'),
             app.config.get('DB_PORT', 3306),  # default for MySQL
-            app.config.get('DB_SCHEMA', 'afterglow')))
+            app.config.get('DB_SCHEMA', 'afterglow'))
+    app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})['pool_timeout'] = \
+        app.config.get('DB_TIMEOUT', 30)
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('pool_recycle', 3600)
+    if multiprocessing.current_process().name == 'JobServer':
+        # Separate db pool size setting for job server
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault(
+            'pool_size', app.config.get('JOB_DB_POOL_SIZE', 10))
+    else:
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault(
+            'pool_size', app.config.get('DB_POOL_SIZE', 10))
     del _db_pass
 app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
 
-user_datastore = None
+user_datastore = security = None
 
 
 db = SQLAlchemy(app)
@@ -246,9 +256,10 @@ def _init_users():
     from alembic.script import ScriptDirectory
     from alembic.runtime.environment import EnvironmentContext
 
-    global user_datastore
+    global user_datastore, security
 
     user_datastore = SQLAlchemyUserDatastore(db, DbUser, DbRole)
+    security = Security(app, user_datastore, register_blueprint=False)
 
     # Make sure that the database directory exists
     try:
