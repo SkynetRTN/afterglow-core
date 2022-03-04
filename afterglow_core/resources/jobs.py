@@ -5,14 +5,18 @@ Job types are defined in afterglow_core.job_plugins.
 """
 
 import pickle
-import struct
 import socket
+import struct
+import sys
+import traceback
 from typing import Any, Dict as TDict
 
+from werkzeug.http import HTTP_STATUS_CODES
+
 from .. import app
-from ..errors import AfterglowError
-from ..errors.job import JobServerError
-from ..job_server import msg_hdr, msg_hdr_size
+from ..errors import AfterglowError, MissingFieldError
+from ..errors.job import JobServerError, UnknownJobError
+from ..job_server import DbJob, job_types, msg_hdr, msg_hdr_size
 
 
 __all__ = ['job_server_request']
@@ -30,13 +34,70 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
     :return: response message
     """
     from .. import auth
+    user_id = getattr(auth.current_user, 'id', None)
+
+    if resource == 'jobs/result' and method.lower() == 'get' and \
+            app.config.get('DB_BACKEND', 'sqlite') != 'sqlite':
+        # Fast path for getting job result when using non-sqlite backends:
+        # retrieve job result directly from the database to avoid extra
+        # serialization of large data
+        # Return job result
+        from .users import db
+        try:
+            try:
+                job_id = args['id']
+            except KeyError:
+                raise MissingFieldError(field='id')
+
+            db_job = db.session.query(DbJob).get(job_id)
+            if db_job is None or db_job.user_id != user_id:
+                raise UnknownJobError(id=job_id)
+
+            # Deduce the polymorphic job result type from the parent
+            # job model; add job type info for the /jobs/[id]/result
+            # view to be able to find the appropriate schema as well
+            result = job_types[db_job.type].fields['result'].nested(
+                db_job.result).to_dict()
+            result['type'] = db_job.type
+            http_status = 200
+
+        except AfterglowError as e:
+            # Construct JSON error response in the same way as
+            # errors.afterglow_error_handler()
+            http_status = int(getattr(e, 'code', 0)) or 400
+            result = {
+                'status': HTTP_STATUS_CODES.get(
+                    http_status, '{} Unknown Error'.format(http_status)),
+                'id': str(getattr(e, 'id', e.__class__.__name__)),
+                'detail': str(e),
+            }
+            meta = getattr(e, 'meta', None)
+            if meta:
+                result['meta'] = dict(meta)
+            if http_status == 500:
+                result.setdefault('meta', {})['traceback'] = \
+                    traceback.format_tb(sys.exc_info()[-1]),
+
+        except Exception as e:
+            # Wrap other exceptions in JobServerError
+            # noinspection PyUnresolvedReferences
+            http_status = JobServerError.code
+            result = {
+                'status': HTTP_STATUS_CODES[http_status],
+                'id': e.__class__.__name__,
+                'detail': str(e),
+                'meta': {'traceback': traceback.format_tb(sys.exc_info()[-1])},
+            }
+
+        return {'json': result, 'status': http_status}
+
     try:
         # Prepare server message
         msg = dict(args)
         msg.update(dict(
             resource=resource,
             method=method,
-            user_id=getattr(auth.current_user, 'id', None),
+            user_id=user_id,
         ))
         msg = pickle.dumps(msg)
 

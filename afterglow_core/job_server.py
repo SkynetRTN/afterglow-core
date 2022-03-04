@@ -193,6 +193,16 @@ def db_from_schema(base_class, schema: AfterglowSchema,
         )
 
 
+# Initialize job database
+# Create DbJob and DbJobResult subclasses for each job type based on schema
+# fields
+db_job_types, db_job_result_types = {}, {}
+for _job_type, _job_schema in job_types.items():
+    db_job_types[_job_type] = db_from_schema(DbJob, _job_schema)
+    db_job_result_types[_job_type] = db_from_schema(
+        DbJobResult, _job_schema.fields['result'].nested(), _job_schema.type)
+
+
 # Read/write lock by Fazal Majid
 # (http://www.majid.info/mylos/weblog/2004/11/04-1.html)
 # updated to support context manager protocol
@@ -908,17 +918,6 @@ def job_server(notify_queue):
         '' if min_pool_size == 1 else 'es')
 
     try:
-        # Initialize job database
-        # Create DbJob and DbJobResult subclasses for each job type based on
-        # schema fields
-        db_job_types, db_job_result_types = {}, {}
-        for job_type, job_schema in job_types.items():
-            db_job_types[job_type] = db_from_schema(
-                DbJob, job_schema)
-            db_job_result_types[job_type] = db_from_schema(
-                DbJobResult, job_schema.fields['result'].nested(),
-                job_schema.type)
-
         if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
             # Enable foreign keys in sqlite; required for ON DELETE CASCADE
             # to work when deleting jobs; set journal mode to WAL to allow
