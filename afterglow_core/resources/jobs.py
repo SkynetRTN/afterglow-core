@@ -15,8 +15,9 @@ from werkzeug.http import HTTP_STATUS_CODES
 
 from .. import app
 from ..errors import AfterglowError, MissingFieldError
-from ..errors.job import JobServerError, UnknownJobError
-from ..job_server import DbJob, job_types, msg_hdr, msg_hdr_size
+from ..errors.job import JobServerError, UnknownJobError, UnknownJobFileError
+from ..job_server import DbJob, DbJobFile, job_types, msg_hdr, msg_hdr_size
+from ..models.jobs import Job, JobState, job_file_path
 
 
 __all__ = ['job_server_request']
@@ -36,7 +37,8 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
     from .. import auth
     user_id = getattr(auth.current_user, 'id', None)
 
-    if resource == 'jobs/result' and method.lower() == 'get' and \
+    if resource in ('jobs', 'jobs/state', 'jobs/result') and 'id' in args and \
+            method.lower() == 'get' and \
             app.config.get('DB_BACKEND', 'sqlite') != 'sqlite':
         # Fast path for getting job result when using non-sqlite backends:
         # retrieve job result directly from the database to avoid extra
@@ -53,12 +55,32 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
             if db_job is None or db_job.user_id != user_id:
                 raise UnknownJobError(id=job_id)
 
-            # Deduce the polymorphic job result type from the parent
-            # job model; add job type info for the /jobs/[id]/result
-            # view to be able to find the appropriate schema as well
-            result = job_types[db_job.type].fields['result'].nested(
-                db_job.result).to_dict()
-            result['type'] = db_job.type
+            if resource == 'jobs':
+                result = Job(db_job, exclude=['result']).to_dict()
+            elif resource == 'jobs/state':
+                result = JobState(db_job.state).to_dict()
+            elif resource == 'jobs/result':
+                result = job_types[db_job.type].fields['result'].nested(
+                    db_job.result).to_dict()
+                result['type'] = db_job.type
+            elif resource == 'jobs/result/files':
+                try:
+                    file_id = args['file_id']
+                except KeyError:
+                    raise MissingFieldError(field='file_id')
+
+                job_file = db.session.query(DbJobFile).filter_by(
+                    job_id=job_id, file_id=file_id).one_or_none()
+                if job_file is None or job_file.job.user_id != user_id:
+                    raise UnknownJobFileError(id=file_id)
+
+                result = {
+                    'filename': job_file_path(user_id, job_id, file_id),
+                    'mimetype': job_file.mimetype,
+                    'headers': job_file.headers or [],
+                }
+            else:
+                result = {}
             http_status = 200
 
         except AfterglowError as e:
