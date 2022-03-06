@@ -118,10 +118,9 @@ def test_process(
         except Exception:
             time.sleep(5)
         else:
-            break
-    if not file_ids:
-        print('No files in {}'.format(proc_id + 1))
-        return
+            if file_ids:
+                break
+            time.sleep(5)
 
     for cycle in range(cycles):
         # noinspection PyBroadException
