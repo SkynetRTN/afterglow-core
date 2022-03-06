@@ -13,11 +13,11 @@ import time
 import traceback
 import warnings
 from multiprocessing import Process
-from typing import Dict, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 
 def api_call(host, port, https, root, api_version, token, method, resource,
-             params=None) -> Optional[Union[Dict[str, dict], str, bytes]]:
+             params=None) -> Optional[Union[Dict[str, Any], str, bytes]]:
     method = method.upper()
 
     headers = {'Authorization': 'Bearer {}'.format(token)}
@@ -123,61 +123,47 @@ def test_process(
         print('No files in {}'.format(proc_id + 1))
         return
 
-    try:
-        for cycle in range(cycles):
-            # noinspection PyBroadException
-            try:
-                # Retrieve pixel data
-                for i in file_ids:
-                    api_call(
-                        host, port, https, root, api_version, token,
-                        'GET', 'data-files/{}/pixels'.format(i))
-
-                # Stack images
-                time.sleep(max(random.gauss(5, 3), 0))
-                temp_file_id = run_job(
-                    host, port, https, root, api_version, token, 'stacking',
-                    {'file_ids': file_ids})['file_id']
-                while True:
-                    # noinspection PyBroadException
-                    try:
-                        api_call(
-                            host, port, https, root, api_version, token,
-                            'DELETE', 'data-files/{}'.format(temp_file_id))
-                    except Exception:
-                        time.sleep(5)
-                    else:
-                        break
-
-                # Extract sources from the first image
-                time.sleep(max(random.gauss(5, 3), 0))
-                sources = run_job(
+    for cycle in range(cycles):
+        # noinspection PyBroadException
+        try:
+            # Retrieve pixel data
+            for i in file_ids:
+                api_call(
                     host, port, https, root, api_version, token,
-                    'source_extraction', {'file_ids': [file_ids[0]]})['data']
+                    'GET', 'data-files/{}/pixels'.format(i))
 
-                # Photometer sources in all images
-                time.sleep(max(random.gauss(5, 3), 0))
-                run_job(
-                    host, port, https, root, api_version, token, 'photometry',
-                    {'file_ids': file_ids, 'sources': sources, 'settings': {
-                        'a': 10, 'a_in': 15, 'a_out': 20}})
-            except Exception:
-                traceback.print_exc()
-
-            print('{}: {}'.format(proc_id + 1, cycle + 1))
-    finally:
-        # Cleanup
-        for i in file_ids:
+            # Stack images
+            time.sleep(max(random.gauss(5, 3), 0))
+            temp_file_id = run_job(
+                host, port, https, root, api_version, token, 'stacking',
+                {'file_ids': file_ids})['file_id']
             while True:
                 # noinspection PyBroadException
                 try:
                     api_call(
                         host, port, https, root, api_version, token,
-                        'DELETE', 'data-files/{}'.format(i))
+                        'DELETE', 'data-files/{}'.format(temp_file_id))
                 except Exception:
                     time.sleep(5)
                 else:
                     break
+
+            # Extract sources from the first image
+            time.sleep(max(random.gauss(5, 3), 0))
+            sources = run_job(
+                host, port, https, root, api_version, token,
+                'source_extraction', {'file_ids': [file_ids[0]]})['data']
+
+            # Photometer sources in all images
+            time.sleep(max(random.gauss(5, 3), 0))
+            run_job(
+                host, port, https, root, api_version, token, 'photometry',
+                {'file_ids': file_ids, 'sources': sources, 'settings': {
+                    'a': 10, 'a_in': 15, 'a_out': 20}})
+        except Exception:
+            traceback.print_exc()
+
+        print('{}: {}'.format(proc_id + 1, cycle + 1))
 
 
 if __name__ == '__main__':
@@ -215,5 +201,24 @@ if __name__ == '__main__':
         args.token, args.obs, args.cycles)) for i in range(args.workers)]
     for p in processes:
         p.start()
-    for p in processes:
-        p.join()
+    try:
+        for p in processes:
+            p.join()
+    finally:
+        # Cleanup
+        data_files = api_call(
+            args.host, args.port, args.https, args.root, args.api_version,
+            args.token, 'GET', 'data-files')
+        for f in data_files:
+            while True:
+                # noinspection PyBroadException
+                try:
+                    # noinspection PyTypeChecker
+                    api_call(
+                        args.host, args.port, args.https, args.root,
+                        args.api_version, args.token,
+                        'DELETE', 'data-files/{}'.format(f['id']))
+                except Exception:
+                    time.sleep(5)
+                else:
+                    break
