@@ -106,12 +106,23 @@ def run_job(host, port, https, root, api_version, token, job_type, params):
 def test_process(
         proc_id, host, port, https, root, api_version, token, obs_id, cycles):
     # Import observation
-    file_ids = run_job(
-        host, port, https, root, api_version, token, 'batch_import',
-        {'settings': [{
-            'provider_id': '1', 'duplicates': 'append',
-            'path': 'User Observations/{}/reduced'.format(obs_id)
-        }]})['file_ids']
+    while True:
+        # noinspection PyBroadException
+        try:
+            file_ids = run_job(
+                host, port, https, root, api_version, token, 'batch_import',
+                {'settings': [{
+                    'provider_id': '1', 'duplicates': 'append',
+                    'path': 'User Observations/{}/reduced'.format(obs_id)
+                }]})['file_ids']
+        except Exception:
+            time.sleep(5)
+        else:
+            break
+    if not file_ids:
+        print('No files in {}'.format(proc_id + 1))
+        return
+
     try:
         for cycle in range(cycles):
             # noinspection PyBroadException
