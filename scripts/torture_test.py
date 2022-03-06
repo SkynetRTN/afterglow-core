@@ -105,8 +105,8 @@ def run_job(host, port, https, root, api_version, token, job_type, params):
 def test_process(
         proc_id, host, port, https, root, api_version, token, obs_id, cycles):
     # noinspection PyBroadException
-    try:
-        for cycle in range(cycles):
+    for cycle in range(cycles):
+        try:
             # Import observation
             file_ids = run_job(
                 host, port, https, root, api_version, token, 'batch_import',
@@ -147,8 +147,8 @@ def test_process(
                     except Exception:
                         pass
                 print('{}: {}'.format(proc_id + 1, cycle + 1))
-    except Exception:
-        traceback.print_exc()
+        except Exception:
+            traceback.print_exc()
 
 
 if __name__ == '__main__':
