@@ -105,18 +105,16 @@ def run_job(host, port, https, root, api_version, token, job_type, params):
 
 def test_process(
         proc_id, host, port, https, root, api_version, token, obs_id, cycles):
-    for cycle in range(cycles):
-        # noinspection PyBroadException
-        try:
-            # Import observation
-            file_ids = run_job(
-                host, port, https, root, api_version, token, 'batch_import',
-                {'settings': [{
-                    'provider_id': '1', 'duplicates': 'append',
-                    'path': 'User Observations/{}/reduced'.format(obs_id)
-                }]})['file_ids']
-            if not file_ids:
-                continue
+    # Import observation
+    file_ids = run_job(
+        host, port, https, root, api_version, token, 'batch_import',
+        {'settings': [{
+            'provider_id': '1', 'duplicates': 'append',
+            'path': 'User Observations/{}/reduced'.format(obs_id)
+        }]})['file_ids']
+    try:
+        for cycle in range(cycles):
+            # noinspection PyBroadException
             try:
                 # Retrieve pixel data
                 for i in file_ids:
@@ -126,9 +124,19 @@ def test_process(
 
                 # Stack images
                 time.sleep(max(random.gauss(5, 3), 0))
-                file_ids.append(run_job(
+                temp_file_id = run_job(
                     host, port, https, root, api_version, token, 'stacking',
-                    {'file_ids': file_ids})['file_id'])
+                    {'file_ids': file_ids})['file_id']
+                while True:
+                    # noinspection PyBroadException
+                    try:
+                        api_call(
+                            host, port, https, root, api_version, token,
+                            'DELETE', 'data-files/{}'.format(temp_file_id))
+                    except Exception:
+                        time.sleep(5)
+                    else:
+                        break
 
                 # Extract sources from the first image
                 time.sleep(max(random.gauss(5, 3), 0))
@@ -142,22 +150,23 @@ def test_process(
                     host, port, https, root, api_version, token, 'photometry',
                     {'file_ids': file_ids, 'sources': sources, 'settings': {
                         'a': 10, 'a_in': 15, 'a_out': 20}})
-            finally:
-                # Cleanup
-                for i in file_ids:
-                    while True:
-                        # noinspection PyBroadException
-                        try:
-                            api_call(
-                                host, port, https, root, api_version, token,
-                                'DELETE', 'data-files/{}'.format(i))
-                        except Exception:
-                            time.sleep(5)
-                        else:
-                            break
-                print('{}: {}'.format(proc_id + 1, cycle + 1))
-        except Exception:
-            traceback.print_exc()
+            except Exception:
+                traceback.print_exc()
+
+            print('{}: {}'.format(proc_id + 1, cycle + 1))
+    finally:
+        # Cleanup
+        for i in file_ids:
+            while True:
+                # noinspection PyBroadException
+                try:
+                    api_call(
+                        host, port, https, root, api_version, token,
+                        'DELETE', 'data-files/{}'.format(i))
+                except Exception:
+                    time.sleep(5)
+                else:
+                    break
 
 
 if __name__ == '__main__':
