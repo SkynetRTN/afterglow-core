@@ -71,7 +71,12 @@ def api_call(host, port, https, root, api_version, token, method, resource,
         return
 
     if content_type.split('/')[-1].lower() == 'json':
-        return r.json()
+        res = r.json()
+        if 'data' in res:
+            return res['data']
+        if 'error' in res:
+            raise RuntimeError(str(res['error']))
+        return res
     if content_type.split('/')[0].lower() == 'text':
         return r.text
     return r.content
@@ -82,17 +87,16 @@ def run_job(host, port, https, root, api_version, token, job_type, params):
     job_params.update(params)
     job_id = api_call(
         host, port, https, root, api_version, token, 'POST', 'jobs',
-        job_params)['data']['id']
+        job_params)['id']
     while True:
         time.sleep(1)
         if api_call(
                 host, port, https, root, api_version, token, 'GET',
-                'jobs/{}/state'.format(job_id))['data']['status'] == \
-                'completed':
+                'jobs/{}/state'.format(job_id))['status'] == 'completed':
             break
     res = api_call(
         host, port, https, root, api_version, token, 'GET',
-        'jobs/{}/result'.format(job_id))['data']
+        'jobs/{}/result'.format(job_id))
     if res['errors']:
         raise RuntimeError(str(res['errors']))
     return res
