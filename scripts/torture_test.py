@@ -111,7 +111,7 @@ def test_process(
             file_ids = run_job(
                 host, port, https, root, api_version, token, 'batch_import',
                 {'settings': [{
-                    'provider_id': '1',
+                    'provider_id': '1', 'duplicates': 'append',
                     'path': 'User Observations/{}/reduced'.format(obs_id)
                 }]})['file_ids']
             try:
