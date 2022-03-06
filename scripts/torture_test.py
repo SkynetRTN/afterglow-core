@@ -7,6 +7,7 @@ Torture-test Afterglow Core API
 import argparse
 import base64
 import json
+import random
 import requests
 import time
 import traceback
@@ -98,14 +99,14 @@ def run_job(host, port, https, root, api_version, token, job_type, params):
         host, port, https, root, api_version, token, 'GET',
         'jobs/{}/result'.format(job_id))
     if res['errors']:
-        raise RuntimeError(str(res['errors']))
+        print(res['errors'])
     return res
 
 
 def test_process(
         proc_id, host, port, https, root, api_version, token, obs_id, cycles):
-    # noinspection PyBroadException
     for cycle in range(cycles):
+        # noinspection PyBroadException
         try:
             # Import observation
             file_ids = run_job(
@@ -114,6 +115,8 @@ def test_process(
                     'provider_id': '1', 'duplicates': 'append',
                     'path': 'User Observations/{}/reduced'.format(obs_id)
                 }]})['file_ids']
+            if not file_ids:
+                continue
             try:
                 # Retrieve pixel data
                 for i in file_ids:
@@ -122,16 +125,19 @@ def test_process(
                         'GET', 'data-files/{}/pixels'.format(i))
 
                 # Stack images
+                time.sleep(max(random.gauss(5, 3), 0))
                 file_ids.append(run_job(
                     host, port, https, root, api_version, token, 'stacking',
                     {'file_ids': file_ids})['file_id'])
 
                 # Extract sources from the first image
+                time.sleep(max(random.gauss(5, 3), 0))
                 sources = run_job(
                     host, port, https, root, api_version, token,
                     'source_extraction', {'file_ids': [file_ids[0]]})['data']
 
                 # Photometer sources in all images
+                time.sleep(max(random.gauss(5, 3), 0))
                 run_job(
                     host, port, https, root, api_version, token, 'photometry',
                     {'file_ids': file_ids, 'sources': sources, 'settings': {
@@ -139,13 +145,16 @@ def test_process(
             finally:
                 # Cleanup
                 for i in file_ids:
-                    # noinspection PyBroadException
-                    try:
-                        api_call(
-                            host, port, https, root, api_version, token,
-                            'DELETE', 'data-files/{}'.format(i))
-                    except Exception:
-                        pass
+                    while True:
+                        # noinspection PyBroadException
+                        try:
+                            api_call(
+                                host, port, https, root, api_version, token,
+                                'DELETE', 'data-files/{}'.format(i))
+                        except Exception:
+                            time.sleep(5)
+                        else:
+                            break
                 print('{}: {}'.format(proc_id + 1, cycle + 1))
         except Exception:
             traceback.print_exc()
