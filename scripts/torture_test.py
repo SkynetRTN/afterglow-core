@@ -132,7 +132,7 @@ def test_process(
                     'GET', 'data-files/{}/pixels'.format(i))
 
             # Stack images
-            time.sleep(max(random.gauss(5, 3), 0))
+            time.sleep(random.uniform(0, 10))
             temp_file_id = run_job(
                 host, port, https, root, api_version, token, 'stacking',
                 {'file_ids': file_ids})['file_id']
@@ -148,13 +148,13 @@ def test_process(
                     break
 
             # Extract sources from the first image
-            time.sleep(max(random.gauss(5, 3), 0))
+            time.sleep(random.uniform(0, 10))
             sources = run_job(
                 host, port, https, root, api_version, token,
                 'source_extraction', {'file_ids': [file_ids[0]]})['data']
 
             # Photometer sources in all images
-            time.sleep(max(random.gauss(5, 3), 0))
+            time.sleep(random.uniform(0, 10))
             run_job(
                 host, port, https, root, api_version, token, 'photometry',
                 {'file_ids': file_ids, 'sources': sources, 'settings': {
@@ -208,6 +208,7 @@ if __name__ == '__main__':
         data_files = api_call(
             args.host, args.port, args.https, args.root, args.api_version,
             args.token, 'GET', 'data-files')
+        print('Deleting {} data files'.format(len(data_files)))
         for f in data_files:
             while True:
                 # noinspection PyBroadException
@@ -218,6 +219,6 @@ if __name__ == '__main__':
                         args.api_version, args.token,
                         'DELETE', 'data-files/{}'.format(f['id']))
                 except Exception:
-                    time.sleep(5)
+                    time.sleep(1)
                 else:
                     break
