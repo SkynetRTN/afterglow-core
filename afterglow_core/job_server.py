@@ -3,6 +3,7 @@ import atexit
 import cProfile
 import ctypes
 import errno
+import gc
 import os
 import pickle
 import shutil
@@ -462,6 +463,9 @@ class JobWorkerProcess(Process):
                             ][1].remove()
                     except Exception:
                         pass
+
+                    # Force collecting garbage to accelerate freeing RAM
+                    gc.collect()
 
             except KeyboardInterrupt:
                 # Ignore interrupt signals occasionally sent before the job has
