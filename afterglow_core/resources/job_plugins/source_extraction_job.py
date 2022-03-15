@@ -75,7 +75,7 @@ class SourceExtractionJob(Job):
             result_data = merge_sources(
                 result_data, self.source_merge_settings, self.id)
 
-        self.result.data = result_data
+        object.__setattr__(self.result, 'data', result_data)
 
 
 def run_source_extraction_job(job: Job,

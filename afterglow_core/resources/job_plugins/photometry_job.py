@@ -220,5 +220,5 @@ class PhotometryJob(Job):
     settings: PhotSettings = Nested(PhotSettings, default={})
 
     def run(self):
-        self.result.data = run_photometry_job(
-            self, self.settings, self.file_ids, self.sources)
+        object.__setattr__(self.result, 'data', run_photometry_job(
+            self, self.settings, self.file_ids, self.sources))

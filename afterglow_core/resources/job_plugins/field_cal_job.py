@@ -637,7 +637,7 @@ class FieldCalJob(Job):
                     'Data file ID {}: Error saving photometric calibration '
                     'info to FITS header [{}]'.format(file_id, e))
 
-        self.result.data = result_data
+        object.__setattr__(self.result, 'data', result_data)
 
 
 def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:

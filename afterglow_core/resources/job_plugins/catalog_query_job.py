@@ -331,7 +331,7 @@ class CatalogQueryJob(Job):
     source_ids: TList[str] = List(String())
 
     def run(self):
-        self.result.data = run_catalog_query_job(
+        object.__setattr__(self.result, 'data', run_catalog_query_job(
             self, catalogs=self.catalogs,
             ra_hours=getattr(self, 'ra_hours', None),
             dec_degs=getattr(self, 'dec_degs', None),
@@ -340,4 +340,4 @@ class CatalogQueryJob(Job):
             height_arcmins=getattr(self, 'height_arcmins', None),
             file_ids=getattr(self, 'file_ids', None),
             constraints=getattr(self, 'constraints', None),
-            source_ids=getattr(self, 'source_ids', None))
+            source_ids=getattr(self, 'source_ids', None)))
