@@ -9,9 +9,12 @@ from marshmallow.fields import Integer, List, Nested
 import numpy
 from numpy import (
     arcsin, argsort, array, asarray, clip, cos, deg2rad, degrees, inf,
-    isfinite, nan, radians, sin, sqrt, transpose)
+    isfinite, median, nan, quantile, radians, sin, sqrt, transpose)
 from scipy.spatial import cKDTree
+from scipy.optimize import fsolve
 from astropy.wcs import WCS
+
+from skylib.util.stats import chauvenet, weighted_median, weighted_quantile
 
 from ...models import (
     Job, JobResult, CatalogSource, FieldCal, FieldCalResult, Mag, PhotSettings,
@@ -640,6 +643,21 @@ class FieldCalJob(Job):
         object.__setattr__(self.result, 'data', result_data)
 
 
+def sigma_eq(sigma2, sigmas2, b, m0):
+    """
+    Equation for finding sigma characterizing the goodness of fit
+
+    :param sigma2: sigma squared
+    :param sigmas2: array of individual point sigmas
+    :param b: array of catalog minus image mags, same shape
+    :param m0: current estimate of zero point
+
+    :return: the value of sigma2 yielding zero result solves the equation
+    """
+    w = 1/(sigmas2 + sigma2)
+    return (((b - m0)**2*w - 1)*w).sum()
+
+
 def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
     """
     Calculate photometric solution (zero point and error) given a list of
@@ -659,22 +677,37 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
         for source in sources
     ])
 
-    n = len(sources)
+    b = ref_mags - mags
+    sigmas2 = mag_errors**2 + ref_mag_errors**2
+    sigma2 = 0
+    weights = None
     while True:
-        d = ref_mags - mags
-        m0 = d.mean()
-        m0_error = sqrt((mag_errors**2 + ref_mag_errors**2).sum())/n
-        good = (abs(d - m0) < 3*d.std()).nonzero()[0]
-        n_good = len(good)
-        if n_good == n or n_good < 3:
-            break
-        n = n_good
-        mags, mag_errors = mags[good], mag_errors[good]
-        ref_mags, ref_mag_errors = ref_mags[good], ref_mag_errors[good]
-    if abs(m0_error) < 1e-7:
-        if n > 1:
-            m0_error = d.std()/sqrt(n)
+        while True:
+            if weights is None:
+                bmed = median(b)
+                sigma68 = quantile(abs(b - bmed), 0.683)
+            else:
+                bmed = weighted_median(b, weights)
+                sigma68 = weighted_quantile(abs(b - bmed), weights, 0.683)
+
+            rejected = chauvenet(b, mean=bmed, sigma=sigma68)
+            if rejected.any():
+                b = b[~rejected]
+                sigmas2 = sigmas2[~rejected]
+            else:
+                break
+
+        if sigma2:
+            m0 = (b/(sigmas2 + sigma2)).sum()/(1/(sigmas2 + sigma2)).sum()
         else:
-            m0_error = None
+            m0 = b.mean()
+        prev_sigma2 = sigma2
+        sigma2 = fsolve(sigma_eq, sigma2 or 1, (sigmas2, b, m0))
+        if abs(sigma2 - prev_sigma2) < 1e-7:
+            break
+
+        weights = 1/(sigmas2 + sigma2)
+
+    m0_error = 1/sqrt((1/(sigmas2 + sigma2)).sum())
 
     return m0, m0_error
