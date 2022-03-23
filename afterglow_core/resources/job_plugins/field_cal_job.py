@@ -340,10 +340,10 @@ class FieldCalJob(Job):
             detected_sources_for_file = {}
             for source in detected_sources:
                 detected_sources_for_file.setdefault(source.file_id, []) \
-                    .append((source.x, source.y))
+                    .append(source)
             detected_source_kdtree_for_file = {
-                file_id: cKDTree(source_xy)
-                for file_id, source_xy in detected_sources_for_file.items()
+                file_id: cKDTree([(source.x, source.y) for source in sources])
+                for file_id, sources in detected_sources_for_file.items()
             }
 
             for source in detected_sources:
