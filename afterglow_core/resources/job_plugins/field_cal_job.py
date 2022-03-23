@@ -3,15 +3,15 @@ Afterglow Core: photometric calibration job plugin
 """
 
 from datetime import datetime
-from typing import List as TList, Tuple
+from typing import List as TList, Optional, Tuple
 
 from marshmallow.fields import Integer, List, Nested
 import numpy
 from numpy import (
     arcsin, argsort, array, asarray, clip, cos, deg2rad, degrees, inf,
-    isfinite, median, nan, quantile, radians, sin, sqrt, transpose)
+    isfinite, median, nan, ndarray, quantile, radians, sin, sqrt, transpose)
 from scipy.spatial import cKDTree
-from scipy.optimize import fsolve
+from scipy.optimize import brenth
 from astropy.wcs import WCS
 
 from skylib.util.stats import chauvenet, weighted_median, weighted_quantile
@@ -679,6 +679,9 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
 
     b = ref_mags - mags
     sigmas2 = mag_errors**2 + ref_mag_errors**2
+    no_errors = not sigmas2.any()
+    if no_errors:
+        sigmas2 = 0
     sigma2 = 0
     weights = None
     while True:
@@ -693,7 +696,8 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
             rejected = chauvenet(b, mean=bmed, sigma=sigma68)
             if rejected.any():
                 b = b[~rejected]
-                sigmas2 = sigmas2[~rejected]
+                if not no_errors:
+                    sigmas2 = sigmas2[~rejected]
             else:
                 break
 
@@ -702,11 +706,14 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
         else:
             m0 = b.mean()
         prev_sigma2 = sigma2
-        sigma2 = fsolve(sigma_eq, sigma2 or 1, (sigmas2, b, m0))
-        if abs(sigma2 - prev_sigma2) < 1e-7:
+        sigma2 = ((b - m0)**2).sum()/len(b)
+        if not no_errors:
+            sigma2 = brenth(sigma_eq, 0.1*sigma2, 10*sigma2, (sigmas2, b, m0))
+        if prev_sigma2 and abs(sigma2 - prev_sigma2) < 1e-8:
             break
 
-        weights = 1/(sigmas2 + sigma2)
+        if not no_errors:
+            weights: Optional[ndarray] = 1/(sigmas2 + sigma2)
 
     m0_error = 1/sqrt((1/(sigmas2 + sigma2)).sum())
 
