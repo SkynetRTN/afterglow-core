@@ -250,6 +250,7 @@ class FieldCalJob(Job):
                     catalog_sources_for_file[catalog_source.file_id].append(
                         catalog_source)
             catalog_source_kdtree_for_file = {}
+            catalog_source_xy_for_file = {}
             for file_id, catalog_source_list in catalog_sources_for_file \
                     .items():
                 if not catalog_source_list:
@@ -331,8 +332,20 @@ class FieldCalJob(Job):
                         x[have_pm] += mu*cos(theta)
                         y[have_pm] += mu*sin(theta)
                 # Build k-d tree from catalog source XYs
-                catalog_source_kdtree_for_file[file_id] = cKDTree(
-                    transpose([x, y]))
+                xy = transpose([x, y])
+                catalog_source_xy_for_file[file_id] = xy
+                catalog_source_kdtree_for_file[file_id] = cKDTree(xy)
+
+            # Build k-d tree from detected source XYs for each file ID
+            detected_sources_for_file = {}
+            for source in detected_sources:
+                detected_sources_for_file.setdefault(source.file_id, []) \
+                    .append((source.x, source.y))
+            detected_source_kdtree_for_file = {
+                file_id: cKDTree(source_xy)
+                for file_id, source_xy in detected_sources_for_file.items()
+            }
+
             for source in detected_sources:
                 file_id = source.file_id
                 catalog_source, match_found = None, False
@@ -342,8 +355,19 @@ class FieldCalJob(Job):
                     i = tree.query(
                         [source.x, source.y], distance_upper_bound=tol)[1]
                     if i < len(catalog_source_list):
-                        match_found = True
                         catalog_source = catalog_source_list[i]
+                        xc, yc = catalog_source_xy_for_file[file_id][i]
+
+                        # Make sure that all matches are unique by making
+                        # a reverse query: the given image source must be
+                        # the nearest neighbor for its matching catalog source
+                        detected_source_list = \
+                            detected_sources_for_file[file_id]
+                        tree = detected_source_kdtree_for_file[file_id]
+                        j = tree.query([xc, yc], distance_upper_bound=tol)[1]
+                        if j < len(detected_source_list) and \
+                                detected_source_list[j] is source:
+                            match_found = True
                 if match_found:
                     # Copy catalog source data to extracted source and set
                     # the latter as a new catalog source
