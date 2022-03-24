@@ -8,7 +8,7 @@ from typing import List as TList, Optional, Tuple
 from marshmallow.fields import Integer, List, Nested
 import numpy
 from numpy import (
-    arcsin, argsort, array, asarray, clip, cos, deg2rad, degrees, inf,
+    arange, arcsin, argsort, array, asarray, clip, cos, deg2rad, degrees, inf,
     isfinite, median, nan, ndarray, quantile, radians, sin, sqrt, transpose)
 from scipy.spatial import cKDTree
 from scipy.optimize import brenth
@@ -702,6 +702,7 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
     ])
 
     b = ref_mags - mags
+    good_stars = arange(len(b))
     sigmas2 = mag_errors**2 + ref_mag_errors**2
     no_errors = not sigmas2.any()
     if no_errors:
@@ -719,9 +720,11 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
 
             rejected = chauvenet(b, mean=bmed, sigma=sigma68)
             if rejected.any():
-                b = b[~rejected]
+                good = ~rejected
+                b = b[good]
+                good_stars = good_stars[good]
                 if not no_errors:
-                    sigmas2 = sigmas2[~rejected]
+                    sigmas2 = sigmas2[good]
             else:
                 break
 
@@ -740,5 +743,16 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
             weights: Optional[ndarray] = 1/(sigmas2 + sigma2)
 
     m0_error = 1/sqrt((1/(sigmas2 + sigma2)).sum())
+
+    with open('field_cal.csv', 'w') as f:
+        for i, source in enumerate(sources):
+            # noinspection PyUnresolvedReferences
+            print('{},{},{},{},{}'.format(
+                source.mag,
+                getattr(source, 'mag_error', None) or '',
+                source.ref_mag,
+                getattr(source, 'ref_mag_error', None) or '',
+                int(i not in good_stars),
+            ))
 
     return m0, m0_error
