@@ -31,7 +31,7 @@ __all__ = [
 
 if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///{}'.format(os.path.join(
-            os.path.abspath(app.config['DATA_ROOT']), 'afterglow.db'))
+        os.path.abspath(app.config['DATA_ROOT']), 'afterglow.db'))
     app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {}).setdefault(
         'connect_args', {})['timeout'] = app.config.get('DB_TIMEOUT', 30)
 else:
@@ -41,12 +41,12 @@ else:
             _db_pass = _db_pass.encode('ascii')
         _db_pass = cipher.decrypt(_db_pass).decode('utf8')
     app.config['SQLALCHEMY_DATABASE_URI'] = '{}://{}{}@{}:{}/{}'.format(
-            app.config.get('DB_BACKEND'),
-            app.config.get('DB_USER', 'admin'),
-            ':' + _db_pass if _db_pass else '',
-            app.config.get('DB_HOST', 'localhost'),
-            app.config.get('DB_PORT', 3306),  # default for MySQL
-            app.config.get('DB_SCHEMA', 'afterglow'))
+        app.config.get('DB_BACKEND'),
+        app.config.get('DB_USER', 'admin'),
+        ':' + _db_pass if _db_pass else '',
+        app.config.get('DB_HOST', 'localhost'),
+        app.config.get('DB_PORT', 3306),  # default for MySQL
+        app.config.get('DB_SCHEMA', 'afterglow'))
     app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})['pool_timeout'] = \
         app.config.get('DB_TIMEOUT', 30)
     app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('pool_recycle', 3600)
@@ -115,7 +115,7 @@ class DbUser(db.Model, UserMixin):
         'DbRole', secondary=user_roles,
         backref=db.backref('users', lazy='dynamic'))
     settings = db.Column(
-        db.String,
+        db.Text,
         db.CheckConstraint(
             'settings is null or length(settings) <= 1048576'),
         default='')
