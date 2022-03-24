@@ -657,10 +657,15 @@ class JobRequestHandler(BaseRequestHandler):
                     if user_id is None:
                         user = users.AnonymousUser()
                     else:
-                        db_user = session.query(users.DbUser).get(user_id)
-                        if db_user is None:
-                            raise UnknownUserError(id=user_id)
-                        user = User(db_user)
+                        try:
+                            db_user = users.DbUser.query.get(user_id)
+                            if db_user is None:
+                                raise UnknownUserError(id=user_id)
+                            user = User(db_user)
+                        finally:
+                            # Clean up the flask_sqlalchemy session in the same
+                            # way as it is done at the end of a Flask request
+                            users.db.session.remove()
                     try:
                         # Convert message arguments to polymorphic job model
                         # and create an appropriate db job class instance
