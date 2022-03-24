@@ -2,8 +2,6 @@
 Afterglow Core: APASS catalog accessed via VizieR
 """
 
-from __future__ import absolute_import, division, print_function
-
 from .vizier_catalogs import VizierCatalog
 
 
