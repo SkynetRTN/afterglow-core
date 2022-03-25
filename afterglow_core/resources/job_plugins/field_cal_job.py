@@ -742,7 +742,12 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
                     break
                 left *= 0.9
                 right *= 1.1
-            sigma2 = brenth(sigma_eq, left, right, (sigmas2, b, m0))
+            # noinspection PyBroadException
+            try:
+                sigma2 = brenth(sigma_eq, left, right, (sigmas2, b, m0))
+            except Exception:
+                # Unable to find the root; use unweighted sigma
+                pass
         if prev_sigma2 and abs(sigma2 - prev_sigma2) < 1e-8:
             break
 
