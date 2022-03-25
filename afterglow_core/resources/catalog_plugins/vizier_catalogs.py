@@ -89,6 +89,8 @@ class VizierCatalog(Catalog):
             e.g. {'some_attr': 'sqrt(some_col)'}
         extra_cols: optional extra column names that should be added to query
             arguments but don't map to any :class:`CatalogObject` attributes
+        sort: optional list of sorting column names: "+col" = ascending,
+            "-col" = descending
     """
     vizier_server = None
     cache: bool = False
@@ -96,6 +98,7 @@ class VizierCatalog(Catalog):
     row_limit = None
     col_mapping = {'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000'}
     extra_cols = []
+    sort = []
 
     _columns = None
 
@@ -145,6 +148,14 @@ class VizierCatalog(Catalog):
                     self._columns.append(mag_col)
                     if mag_err_col:
                         self._columns.append(mag_err_col)
+
+        if self.sort:
+            for col in self.sort:
+                d, colname = col[:1], col[1:]
+                if colname in self._columns:
+                    self._columns[self._columns.index(colname)] = col
+                else:
+                    self._columns.append(col)
 
     def table_to_sources(self, table: Union[TList, Table]) \
             -> TList[CatalogSource]:
