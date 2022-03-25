@@ -25,7 +25,7 @@ class APASSCatalog(VizierCatalog):
     col_mapping = {
         'id': 'recno', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
     }
-    sort = ['+Bmag', '+Vmag', "+g'mag", "+r'mag", "+i'mag"]
+    sort = ["+r'mag"]
     filter_lookup = {
         # naming
         "g'": 'gprime', "r'": 'rprime', "i'": 'iprime',

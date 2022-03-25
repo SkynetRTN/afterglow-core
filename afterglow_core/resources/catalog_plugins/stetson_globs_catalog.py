@@ -33,4 +33,4 @@ class StetsonGlobsCatalog(VizierCatalog):
         'V': ('Vmag', 'e_Vmag'), 'R': ('Rmag', 'e_Rmag'),
         'I': ('Imag', 'e_Imag'),
     }
-    sort = ['+Umag', '+Bmag', '+Vmag', '+Rmag', '+Imag']
+    sort = ['+Rmag']

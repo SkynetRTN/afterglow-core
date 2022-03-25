@@ -27,7 +27,7 @@ class TwoMASSCatalog(VizierCatalog):
         'id': '_2MASS', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
     }
     extra_cols = ['2MASS']  # VizieR returns "2MASS" as "_2MASS"
-    sort = ['+Jmag', '+Hmag', '+Kmag', '+Bmag', '+Rmag']
+    sort = ['+Jmag']
     filter_lookup = {
         'B': '0.1980 + J + (5.2150 + (-2.7785 + '
         '1.7495*(J - K))*(J - K))*(J - K)',

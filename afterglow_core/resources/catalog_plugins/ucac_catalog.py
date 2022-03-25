@@ -27,4 +27,4 @@ class UCAC5Catalog(VizierCatalog):
     col_mapping = {
         'id': 'SrcIDgaia', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
     }
-    sort = ['+f.mag', '+Gmag', '+Rmag', '+Jmag', '+Hmag', '+Kmag']
+    sort = ['+f.mag']

@@ -28,7 +28,7 @@ class SkyMapperCatalog(VizierCatalog):
         'g': ('gPSF', 'e_gPSF'), 'r': ('rPSF', 'e_rPSF'),
         'i': ('iPSF', 'e_iPSF'), 'z': ('zPSF', 'e_zPSF'),
     }
-    sort = ['+uPSF', '+vPSF', '+gPSF', '+rPSF', '+iPSF', '+zPSF']
+    sort = ['+rPSF']
     filter_lookup = {
         # See row F5V of the table at
         # https://skymapper.anu.edu.au/filter-transformations/
