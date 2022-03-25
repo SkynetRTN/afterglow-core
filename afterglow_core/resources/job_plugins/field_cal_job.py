@@ -101,7 +101,7 @@ class FieldCalJob(Job):
                         self, [catalog], file_ids=self.file_ids)
                     self.run_for_sources(catalog_sources, detected_sources)
                 except Exception as e:
-                    if i < len(field_cal.catalogs):
+                    if i < len(field_cal.catalogs) - 1:
                         self.add_warning(
                             'Calibration failed for catalog "{}" [{}]'
                             .format(catalog, e))
@@ -735,7 +735,14 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
         prev_sigma2 = sigma2
         sigma2 = ((b - m0)**2).sum()/len(b)
         if not no_errors:
-            sigma2 = brenth(sigma_eq, 0.1*sigma2, 10*sigma2, (sigmas2, b, m0))
+            left, right = 0.9*sigma2, 1.1*sigma2
+            for _ in range(1000):
+                if sigma_eq(left, sigmas2, b, m0) * \
+                        sigma_eq(right, sigmas2, b, m0) < 0:
+                    break
+                left *= 0.9
+                right *= 1.1
+            sigma2 = brenth(sigma_eq, left, right, (sigmas2, b, m0))
         if prev_sigma2 and abs(sigma2 - prev_sigma2) < 1e-8:
             break
 
@@ -744,7 +751,10 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
 
     m0_error = 1/sqrt((1/(sigmas2 + sigma2)).sum())
 
-    with open('field_cal.csv', 'w') as f:
+    import os
+    from ... import app
+    with open(os.path.join(app.config['DATA_ROOT'], 'field_cal.csv'),
+              'w') as f:
         for i, source in enumerate(sources):
             # noinspection PyUnresolvedReferences
             print('{},{},{},{},{}'.format(
@@ -753,6 +763,6 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
                 source.ref_mag,
                 getattr(source, 'ref_mag_error', None) or '',
                 int(i not in good_stars),
-            ))
+            ), file=f)
 
     return m0, m0_error
