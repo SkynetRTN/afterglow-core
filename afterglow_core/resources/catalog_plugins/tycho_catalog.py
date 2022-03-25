@@ -24,3 +24,4 @@ class Tycho2Catalog(VizierCatalog):
         'id': '"{:04d}-{:05d}-{}".format(TYC1,TYC2,TYC3)',
         'ra_hours': 'RAmdeg/15', 'dec_degs': 'DEmdeg',
     }
+    sort = ['+BTmag', '+VTmag']

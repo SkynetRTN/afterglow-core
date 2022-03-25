@@ -28,6 +28,7 @@ class SkyMapperCatalog(VizierCatalog):
         'g': ('gPSF', 'e_gPSF'), 'r': ('rPSF', 'e_rPSF'),
         'i': ('iPSF', 'e_iPSF'), 'z': ('zPSF', 'e_zPSF'),
     }
+    sort = ['+uPSF', '+vPSF', '+gPSF', '+rPSF', '+iPSF', '+zPSF']
     filter_lookup = {
         # See row F5V of the table at
         # https://skymapper.anu.edu.au/filter-transformations/
@@ -52,6 +53,6 @@ class SkyMapperCatalog(VizierCatalog):
         """
         if constraints is None:
             constraints = {}
-        constraints.setdefault('flags', 0)
+        constraints.setdefault('flags', '0')
         return super().query_region(
             ra_hours, dec_degs, constraints, limit, **region)
