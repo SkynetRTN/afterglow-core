@@ -160,33 +160,32 @@ def run_cropping_job(job: Job,
         # data files
         return job_file_ids
 
-    adb = get_data_file_db(job.user_id)
-    try:
-        # Crop all data files and adjust WCS
-        new_file_ids = []
-        for i, file_id in enumerate(job_file_ids):
-            try:
-                data, hdr = get_data_file_data(job.user_id, file_id)
-                if any([left, right, top, bottom]):
-                    data = data[bottom:-(top + 1), left:-(right + 1)]
-                    hdr.add_history(
-                        '[{}] Cropped by Afterglow with margins: left={}, '
-                        'right={}, top={}, bottom={}'
-                        .format(datetime.utcnow(), left, right, top, bottom))
+    # Crop all data files and adjust WCS
+    new_file_ids = []
+    for i, file_id in enumerate(job_file_ids):
+        try:
+            data, hdr = get_data_file_data(job.user_id, file_id)
+            if any([left, right, top, bottom]):
+                data = data[bottom:-(top + 1), left:-(right + 1)]
+                hdr.add_history(
+                    '[{}] Cropped by Afterglow with margins: left={}, '
+                    'right={}, top={}, bottom={}'
+                    .format(datetime.utcnow(), left, right, top, bottom))
 
-                    # Move CRPIXn if present
-                    if left:
-                        try:
-                            hdr['CRPIX1'] -= left
-                        except (KeyError, ValueError):
-                            pass
-                    if bottom:
-                        try:
-                            hdr['CRPIX2'] -= bottom
-                        except (KeyError, ValueError):
-                            pass
+                # Move CRPIXn if present
+                if left:
+                    try:
+                        hdr['CRPIX1'] -= left
+                    except (KeyError, ValueError):
+                        pass
+                if bottom:
+                    try:
+                        hdr['CRPIX2'] -= bottom
+                    except (KeyError, ValueError):
+                        pass
 
-                    if inplace:
+                if inplace:
+                    with get_data_file_db(job.user_id) as adb:
                         try:
                             # Overwrite the original data file
                             save_data_file(
@@ -195,9 +194,10 @@ def run_cropping_job(job: Job,
                         except Exception:
                             adb.rollback()
                             raise
-                    else:
-                        hdr.add_history(
-                            'Original data file ID: {:d}'.format(file_id))
+                else:
+                    hdr.add_history(
+                        'Original data file ID: {:d}'.format(file_id))
+                    with get_data_file_db(job.user_id) as adb:
                         try:
                             file_id = create_data_file(
                                 adb, None, get_root(job.user_id), data, hdr,
@@ -207,8 +207,9 @@ def run_cropping_job(job: Job,
                         except Exception:
                             adb.rollback()
                             raise
-                elif not inplace:
-                    # Merely duplicate the original data file
+            elif not inplace:
+                # Merely duplicate the original data file
+                with get_data_file_db(job.user_id) as adb:
                     try:
                         hdr.add_history(
                             'Original data file ID: {:d}'.format(file_id))
@@ -220,13 +221,11 @@ def run_cropping_job(job: Job,
                         adb.rollback()
                         raise
 
-                new_file_ids.append(file_id)
-            except Exception as e:
-                job.add_error(e, {'file_id': job_file_ids[i]})
-            finally:
-                job.update_progress((i + 1)/len(job_file_ids)*100)
-    finally:
-        adb.remove()
+            new_file_ids.append(file_id)
+        except Exception as e:
+            job.add_error(e, {'file_id': job_file_ids[i]})
+        finally:
+            job.update_progress((i + 1)/len(job_file_ids)*100)
 
     return new_file_ids
 

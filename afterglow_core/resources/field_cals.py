@@ -44,12 +44,9 @@ def query_field_cals(user_id: Optional[int]) -> TList[FieldCal]:
 
     :return: list of field cal objects
     """
-    adb = get_data_file_db(user_id)
-    try:
+    with get_data_file_db(user_id) as adb:
         return [FieldCal(db_field_cal)
                 for db_field_cal in adb.query(DbFieldCal)]
-    finally:
-        adb.remove()
 
 
 def get_field_cal(user_id: Optional[int],
@@ -62,8 +59,7 @@ def get_field_cal(user_id: Optional[int],
 
     :return: field cal object
     """
-    adb = get_data_file_db(user_id)
-    try:
+    with get_data_file_db(user_id) as adb:
         try:
             db_field_cal = adb.query(DbFieldCal).get(int(id_or_name))
         except ValueError:
@@ -77,8 +73,6 @@ def get_field_cal(user_id: Optional[int],
 
         # Convert to data model object
         return FieldCal(db_field_cal)
-    finally:
-        adb.remove()
 
 
 def create_field_cal(user_id: Optional[int], field_cal: FieldCal) -> FieldCal:
@@ -90,8 +84,7 @@ def create_field_cal(user_id: Optional[int], field_cal: FieldCal) -> FieldCal:
 
     :return: new field cal object
     """
-    adb = get_data_file_db(user_id)
-    try:
+    with get_data_file_db(user_id) as adb:
         if adb.query(DbFieldCal).filter(DbFieldCal.name == field_cal.name) \
                 .count():
             raise DuplicateFieldCalError(name=field_cal.name)
@@ -115,8 +108,6 @@ def create_field_cal(user_id: Optional[int], field_cal: FieldCal) -> FieldCal:
             raise
 
         return field_cal
-    finally:
-        adb.remove()
 
 
 def update_field_cal(user_id: Optional[int], field_cal_id: int,
@@ -130,8 +121,7 @@ def update_field_cal(user_id: Optional[int], field_cal_id: int,
 
     :return: updated field cal object
     """
-    adb = get_data_file_db(user_id)
-    try:
+    with get_data_file_db(user_id) as adb:
         db_field_cal = adb.query(DbFieldCal).get(field_cal_id)
         if db_field_cal is None:
             raise UnknownFieldCalError(id=field_cal_id)
@@ -152,8 +142,6 @@ def update_field_cal(user_id: Optional[int], field_cal_id: int,
             raise
 
         return field_cal
-    finally:
-        adb.remove()
 
 
 def delete_field_cal(user_id: Optional[int], field_cal_id: int) -> None:
@@ -163,8 +151,7 @@ def delete_field_cal(user_id: Optional[int], field_cal_id: int) -> None:
     :param user_id: current user ID (None if user auth is disabled)
     :param field_cal_id: field cal ID to delete
     """
-    adb = get_data_file_db(user_id)
-    try:
+    with get_data_file_db(user_id) as adb:
         db_field_cal = adb.query(DbFieldCal).get(field_cal_id)
         if db_field_cal is None:
             raise UnknownFieldCalError(id=field_cal_id)
@@ -175,5 +162,3 @@ def delete_field_cal(user_id: Optional[int], field_cal_id: int) -> None:
         except Exception:
             adb.rollback()
             raise
-    finally:
-        adb.remove()

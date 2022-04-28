@@ -53,7 +53,7 @@ class StackingJob(Job):
                 settings.scaling.lower() not in ('none', 'average', 'median',
                                                  'mode'):
             raise ValueError(
-                'Stacking mode must be "none", "average", "median", or "mode"')
+                'Scaling mode must be "none", "average", "median", or "mode"')
         if settings.scaling is not None:
             settings.scaling = settings.scaling.lower()
             if settings.scaling == 'none':
@@ -110,14 +110,12 @@ class StackingJob(Job):
             callback=self.update_progress)[0]
 
         # Create a new data file in the given session and return its ID
-        adb = get_data_file_db(self.user_id)
-        try:
-            self.result.file_id = create_data_file(
-                adb, None, get_root(self.user_id), data, header,
-                duplicates='append', session_id=self.session_id).id
-            adb.commit()
-        except Exception:
-            adb.rollback()
-            raise
-        finally:
-            adb.remove()
+        with get_data_file_db(self.user_id) as adb:
+            try:
+                self.result.file_id = create_data_file(
+                    adb, None, get_root(self.user_id), data, header,
+                    duplicates='append', session_id=self.session_id).id
+                adb.commit()
+            except Exception:
+                adb.rollback()
+                raise

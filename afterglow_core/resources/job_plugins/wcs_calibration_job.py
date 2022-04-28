@@ -147,104 +147,103 @@ class WcsCalibrationJob(Job):
             # are single-threaded, so we shouldn't care about locking
             solver = Solver(app.config['ANET_INDEX_PATH'])
 
-        adb = get_data_file_db(self.user_id)
-        try:
-            for i, file_id in enumerate(self.file_ids):
-                try:
-                    data, hdr = get_data_file_data(self.user_id, file_id)
-                    height, width = data.shape
+        for i, file_id in enumerate(self.file_ids):
+            try:
+                data, hdr = get_data_file_data(self.user_id, file_id)
+                height, width = data.shape
 
-                    # Extract sources
-                    sources = run_source_extraction_job(
-                        self, source_extraction_settings, [file_id],
-                        update_progress=False)
-                    xy = [(source.x - 1, source.y - 1) for source in sources]
-                    fluxes = [source.flux for source in sources]
+                # Extract sources
+                sources = run_source_extraction_job(
+                    self, source_extraction_settings, [file_id],
+                    update_progress=False)
+                xy = [(source.x - 1, source.y - 1) for source in sources]
+                fluxes = [source.flux for source in sources]
 
-                    ra_hours, dec_degs = settings.ra_hours, settings.dec_degs
-                    if ra_hours is None and dec_degs is None:
-                        # Guess starting RA and Dec from WCS in the image
-                        # header
-                        # noinspection PyBroadException
+                ra_hours, dec_degs = settings.ra_hours, settings.dec_degs
+                if ra_hours is None and dec_degs is None:
+                    # Guess starting RA and Dec from WCS in the image
+                    # header
+                    # noinspection PyBroadException
+                    try:
+                        wcs = WCS(hdr, relax=True)
+                        if wcs.has_celestial:
+                            ra_hours, dec_degs = wcs.all_pix2world(
+                                (width - 1)/2, (height - 1)/2, 0)
+                            ra_hours /= 15
+                    except Exception:
+                        pass
+                if ra_hours is None and dec_degs is None:
+                    # Guess starting RA and Dec from MaxIm DL FITS keywords
+                    for name in ('OBJRA', 'TELRA', 'RA'):
                         try:
-                            wcs = WCS(hdr, relax=True)
-                            if wcs.has_celestial:
-                                ra_hours, dec_degs = wcs.all_pix2world(
-                                    (width - 1)/2, (height - 1)/2, 0)
-                                ra_hours /= 15
-                        except Exception:
+                            h, m, s = hdr[name].split(':')
+                            ra_hours = int(h) + int(m)/60 + \
+                                float(s.replace(',', '.'))/3600
+                        except (KeyError, ValueError):
                             pass
-                    if ra_hours is None and dec_degs is None:
-                        # Guess starting RA and Dec from MaxIm DL FITS keywords
-                        for name in ('OBJRA', 'TELRA', 'RA'):
-                            try:
-                                h, m, s = hdr[name].split(':')
-                                ra_hours = int(h) + int(m)/60 + \
-                                    float(s.replace(',', '.'))/3600
-                            except (KeyError, ValueError):
-                                pass
-                            else:
-                                break
-                        for name in ('OBJDEC', 'TELDEC', 'DEC'):
-                            try:
-                                d, m, s = hdr[name].split(':')
-                                dec_degs = \
-                                    (abs(int(d)) + int(m)/60 +
-                                     float(s.replace(',', '.'))/3600) * \
-                                    (1 - d.strip().startswith('-'))
-                            except (KeyError, ValueError):
-                                pass
-                            else:
-                                break
+                        else:
+                            break
+                    for name in ('OBJDEC', 'TELDEC', 'DEC'):
+                        try:
+                            d, m, s = hdr[name].split(':')
+                            dec_degs = \
+                                (abs(int(d)) + int(m)/60 +
+                                 float(s.replace(',', '.'))/3600) * \
+                                (1 - d.strip().startswith('-'))
+                        except (KeyError, ValueError):
+                            pass
+                        else:
+                            break
 
-                    # Run Astrometry.net; allow to abort the job by calling
-                    # back from the engine into Python code
-                    solution = solve_field(
-                        solver, xy, fluxes,
-                        width=width,
-                        height=height,
-                        ra_hours=ra_hours or 0,
-                        dec_degs=dec_degs or 0,
-                        radius=settings.radius,
-                        min_scale=settings.min_scale,
-                        max_scale=settings.max_scale,
-                        parity=settings.parity,
-                        sip_order=settings.sip_order,
-                        crpix_center=settings.crpix_center,
-                        max_sources=settings.max_sources,
-                        retry_lost=False,
-                        callback=lambda: self.state.status != 'canceled')
-                    if solution.wcs is None:
-                        raise RuntimeError('WCS solution not found')
+                # Run Astrometry.net; allow to abort the job by calling
+                # back from the engine into Python code
+                solution = solve_field(
+                    solver, xy, fluxes,
+                    width=width,
+                    height=height,
+                    ra_hours=ra_hours or 0,
+                    dec_degs=dec_degs or 0,
+                    radius=settings.radius,
+                    min_scale=settings.min_scale,
+                    max_scale=settings.max_scale,
+                    parity=settings.parity,
+                    sip_order=settings.sip_order,
+                    crpix_center=settings.crpix_center,
+                    max_sources=settings.max_sources,
+                    retry_lost=False,
+                    callback=lambda: self.state.status != 'canceled')
+                if solution.wcs is None:
+                    raise RuntimeError('WCS solution not found')
 
-                    # Remove all existing WCS-related keywords so that they
-                    # don't mess up the new WCS if it doesn't have them
-                    for name in list(hdr):
-                        if WCS_REGEX.match(name):
-                            del hdr[name]
+                # Remove all existing WCS-related keywords so that they
+                # don't mess up the new WCS if it doesn't have them
+                for name in list(hdr):
+                    if WCS_REGEX.match(name):
+                        del hdr[name]
 
-                    hdr.add_history(
-                        '[{}] WCS calibration obtained by Afterglow with '
-                        'index {} from {} sources; matched sources: {}, '
-                        'conflicts: {}, log-odds: {}'.format(
-                            datetime.utcnow(), solution.index_name,
-                            solution.n_field, solution.n_match,
-                            solution.n_conflict, solution.log_odds))
+                hdr.add_history(
+                    '[{}] WCS calibration obtained by Afterglow with '
+                    'index {} from {} sources; matched sources: {}, '
+                    'conflicts: {}, log-odds: {}'.format(
+                        datetime.utcnow(), solution.index_name,
+                        solution.n_field, solution.n_match,
+                        solution.n_conflict, solution.log_odds))
 
-                    # Overwrite WCS in FITS header; preserve epoch
-                    # of observation
-                    orig_kw = {
-                        name: (hdr[name], hdr.comments[name])
-                        if hdr.comments[name] else hdr[name]
-                        for name in (
-                            'DATE-OBS', 'MJD-OBS', 'DATEREF', 'MJDREFI',
-                            'MJDREFF')
-                        if name in hdr
-                    }
-                    hdr.update(solution.wcs.to_header(relax=True))
-                    for name, val in orig_kw.items():
-                        hdr[name] = val
+                # Overwrite WCS in FITS header; preserve epoch
+                # of observation
+                orig_kw = {
+                    name: (hdr[name], hdr.comments[name])
+                    if hdr.comments[name] else hdr[name]
+                    for name in (
+                        'DATE-OBS', 'MJD-OBS', 'DATEREF', 'MJDREFI',
+                        'MJDREFF')
+                    if name in hdr
+                }
+                hdr.update(solution.wcs.to_header(relax=True))
+                for name, val in orig_kw.items():
+                    hdr[name] = val
 
+                with get_data_file_db(self.user_id) as adb:
                     try:
                         if self.inplace:
                             # Overwrite the original data file
@@ -261,10 +260,8 @@ class WcsCalibrationJob(Job):
                         adb.rollback()
                         raise
 
-                    self.result.file_ids.append(file_id)
-                except Exception as e:
-                    self.add_error(e, {'file_id': self.file_ids[i]})
-                finally:
-                    self.update_progress((i + 1)/len(self.file_ids)*100)
-        finally:
-            adb.remove()
+                self.result.file_ids.append(file_id)
+            except Exception as e:
+                self.add_error(e, {'file_id': self.file_ids[i]})
+            finally:
+                self.update_progress((i + 1)/len(self.file_ids)*100)

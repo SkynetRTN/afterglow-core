@@ -169,18 +169,17 @@ class PixelOpsJob(Job):
             if nd != 2:
                 raise ValueError('Expression must yield a 2D array or scalar')
 
-            adb = get_data_file_db(self.user_id)
-            try:
-                if not isinstance(res, numpy.ndarray):
-                    # Cannot blindly apply asarray() to masked arrays
-                    res = numpy.asarray(res)
-                res = res.astype(numpy.float32)
-                if self.inplace:
-                    hdr = get_data_file_data(self.user_id, file_id)[1]
-                    hdr.add_history(
-                        '[{}] Updated by Afterglow by evaluating expression '
-                        '"{}"'.format(datetime.utcnow(), expr))
+            if not isinstance(res, numpy.ndarray):
+                # Cannot blindly apply asarray() to masked arrays
+                res = numpy.asarray(res)
+            res = res.astype(numpy.float32)
+            if self.inplace:
+                hdr = get_data_file_data(self.user_id, file_id)[1]
+                hdr.add_history(
+                    '[{}] Updated by Afterglow by evaluating expression '
+                    '"{}"'.format(datetime.utcnow(), expr))
 
+                with get_data_file_db(self.user_id) as adb:
                     try:
                         save_data_file(
                             adb, get_root(self.user_id), file_id, res, hdr)
@@ -188,19 +187,20 @@ class PixelOpsJob(Job):
                     except Exception:
                         adb.rollback()
                         raise
+            else:
+                if file_id is None:
+                    hdr = pyfits.Header()
+                    hdr.add_history(
+                        '[{}] Created by Afterglow by evaluating '
+                        'expression "{}"'.format(datetime.utcnow(), expr))
                 else:
-                    if file_id is None:
-                        hdr = pyfits.Header()
-                        hdr.add_history(
-                            '[{}] Created by Afterglow by evaluating '
-                            'expression "{}"'.format(datetime.utcnow(), expr))
-                    else:
-                        hdr = get_data_file_data(self.user_id, file_id)[1]
-                        hdr.add_history(
-                            '[{}] Created by Afterglow from data file {:d} by '
-                            'evaluating expression "{}"'
-                            .format(datetime.utcnow(), file_id, expr))
+                    hdr = get_data_file_data(self.user_id, file_id)[1]
+                    hdr.add_history(
+                        '[{}] Created by Afterglow from data file {:d} by '
+                        'evaluating expression "{}"'
+                        .format(datetime.utcnow(), file_id, expr))
 
+                with get_data_file_db(self.user_id) as adb:
                     try:
                         # Create data file in the same session as input data
                         # file or, if created from expression not involving
@@ -211,8 +211,6 @@ class PixelOpsJob(Job):
                     except Exception:
                         adb.rollback()
                         raise
-            finally:
-                adb.remove()
 
             self.result.file_ids.append(file_id)
         else:
