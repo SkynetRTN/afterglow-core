@@ -23,8 +23,8 @@ from socketserver import BaseRequestHandler, ThreadingTCPServer
 
 from marshmallow import Schema, fields, missing
 from sqlalchemy import (
-    Boolean, Column, Float, ForeignKey, Integer, String, Text, create_engine,
-    event, text)
+    Boolean, Column, Float, ForeignKey, Index, Integer, String, Text,
+    create_engine, event, text)
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -57,6 +57,9 @@ JobBase = declarative_base()
 
 class DbJobState(JobBase):
     __tablename__ = 'job_states'
+    __table_args__ = (
+        Index('idx_timeout', 'status', 'started_on', 'progress'),
+    )
 
     id = Column(
         ForeignKey('jobs.id', ondelete='CASCADE'), index=True,
@@ -64,8 +67,9 @@ class DbJobState(JobBase):
     status = Column(String(16), nullable=False, index=True, default='pending')
     created_on = Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+    started_on = Column(DateTime, index=True)
     completed_on = Column(DateTime)
-    progress = Column(Float, nullable=False, default=0)
+    progress = Column(Float, nullable=False, default=0, index=True)
 
 
 class DbJobResult(JobBase):
@@ -428,6 +432,7 @@ class JobWorkerProcess(Process):
                 # Notify the job server that the job is running and run it
                 result_queue.put(dict(id=job_descr['id'], pid=self.ident))
                 job.state.status = 'in_progress'
+                job.state.started_on = datetime.utcnow()
                 job.update()
                 try:
                     if app.config.get('PROFILE'):
@@ -642,6 +647,27 @@ class JobRequestHandler(BaseRequestHandler):
                             app.logger.warning(
                                 'All job worker processes are busy; '
                                 'consider increasing JOB_POOL_MAX')
+
+                            # Cancel jobs that take too long to complete
+                            for db_job_state in session.query(DbJobState) \
+                                    .filter(DbJobState.status == 'in_progress',
+                                            DbJobState.progress <
+                                            app.config.get(
+                                                'JOB_TIMEOUT_MAX_PROGRESS',
+                                                90),
+                                            DbJobState.started_on <
+                                            datetime.utcnow() - timedelta(
+                                                seconds=app.config.get(
+                                                    'JOB_TIMEOUT', 900))):
+                                job_id = db_job_state.id
+                                with server.pool_lock.acquire_read():
+                                    for p in server.pool:
+                                        if p.job_id == job_id:
+                                            p.cancel_current_job()
+                                            app.logger.warning(
+                                                'Job %s timed out, canceled',
+                                                job_id)
+                                            break
                         else:
                             app.logger.info(
                                 'Adding one more worker to job pool')

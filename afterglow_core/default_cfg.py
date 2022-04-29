@@ -165,3 +165,11 @@ JOB_POOL_MAX = 16
 # Maximum RAM in megabytes allowed to be allocated by certain memory-intensive
 # jobs
 JOB_MAX_RAM = 100.0
+
+# Job completion timeout in seconds: if job pool is exhausted, cancel jobs that
+# run longer than specified except those which progress is above
+# JOB_TIMEOUT_MAX_PROGRESS
+JOB_TIMEOUT = 900
+
+# Don't time out jobs with progress above the given percentage
+JOB_TIMEOUT_MAX_PROGRESS = 90
