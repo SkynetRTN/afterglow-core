@@ -2,9 +2,10 @@
 Afterglow Core: source extraction job plugin
 """
 
-from typing import List as TList
+from typing import Dict as TDict, List as TList, Tuple
 
 from marshmallow.fields import Integer, List, Nested
+from numpy import ndarray
 from astropy.wcs import WCS
 
 from skylib.extraction import auto_sat_level, extract_sources
@@ -69,7 +70,7 @@ class SourceExtractionJob(Job):
 
     def run(self):
         result_data = run_source_extraction_job(
-            self, self.source_extraction_settings, self.file_ids)
+            self, self.source_extraction_settings, self.file_ids)[0]
 
         if self.file_ids and len(self.file_ids) > 1 and self.merge_sources:
             result_data = merge_sources(
@@ -82,7 +83,8 @@ def run_source_extraction_job(job: Job,
                               settings: SourceExtractionSettings,
                               job_file_ids: TList[int],
                               update_progress: bool = True) -> \
-        TList[SourceExtractionData]:
+        Tuple[TList[SourceExtractionData],
+              TDict[int, Tuple[ndarray, ndarray]]]:
     """
     Batch photometry job body; also used during photometric calibration
 
@@ -92,7 +94,8 @@ def run_source_extraction_job(job: Job,
     :param update_progress: set to False when called by another job (e.g. WCS
         calibration)
 
-    :return: list of source extraction results
+    :return: list of source extraction results plus background and RMS map
+        pairs indexed by file IDs
     """
     extraction_kw = dict(
         threshold=settings.threshold,
@@ -116,6 +119,7 @@ def run_source_extraction_job(job: Job,
     )
 
     result_data = []
+    backgrounds = {}
     for file_no, id in enumerate(job_file_ids):
         try:
             # Get image data
@@ -149,6 +153,7 @@ def run_source_extraction_job(job: Job,
             # Extract sources
             source_table, background, background_rms = extract_sources(
                 pixels, gain=gain, sat_img=sat_img, **extraction_kw)
+            backgrounds[id] = (background, background_rms)
 
             if settings.limit and len(source_table) > settings.limit:
                 # Leave only the given number of the brightest sources
@@ -182,4 +187,4 @@ def run_source_extraction_job(job: Job,
         except Exception as e:
             job.add_error(e, {'file_id': id})
 
-    return result_data
+    return result_data, backgrounds

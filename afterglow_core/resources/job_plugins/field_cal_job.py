@@ -70,7 +70,7 @@ class FieldCalJob(Job):
             # Detect sources using settings provided
             detected_sources = run_source_extraction_job(
                 self, self.source_extraction_settings, self.file_ids,
-                update_progress=False)
+                update_progress=False)[0]
             if not detected_sources:
                 raise RuntimeError('Could not detect any sources')
         else:
