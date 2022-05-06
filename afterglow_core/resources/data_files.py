@@ -232,6 +232,8 @@ def get_data_file_db(user_id: Optional[int]):
 
                     # Get engine from cache
                     session = data_file_engine[user_id, pid][1]
+                    session()
+                    yield session
                 except KeyError:
                     # Engine does not exist in the current process, create it
                     engine = create_data_file_engine(root)
