@@ -4,12 +4,12 @@ Afterglow Core: image property extraction job plugin
 
 from typing import List as TList
 
-from numpy import median
+from numpy import median, sqrt
 from astropy.wcs import WCS
 from marshmallow.fields import Integer, List, Nested
 
 from ...models import Job, JobResult, ImageProperties
-from ..data_files import get_data_file_fits
+from ..data_files import get_data_file_data, get_data_file_fits
 from .source_extraction_job import (
     SourceExtractionSettings, run_source_extraction_job)
 
@@ -50,6 +50,9 @@ class ImagePropsExtractionJob(Job):
                     raise RuntimeError('Could not detect any sources')
                 background, background_rms = background_info.get(
                     file_id, (None, None))
+                global_snr = sqrt((((
+                    get_data_file_data(self.user_id, file_id)[0] -
+                    background)/background_rms)**2).mean())
                 if background is not None:
                     background = background.mean()
                 if background_rms is not None:
@@ -94,6 +97,7 @@ class ImagePropsExtractionJob(Job):
                     seeing_pixels=seeing_pixels,
                     seeing_arcsec=seeing_arcsec,
                     ellipticity=ellipticity,
+                    global_snr=global_snr,
                 ))
 
             except Exception as e:

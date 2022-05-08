@@ -2017,6 +2017,9 @@ components:
           ellipticity:
             description: median ellipticity of sources (1 - b/a)
             type: number
+          global_snr:
+            description: global image signal-to-noise ratio
+            type: number
 
     ImagePropsExtractionJob:
       description: Image property extraction job
