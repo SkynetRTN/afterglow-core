@@ -100,7 +100,7 @@ class WcsCalibrationJob(Job):
         WcsCalibrationSettings, default={})
     source_extraction_settings: SourceExtractionSettings = Nested(
         SourceExtractionSettings, default=None)
-    inplace: bool = Boolean(default=False)
+    inplace: bool = Boolean(default=True)
 
     def run(self):
         global solver

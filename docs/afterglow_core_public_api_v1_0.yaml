@@ -1974,7 +1974,7 @@ components:
             inplace:
               description: calibrate in-place vs create a new data file for each input data file
               type: boolean
-              default: false
+              default: true
 
     WcsCalibrationJobResult:
       description: Result of WCS calibration

@@ -45,4 +45,4 @@ class WcsCalibrationJobSchema(JobSchema):
         WcsCalibrationSettingsSchema, default={})
     source_extraction_settings: SourceExtractionSettingsSchema = Nested(
         SourceExtractionSettingsSchema, default=None)
-    inplace: bool = Boolean(default=False)
+    inplace: bool = Boolean(default=True)
