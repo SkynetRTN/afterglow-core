@@ -102,7 +102,8 @@ DATA_FILE_UPLOAD = False
 
 # Number of histogram bins or method for calculating the optimal bin size
 # ("auto", "fd", "doane", "scott", "rice", "sturges", or "sqrt", see
-# https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html)
+# https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html),
+# or "background" for the experimental background-based histogramming
 HISTOGRAM_BINS = 1024
 
 
