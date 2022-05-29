@@ -1486,11 +1486,12 @@ def update_data_file(user_id: Optional[int], data_file_id: int,
 
         modified = force
         for key, val in data_file.to_dict().items():
-            if key not in ('name', 'session_id', 'group_name', 'group_order'):
+            if key not in ('name', 'session_id', 'group_name', 'group_order',
+                           'data_provider', 'asset_path'):
                 continue
             if val != getattr(db_data_file, key):
                 setattr(db_data_file, key, val)
-                if key not in ('group_name', 'group_order'):
+                if key in ('name', 'session_id'):
                     modified = True
         if modified:
             try:
