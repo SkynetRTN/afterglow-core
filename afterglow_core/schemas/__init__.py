@@ -279,7 +279,7 @@ class Resource(AfterglowSchema):
 
     class MyResource(Resource):
         __get_view__ = 'my_resource'
-        id = Integer(default=None)
+        id = Integer(dump_default=None)
         ...
 
     @api.route(url_prefix + 'my_resource/[id]')

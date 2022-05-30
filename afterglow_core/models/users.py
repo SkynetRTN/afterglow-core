@@ -24,7 +24,7 @@ class Identity(AfterglowSchema):
     name: str = String()
     user_id: int = Integer()
     auth_method: str = String()
-    data: str = String(default='')
+    data: str = String(dump_default='')
 
 
 class User(AfterglowSchema):

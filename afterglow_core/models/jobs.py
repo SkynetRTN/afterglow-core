@@ -35,10 +35,10 @@ class JobState(AfterglowSchema):
         completed_on: time of completion or cancellation
         progress: current job progress, a number from 0 to 100
     """
-    status: str = String(default='in_progress')
+    status: str = String(dump_default='in_progress')
     created_on: datetime = DateTime()
     completed_on: datetime = DateTime()
-    progress: float = Float(default=0)
+    progress: float = Float(dump_default=0)
 
     def __init__(self, *args, **kwargs):
         """
@@ -111,19 +111,19 @@ class Job(AfterglowSchema):
 
     class MyJob(Job):
         ...
-        param1 = fields.Integer(default=1)
+        param1 = fields.Integer(dump_default=1)
         ...
 
     Alternatively, one may pack parameters in a separate class that should be
     a subclass of :class:`afterglow_core.schemas.AfterglowSchema`:
 
     class MyJobSettings(AfterglowSchema):
-        param1 = fields.Integer(default=1)
+        param1 = fields.Integer(dump_default=1)
         ...
 
     class MyJob(Job):
         ...
-        settings = fields.Nested(MyJobSettings, default={})
+        settings = fields.Nested(MyJobSettings, dump_default={})
 
     Job plugins may define job-specific result structures by subclassing from
     :class:`JobResult` and adding extra fields that store data to be returned
@@ -152,14 +152,14 @@ class Job(AfterglowSchema):
     files when processing multiple files:
 
     class MyJobSettings(AfterglowSchema):
-        file_ids = fields.List(fields.Integer, default=[])
+        file_ids = fields.List(fields.Integer, dump_default=[])
 
     class MyJobResult(JobResult):
-        values = fields.List(fields.Float, default=[])
+        values = fields.List(fields.Float, dump_default=[])
 
     class MyJob(Job):
         ...
-        settings = fields.Nested(MyJobSettings, default={})
+        settings = fields.Nested(MyJobSettings, dump_default={})
         result = fields.Nested(MyJobResult)
 
         def run(self):
@@ -256,10 +256,10 @@ class Job(AfterglowSchema):
     """
     __polymorphic_on__ = 'type'
 
-    id: int = Integer(default=None)
+    id: int = Integer(dump_default=None)
     type: str = String()
-    user_id: int = Integer(default=None)
-    session_id: int = Integer(default=None)
+    user_id: int = Integer(dump_default=None)
+    session_id: int = Integer(dump_default=None)
     state: JobState = Nested(JobState)
     result: JobResult = Nested(JobResult)
 

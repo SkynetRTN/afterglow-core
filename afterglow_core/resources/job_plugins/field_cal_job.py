@@ -32,19 +32,19 @@ __all__ = ['FieldCalJob']
 
 
 class FieldCalJobResult(JobResult):
-    data: TList[FieldCalResult] = List(Nested(FieldCalResult), default=[])
+    data: TList[FieldCalResult] = List(Nested(FieldCalResult), dump_default=[])
 
 
 class FieldCalJob(Job):
     type = 'field_cal'
     description = 'Photometric Calibration'
 
-    result: FieldCalJobResult = Nested(FieldCalJobResult, default={})
-    file_ids: TList[int] = List(Integer(), default=[])
-    field_cal: FieldCal = Nested(FieldCal, default={})
+    result: FieldCalJobResult = Nested(FieldCalJobResult, dump_default={})
+    file_ids: TList[int] = List(Integer(), dump_default=[])
+    field_cal: FieldCal = Nested(FieldCal, dump_default={})
     source_extraction_settings: SourceExtractionSettings = Nested(
-        SourceExtractionSettings, default=None)
-    photometry_settings: PhotSettings = Nested(PhotSettings, default=None)
+        SourceExtractionSettings, dump_default=None)
+    photometry_settings: PhotSettings = Nested(PhotSettings, dump_default=None)
 
     def run(self):
         if not getattr(self, 'file_ids', None):

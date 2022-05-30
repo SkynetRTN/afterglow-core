@@ -231,14 +231,14 @@ def run_cropping_job(job: Job,
 
 
 class CroppingSettings(AfterglowSchema):
-    left: int = Integer(default=0)
-    right: int = Integer(default=0)
-    top: int = Integer(default=0)
-    bottom: int = Integer(default=0)
+    left: int = Integer(dump_default=0)
+    right: int = Integer(dump_default=0)
+    top: int = Integer(dump_default=0)
+    bottom: int = Integer(dump_default=0)
 
 
 class CroppingJobResult(JobResult):
-    file_ids: TList[int] = List(Integer(), default=[])
+    file_ids: TList[int] = List(Integer(), dump_default=[])
 
 
 class CroppingJob(Job):
@@ -248,10 +248,10 @@ class CroppingJob(Job):
     type = 'cropping'
     description = 'Crop Images'
 
-    result: CroppingJobResult = Nested(CroppingJobResult, default={})
-    file_ids: TList[int] = List(Integer(), default=[])
-    settings: CroppingSettings = Nested(CroppingSettings, default={})
-    inplace: bool = Boolean(default=False)
+    result: CroppingJobResult = Nested(CroppingJobResult, dump_default={})
+    file_ids: TList[int] = List(Integer(), dump_default=[])
+    settings: CroppingSettings = Nested(CroppingSettings, dump_default={})
+    inplace: bool = Boolean(dump_default=False)
 
     def run(self):
         self.result.file_ids = run_cropping_job(

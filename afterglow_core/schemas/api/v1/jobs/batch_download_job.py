@@ -17,12 +17,12 @@ __all__ = [
 class BatchDownloadJobSchema(JobSchema):
     type = 'batch_download'
 
-    file_ids: TList[int] = List(Integer(), default=[])
-    group_names: TList[str] = List(String(), default=[])
+    file_ids: TList[int] = List(Integer(), dump_default=[])
+    group_names: TList[str] = List(String(), dump_default=[])
 
 
 class BatchAssetDownloadJobSchema(JobSchema):
     type = 'batch_asset_download'
 
-    provider_id: int = Integer(default=None)
-    paths: TList[str] = List(String(), default=[])
+    provider_id: int = Integer(dump_default=None)
+    paths: TList[str] = List(String(), dump_default=[])

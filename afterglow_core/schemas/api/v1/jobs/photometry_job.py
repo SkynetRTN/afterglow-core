@@ -16,15 +16,15 @@ __all__ = ['PhotometryJobResultSchema', 'PhotometryJobSchema']
 
 class PhotometryJobResultSchema(JobResultSchema):
     data: TList[PhotometryDataSchema] = List(
-        Nested(PhotometryDataSchema), default=[])
+        Nested(PhotometryDataSchema), dump_default=[])
 
 
 class PhotometryJobSchema(JobSchema):
     type = 'photometry'
 
     result: PhotometryJobResultSchema = Nested(
-        PhotometryJobResultSchema, default={})
-    file_ids: TList[int] = List(Integer(), default=[])
+        PhotometryJobResultSchema, dump_default={})
+    file_ids: TList[int] = List(Integer(), dump_default=[])
     sources: TList[SourceExtractionDataSchema] = List(
-        Nested(SourceExtractionDataSchema), default=[])
-    settings: PhotSettingsSchema = Nested(PhotSettingsSchema, default={})
+        Nested(SourceExtractionDataSchema), dump_default=[])
+    settings: PhotSettingsSchema = Nested(PhotSettingsSchema, dump_default={})

@@ -39,10 +39,10 @@ class CatalogSchema(Resource):
     __polymorphic_on__ = 'name'
     __get_view__ = 'get_catalogs'
 
-    name = String(default=None)
-    display_name = String(default=None)
+    name = String(dump_default=None)
+    display_name = String(dump_default=None)
     num_sources = Integer()
-    mags = Dict(keys=String, values=List(String()), default={})
+    mags = Dict(keys=String, values=List(String()), dump_default={})
     filter_lookup = Dict(keys=String, values=String)
 
 

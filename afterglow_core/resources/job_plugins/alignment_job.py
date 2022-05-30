@@ -23,13 +23,13 @@ __all__ = ['AlignmentJob']
 
 
 class AlignmentSettings(AfterglowSchema):
-    ref_image: str = String(default='central')
-    wcs_grid_points: int = Integer(default=0)
-    prefilter: bool = Boolean(default=True)
+    ref_image: str = String(dump_default='central')
+    wcs_grid_points: int = Integer(dump_default=0)
+    prefilter: bool = Boolean(dump_default=True)
 
 
 class AlignmentJobResult(JobResult):
-    file_ids: TList[int] = List(Integer(), default=[])
+    file_ids: TList[int] = List(Integer(), dump_default=[])
 
 
 class AlignmentJob(Job):
@@ -39,13 +39,13 @@ class AlignmentJob(Job):
     type = 'alignment'
     description = 'Align Images'
 
-    result: AlignmentJobResult = Nested(AlignmentJobResult, default={})
-    file_ids: TList[int] = List(Integer(), default=[])
-    settings: AlignmentSettings = Nested(AlignmentSettings, default={})
+    result: AlignmentJobResult = Nested(AlignmentJobResult, dump_default={})
+    file_ids: TList[int] = List(Integer(), dump_default=[])
+    settings: AlignmentSettings = Nested(AlignmentSettings, dump_default={})
     sources: TList[SourceExtractionData] = List(
-        Nested(SourceExtractionData), default=[])
-    inplace: bool = Boolean(default=False)
-    crop: bool = Boolean(default=False)
+        Nested(SourceExtractionData), dump_default=[])
+    inplace: bool = Boolean(dump_default=False)
+    crop: bool = Boolean(dump_default=False)
 
     def run(self):
         settings = self.settings

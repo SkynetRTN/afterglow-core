@@ -38,8 +38,8 @@ context['np'] = numpy
 
 
 class PixelOpsJobResult(JobResult):
-    file_ids: TList[int] = List(Integer(), default=[])
-    data: TList[float] = List(Float(), default=[])
+    file_ids: TList[int] = List(Integer(), dump_default=[])
+    data: TList[float] = List(Float(), dump_default=[])
 
 
 class PixelOpsJob(Job):
@@ -80,10 +80,10 @@ class PixelOpsJob(Job):
     description = 'Pixel Operations'
 
     result: PixelOpsJobResult = Nested(PixelOpsJobResult)
-    file_ids: TList[int] = List(Integer(), default=[])
-    op: str = String(default=None)
-    inplace: bool = Boolean(default=False)
-    aux_file_ids: TList[int] = List(Integer(), default=[])
+    file_ids: TList[int] = List(Integer(), dump_default=[])
+    op: str = String(dump_default=None)
+    inplace: bool = Boolean(dump_default=False)
+    aux_file_ids: TList[int] = List(Integer(), dump_default=[])
 
     def run(self):
         # Deduce the type of result by analyzing the user-supplied expression

@@ -18,13 +18,13 @@ __all__ = [
 
 
 class SourceMergeSettingsSchema(AfterglowSchema):
-    pos_type: str = String(default='auto')
-    tol: float = Float(default=None)
+    pos_type: str = String(dump_default='auto')
+    tol: float = Float(dump_default=None)
 
 
 class SourceMergeJobResultSchema(JobResultSchema):
     data: TList[SourceExtractionDataSchema] = List(
-        Nested(SourceExtractionDataSchema), default=[])
+        Nested(SourceExtractionDataSchema), dump_default=[])
 
 
 class SourceMergeJobSchema(JobSchema):
@@ -34,4 +34,4 @@ class SourceMergeJobSchema(JobSchema):
     sources: TList[SourceExtractionDataSchema] = List(Nested(
         SourceExtractionDataSchema))
     settings: SourceMergeSettingsSchema = Nested(
-        SourceMergeSettingsSchema, default={})
+        SourceMergeSettingsSchema, dump_default={})

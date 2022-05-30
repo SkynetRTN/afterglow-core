@@ -206,18 +206,18 @@ def run_photometry_job(job: Job, settings: PhotSettings,
 
 
 class PhotometryJobResult(JobResult):
-    data: TList[PhotometryData] = List(Nested(PhotometryData), default=[])
+    data: TList[PhotometryData] = List(Nested(PhotometryData), dump_default=[])
 
 
 class PhotometryJob(Job):
     type = 'photometry'
     description = 'Photometer Sources'
 
-    result: PhotometryJobResult = Nested(PhotometryJobResult, default={})
-    file_ids: TList[int] = List(Integer(), default=[])
+    result: PhotometryJobResult = Nested(PhotometryJobResult, dump_default={})
+    file_ids: TList[int] = List(Integer(), dump_default=[])
     sources: TList[SourceExtractionData] = List(
-        Nested(SourceExtractionData), default=[])
-    settings: PhotSettings = Nested(PhotSettings, default={})
+        Nested(SourceExtractionData), dump_default=[])
+    settings: PhotSettings = Nested(PhotSettings, dump_default={})
 
     def run(self):
         object.__setattr__(self.result, 'data', run_photometry_job(

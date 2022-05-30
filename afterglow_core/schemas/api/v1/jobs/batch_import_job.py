@@ -19,19 +19,19 @@ __all__ = [
 class BatchImportSettingsSchema(AfterglowSchema):
     provider_id: str = String()
     path: str = String()
-    duplicates: str = String(default='ignore')
-    recurse: bool = Boolean(default=False)
+    duplicates: str = String(dump_default='ignore')
+    recurse: bool = Boolean(dump_default=False)
 
 
 class BatchImportJobResultSchema(JobResultSchema):
-    file_ids: TList[int] = List(Integer(), default=[])
+    file_ids: TList[int] = List(Integer(), dump_default=[])
 
 
 class BatchImportJobSchema(JobSchema):
     type = 'batch_import'
 
     result: BatchImportJobResultSchema = Nested(
-        BatchImportJobResultSchema, default={})
+        BatchImportJobResultSchema, dump_default={})
     settings: TList[BatchImportSettingsSchema] = List(Nested(
-        BatchImportSettingsSchema, default={}), default=[])
-    session_id: int = Integer(default=None)
+        BatchImportSettingsSchema, dump_default={}), dump_default=[])
+    session_id: int = Integer(dump_default=None)

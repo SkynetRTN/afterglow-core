@@ -311,7 +311,7 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
 
 
 class CatalogQueryJobResult(JobResult):
-    data: TList[CatalogSource] = List(Nested(CatalogSource), default=[])
+    data: TList[CatalogSource] = List(Nested(CatalogSource), dump_default=[])
 
 
 class CatalogQueryJob(Job):
@@ -319,8 +319,8 @@ class CatalogQueryJob(Job):
     description = 'Catalog Query'
 
     result: CatalogQueryJobResult = Nested(
-        CatalogQueryJobResult, default={})
-    catalogs: TList[str] = List(String(), default=[])
+        CatalogQueryJobResult, dump_default={})
+    catalogs: TList[str] = List(String(), dump_default=[])
     ra_hours: float = Float()
     dec_degs: float = Float()
     radius_arcmins: float = Float()

@@ -73,11 +73,11 @@ class Catalog(AfterglowSchema):
     """
     __polymorphic_on__ = 'name'
 
-    name: str = String(default=None)
-    display_name: str = String(default=None)
+    name: str = String(dump_default=None)
+    display_name: str = String(dump_default=None)
     num_sources: int = Integer()
     mags: TDict[str, TList[str]] = Dict(
-        keys=String, values=List(String()), default={})
+        keys=String, values=List(String()), dump_default={})
     filter_lookup: TDict[str, str] = Dict(keys=String, values=String)
 
     def __init__(self, **kwargs):

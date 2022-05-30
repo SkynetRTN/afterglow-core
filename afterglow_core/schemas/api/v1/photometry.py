@@ -41,21 +41,21 @@ class IApertureSchema(AfterglowSchema):
 
 
 class PhotSettingsSchema(AfterglowSchema):
-    mode: str = String(default='aperture')
-    a: float = Float(default=None)
-    b: float = Float(default=None)
-    theta: float = Float(default=0)
-    a_in: float = Float(default=None)
-    a_out: float = Float(default=None)
-    b_out: float = Float(default=None)
-    theta_out: float = Float(default=None)
-    gain: float = Float(default=None)
-    centroid_radius: float = Float(default=0)
-    zero_point: float = Float(default=0)
-    fix_aper: bool = Boolean(default=True)
-    fix_ell: bool = Boolean(default=True)
-    fix_rot: bool = Boolean(default=True)
-    apcorr_tol: float = Float(default=0.0001)
+    mode: str = String(dump_default='aperture')
+    a: float = Float(dump_default=None)
+    b: float = Float(dump_default=None)
+    theta: float = Float(dump_default=0)
+    a_in: float = Float(dump_default=None)
+    a_out: float = Float(dump_default=None)
+    b_out: float = Float(dump_default=None)
+    theta_out: float = Float(dump_default=None)
+    gain: float = Float(dump_default=None)
+    centroid_radius: float = Float(dump_default=0)
+    zero_point: float = Float(dump_default=0)
+    fix_aper: bool = Boolean(dump_default=True)
+    fix_ell: bool = Boolean(dump_default=True)
+    fix_rot: bool = Boolean(dump_default=True)
+    apcorr_tol: float = Float(dump_default=0.0001)
 
 
 class PhotometryDataSchema(SourceExtractionDataSchema, IPhotometrySchema,

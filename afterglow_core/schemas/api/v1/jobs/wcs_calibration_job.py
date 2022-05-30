@@ -18,31 +18,31 @@ __all__ = [
 
 
 class WcsCalibrationSettingsSchema(AfterglowSchema):
-    ra_hours: Optional[float] = Float(default=None)
-    dec_degs: Optional[float] = Float(default=None)
-    radius: float = Float(default=180)
-    min_scale: float = Float(default=0.1)
-    max_scale: float = Float(default=60)
+    ra_hours: Optional[float] = Float(dump_default=None)
+    dec_degs: Optional[float] = Float(dump_default=None)
+    radius: float = Float(dump_default=180)
+    min_scale: float = Float(dump_default=0.1)
+    max_scale: float = Float(dump_default=60)
     parity: Optional[bool] = Boolean(
         truthy={True, 1, 'negative'},
-        falsy={False, 0, 'positive'}, default=None)
-    sip_order: int = Integer(default=3)
-    crpix_center: bool = Boolean(default=True)
-    max_sources: Optional[int] = Integer(default=100)
+        falsy={False, 0, 'positive'}, dump_default=None)
+    sip_order: int = Integer(dump_default=3)
+    crpix_center: bool = Boolean(dump_default=True)
+    max_sources: Optional[int] = Integer(dump_default=100)
 
 
 class WcsCalibrationJobResultSchema(JobResultSchema):
-    file_ids: TList[int] = List(Integer(), default=[])
+    file_ids: TList[int] = List(Integer(), dump_default=[])
 
 
 class WcsCalibrationJobSchema(JobSchema):
     type = 'wcs_calibration'
 
     result: WcsCalibrationJobResultSchema = Nested(
-        WcsCalibrationJobResultSchema, default={})
-    file_ids: TList[int] = List(Integer(), default=[])
+        WcsCalibrationJobResultSchema, dump_default={})
+    file_ids: TList[int] = List(Integer(), dump_default=[])
     settings: WcsCalibrationSettingsSchema = Nested(
-        WcsCalibrationSettingsSchema, default={})
+        WcsCalibrationSettingsSchema, dump_default={})
     source_extraction_settings: SourceExtractionSettingsSchema = Nested(
-        SourceExtractionSettingsSchema, default=None)
-    inplace: bool = Boolean(default=True)
+        SourceExtractionSettingsSchema, dump_default=None)
+    inplace: bool = Boolean(dump_default=True)

@@ -51,9 +51,10 @@ class DSSImageDataProvider(DataProvider):
             label='Field Height [arcmin]', type='int', min_val=0),
     )
 
-    server: str = String(validate=OneOf(['STScI', 'ESO']), default='STScI')
+    server: str = String(
+        validate=OneOf(['STScI', 'ESO']), dump_default='STScI')
     timeout: float = Float(
-        validate=Range(min=0, min_inclusive=False), default=30)
+        validate=Range(min=0, min_inclusive=False), dump_default=30)
 
     @staticmethod
     def _get_asset_params(path: str) -> Tuple[float, float, float, float]:

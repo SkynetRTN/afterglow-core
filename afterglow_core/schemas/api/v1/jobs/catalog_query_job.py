@@ -16,15 +16,15 @@ __all__ = ['CatalogQueryJobResultSchema', 'CatalogQueryJobSchema']
 
 class CatalogQueryJobResultSchema(JobResultSchema):
     data: TList[CatalogSourceSchema] = List(
-        Nested(CatalogSourceSchema), default=[])
+        Nested(CatalogSourceSchema), dump_default=[])
 
 
 class CatalogQueryJobSchema(JobSchema):
     type = 'catalog_query'
 
     result: CatalogQueryJobResultSchema = Nested(
-        CatalogQueryJobResultSchema, default={})
-    catalogs: TList[str] = List(String(), default=[])
+        CatalogQueryJobResultSchema, dump_default={})
+    catalogs: TList[str] = List(String(), dump_default=[])
     ra_hours: float = Float()
     dec_degs: float = Float()
     radius_arcmins: float = Float()

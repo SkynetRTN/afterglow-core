@@ -43,24 +43,24 @@ class DataFileSchema(Resource):
     """
     __get_view__ = 'data_files'
 
-    id: int = Integer(default=None)
-    type: str = String(default=None)
-    name: str = String(default=None)
-    width: int = Integer(default=None)
-    height: int = Integer(default=None)
-    data_provider: str = String(default=None)
-    asset_path: str = String(default=None)
-    asset_type: str = String(default=None)
-    asset_metadata: TDict[str, Any] = Dict(default={})
-    layer: str = String(default=None)
+    id: int = Integer(dump_default=None)
+    type: str = String(dump_default=None)
+    name: str = String(dump_default=None)
+    width: int = Integer(dump_default=None)
+    height: int = Integer(dump_default=None)
+    data_provider: str = String(dump_default=None)
+    asset_path: str = String(dump_default=None)
+    asset_type: str = String(dump_default=None)
+    asset_metadata: TDict[str, Any] = Dict(dump_default={})
+    layer: str = String(dump_default=None)
     created_on: datetime = DateTime(
-        default=None, format='%Y-%m-%d %H:%M:%S.%f')
-    modified: bool = Boolean(default=False)
+        dump_default=None, format='%Y-%m-%d %H:%M:%S.%f')
+    modified: bool = Boolean(dump_default=False)
     modified_on: datetime = DateTime(
-        default=None, format='%Y-%m-%d %H:%M:%S.%f')
-    session_id: Optional[int] = Integer(default=None)
-    group_name: str = String(default=None)
-    group_order: int = Integer(default=0)
+        dump_default=None, format='%Y-%m-%d %H:%M:%S.%f')
+    session_id: Optional[int] = Integer(dump_default=None)
+    group_name: str = String(dump_default=None)
+    group_order: int = Integer(dump_default=0)
 
 
 class SessionSchema(Resource):
@@ -83,10 +83,11 @@ class SessionSchema(Resource):
     """
     __get_view__ = 'sessions'
 
-    id: int = Integer(default=None)
-    name: str = String(default=None)
+    id: int = Integer(dump_default=None)
+    name: str = String(dump_default=None)
     data: str = String()
-    data_file_ids: TList[int] = List(Integer(), default=[], dump_only=True)
+    data_file_ids: TList[int] = List(
+        Integer(), dump_default=[], dump_only=True)
 
     def __init__(self, _obj: Optional[Session] = None, **kwargs):
         """

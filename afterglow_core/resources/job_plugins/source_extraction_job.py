@@ -24,35 +24,35 @@ __all__ = [
 
 
 class SourceExtractionSettings(AfterglowSchema):
-    x: int = Integer(default=1)
-    y: int = Integer(default=1)
-    width: int = Integer(default=0)
-    height: int = Integer(default=0)
-    threshold: float = Float(default=2.5)
-    bk_size: float = Float(default=1/64)
-    bk_filter_size: int = Integer(default=3)
-    fwhm: float = Float(default=0)
-    ratio: float = Float(default=1)
-    theta: float = Float(default=0)
-    min_pixels: int = Integer(default=3)
-    min_fwhm: float = Float(default=0.8)
-    max_fwhm: float = Float(default=10)
-    max_ellipticity: float = Float(default=2)
-    deblend: bool = Boolean(default=False)
-    deblend_levels: int = Integer(default=32)
-    deblend_contrast: float = Float(default=0.005)
-    gain: float = Float(default=None)
-    clean: float = Float(default=1)
-    centroid: bool = Boolean(default=True)
-    limit: int = Integer(default=None)
-    sat_level: float = Float(default=63000)
-    auto_sat_level: bool = Boolean(default=False)
-    discard_saturated: int = Integer(default=1)
+    x: int = Integer(dump_default=1)
+    y: int = Integer(dump_default=1)
+    width: int = Integer(dump_default=0)
+    height: int = Integer(dump_default=0)
+    threshold: float = Float(dump_default=2.5)
+    bk_size: float = Float(dump_default=1/64)
+    bk_filter_size: int = Integer(dump_default=3)
+    fwhm: float = Float(dump_default=0)
+    ratio: float = Float(dump_default=1)
+    theta: float = Float(dump_default=0)
+    min_pixels: int = Integer(dump_default=3)
+    min_fwhm: float = Float(dump_default=0.8)
+    max_fwhm: float = Float(dump_default=10)
+    max_ellipticity: float = Float(dump_default=2)
+    deblend: bool = Boolean(dump_default=False)
+    deblend_levels: int = Integer(dump_default=32)
+    deblend_contrast: float = Float(dump_default=0.005)
+    gain: float = Float(dump_default=None)
+    clean: float = Float(dump_default=1)
+    centroid: bool = Boolean(dump_default=True)
+    limit: int = Integer(dump_default=None)
+    sat_level: float = Float(dump_default=63000)
+    auto_sat_level: bool = Boolean(dump_default=False)
+    discard_saturated: int = Integer(dump_default=1)
 
 
 class SourceExtractionJobResult(JobResult):
     data: TList[SourceExtractionData] = List(
-        Nested(SourceExtractionData), default=[])
+        Nested(SourceExtractionData), dump_default=[])
 
 
 class SourceExtractionJob(Job):
@@ -61,12 +61,12 @@ class SourceExtractionJob(Job):
 
     result: SourceExtractionJobResult = Nested(
         SourceExtractionJobResult)
-    file_ids: TList[int] = List(Integer(), default=[])
+    file_ids: TList[int] = List(Integer(), dump_default=[])
     source_extraction_settings: SourceExtractionSettings = Nested(
-        SourceExtractionSettings, default={})
-    merge_sources: bool = Boolean(default=True)
+        SourceExtractionSettings, dump_default={})
+    merge_sources: bool = Boolean(dump_default=True)
     source_merge_settings: SourceMergeSettings = Nested(
-        SourceMergeSettings, default={})
+        SourceMergeSettings, dump_default={})
 
     def run(self):
         result_data = run_source_extraction_job(
