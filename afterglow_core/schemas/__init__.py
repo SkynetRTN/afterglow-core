@@ -186,6 +186,9 @@ class AfterglowSchema(Schema):
                         # class was turned into a read-only property
                         # in a subclass
                         pass
+        else:
+            # Don't serialize fields that have not been explicitly set
+            self.dump_fields = self.dict_class()
 
     def __setattr__(self, name: str, value: Any) -> None:
         """
@@ -200,6 +203,9 @@ class AfterglowSchema(Schema):
             except (AttributeError, KeyError):
                 pass
             else:
+                if not field.load_only:
+                    # Include field in serialization
+                    self.dump_fields[name] = field
                 if hasattr(field, 'nested') and \
                         issubclass(field.nested, AfterglowSchema):
                     value = field.nested(value)
