@@ -23,8 +23,8 @@ class Boolean(fields.Boolean):
     values such as "yes" and "no"
     """
     truthy = {
-        True, 't', 'T', 'true', 'True', 'TRUE', 'yes', 'Yes', 'YES', 'on', 'On',
-        'ON', '1', 1, 1.0}
+        True, 't', 'T', 'true', 'True', 'TRUE', 'yes', 'Yes', 'YES', 'on',
+        'On', 'ON', '1', 1, 1.0}
     falsy = {
         False, 'f', 'F', 'false', 'False', 'FALSE', 'no', 'No', 'NO', 'off',
         'Off', 'OFF', '0', 0, 0.0}
@@ -145,7 +145,7 @@ class AfterglowSchema(Schema):
         :param _obj: initialize fields from the given object (usually a data
             model object defined in :mod:`afterglow_core.models`, an SQLA
             database object defined in :mod:`afterglow_core.resources`),
-            or a public API schema defined in :mode:`afterglow_core.schemas.api`
+            or a public API schema defined in :mod:`afterglow_core.schemas.api`
         :param only: whitelist of the fields to include in the instantiated
             schema
         :param exclude: blacklist of the fields to exclude
@@ -165,16 +165,6 @@ class AfterglowSchema(Schema):
             kw = dict(self.dump(_obj).items())
             kw.update(kwargs)
 
-        for name, val in kw.items():
-            try:
-                if isinf(val) or isnan(val):
-                    # Convert floating-point NaNs/Infs to string
-                    val = str(val)
-            except TypeError:
-                pass
-
-            setattr(self, name, val)
-
         if _set_defaults:
             # Initialize the missing fields with their defaults
             for name, f in self.fields.items():
@@ -189,6 +179,16 @@ class AfterglowSchema(Schema):
         else:
             # Don't serialize fields that have not been explicitly set
             self.dump_fields = self.dict_class()
+
+        for name, val in kw.items():
+            try:
+                if isinf(val) or isnan(val):
+                    # Convert floating-point NaNs/Infs to string
+                    val = str(val)
+            except TypeError:
+                pass
+
+            setattr(self, name, val)
 
     def __setattr__(self, name: str, value: Any) -> None:
         """
