@@ -181,7 +181,7 @@ class DataProvider(AfterglowSchema):
 
         :param kwargs: data provider initialization parameters
         """
-        super(DataProvider, self).__init__(_set_defaults=True, **kwargs)
+        super(DataProvider, self).__init__(**kwargs)
 
         # Automatically set browseable, searchable, and readonly flags
         # depending on what methods are reimplemented by provider; method attr

@@ -52,8 +52,8 @@ def users() -> Response:
     if request.method == 'POST':
         # Create user
         return json_response(UserSchema(create_user(User(
-            UserSchema(_set_defaults=True, **request.args.to_dict()),
-            _set_defaults=True))), 201)
+            UserSchema(**request.args.to_dict()),
+            only=list(request.args.keys())))), 201)
 
 
 @app.route(url_prefix + 'users/<int:user_id>',

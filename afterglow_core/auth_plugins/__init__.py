@@ -58,7 +58,7 @@ class AuthnPluginBase(AfterglowSchema):
     def __init__(self, id: Optional[str] = None,
                  description: Optional[str] = None, icon: Optional[str] = None,
                  register_users: Optional[bool] = None):
-        super().__init__(_set_defaults=True)
+        super().__init__()
 
         if id is None:
             self.id = self.name

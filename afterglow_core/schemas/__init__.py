@@ -133,8 +133,7 @@ class AfterglowSchema(Schema):
     def __init__(self, _obj: Any = None,
                  only: Optional[Union[Sequence[str], Set[str]]] = None,
                  exclude: Union[Sequence[str], Set[str]] = (),
-                 _set_defaults: bool = False, _remove_nulls: bool = False,
-                 **kwargs):
+                 _remove_nulls: bool = False, **kwargs):
         """
         Create an Afterglow schema class instance
 
@@ -150,8 +149,6 @@ class AfterglowSchema(Schema):
             schema
         :param exclude: blacklist of the fields to exclude
             from the instantiated schema
-        :param _set_defaults: initialize fields missing from both `_obj` and
-            keyword arguments to their defaults, if any
         :param _remove_nulls: if set, don't dump fields with null values
         :param kwargs: keyword arguments are assigned to the corresponding
             instance attributes, including fields
@@ -162,11 +159,8 @@ class AfterglowSchema(Schema):
         if _obj is None:
             kw = kwargs
         else:
-            kw = dict(self.dump(_obj).items())
+            kw = dict(self.dump(_obj))
             kw.update(kwargs)
-
-        # Don't serialize fields that have not been explicitly set
-        self.dump_fields = self.dict_class()
 
         # Initialize fields passed via keywords or object instance
         for name, val in kw.items():
@@ -179,17 +173,16 @@ class AfterglowSchema(Schema):
 
             setattr(self, name, val)
 
-        if _set_defaults:
-            # Initialize missing fields with their defaults
-            for name, f in self.fields.items():
-                if not hasattr(self, name) and f.default != fields.missing_:
-                    try:
-                        setattr(self, name, f.default)
-                    except AttributeError:
-                        # Possibly missing attribute with a default in the base
-                        # class was turned into a read-only property
-                        # in a subclass
-                        pass
+        # Initialize missing fields with their defaults
+        for name, f in self.dump_fields.items():
+            if not hasattr(self, name) and f.dump_default != fields.missing_:
+                try:
+                    setattr(self, name, f.dump_default)
+                except AttributeError:
+                    # Possibly missing attribute with a default in the base
+                    # class was turned into a read-only property
+                    # in a subclass
+                    pass
 
     def __setattr__(self, name: str, value: Any) -> None:
         """

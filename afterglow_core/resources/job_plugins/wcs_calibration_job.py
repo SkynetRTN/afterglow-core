@@ -133,7 +133,7 @@ class WcsCalibrationJob(Job):
             return
 
         source_extraction_settings = self.source_extraction_settings or \
-            SourceExtractionSettings(_set_defaults=True)
+            SourceExtractionSettings()
         # Don't discard saturated stars because we need max_sources brightest
         # sources
         source_extraction_settings.discard_saturated = 0

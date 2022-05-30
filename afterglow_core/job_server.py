@@ -412,8 +412,7 @@ class JobWorkerProcess(Process):
                 # to contain at least type, ID, and user ID, and
                 # the corresponding job plugin is guaranteed to exist
                 try:
-                    job = Job(
-                        _queue=result_queue, _set_defaults=True, **job_descr)
+                    job = Job(_queue=result_queue, **job_descr)
                 except Exception as e:
                     # Report job creation error to job server
                     app.logger.warning(
@@ -695,7 +694,7 @@ class JobRequestHandler(BaseRequestHandler):
                     try:
                         # Convert message arguments to polymorphic job model
                         # and create an appropriate db job class instance
-                        job_args = Job(_set_defaults=True, **msg).to_dict()
+                        job_args = Job(**msg).to_dict()
                         del job_args['state'], job_args['result']
                         db_job = server.db_job_types[job_type](
                             state=DbJobState(),
@@ -769,8 +768,7 @@ class JobRequestHandler(BaseRequestHandler):
 
                 elif method == 'put':
                     # Cancel job
-                    status = getattr(
-                        JobState(_set_defaults=True, **msg), 'status', None)
+                    status = getattr(JobState(**msg), 'status', None)
                     if status is None:
                         raise MissingFieldError(field='status')
                     if status != 'canceled':
