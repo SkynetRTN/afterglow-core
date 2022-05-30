@@ -18,7 +18,8 @@ __all__ = ['ImagePropsExtractionJob']
 
 
 class ImagePropsExtractionJobResult(JobResult):
-    data: TList[ImageProperties] = List(Nested(ImageProperties), default=[])
+    data: TList[ImageProperties] = List(
+        Nested(ImageProperties), dump_default=[])
 
 
 class ImagePropsExtractionJob(Job):
@@ -26,10 +27,10 @@ class ImagePropsExtractionJob(Job):
     description = 'Extraction of Image Properties'
 
     result: ImagePropsExtractionJobResult = Nested(
-        ImagePropsExtractionJobResult, default={})
-    file_ids: TList[int] = List(Integer(), default=[])
+        ImagePropsExtractionJobResult, dump_default={})
+    file_ids: TList[int] = List(Integer(), dump_default=[])
     source_extraction_settings: SourceExtractionSettings = Nested(
-        SourceExtractionSettings, default=None)
+        SourceExtractionSettings, dump_default=None)
 
     def run(self):
         if not getattr(self, 'file_ids', None):
@@ -37,7 +38,7 @@ class ImagePropsExtractionJob(Job):
 
         # Disable centroiding; will be done separately by PSF fitting
         source_extraction_settings = self.source_extraction_settings or \
-            SourceExtractionSettings(_set_defaults=True)
+            SourceExtractionSettings()
         source_extraction_settings.centroid = False
 
         for file_no, file_id in enumerate(self.file_ids):
@@ -50,9 +51,13 @@ class ImagePropsExtractionJob(Job):
                     raise RuntimeError('Could not detect any sources')
                 background, background_rms = background_info.get(
                     file_id, (None, None))
-                global_snr = sqrt((((
-                    get_data_file_data(self.user_id, file_id)[0] -
-                    background)/background_rms)**2).mean())
+                flux = (get_data_file_data(self.user_id, file_id)[0] -
+                        background).sum()
+                noise = flux + (background_rms**2).sum()
+                if noise > 0:
+                    global_snr = flux/sqrt(noise)
+                else:
+                    global_snr = 0
                 if background is not None:
                     background = background.mean()
                 if background_rms is not None:

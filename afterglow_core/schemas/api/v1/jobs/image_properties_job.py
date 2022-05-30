@@ -17,14 +17,14 @@ __all__ = ['ImagePropsExtractionJobResultSchema',
 
 class ImagePropsExtractionJobResultSchema(JobResultSchema):
     data: TList[ImagePropertiesSchema] = List(
-        Nested(ImagePropertiesSchema), default=[])
+        Nested(ImagePropertiesSchema), dump_default=[])
 
 
 class ImagePropsExtractionJobSchema(JobSchema):
     type = 'image_props'
 
     result: ImagePropsExtractionJobResultSchema = Nested(
-        ImagePropsExtractionJobResultSchema, default={})
-    file_ids: TList[int] = List(Integer(), default=[])
+        ImagePropsExtractionJobResultSchema, dump_default={})
+    file_ids: TList[int] = List(Integer(), dump_default=[])
     source_extraction_settings: SourceExtractionSettingsSchema = Nested(
-        SourceExtractionSettingsSchema, default=None)
+        SourceExtractionSettingsSchema, dump_default=None)
