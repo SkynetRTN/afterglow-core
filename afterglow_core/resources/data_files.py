@@ -1475,7 +1475,7 @@ def update_data_file(user_id: Optional[int], data_file_id: int,
     :param data_file: data_file object containing updated parameters: name,
         session ID, group name, or group order
     :param force: if set, flag the data file as modified even if no fields were
-        changed
+        changed (e.g. if updating header or pixel data)
 
     :return: updated field cal object
     """
@@ -1484,24 +1484,28 @@ def update_data_file(user_id: Optional[int], data_file_id: int,
         if db_data_file is None:
             raise UnknownDataFileError(file_id=data_file_id)
 
-        modified = force
+        modified = fields_changed = force
         for key, val in data_file.to_dict().items():
             if key not in ('name', 'session_id', 'group_name', 'group_order',
                            'data_provider', 'asset_path'):
                 continue
             if val != getattr(db_data_file, key):
                 setattr(db_data_file, key, val)
+                fields_changed = True
                 if key in ('name', 'session_id'):
                     modified = True
         if modified:
+            db_data_file.modified = True
+        if fields_changed:
             try:
-                db_data_file.modified = True
                 adb.flush()
                 data_file = DataFile(db_data_file)
                 adb.commit()
             except Exception:
                 adb.rollback()
                 raise
+        else:
+            data_file = DataFile(db_data_file)
 
     return data_file
 
