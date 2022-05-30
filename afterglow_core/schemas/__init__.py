@@ -165,21 +165,10 @@ class AfterglowSchema(Schema):
             kw = dict(self.dump(_obj).items())
             kw.update(kwargs)
 
-        if _set_defaults:
-            # Initialize the missing fields with their defaults
-            for name, f in self.fields.items():
-                if not hasattr(self, name) and f.default != fields.missing_:
-                    try:
-                        setattr(self, name, f.default)
-                    except AttributeError:
-                        # Possibly missing attribute with a default in the base
-                        # class was turned into a read-only property
-                        # in a subclass
-                        pass
-        else:
-            # Don't serialize fields that have not been explicitly set
-            self.dump_fields = self.dict_class()
+        # Don't serialize fields that have not been explicitly set
+        self.dump_fields = self.dict_class()
 
+        # Initialize fields passed via keywords or object instance
         for name, val in kw.items():
             try:
                 if isinf(val) or isnan(val):
@@ -189,6 +178,18 @@ class AfterglowSchema(Schema):
                 pass
 
             setattr(self, name, val)
+
+        if _set_defaults:
+            # Initialize missing fields with their defaults
+            for name, f in self.fields.items():
+                if not hasattr(self, name) and f.default != fields.missing_:
+                    try:
+                        setattr(self, name, f.default)
+                    except AttributeError:
+                        # Possibly missing attribute with a default in the base
+                        # class was turned into a read-only property
+                        # in a subclass
+                        pass
 
     def __setattr__(self, name: str, value: Any) -> None:
         """
