@@ -46,11 +46,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
         # Return job result
         from .users import db
         try:
-            try:
-                job_id = args['id']
-            except KeyError:
-                raise MissingFieldError(field='id')
-
+            job_id = args['id']
             db_job = db.session.query(DbJob).get(job_id)
             if db_job is None or db_job.user_id != user_id:
                 raise UnknownJobError(id=job_id)

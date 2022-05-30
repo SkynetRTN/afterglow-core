@@ -57,7 +57,8 @@ def jobs() -> Response:
         msg = job_server_request('jobs', method, **args)
         if msg['status'] != 200:
             return error_response(msg)
-        return json_response([JobSchema(**j) for j in msg['json']])
+        return json_response([JobSchema(exclude=['result'], **j)
+                              for j in msg['json']])
 
     if method == 'POST':
         # Submit a job
@@ -65,7 +66,7 @@ def jobs() -> Response:
             'jobs', method, **JobSchema(**request.args.to_dict()).to_dict())
         if msg['status'] != 201:
             return error_response(msg)
-        return json_response(JobSchema(**msg['json']))
+        return json_response(JobSchema(exclude=['result'], **msg['json']))
 
 
 @app.route(resource_prefix + '<int:id>', methods=('GET', 'DELETE'))
@@ -93,7 +94,7 @@ def job(id: Union[int, str]) -> Response:
             method == 'DELETE' and msg['status'] != 204:
         return error_response(msg)
     if method == 'GET':
-        return json_response(JobSchema(**msg['json']))
+        return json_response(JobSchema(exclude=['result'], **msg['json']))
     if method == 'DELETE':
         return json_response()
 
