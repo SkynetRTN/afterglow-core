@@ -117,6 +117,9 @@ MANIFEST
 # Visual Studio
 /.vscode/
 
+# PyCharm
+.idea/
+
 # Locally generated data
 /*.db
 AFTERGLOW_CORE_KEY
