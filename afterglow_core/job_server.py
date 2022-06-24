@@ -65,8 +65,7 @@ class DbJobState(JobBase):
         ForeignKey('jobs.id', ondelete='CASCADE'), index=True,
         primary_key=True)
     status = Column(String(16), nullable=False, index=True, default='pending')
-    created_on = Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+    created_on = Column(DateTime, nullable=False, default=datetime.utcnow)
     started_on = Column(DateTime, index=True)
     completed_on = Column(DateTime)
     progress = Column(Float, nullable=False, default=0, index=True)
