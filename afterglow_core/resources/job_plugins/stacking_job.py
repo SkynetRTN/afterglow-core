@@ -2,7 +2,7 @@
 Afterglow Core: image stacking job plugin
 """
 
-from typing import List as TList
+from typing import List as TList, Optional
 
 from marshmallow.fields import Integer, List, Nested, String
 
@@ -12,19 +12,20 @@ from ... import app
 from ...models import Job, JobResult
 from ...schemas import AfterglowSchema, Float
 from ..data_files import (
-    create_data_file, get_data_file_data, get_data_file_db, get_root)
+    create_data_file, get_data_file_fits, get_data_file_db, get_root)
 
 
 __all__ = ['StackingJob']
 
 
 class StackingSettings(AfterglowSchema):
-    mode: str = String(default='average')
-    scaling: str = String(default=None)
-    rejection: str = String(default=None)
-    percentile: int = Integer(default=50)
-    lo: float = Float(default=0)
-    hi: float = Float(default=100)
+    mode: str = String(dump_default='average')
+    scaling: str = String(dump_default=None)
+    rejection: str = String(dump_default=None)
+    percentile: int = Integer(dump_default=50)
+    lo: float = Float(dump_default=0)
+    hi: float = Float(dump_default=100)
+    smart_stacking: Optional[str] = String(dump_default=None)
 
 
 class StackingJobResult(JobResult):
@@ -35,11 +36,12 @@ class StackingJob(Job):
     type = 'stacking'
     description = 'Stack Images'
 
-    result: StackingJobResult = Nested(StackingJobResult, default={})
-    file_ids: TList[int] = List(Integer(), default=[])
+    result: StackingJobResult = Nested(StackingJobResult, dump_default={})
+    file_ids: TList[int] = List(Integer(), dump_default=[])
     # alignment_settings: AlignmentSettings = Nested(
-    #     AlignmentSettings, default={})
-    stacking_settings: StackingSettings = Nested(StackingSettings, default={})
+    #     AlignmentSettings, dump_default={})
+    stacking_settings: StackingSettings = Nested(
+        StackingSettings, dump_default={})
 
     def run(self):
         settings = self.stacking_settings
@@ -85,20 +87,33 @@ class StackingJob(Job):
                         'must be integer')
                 hi = int(hi)
 
+        if settings.smart_stacking and settings.smart_stacking not in (
+                None, 'none', 'SNR'):
+            raise ValueError(
+                'Unsupported smart stacking mode "{}"'
+                .format(settings.smart_stacking))
+        if settings.smart_stacking and \
+                settings.smart_stacking.lower() == 'none':
+            settings.smart_stacking = None
+
         # Load data files
         if not self.file_ids:
             return
-        data_files = [get_data_file_data(self.user_id, file_id)
+        data_files = [get_data_file_fits(self.user_id, file_id)
                       for file_id in self.file_ids]
 
         # Check data dimensions
-        shape = data_files[0][0].shape
+        shape = (
+            data_files[0][0].header['NAXIS1'],
+            data_files[0][0].header['NAXIS2']
+        )
         for i, data_file in enumerate(list(data_files[1:])):
-            if data_file[0].shape != shape:
+            if (data_file[0].header['NAXIS1'],
+                    data_file[0].header['NAXIS2']) != shape:
                 self.add_error(
                     ValueError(
-                        'Shape mismatch: expected {0[1]}x{0[0]}, got '
-                        '{1[1]}x{1[0]}'.format(shape, data_file[0].shape)),
+                        'Shape mismatch: expected {0[0]}x{0[1]}, got '
+                        '{1[0]}x{1[1]}'.format(shape, data_file[0].shape)),
                     {'file_id': self.file_ids[i + 1]})
                 data_files.remove(data_file)
 
@@ -106,7 +121,8 @@ class StackingJob(Job):
         data, header = combine(
             data_files, mode=settings.mode, scaling=settings.scaling,
             rejection=settings.rejection, percentile=settings.percentile,
-            lo=lo, hi=hi, max_mem_mb=app.config.get('JOB_MAX_RAM'),
+            lo=lo, hi=hi, smart_stacking=settings.smart_stacking,
+            max_mem_mb=app.config.get('JOB_MAX_RAM'),
             callback=self.update_progress)[0]
 
         # Create a new data file in the given session and return its ID

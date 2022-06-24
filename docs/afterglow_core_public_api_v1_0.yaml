@@ -1435,6 +1435,14 @@ components:
             `rejection` = "minmax": reject values above this limit; default: not set;
             `rejection` = "sigclip": reject values more than `hi` sigmas above the baseline; default: 3'
           type: number
+        smart_stacking:
+          description: 'smart stacking mode for the automatic rejection of lower-quality images::
+            null | "none" (default) -- regular stacking, don''t reject any images
+            "SNR" -- reject images that lower the global signal-to-noise ratio'
+          type: string
+          enum: [none, SNR]
+          nullable: true
+          default: null
       nullable: true
       default: null
 
