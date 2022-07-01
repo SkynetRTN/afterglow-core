@@ -601,7 +601,8 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
             layers = []
             for i, hdu in enumerate(fits):
                 hdr = hdu.header
-                if isinstance(hdu, pyfits.ImageHDU.__base__):
+                if isinstance(hdu, pyfits.ImageHDU.__base__) or \
+                        isinstance(hdu, pyfits.CompImageHDU):
                     # Image HDU; eliminate redundant extra dimensions if any,
                     # skip non-2D images
                     imshape = hdu.shape
