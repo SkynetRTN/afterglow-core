@@ -48,6 +48,7 @@ class SourceExtractionSettings(AfterglowSchema):
     sat_level: float = Float(dump_default=63000)
     auto_sat_level: bool = Boolean(dump_default=False)
     discard_saturated: int = Integer(dump_default=1)
+    max_sources: int = Integer(dump_default=10000)
 
 
 class SourceExtractionJobResult(JobResult):
@@ -116,6 +117,7 @@ def run_source_extraction_job(job: Job,
         clean=settings.clean,
         centroid=settings.centroid,
         discard_saturated=settings.discard_saturated,
+        max_sources=settings.max_sources,
     )
 
     result_data = []

@@ -40,6 +40,7 @@ class SourceExtractionSettingsSchema(AfterglowSchema):
     sat_level: float = Float(dump_default=63000)
     auto_sat_level: bool = Boolean(dump_default=False)
     discard_saturated: int = Integer(dump_default=1)
+    max_sources: int = Integer(dump_default=10000)
 
 
 class SourceExtractionJobResultSchema(JobResultSchema):
