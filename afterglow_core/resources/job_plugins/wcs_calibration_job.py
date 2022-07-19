@@ -9,7 +9,7 @@ from typing import List as TList, Optional
 from marshmallow.fields import Integer, List, Nested
 from astropy.wcs import WCS
 
-from skylib.astrometry import Solver, solve_field
+from skylib.astrometry import Solver, solve_field_glob
 
 from ... import app
 from ...models import Job, JobResult
@@ -137,8 +137,6 @@ class WcsCalibrationJob(Job):
         # Don't discard saturated stars because we need max_sources brightest
         # sources
         source_extraction_settings.discard_saturated = 0
-        if settings.max_sources is not None:
-            source_extraction_settings.limit = settings.max_sources
 
         root = get_root(self.user_id)
 
@@ -197,7 +195,7 @@ class WcsCalibrationJob(Job):
 
                 # Run Astrometry.net; allow to abort the job by calling
                 # back from the engine into Python code
-                solution = solve_field(
+                solution = solve_field_glob(
                     solver, xy, fluxes,
                     width=width,
                     height=height,
