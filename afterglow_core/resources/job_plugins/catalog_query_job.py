@@ -311,7 +311,7 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
 
 
 class CatalogQueryJobResult(JobResult):
-    data: TList[CatalogSource] = List(Nested(CatalogSource), default=[])
+    data: TList[CatalogSource] = List(Nested(CatalogSource), dump_default=[])
 
 
 class CatalogQueryJob(Job):
@@ -319,8 +319,8 @@ class CatalogQueryJob(Job):
     description = 'Catalog Query'
 
     result: CatalogQueryJobResult = Nested(
-        CatalogQueryJobResult, default={})
-    catalogs: TList[str] = List(String(), default=[])
+        CatalogQueryJobResult, dump_default={})
+    catalogs: TList[str] = List(String(), dump_default=[])
     ra_hours: float = Float()
     dec_degs: float = Float()
     radius_arcmins: float = Float()
@@ -331,7 +331,7 @@ class CatalogQueryJob(Job):
     source_ids: TList[str] = List(String())
 
     def run(self):
-        self.result.data = run_catalog_query_job(
+        object.__setattr__(self.result, 'data', run_catalog_query_job(
             self, catalogs=self.catalogs,
             ra_hours=getattr(self, 'ra_hours', None),
             dec_degs=getattr(self, 'dec_degs', None),
@@ -340,4 +340,4 @@ class CatalogQueryJob(Job):
             height_arcmins=getattr(self, 'height_arcmins', None),
             file_ids=getattr(self, 'file_ids', None),
             constraints=getattr(self, 'constraints', None),
-            source_ids=getattr(self, 'source_ids', None))
+            source_ids=getattr(self, 'source_ids', None)))

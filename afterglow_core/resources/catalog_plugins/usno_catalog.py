@@ -30,6 +30,7 @@ class USNOB1Catalog(VizierCatalog):
     col_mapping = {
         'id': 'USNO-B1.0', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
     }
+    sort = ['+B1mag']
 
     def table_to_sources(self, table: Union[list, Table]) \
             -> TList[CatalogSource]:

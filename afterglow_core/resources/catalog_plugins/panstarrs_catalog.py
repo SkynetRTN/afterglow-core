@@ -25,6 +25,7 @@ class PanSTARRSCatalog(VizierCatalog):
         'i': ('imag', 'e_imag'), 'z': ('zmag', 'e_zmag'),
         'y': ('ymag', 'e_ymag'),
     }
+    sort = ['+rmag']
     filter_lookup = {
         # griz(P1) -> griz(SDSS) as per
         # https://iopscience.iop.org/article/10.1088/0004-637X/750/2/99

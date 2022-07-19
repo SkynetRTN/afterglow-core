@@ -177,7 +177,6 @@ def load_plugins(descr: str, package: str, plugin_class: Any,
             # of the base plugin class
             try:
                 instance = klass(
-                    _set_defaults=True,
                     **{klass.__polymorphic_on__:
                        getattr(klass, klass.__polymorphic_on__)})
             except Exception:

@@ -23,8 +23,8 @@ from socketserver import BaseRequestHandler, ThreadingTCPServer
 
 from marshmallow import Schema, fields, missing
 from sqlalchemy import (
-    Boolean, Column, Float, ForeignKey, Integer, String, Text, create_engine,
-    event, text)
+    Boolean, Column, Float, ForeignKey, Index, Integer, String, Text,
+    create_engine, event, text)
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -57,15 +57,18 @@ JobBase = declarative_base()
 
 class DbJobState(JobBase):
     __tablename__ = 'job_states'
+    __table_args__ = (
+        Index('idx_timeout', 'status', 'started_on', 'progress'),
+    )
 
     id = Column(
         ForeignKey('jobs.id', ondelete='CASCADE'), index=True,
         primary_key=True)
     status = Column(String(16), nullable=False, index=True, default='pending')
-    created_on = Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+    created_on = Column(DateTime, nullable=False, default=datetime.utcnow)
+    started_on = Column(DateTime, index=True)
     completed_on = Column(DateTime)
-    progress = Column(Float, nullable=False, default=0)
+    progress = Column(Float, nullable=False, default=0, index=True)
 
 
 class DbJobResult(JobBase):
@@ -408,8 +411,7 @@ class JobWorkerProcess(Process):
                 # to contain at least type, ID, and user ID, and
                 # the corresponding job plugin is guaranteed to exist
                 try:
-                    job = Job(
-                        _queue=result_queue, _set_defaults=True, **job_descr)
+                    job = Job(_queue=result_queue, **job_descr)
                 except Exception as e:
                     # Report job creation error to job server
                     app.logger.warning(
@@ -428,6 +430,7 @@ class JobWorkerProcess(Process):
                 # Notify the job server that the job is running and run it
                 result_queue.put(dict(id=job_descr['id'], pid=self.ident))
                 job.state.status = 'in_progress'
+                job.state.started_on = datetime.utcnow()
                 job.update()
                 try:
                     if app.config.get('PROFILE'):
@@ -642,6 +645,27 @@ class JobRequestHandler(BaseRequestHandler):
                             app.logger.warning(
                                 'All job worker processes are busy; '
                                 'consider increasing JOB_POOL_MAX')
+
+                            # Cancel jobs that take too long to complete
+                            for db_job_state in session.query(DbJobState) \
+                                    .filter(DbJobState.status == 'in_progress',
+                                            DbJobState.progress <
+                                            app.config.get(
+                                                'JOB_TIMEOUT_MAX_PROGRESS',
+                                                90),
+                                            DbJobState.started_on <
+                                            datetime.utcnow() - timedelta(
+                                                seconds=app.config.get(
+                                                    'JOB_TIMEOUT', 900))):
+                                job_id = db_job_state.id
+                                with server.pool_lock.acquire_read():
+                                    for p in server.pool:
+                                        if p.job_id == job_id:
+                                            p.cancel_current_job()
+                                            app.logger.warning(
+                                                'Job %s timed out, canceled',
+                                                job_id)
+                                            break
                         else:
                             app.logger.info(
                                 'Adding one more worker to job pool')
@@ -657,14 +681,19 @@ class JobRequestHandler(BaseRequestHandler):
                     if user_id is None:
                         user = users.AnonymousUser()
                     else:
-                        db_user = session.query(users.DbUser).get(user_id)
-                        if db_user is None:
-                            raise UnknownUserError(id=user_id)
-                        user = User(db_user)
+                        try:
+                            db_user = users.DbUser.query.get(user_id)
+                            if db_user is None:
+                                raise UnknownUserError(id=user_id)
+                            user = User(db_user)
+                        finally:
+                            # Clean up the flask_sqlalchemy session in the same
+                            # way as it is done at the end of a Flask request
+                            users.db.session.remove()
                     try:
                         # Convert message arguments to polymorphic job model
                         # and create an appropriate db job class instance
-                        job_args = Job(_set_defaults=True, **msg).to_dict()
+                        job_args = Job(**msg).to_dict()
                         del job_args['state'], job_args['result']
                         db_job = server.db_job_types[job_type](
                             state=DbJobState(),
@@ -738,8 +767,7 @@ class JobRequestHandler(BaseRequestHandler):
 
                 elif method == 'put':
                     # Cancel job
-                    status = getattr(
-                        JobState(_set_defaults=True, **msg), 'status', None)
+                    status = getattr(JobState(**msg), 'status', None)
                     if status is None:
                         raise MissingFieldError(field='status')
                     if status != 'canceled':

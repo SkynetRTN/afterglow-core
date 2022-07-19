@@ -2,9 +2,10 @@
 Afterglow Core: source extraction job plugin
 """
 
-from typing import List as TList
+from typing import Dict as TDict, List as TList, Tuple
 
 from marshmallow.fields import Integer, List, Nested
+from numpy import ndarray
 from astropy.wcs import WCS
 
 from skylib.extraction import auto_sat_level, extract_sources
@@ -23,35 +24,36 @@ __all__ = [
 
 
 class SourceExtractionSettings(AfterglowSchema):
-    x: int = Integer(default=1)
-    y: int = Integer(default=1)
-    width: int = Integer(default=0)
-    height: int = Integer(default=0)
-    threshold: float = Float(default=2.5)
-    bk_size: float = Float(default=1/64)
-    bk_filter_size: int = Integer(default=3)
-    fwhm: float = Float(default=0)
-    ratio: float = Float(default=1)
-    theta: float = Float(default=0)
-    min_pixels: int = Integer(default=3)
-    min_fwhm: float = Float(default=0.8)
-    max_fwhm: float = Float(default=10)
-    max_ellipticity: float = Float(default=2)
-    deblend: bool = Boolean(default=False)
-    deblend_levels: int = Integer(default=32)
-    deblend_contrast: float = Float(default=0.005)
-    gain: float = Float(default=None)
-    clean: float = Float(default=1)
-    centroid: bool = Boolean(default=True)
-    limit: int = Integer(default=None)
-    sat_level: float = Float(default=63000)
-    auto_sat_level: bool = Boolean(default=False)
-    discard_saturated: int = Integer(default=1)
+    x: int = Integer(dump_default=1)
+    y: int = Integer(dump_default=1)
+    width: int = Integer(dump_default=0)
+    height: int = Integer(dump_default=0)
+    threshold: float = Float(dump_default=2.5)
+    bk_size: float = Float(dump_default=1/64)
+    bk_filter_size: int = Integer(dump_default=3)
+    fwhm: float = Float(dump_default=0)
+    ratio: float = Float(dump_default=1)
+    theta: float = Float(dump_default=0)
+    min_pixels: int = Integer(dump_default=3)
+    min_fwhm: float = Float(dump_default=0.8)
+    max_fwhm: float = Float(dump_default=10)
+    max_ellipticity: float = Float(dump_default=2)
+    deblend: bool = Boolean(dump_default=False)
+    deblend_levels: int = Integer(dump_default=32)
+    deblend_contrast: float = Float(dump_default=0.005)
+    gain: float = Float(dump_default=None)
+    clean: float = Float(dump_default=1)
+    centroid: bool = Boolean(dump_default=True)
+    limit: int = Integer(dump_default=None)
+    sat_level: float = Float(dump_default=63000)
+    auto_sat_level: bool = Boolean(dump_default=False)
+    discard_saturated: int = Integer(dump_default=1)
+    max_sources: int = Integer(dump_default=10000)
 
 
 class SourceExtractionJobResult(JobResult):
     data: TList[SourceExtractionData] = List(
-        Nested(SourceExtractionData), default=[])
+        Nested(SourceExtractionData), dump_default=[])
 
 
 class SourceExtractionJob(Job):
@@ -60,29 +62,30 @@ class SourceExtractionJob(Job):
 
     result: SourceExtractionJobResult = Nested(
         SourceExtractionJobResult)
-    file_ids: TList[int] = List(Integer(), default=[])
+    file_ids: TList[int] = List(Integer(), dump_default=[])
     source_extraction_settings: SourceExtractionSettings = Nested(
-        SourceExtractionSettings, default={})
-    merge_sources: bool = Boolean(default=True)
+        SourceExtractionSettings, dump_default={})
+    merge_sources: bool = Boolean(dump_default=True)
     source_merge_settings: SourceMergeSettings = Nested(
-        SourceMergeSettings, default={})
+        SourceMergeSettings, dump_default={})
 
     def run(self):
         result_data = run_source_extraction_job(
-            self, self.source_extraction_settings, self.file_ids)
+            self, self.source_extraction_settings, self.file_ids)[0]
 
         if self.file_ids and len(self.file_ids) > 1 and self.merge_sources:
             result_data = merge_sources(
                 result_data, self.source_merge_settings, self.id)
 
-        self.result.data = result_data
+        object.__setattr__(self.result, 'data', result_data)
 
 
 def run_source_extraction_job(job: Job,
                               settings: SourceExtractionSettings,
                               job_file_ids: TList[int],
                               update_progress: bool = True) -> \
-        TList[SourceExtractionData]:
+        Tuple[TList[SourceExtractionData],
+              TDict[int, Tuple[ndarray, ndarray]]]:
     """
     Batch photometry job body; also used during photometric calibration
 
@@ -92,7 +95,8 @@ def run_source_extraction_job(job: Job,
     :param update_progress: set to False when called by another job (e.g. WCS
         calibration)
 
-    :return: list of source extraction results
+    :return: list of source extraction results plus background and RMS map
+        pairs indexed by file IDs
     """
     extraction_kw = dict(
         threshold=settings.threshold,
@@ -113,9 +117,11 @@ def run_source_extraction_job(job: Job,
         clean=settings.clean,
         centroid=settings.centroid,
         discard_saturated=settings.discard_saturated,
+        max_sources=settings.max_sources,
     )
 
     result_data = []
+    backgrounds = {}
     for file_no, id in enumerate(job_file_ids):
         try:
             # Get image data
@@ -149,6 +155,7 @@ def run_source_extraction_job(job: Job,
             # Extract sources
             source_table, background, background_rms = extract_sources(
                 pixels, gain=gain, sat_img=sat_img, **extraction_kw)
+            backgrounds[id] = (background, background_rms)
 
             if settings.limit and len(source_table) > settings.limit:
                 # Leave only the given number of the brightest sources
@@ -182,4 +189,4 @@ def run_source_extraction_job(job: Job,
         except Exception as e:
             job.add_error(e, {'file_id': id})
 
-    return result_data
+    return result_data, backgrounds

@@ -28,8 +28,8 @@ class BatchDownloadJob(Job):
     type = 'batch_download'
     description = 'Download Multiple Data Files and Groups'
 
-    file_ids: TList[int] = List(Integer(), default=[])
-    group_names: TList[str] = List(String(), default=[])
+    file_ids: TList[int] = List(Integer(), dump_default=[])
+    group_names: TList[str] = List(String(), dump_default=[])
 
     def run(self):
         if not self.file_ids and not self.group_names:
@@ -110,8 +110,8 @@ class BatchAssetDownloadJob(Job):
     type = 'batch_asset_download'
     description = 'Download Multiple Data Provider Assets'
 
-    provider_id: int = Integer(default=None)
-    paths: TList[str] = List(String(), default=[])
+    provider_id: int = Integer(dump_default=None)
+    paths: TList[str] = List(String(), dump_default=[])
 
     def run(self):
         if self.provider_id is None:

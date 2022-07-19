@@ -6,6 +6,7 @@ from .catalog import *
 from .data_file import *
 from .data_provider import *
 from .field_cal import *
+from .image_properties import *
 from .job import *
 from .jobs import *
 from .photometry import *

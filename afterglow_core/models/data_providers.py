@@ -53,10 +53,10 @@ class DataProviderAsset(AfterglowSchema):
         metadata: extra asset metadata (e.g. data format, image dimensions,
             etc.)
     """
-    name: str = String(default=None)
-    collection: bool = Boolean(default=False)
-    path: str = String(default=None)
-    metadata: TDict[str, Any] = Dict(default={})
+    name: str = String(dump_default=None)
+    collection: bool = Boolean(dump_default=False)
+    path: str = String(dump_default=None)
+    metadata: TDict[str, Any] = Dict(dump_default={})
 
     @property
     def mimetype(self) -> Optional[str]:
@@ -158,22 +158,22 @@ class DataProvider(AfterglowSchema):
     """
     __polymorphic_on__ = 'name'
 
-    id: int = Integer(default=None)
-    name: str = String(default=None)
-    auth_methods: Optional[TList[str]] = List(String(), default=None)
-    display_name: str = String(default=None)
-    icon: str = String(default=None)
-    description: str = String(default=None)
-    columns: TList[TDict[str, Any]] = List(Dict(), default=[])
-    sort_by: str = String(default=None)
-    sort_asc: bool = Boolean(default=True)
-    browseable: bool = Boolean(default=False)
-    searchable: bool = Boolean(default=False)
-    search_fields: TDict[str, TDict[str, Any]] = Dict(default={})
-    readonly: bool = Boolean(default=True)
-    allow_upload: bool = Boolean(default=False)
-    quota: int = Integer(default=None)
-    usage: int = Integer(default=None)
+    id: int = Integer(dump_default=None)
+    name: str = String(dump_default=None)
+    auth_methods: Optional[TList[str]] = List(String(), dump_default=None)
+    display_name: str = String(dump_default=None)
+    icon: str = String(dump_default=None)
+    description: str = String(dump_default=None)
+    columns: TList[TDict[str, Any]] = List(Dict(), dump_default=[])
+    sort_by: str = String(dump_default=None)
+    sort_asc: bool = Boolean(dump_default=True)
+    browseable: bool = Boolean(dump_default=False)
+    searchable: bool = Boolean(dump_default=False)
+    search_fields: TDict[str, TDict[str, Any]] = Dict(dump_default={})
+    readonly: bool = Boolean(dump_default=True)
+    allow_upload: bool = Boolean(dump_default=False)
+    quota: int = Integer(dump_default=None)
+    usage: int = Integer(dump_default=None)
 
     def __init__(self, **kwargs):
         """
@@ -181,7 +181,7 @@ class DataProvider(AfterglowSchema):
 
         :param kwargs: data provider initialization parameters
         """
-        super(DataProvider, self).__init__(_set_defaults=True, **kwargs)
+        super(DataProvider, self).__init__(**kwargs)
 
         # Automatically set browseable, searchable, and readonly flags
         # depending on what methods are reimplemented by provider; method attr

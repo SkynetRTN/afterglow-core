@@ -48,17 +48,17 @@ class AuthnPluginBase(AfterglowSchema):
     """
     __polymorphic_on__ = 'name'
 
-    id = String(default=None)
-    name = String(default=None)
-    type = String(default=None)
-    description = String(default=None)
-    icon = String(default=None)
-    register_users = String(default=None)
+    id = String(dump_default=None)
+    name = String(dump_default=None)
+    type = String(dump_default=None)
+    description = String(dump_default=None)
+    icon = String(dump_default=None)
+    register_users = String(dump_default=None)
 
     def __init__(self, id: Optional[str] = None,
                  description: Optional[str] = None, icon: Optional[str] = None,
                  register_users: Optional[bool] = None):
-        super().__init__(_set_defaults=True)
+        super().__init__()
 
         if id is None:
             self.id = self.name
@@ -112,9 +112,9 @@ class OAuthServerPluginBase(AuthnPluginBase):
     Class for OAuth plugins
     """
     # Fields visible on the client side
-    authorize_url = String(default=None)
-    request_token_params = Dict(default=None)
-    client_id = String(default=None)
+    authorize_url = String(dump_default=None)
+    request_token_params = Dict(dump_default=None)
+    client_id = String(dump_default=None)
 
     # Internal fields related to access token exchange
     client_secret = None

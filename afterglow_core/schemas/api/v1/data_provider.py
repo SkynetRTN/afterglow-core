@@ -52,21 +52,21 @@ class DataProviderSchema(Resource):
     __polymorphic_on__ = 'name'
     __get_view__ = 'data_providers'
 
-    id = Integer(default=None)
-    name = String(default=None)
-    auth_methods = List(String(), default=None)
-    display_name = String(default=None)
-    icon = String(default=None)
-    description = String(default=None)
-    columns = List(Dict(), default=[])
-    sort_by = String(default=None)
-    sort_asc = Boolean(default=True)
-    browseable = Boolean(default=False)
-    searchable = Boolean(default=False)
-    search_fields = Dict(default={})
-    readonly = Boolean(default=True)
-    quota = Integer(default=None)
-    usage = Integer(default=None)
+    id = Integer(dump_default=None)
+    name = String(dump_default=None)
+    auth_methods = List(String(), dump_default=None)
+    display_name = String(dump_default=None)
+    icon = String(dump_default=None)
+    description = String(dump_default=None)
+    columns = List(Dict(), dump_default=[])
+    sort_by = String(dump_default=None)
+    sort_asc = Boolean(dump_default=True)
+    browseable = Boolean(dump_default=False)
+    searchable = Boolean(dump_default=False)
+    search_fields = Dict(dump_default={})
+    readonly = Boolean(dump_default=True)
+    quota = Integer(dump_default=None)
+    usage = Integer(dump_default=None)
 
 
 class DataProviderAssetSchema(Resource):
@@ -81,7 +81,7 @@ class DataProviderAssetSchema(Resource):
         metadata: extra asset metadata (e.g. data format, image dimensions,
             etc.)
     """
-    name = String(default=None)
-    collection = Boolean(default=False)
-    path = String(default=None)
-    metadata = Dict(default={})
+    name = String(dump_default=None)
+    collection = Boolean(dump_default=False)
+    path = String(dump_default=None)
+    metadata = Dict(dump_default={})

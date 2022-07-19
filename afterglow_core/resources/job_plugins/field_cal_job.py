@@ -3,15 +3,18 @@ Afterglow Core: photometric calibration job plugin
 """
 
 from datetime import datetime
-from typing import List as TList, Tuple
+from typing import List as TList, Optional, Tuple
 
 from marshmallow.fields import Integer, List, Nested
 import numpy
 from numpy import (
-    arcsin, argsort, array, asarray, clip, cos, deg2rad, degrees, inf,
-    isfinite, nan, radians, sin, sqrt, transpose)
+    arange, arcsin, argsort, array, asarray, clip, cos, deg2rad, degrees, inf,
+    isfinite, median, nan, ndarray, quantile, radians, sin, sqrt, transpose)
 from scipy.spatial import cKDTree
+from scipy.optimize import brenth
 from astropy.wcs import WCS
+
+from skylib.util.stats import chauvenet, weighted_median, weighted_quantile
 
 from ...models import (
     Job, JobResult, CatalogSource, FieldCal, FieldCalResult, Mag, PhotSettings,
@@ -29,19 +32,19 @@ __all__ = ['FieldCalJob']
 
 
 class FieldCalJobResult(JobResult):
-    data: TList[FieldCalResult] = List(Nested(FieldCalResult), default=[])
+    data: TList[FieldCalResult] = List(Nested(FieldCalResult), dump_default=[])
 
 
 class FieldCalJob(Job):
     type = 'field_cal'
     description = 'Photometric Calibration'
 
-    result: FieldCalJobResult = Nested(FieldCalJobResult, default={})
-    file_ids: TList[int] = List(Integer(), default=[])
-    field_cal: FieldCal = Nested(FieldCal, default={})
+    result: FieldCalJobResult = Nested(FieldCalJobResult, dump_default={})
+    file_ids: TList[int] = List(Integer(), dump_default=[])
+    field_cal: FieldCal = Nested(FieldCal, dump_default={})
     source_extraction_settings: SourceExtractionSettings = Nested(
-        SourceExtractionSettings, default=None)
-    photometry_settings: PhotSettings = Nested(PhotSettings, default=None)
+        SourceExtractionSettings, dump_default=None)
+    photometry_settings: PhotSettings = Nested(PhotSettings, dump_default=None)
 
     def run(self):
         if not getattr(self, 'file_ids', None):
@@ -67,7 +70,7 @@ class FieldCalJob(Job):
             # Detect sources using settings provided
             detected_sources = run_source_extraction_job(
                 self, self.source_extraction_settings, self.file_ids,
-                update_progress=False)
+                update_progress=False)[0]
             if not detected_sources:
                 raise RuntimeError('Could not detect any sources')
         else:
@@ -98,7 +101,7 @@ class FieldCalJob(Job):
                         self, [catalog], file_ids=self.file_ids)
                     self.run_for_sources(catalog_sources, detected_sources)
                 except Exception as e:
-                    if i < len(field_cal.catalogs):
+                    if i < len(field_cal.catalogs) - 1:
                         self.add_warning(
                             'Calibration failed for catalog "{}" [{}]'
                             .format(catalog, e))
@@ -247,6 +250,7 @@ class FieldCalJob(Job):
                     catalog_sources_for_file[catalog_source.file_id].append(
                         catalog_source)
             catalog_source_kdtree_for_file = {}
+            catalog_source_xy_for_file = {}
             for file_id, catalog_source_list in catalog_sources_for_file \
                     .items():
                 if not catalog_source_list:
@@ -328,8 +332,20 @@ class FieldCalJob(Job):
                         x[have_pm] += mu*cos(theta)
                         y[have_pm] += mu*sin(theta)
                 # Build k-d tree from catalog source XYs
-                catalog_source_kdtree_for_file[file_id] = cKDTree(
-                    transpose([x, y]))
+                xy = transpose([x, y])
+                catalog_source_xy_for_file[file_id] = xy
+                catalog_source_kdtree_for_file[file_id] = cKDTree(xy)
+
+            # Build k-d tree from detected source XYs for each file ID
+            detected_sources_for_file = {}
+            for source in detected_sources:
+                detected_sources_for_file.setdefault(source.file_id, []) \
+                    .append(source)
+            detected_source_kdtree_for_file = {
+                file_id: cKDTree([(source.x, source.y) for source in sources])
+                for file_id, sources in detected_sources_for_file.items()
+            }
+
             for source in detected_sources:
                 file_id = source.file_id
                 catalog_source, match_found = None, False
@@ -339,8 +355,19 @@ class FieldCalJob(Job):
                     i = tree.query(
                         [source.x, source.y], distance_upper_bound=tol)[1]
                     if i < len(catalog_source_list):
-                        match_found = True
                         catalog_source = catalog_source_list[i]
+                        xc, yc = catalog_source_xy_for_file[file_id][i]
+
+                        # Make sure that all matches are unique by making
+                        # a reverse query: the given image source must be
+                        # the nearest neighbor for its matching catalog source
+                        detected_source_list = \
+                            detected_sources_for_file[file_id]
+                        tree = detected_source_kdtree_for_file[file_id]
+                        j = tree.query([xc, yc], distance_upper_bound=tol)[1]
+                        if j < len(detected_source_list) and \
+                                detected_source_list[j] is source:
+                            match_found = True
                 if match_found:
                     # Copy catalog source data to extracted source and set
                     # the latter as a new catalog source
@@ -637,7 +664,22 @@ class FieldCalJob(Job):
                     'Data file ID {}: Error saving photometric calibration '
                     'info to FITS header [{}]'.format(file_id, e))
 
-        self.result.data = result_data
+        object.__setattr__(self.result, 'data', result_data)
+
+
+def sigma_eq(sigma2, sigmas2, b, m0):
+    """
+    Equation for finding sigma characterizing the goodness of fit
+
+    :param sigma2: sigma squared
+    :param sigmas2: array of individual point sigmas
+    :param b: array of catalog minus image mags, same shape
+    :param m0: current estimate of zero point
+
+    :return: the value of sigma2 yielding zero result solves the equation
+    """
+    w = 1/(sigmas2 + sigma2)
+    return (((b - m0)**2*w - 1)*w).sum()
 
 
 def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
@@ -659,22 +701,73 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
         for source in sources
     ])
 
-    n = len(sources)
+    b = ref_mags - mags
+    good_stars = arange(len(b))
+    sigmas2 = mag_errors**2 + ref_mag_errors**2
+    no_errors = not sigmas2.any()
+    if no_errors:
+        sigmas2 = 0
+    sigma2 = 0
+    weights = None
     while True:
-        d = ref_mags - mags
-        m0 = d.mean()
-        m0_error = sqrt((mag_errors**2 + ref_mag_errors**2).sum())/n
-        good = (abs(d - m0) < 3*d.std()).nonzero()[0]
-        n_good = len(good)
-        if n_good == n or n_good < 3:
-            break
-        n = n_good
-        mags, mag_errors = mags[good], mag_errors[good]
-        ref_mags, ref_mag_errors = ref_mags[good], ref_mag_errors[good]
-    if abs(m0_error) < 1e-7:
-        if n > 1:
-            m0_error = d.std()/sqrt(n)
+        while True:
+            if weights is None:
+                bmed = median(b)
+                sigma68 = quantile(abs(b - bmed), 0.683)
+            else:
+                bmed = weighted_median(b, weights)
+                sigma68 = weighted_quantile(abs(b - bmed), weights, 0.683)
+
+            rejected = chauvenet(b, mean=bmed, sigma=sigma68)
+            if rejected.any():
+                good = ~rejected
+                b = b[good]
+                good_stars = good_stars[good]
+                if not no_errors:
+                    sigmas2 = sigmas2[good]
+            else:
+                break
+
+        if sigma2:
+            m0 = (b/(sigmas2 + sigma2)).sum()/(1/(sigmas2 + sigma2)).sum()
         else:
-            m0_error = None
+            m0 = b.mean()
+        prev_sigma2 = sigma2
+        sigma2 = ((b - m0)**2).sum()/len(b)
+        if not no_errors:
+            left, right = 0.9*sigma2, 1.1*sigma2
+            for _ in range(1000):
+                if sigma_eq(left, sigmas2, b, m0) * \
+                        sigma_eq(right, sigmas2, b, m0) < 0:
+                    break
+                left *= 0.9
+                right *= 1.1
+            # noinspection PyBroadException
+            try:
+                sigma2 = brenth(sigma_eq, left, right, (sigmas2, b, m0))
+            except Exception:
+                # Unable to find the root; use unweighted sigma
+                pass
+        if prev_sigma2 and abs(sigma2 - prev_sigma2) < 1e-8:
+            break
+
+        if not no_errors:
+            weights: Optional[ndarray] = 1/(sigmas2 + sigma2)
+
+    m0_error = 1/sqrt((1/(sigmas2 + sigma2)).sum())
+
+    import os
+    from ... import app
+    with open(os.path.join(app.config['DATA_ROOT'], 'field_cal.csv'),
+              'w') as f:
+        for i, source in enumerate(sources):
+            # noinspection PyUnresolvedReferences
+            print('{},{},{},{},{}'.format(
+                source.mag,
+                getattr(source, 'mag_error', None) or '',
+                source.ref_mag,
+                getattr(source, 'ref_mag_error', None) or '',
+                int(i not in good_stars),
+            ), file=f)
 
     return m0, m0_error

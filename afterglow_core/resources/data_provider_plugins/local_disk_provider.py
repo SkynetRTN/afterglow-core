@@ -241,49 +241,61 @@ class LocalDiskDataProvider(DataProvider):
         try:
             with pyfits.open(filename, 'readonly', memmap=False,
                              ignore_missing_end=True) as f:
-                layers = len(f)
-                imwidth = f[0].header['NAXIS1']
-                imheight = f[0].header['NAXIS2']
-
-                try:
-                    explength = f[0].header['EXPOSURE']
-                except KeyError:
-                    pass
-
-                try:
-                    telescope = f[0].header['TELESCOP']
-                except KeyError:
-                    pass
-
-                flt = ','.join(hdu.header['FILTER']
-                               for hdu in f if 'FILTER' in hdu.header)
-
-                try:
+                layers = 0
+                flt = []
+                for hdu in f:
                     try:
-                        exptime = datetime.strptime(
-                            f[0].header['DATE-OBS'], '%Y-%m-%dT%H:%M:%S.%f')
-                    except ValueError:
+                        hdr = hdu.header
+                        imwidth = hdr['NAXIS1']
+                        imheight = hdr['NAXIS2']
+
                         try:
-                            exptime = datetime.strptime(
-                                f[0].header['DATE-OBS'], '%Y-%m-%dT%H:%M:%S')
-                        except ValueError:
+                            explength = hdr['EXPOSURE']
+                        except KeyError:
+                            pass
+
+                        try:
+                            telescope = hdr['TELESCOP']
+                        except KeyError:
+                            pass
+
+                        try:
+                            flt.append(str(hdr['FILTER']))
+                        except KeyError:
+                            pass
+
+                        try:
                             try:
                                 exptime = datetime.strptime(
-                                    f[0].header['DATE-OBS'] + 'T' +
-                                    f[0].header['TIME-OBS'],
-                                    '%Y-%m-%dT%H:%M:%S.%f')
+                                    hdr['DATE-OBS'], '%Y-%m-%dT%H:%M:%S.%f')
                             except ValueError:
                                 try:
                                     exptime = datetime.strptime(
-                                        f[0].header['DATE-OBS'] + 'T' +
-                                        f[0].header['TIME-OBS'],
-                                        '%Y-%m-%dT%H:%M:%S')
+                                        hdr['DATE-OBS'], '%Y-%m-%dT%H:%M:%S')
                                 except ValueError:
-                                    pass
-                except KeyError:
-                    pass
+                                    try:
+                                        exptime = datetime.strptime(
+                                            hdr['DATE-OBS'] + 'T' +
+                                            hdr['TIME-OBS'],
+                                            '%Y-%m-%dT%H:%M:%S.%f')
+                                    except ValueError:
+                                        try:
+                                            exptime = datetime.strptime(
+                                                hdr['DATE-OBS'] + 'T' +
+                                                hdr['TIME-OBS'],
+                                                '%Y-%m-%dT%H:%M:%S')
+                                        except ValueError:
+                                            pass
+                        except KeyError:
+                            pass
+                    except Exception:
+                        pass
+                    else:
+                        layers += 1
 
-            imtype = 'FITS'
+            flt = ','.join(flt)
+            if layers:
+                imtype = 'FITS'
         except Exception:
             pass
 

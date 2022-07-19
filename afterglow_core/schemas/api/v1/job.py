@@ -27,10 +27,10 @@ class JobStateSchema(AfterglowSchema):
         completed_on: time of completion or cancellation
         progress: current job progress, a number from 0 to 100
     """
-    status: str = String(default='in_progress')
+    status: str = String(dump_default='in_progress')
     created_on: datetime = DateTime()
     completed_on: datetime = DateTime()
-    progress: float = Float(default=0)
+    progress: float = Float(dump_default=0)
 
 
 class JobResultSchema(AfterglowSchema):
@@ -42,8 +42,8 @@ class JobResultSchema(AfterglowSchema):
         warnings: list of warnings issued by :meth:`Job.run`
     """
     errors: TList[Dict[str, Union[str, int, float, bool]]] = List(
-        Nested(AfterglowErrorSchema), default=[])
-    warnings: TList[str] = List(String(), default=[])
+        Nested(AfterglowErrorSchema), dump_default=[])
+    warnings: TList[str] = List(String(), dump_default=[])
 
 
 class JobSchema(Resource):
@@ -63,9 +63,9 @@ class JobSchema(Resource):
     __polymorphic_on__ = 'type'
     __get_view__ = 'jobs'
 
-    id: int = Integer(default=None)
+    id: int = Integer(dump_default=None)
     type: str = String()
-    user_id: int = Integer(default=None)
-    session_id: Optional[int] = Integer(default=None)
-    state: JobStateSchema = Nested(JobStateSchema, default={})
-    result: JobResultSchema = Nested(JobResultSchema, default={})
+    user_id: int = Integer(dump_default=None)
+    session_id: Optional[int] = Integer(dump_default=None)
+    state: JobStateSchema = Nested(JobStateSchema, dump_default={})
+    result: JobResultSchema = Nested(JobResultSchema, dump_default={})

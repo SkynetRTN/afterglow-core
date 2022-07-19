@@ -34,7 +34,8 @@ def dcs2c(ra: ndarray, dec: ndarray) -> ndarray:
 
 
 def merge_sources(sources: TList[SourceExtractionData],
-                  settings: SourceMergeSettings, job_id: Optional[int] = None):
+                  settings: SourceMergeSettings,
+                  job_id: Optional[int] = None) -> TList[SourceExtractionData]:
     """
     Find matching sources in multiple images by doing a nearest neighbor match
     using either RA/Dec or XY coordinates, depending on `settings`.pos_type;
@@ -55,8 +56,8 @@ def merge_sources(sources: TList[SourceExtractionData],
     # Split input sources by file ID; save the original source index
     sources_by_file = {}
     for i, source in enumerate(sources):
-        sources_by_file.setdefault(getattr(source, 'file_id', None), []).append(
-            (i, source))
+        sources_by_file.setdefault(getattr(source, 'file_id', None), []) \
+            .append((i, source))
     if len(sources_by_file) < 2:
         # No data or same file ID for all sources; nothing to merge
         return merged_sources
@@ -132,10 +133,10 @@ def merge_sources(sources: TList[SourceExtractionData],
     chains = []
     for i in range(n):
         # Create a (M x N) chain matrix (M = number of sources in the i-th
-        # image): its k-th row is a sequence of indices of neighbors to the k-th
-        # source in the i-th image for all images (including the i-th one, so
-        # CM[k,i] = k); absence of a neighbor in the particular image is
-        # indicated by -1
+        # image): its k-th row is a sequence of indices of neighbors
+        # to the k-th source in the i-th image for all images (including
+        # the i-th one, so CM[k,i] = k); absence of a neighbor
+        # in the particular image is indicated by -1
         cm = zeros([len(sources_by_file[file_ids[i]]), n], int)
         for j in range(n):
             cm[:, j] = trees[j].query(coords[i], distance_upper_bound=tol)[1]
@@ -170,13 +171,13 @@ def merge_sources(sources: TList[SourceExtractionData],
 
 
 class SourceMergeSettings(AfterglowSchema):
-    pos_type: str = String(default='auto')
-    tol: float = Float(default=None)
+    pos_type: str = String(dump_default='auto')
+    tol: float = Float(dump_default=None)
 
 
 class SourceMergeJobResult(JobResult):
     data: TList[SourceExtractionData] = List(
-        Nested(SourceExtractionData), default=[])
+        Nested(SourceExtractionData), dump_default=[])
 
 
 class SourceMergeJob(Job):
@@ -185,7 +186,9 @@ class SourceMergeJob(Job):
 
     result: SourceMergeJobResult = Nested(SourceMergeJobResult)
     sources: TList[SourceExtractionData] = List(Nested(SourceExtractionData))
-    settings: SourceMergeSettings = Nested(SourceMergeSettings, default={})
+    settings: SourceMergeSettings = Nested(
+        SourceMergeSettings, dump_default={})
 
     def run(self):
-        self.result.data = merge_sources(self.sources, self.settings, self.id)
+        object.__setattr__(self.result, 'data', merge_sources(
+            self.sources, self.settings, self.id))

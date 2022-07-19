@@ -1435,6 +1435,14 @@ components:
             `rejection` = "minmax": reject values above this limit; default: not set;
             `rejection` = "sigclip": reject values more than `hi` sigmas above the baseline; default: 3'
           type: number
+        smart_stacking:
+          description: 'smart stacking mode for the automatic rejection of lower-quality images::
+            null | "none" (default) -- regular stacking, don''t reject any images
+            "SNR" -- reject images that lower the global signal-to-noise ratio'
+          type: string
+          enum: [none, SNR]
+          nullable: true
+          default: null
       nullable: true
       default: null
 
@@ -1974,7 +1982,7 @@ components:
             inplace:
               description: calibrate in-place vs create a new data file for each input data file
               type: boolean
-              default: false
+              default: true
 
     WcsCalibrationJobResult:
       description: Result of WCS calibration
@@ -1988,6 +1996,72 @@ components:
               type: array
               items:
                 type: integer
+
+    ImageProperties:
+        description: Result of extraction of image properties (seeing etc.)
+        type: object
+        properties:
+          file_id:
+            description: ID of file which properties are extracted
+            type: integer
+          background_counts:
+            description: mean background level in counts (ADUs)
+            type: number
+          background_rms_counts:
+            description: mean background noise in counts (ADUs)
+            type: number
+          num_sources:
+            description: number of extracted sources
+            type: integer
+          num_saturated_sources:
+            description: number of sources with at least one saturated pixel
+            type: integer
+          seeing_pixels:
+            description: seeing in pixels
+            type: number
+          seeing_arcsec:
+            description: seeing in arcseconds
+            type: number
+          ellipticity:
+            description: median ellipticity of sources (1 - b/a)
+            type: number
+          global_snr:
+            description: global image signal-to-noise ratio
+            type: number
+
+    ImagePropsExtractionJob:
+      description: Image property extraction job
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [image_props]
+            result:
+              $ref: '#/components/schemas/ImagePropsExtractionJobResult'
+            file_ids:
+              description: IDs of data files which properties to extract
+              type: array
+              items:
+                type: integer
+            source_extraction_settings:
+              $ref: '#/components/schemas/SourceExtractionSettings'
+
+    ImagePropsExtractionJobResult:
+      description: Result of photometric calibration
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/JobResult'
+        - type: object
+          properties:
+            data:
+              description: list of image properties for all data files
+              type: array
+              items:
+                $ref: '#/components/schemas/ImageProperties'
+
 
   responses:
 

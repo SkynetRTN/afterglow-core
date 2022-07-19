@@ -51,7 +51,7 @@ setup(
         'alembic == 1.7.6',
         'Authlib == 0.15.5',
         'astropy == 4.3.1',
-        'astroquery == 0.4.5',
+        'astroquery == 0.4.6',
         'email_validator == 1.1.3',
         'ExifRead == 2.3.2',
         'Flask == 2.0.3',

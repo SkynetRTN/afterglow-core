@@ -56,7 +56,7 @@ class SDSSCatalog(VizierCatalog):
         for name in names:
             rows.append(sdss.query_object(
                 name, data_release=15, photoobj_fields=self._columns,
-                cache=False)[0])
+                cache=self.cache)[0])
         return self.table_to_sources(rows)
 
     def query_region(self, ra_hours: float, dec_degs: float,
@@ -72,11 +72,12 @@ class SDSSCatalog(VizierCatalog):
         :param limit: maximum number of rows to return
         :param region: keywords defining the query region
 
-        :return: list of catalog objects within the specified rectangular region
+        :return: list of catalog objects within the specified rectangular
+            region
         """
         sdss = SDSS()
         return self.table_to_sources(sdss.query_region(
             SkyCoord(ra=ra_hours, dec=dec_degs, unit=(hour, deg),
                      frame='icrs'),
-            data_release=15, photoobj_fields=self._columns, cache=False,
+            data_release=15, photoobj_fields=self._columns, cache=self.cache,
             **region))

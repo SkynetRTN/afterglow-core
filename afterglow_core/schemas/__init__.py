@@ -23,8 +23,8 @@ class Boolean(fields.Boolean):
     values such as "yes" and "no"
     """
     truthy = {
-        True, 't', 'T', 'true', 'True', 'TRUE', 'yes', 'Yes', 'YES', 'on', 'On',
-        'ON', '1', 1, 1.0}
+        True, 't', 'T', 'true', 'True', 'TRUE', 'yes', 'Yes', 'YES', 'on',
+        'On', 'ON', '1', 1, 1.0}
     falsy = {
         False, 'f', 'F', 'false', 'False', 'FALSE', 'no', 'No', 'NO', 'off',
         'Off', 'OFF', '0', 0, 0.0}
@@ -133,8 +133,7 @@ class AfterglowSchema(Schema):
     def __init__(self, _obj: Any = None,
                  only: Optional[Union[Sequence[str], Set[str]]] = None,
                  exclude: Union[Sequence[str], Set[str]] = (),
-                 _set_defaults: bool = False, _remove_nulls: bool = False,
-                 **kwargs):
+                 _remove_nulls: bool = False, **kwargs):
         """
         Create an Afterglow schema class instance
 
@@ -145,13 +144,11 @@ class AfterglowSchema(Schema):
         :param _obj: initialize fields from the given object (usually a data
             model object defined in :mod:`afterglow_core.models`, an SQLA
             database object defined in :mod:`afterglow_core.resources`),
-            or a public API schema defined in :mode:`afterglow_core.schemas.api`
+            or a public API schema defined in :mod:`afterglow_core.schemas.api`
         :param only: whitelist of the fields to include in the instantiated
             schema
         :param exclude: blacklist of the fields to exclude
             from the instantiated schema
-        :param _set_defaults: initialize fields missing from both `_obj` and
-            keyword arguments to their defaults, if any
         :param _remove_nulls: if set, don't dump fields with null values
         :param kwargs: keyword arguments are assigned to the corresponding
             instance attributes, including fields
@@ -162,9 +159,10 @@ class AfterglowSchema(Schema):
         if _obj is None:
             kw = kwargs
         else:
-            kw = dict(self.dump(_obj).items())
+            kw = dict(self.dump(_obj))
             kw.update(kwargs)
 
+        # Initialize fields passed via keywords or object instance
         for name, val in kw.items():
             try:
                 if isinf(val) or isnan(val):
@@ -175,17 +173,16 @@ class AfterglowSchema(Schema):
 
             setattr(self, name, val)
 
-        if _set_defaults:
-            # Initialize the missing fields with their defaults
-            for name, f in self.fields.items():
-                if not hasattr(self, name) and f.default != fields.missing_:
-                    try:
-                        setattr(self, name, f.default)
-                    except AttributeError:
-                        # Possibly missing attribute with a default in the base
-                        # class was turned into a read-only property
-                        # in a subclass
-                        pass
+        # Initialize missing fields with their defaults
+        for name, f in self.dump_fields.items():
+            if not hasattr(self, name) and f.dump_default != fields.missing_:
+                try:
+                    setattr(self, name, f.dump_default)
+                except AttributeError:
+                    # Possibly missing attribute with a default in the base
+                    # class was turned into a read-only property
+                    # in a subclass
+                    pass
 
     def __setattr__(self, name: str, value: Any) -> None:
         """
@@ -200,6 +197,9 @@ class AfterglowSchema(Schema):
             except (AttributeError, KeyError):
                 pass
             else:
+                if not field.load_only:
+                    # Include field in serialization
+                    self.dump_fields[name] = field
                 if hasattr(field, 'nested') and \
                         issubclass(field.nested, AfterglowSchema):
                     value = field.nested(value)
@@ -279,7 +279,7 @@ class Resource(AfterglowSchema):
 
     class MyResource(Resource):
         __get_view__ = 'my_resource'
-        id = Integer(default=None)
+        id = Integer(dump_default=None)
         ...
 
     @api.route(url_prefix + 'my_resource/[id]')

@@ -40,9 +40,8 @@ def field_cals() -> Response:
         # Create field cal
         return json_response(FieldCalSchema(create_field_cal(
             request.user.id,
-            FieldCal(
-                FieldCalSchema(_set_defaults=True, **request.args.to_dict()),
-                _set_defaults=True))), 201)
+            FieldCal(FieldCalSchema(**request.args.to_dict()),
+                     only=list(request.args.keys())))), 201)
 
 
 @app.route(resource_prefix + '<id_or_name>', methods=['GET', 'PUT', 'DELETE'])

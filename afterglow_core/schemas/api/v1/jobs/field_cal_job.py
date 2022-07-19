@@ -17,17 +17,17 @@ __all__ = ['FieldCalJobResultSchema', 'FieldCalJobSchema']
 
 class FieldCalJobResultSchema(JobResultSchema):
     data: TList[FieldCalResultSchema] = List(
-        Nested(FieldCalResultSchema), default=[])
+        Nested(FieldCalResultSchema), dump_default=[])
 
 
 class FieldCalJobSchema(JobSchema):
     type = 'field_cal'
 
     result: FieldCalJobResultSchema = Nested(
-        FieldCalJobResultSchema, default={})
-    file_ids: TList[int] = List(Integer(), default=[])
-    field_cal: FieldCalSchema = Nested(FieldCalSchema, default={})
+        FieldCalJobResultSchema, dump_default={})
+    file_ids: TList[int] = List(Integer(), dump_default=[])
+    field_cal: FieldCalSchema = Nested(FieldCalSchema, dump_default={})
     source_extraction_settings: SourceExtractionSettingsSchema = Nested(
-        SourceExtractionSettingsSchema, default=None)
+        SourceExtractionSettingsSchema, dump_default=None)
     photometry_settings: PhotSettingsSchema = Nested(
-        PhotSettingsSchema, default=None)
+        PhotSettingsSchema, dump_default=None)

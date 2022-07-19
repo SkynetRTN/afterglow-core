@@ -15,6 +15,7 @@ from io import BytesIO
 from typing import Dict as TDict, List as TList, Optional, Tuple, Union
 import warnings
 import traceback
+from contextlib import contextmanager
 
 from sqlalchemy import (
     Boolean, CheckConstraint, Column, ForeignKey, Integer, String,
@@ -174,6 +175,7 @@ def create_data_file_engine(root: str) -> Engine:
     return engine
 
 
+@contextmanager
 def get_data_file_db(user_id: Optional[int]):
     """
     Initialize the given user's data file storage directory and database as
@@ -219,6 +221,7 @@ def get_data_file_db(user_id: Optional[int]):
 
             # Prevent concurrent db initialization by multiple processes,
             # including those not initiated via multiprocessing, e.g. WSGI
+            session = None
             with proc_lock as _lock:
                 try:
                     # Make sure the user's data directory exists
@@ -229,6 +232,8 @@ def get_data_file_db(user_id: Optional[int]):
 
                     # Get engine from cache
                     session = data_file_engine[user_id, pid][1]
+                    session()
+                    yield session
                 except KeyError:
                     # Engine does not exist in the current process, create it
                     engine = create_data_file_engine(root)
@@ -282,7 +287,16 @@ def get_data_file_db(user_id: Optional[int]):
 
                     session = scoped_session(sessionmaker(bind=engine))
                     data_file_engine[user_id, pid] = engine, session
+
+                    # Instantiate scoped session in the current thread
+                    session()
+
+                    # Return session registry instead of session
+                    yield session
                 finally:
+                    if session is not None:
+                        session.remove()
+
                     if isinstance(proc_lock, FileLock):
                         # noinspection PyBroadException
                         try:
@@ -292,12 +306,6 @@ def get_data_file_db(user_id: Optional[int]):
                             os.fsync(_lock.fileno())
                         except Exception:
                             pass
-
-        # Instantiate scoped session in the current thread
-        session()
-
-        # Return session registry instead of session
-        return session
 
     except Exception as e:
         traceback.print_exc()
@@ -530,13 +538,13 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
     else:
         db_data_file = None
 
-    if db_data_file is None:
-        # Add a database row and obtain its ID
-        db_data_file = DbDataFile(**sqla_fields)
-        adb.add(db_data_file)
-        adb.flush()  # obtain the new row ID by flushing db
-
     try:
+        if db_data_file is None:
+            # Add a database row and obtain its ID
+            db_data_file = DbDataFile(**sqla_fields)
+            adb.add(db_data_file)
+            adb.flush()  # obtain the new row ID by flushing db
+
         save_data_file(adb, root, db_data_file.id, data, hdr, modified=False)
     except Exception:
         adb.rollback()
@@ -593,7 +601,8 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
             layers = []
             for i, hdu in enumerate(fits):
                 hdr = hdu.header
-                if isinstance(hdu, pyfits.ImageHDU.__base__):
+                if isinstance(hdu, pyfits.ImageHDU.__base__) or \
+                        isinstance(hdu, pyfits.CompImageHDU):
                     # Image HDU; eliminate redundant extra dimensions if any,
                     # skip non-2D images
                     imshape = hdu.shape
@@ -720,7 +729,7 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                     else:
                         bands = (im,)
                     channels = [
-                        (band_name, numpy.fromstring(
+                        (band_name, numpy.frombuffer(
                             band.tobytes(), numpy.uint8).reshape(
                             [height, width]))
                         for band_name, band in zip(band_names, bands)]
@@ -1098,13 +1107,15 @@ def get_data_file_group_bytes(user_id: Optional[int], group_name: str,
 
     :return: data file bytes
     """
-    data_file_ids, data_file_types, data_file_formats, data_file_modes = zip(
-        *[(df.id, df.type, df.asset_type,
-           df.asset_metadata.get('image_mode')
-           if getattr(df, 'asset_metadata', None) else None)
-          for df in get_data_file_db(user_id).query(DbDataFile)
-          .filter(DbDataFile.group_name == group_name)
-          .order_by(DbDataFile.group_order)])
+    with get_data_file_db(user_id) as adb:
+        data_file_ids, data_file_types, data_file_formats, data_file_modes = \
+            zip(
+                *[(df.id, df.type, df.asset_type,
+                   df.asset_metadata.get('image_mode')
+                   if getattr(df, 'asset_metadata', None) else None)
+                  for df in adb.query(DbDataFile)
+                  .filter(DbDataFile.group_name == group_name)
+                  .order_by(DbDataFile.group_order)])
     n = len(data_file_ids)
     if not n:
         raise UnknownDataFileGroupError(group_name=group_name)
@@ -1255,17 +1266,16 @@ def get_data_file(user_id: Optional[int], file_id: int) -> DataFile:
 
     :return: data file object
     """
-    adb = get_data_file_db(user_id)
+    with get_data_file_db(user_id) as adb:
+        try:
+            db_data_file = adb.query(DbDataFile).get(int(file_id))
+        except ValueError:
+            db_data_file = None
+        if db_data_file is None:
+            raise UnknownDataFileError(file_id=file_id)
 
-    try:
-        db_data_file = adb.query(DbDataFile).get(int(file_id))
-    except ValueError:
-        db_data_file = None
-    if db_data_file is None:
-        raise UnknownDataFileError(file_id=file_id)
-
-    # Convert to data model object
-    return DataFile(db_data_file)
+        # Convert to data model object
+        return DataFile(db_data_file)
 
 
 def get_data_file_group(user_id: Optional[int], group_name: str) \
@@ -1278,12 +1288,11 @@ def get_data_file_group(user_id: Optional[int], group_name: str) \
 
     :return: data file objects sorted by group_order
     """
-    adb = get_data_file_db(user_id)
-
-    return [DataFile(db_data_file)
-            for db_data_file in adb.query(DbDataFile)
-            .filter(DbDataFile.group_name == group_name)
-            .order_by(DbDataFile.group_order)]
+    with get_data_file_db(user_id) as adb:
+        return [DataFile(db_data_file)
+                for db_data_file in adb.query(DbDataFile)
+                .filter(DbDataFile.group_name == group_name)
+                .order_by(DbDataFile.group_order)]
 
 
 def query_data_files(user_id: Optional[int], session_id: Optional[int]) \
@@ -1296,22 +1305,21 @@ def query_data_files(user_id: Optional[int], session_id: Optional[int]) \
 
     :return: list of data file objects
     """
-    adb = get_data_file_db(user_id)
+    with get_data_file_db(user_id) as adb:
+        if session_id is not None:
+            session = adb.query(Session).get(session_id)
+            if session is None:
+                session = adb.query(Session).filter(
+                    Session.name == session_id).one_or_none()
+            if session is None:
+                raise errors.ValidationError(
+                    'session_id', 'Unknown session "{}"'.format(session_id),
+                    404)
+            session_id = session.id
 
-    if session_id is not None:
-        session = adb.query(Session).get(session_id)
-        if session is None:
-            session = adb.query(Session).filter(
-                Session.name == session_id).one_or_none()
-        if session is None:
-            raise errors.ValidationError(
-                'session_id', 'Unknown session "{}"'.format(session_id),
-                404)
-        session_id = session.id
-
-    return [DataFile(db_data_file)
-            for db_data_file in adb.query(DbDataFile).filter(
-            DbDataFile.session_id == session_id)]
+        return [DataFile(db_data_file)
+                for db_data_file in adb.query(DbDataFile).filter(
+                DbDataFile.session_id == session_id)]
 
 
 def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
@@ -1359,105 +1367,103 @@ def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
 
     :return: list of imported data files
     """
-    adb = get_data_file_db(user_id)
     root = get_root(user_id)
-
     all_data_files = []
-
-    try:
-        if provider_id is None and not files:
-            # Create an empty image data file
-            if width is None:
-                raise errors.MissingFieldError('width')
-            try:
-                width = int(width)
-                if width < 1:
-                    raise errors.ValidationError(
-                        'width', 'Width must be positive', 422)
-            except ValueError:
-                raise errors.ValidationError(
-                    'width', 'Width must be a positive integer')
-            if height is None:
-                raise errors.MissingFieldError('height')
-            try:
-                height = int(height)
-                if height < 1:
-                    raise errors.ValidationError(
-                        'height', 'Height must be positive', 422)
-            except ValueError:
-                raise errors.ValidationError(
-                    'width', 'Width must be a positive integer')
-
-            data = numpy.zeros([height, width], dtype=numpy.float32)
-            if pixel_value is not None:
+    with get_data_file_db(user_id) as adb:
+        try:
+            if provider_id is None and not files:
+                # Create an empty image data file
+                if width is None:
+                    raise errors.MissingFieldError('width')
                 try:
-                    pixel_value = float(pixel_value)
+                    width = int(width)
+                    if width < 1:
+                        raise errors.ValidationError(
+                            'width', 'Width must be positive', 422)
                 except ValueError:
                     raise errors.ValidationError(
-                        'pixel_value', 'Pixel value must be a number')
-                else:
-                    # noinspection PyPropertyAccess
-                    data += pixel_value
-
-            all_data_files.append(create_data_file(
-                adb, name, root, data, duplicates='append',
-                session_id=session_id))
-        elif provider_id is None:
-            # Data file upload: get from multipart/form-data; use filename
-            # for the 2nd and subsequent files or if the "name" parameter
-            # is not provided
-            if not app.config.get('DATA_FILE_UPLOAD'):
-                raise DataFileUploadNotAllowedError()
-            for i, (filename, file) in enumerate(files.items()):
-                all_data_files += import_data_file(
-                    adb, root, None, None, {}, BytesIO(file.read()),
-                    filename if i else name or filename,
-                    duplicates='append', session_id=session_id)
-        else:
-            # Import data file
-            if path is None:
-                raise errors.MissingFieldError('path')
-
-            try:
-                provider = data_providers.providers[provider_id]
-            except KeyError:
-                raise UnknownDataProviderError(id=provider_id)
-            provider_id = provider.id
-
-            def recursive_import(_path, depth=0):
-                asset = provider.get_asset(_path)
-                if asset.collection:
-                    if not provider.browseable:
-                        raise CannotImportFromCollectionAssetError(
-                            provider_id=provider_id, path=_path)
-                    if not recurse and depth:
-                        return []
-                    return sum(
-                        [recursive_import(child_asset.path, depth + 1)
-                         for child_asset in provider.get_child_assets(
-                            asset.path)[0]], [])
-                return import_data_file(
-                    adb, root, provider_id, asset.path, asset.metadata,
-                    BytesIO(provider.get_asset_data(asset.path)),
-                    name or asset.name if len(path) == 1 else asset.name,
-                    duplicates, session_id=session_id)
-
-            if not isinstance(path, list):
+                        'width', 'Width must be a positive integer')
+                if height is None:
+                    raise errors.MissingFieldError('height')
                 try:
-                    path = json.loads(path)
+                    height = int(height)
+                    if height < 1:
+                        raise errors.ValidationError(
+                            'height', 'Height must be positive', 422)
                 except ValueError:
-                    pass
+                    raise errors.ValidationError(
+                        'width', 'Width must be a positive integer')
+
+                data = numpy.zeros([height, width], dtype=numpy.float32)
+                if pixel_value is not None:
+                    try:
+                        pixel_value = float(pixel_value)
+                    except ValueError:
+                        raise errors.ValidationError(
+                            'pixel_value', 'Pixel value must be a number')
+                    else:
+                        # noinspection PyPropertyAccess
+                        data += pixel_value
+
+                all_data_files.append(create_data_file(
+                    adb, name, root, data, duplicates='append',
+                    session_id=session_id))
+            elif provider_id is None:
+                # Data file upload: get from multipart/form-data; use filename
+                # for the 2nd and subsequent files or if the "name" parameter
+                # is not provided
+                if not app.config.get('DATA_FILE_UPLOAD'):
+                    raise DataFileUploadNotAllowedError()
+                for i, (filename, file) in enumerate(files.items()):
+                    all_data_files += import_data_file(
+                        adb, root, None, None, {}, BytesIO(file.read()),
+                        filename if i else name or filename,
+                        duplicates='append', session_id=session_id)
+            else:
+                # Import data file
+                if path is None:
+                    raise errors.MissingFieldError('path')
+
+                try:
+                    provider = data_providers.providers[provider_id]
+                except KeyError:
+                    raise UnknownDataProviderError(id=provider_id)
+                provider_id = provider.id
+
+                def recursive_import(_path, depth=0):
+                    asset = provider.get_asset(_path)
+                    if asset.collection:
+                        if not provider.browseable:
+                            raise CannotImportFromCollectionAssetError(
+                                provider_id=provider_id, path=_path)
+                        if not recurse and depth:
+                            return []
+                        return sum(
+                            [recursive_import(child_asset.path, depth + 1)
+                             for child_asset in provider.get_child_assets(
+                                asset.path)[0]], [])
+                    return import_data_file(
+                        adb, root, provider_id, asset.path, asset.metadata,
+                        BytesIO(provider.get_asset_data(asset.path)),
+                        name or asset.name if len(path) == 1 else asset.name,
+                        duplicates, session_id=session_id)
+
                 if not isinstance(path, list):
-                    path = [path]
-            all_data_files += sum([recursive_import(p) for p in path], [])
+                    try:
+                        path = json.loads(path)
+                    except ValueError:
+                        pass
+                    if not isinstance(path, list):
+                        path = [path]
+                all_data_files += sum([recursive_import(p) for p in path], [])
 
-        if all_data_files:
-            adb.commit()
-    except Exception:
-        adb.rollback()
-        raise
+            if all_data_files:
+                adb.commit()
+        except Exception:
+            adb.rollback()
+            raise
 
-    return [DataFile(f) for f in all_data_files]
+        return [DataFile(f) for f in all_data_files]
 
 
 def update_data_file(user_id: Optional[int], data_file_id: int,
@@ -1470,33 +1476,37 @@ def update_data_file(user_id: Optional[int], data_file_id: int,
     :param data_file: data_file object containing updated parameters: name,
         session ID, group name, or group order
     :param force: if set, flag the data file as modified even if no fields were
-        changed
+        changed (e.g. if updating header or pixel data)
 
     :return: updated field cal object
     """
-    adb = get_data_file_db(user_id)
+    with get_data_file_db(user_id) as adb:
+        db_data_file = adb.query(DbDataFile).get(data_file_id)
+        if db_data_file is None:
+            raise UnknownDataFileError(file_id=data_file_id)
 
-    db_data_file = adb.query(DbDataFile).get(data_file_id)
-    if db_data_file is None:
-        raise UnknownDataFileError(file_id=data_file_id)
-
-    modified = force
-    for key, val in data_file.to_dict().items():
-        if key not in ('name', 'session_id', 'group_name', 'group_order'):
-            continue
-        if val != getattr(db_data_file, key):
-            setattr(db_data_file, key, val)
-            if key not in ('group_name', 'group_order'):
-                modified = True
-    if modified:
-        try:
+        modified = fields_changed = force
+        for key, val in data_file.to_dict().items():
+            if key not in ('name', 'session_id', 'group_name', 'group_order',
+                           'data_provider', 'asset_path'):
+                continue
+            if val != getattr(db_data_file, key):
+                setattr(db_data_file, key, val)
+                fields_changed = True
+                if key in ('name', 'session_id'):
+                    modified = True
+        if modified:
             db_data_file.modified = True
-            adb.flush()
+        if fields_changed:
+            try:
+                adb.flush()
+                data_file = DataFile(db_data_file)
+                adb.commit()
+            except Exception:
+                adb.rollback()
+                raise
+        else:
             data_file = DataFile(db_data_file)
-            adb.commit()
-        except Exception:
-            adb.rollback()
-            raise
 
     return data_file
 
@@ -1514,22 +1524,21 @@ def update_data_file_asset(user_id: Optional[int], data_file_id: int,
     :param asset_metadata: data provider asset metadata
     :param name: new data file name
     """
-    adb = get_data_file_db(user_id)
+    with get_data_file_db(user_id) as adb:
+        db_data_file = adb.query(DbDataFile).get(data_file_id)
+        if db_data_file is None:
+            raise UnknownDataFileError(file_id=data_file_id)
 
-    db_data_file = adb.query(DbDataFile).get(data_file_id)
-    if db_data_file is None:
-        raise UnknownDataFileError(file_id=data_file_id)
-
-    try:
-        db_data_file.data_provider = provider_id
-        db_data_file.asset_path = asset_path
-        db_data_file.asset_metadata = asset_metadata
-        db_data_file.name = name
-        db_data_file.modified = False
-        adb.commit()
-    except Exception:
-        adb.rollback()
-        raise
+        try:
+            db_data_file.data_provider = provider_id
+            db_data_file.asset_path = asset_path
+            db_data_file.asset_metadata = asset_metadata
+            db_data_file.name = name
+            db_data_file.modified = False
+            adb.commit()
+        except Exception:
+            adb.rollback()
+            raise
 
 
 def update_data_file_group_asset(user_id: Optional[int], group_name: str,
@@ -1545,24 +1554,23 @@ def update_data_file_group_asset(user_id: Optional[int], group_name: str,
     :param asset_metadata: data provider asset metadata
     :param name: new data file name
     """
-    adb = get_data_file_db(user_id)
+    with get_data_file_db(user_id) as adb:
+        db_data_files = adb.query(DbDataFile) \
+            .filter(DbDataFile.group_name == group_name)
+        if not db_data_files.count():
+            raise UnknownDataFileGroupError(group_name=group_name)
 
-    db_data_files = adb.query(DbDataFile) \
-        .filter(DbDataFile.group_name == group_name)
-    if not db_data_files.count():
-        raise UnknownDataFileGroupError(group_name=group_name)
-
-    try:
-        for db_data_file in db_data_files:
-            db_data_file.data_provider = provider_id
-            db_data_file.asset_path = asset_path
-            db_data_file.asset_metadata = asset_metadata
-            db_data_file.name = name
-            db_data_file.modified = False
-        adb.commit()
-    except Exception:
-        adb.rollback()
-        raise
+        try:
+            for db_data_file in db_data_files:
+                db_data_file.data_provider = provider_id
+                db_data_file.asset_path = asset_path
+                db_data_file.asset_metadata = asset_metadata
+                db_data_file.name = name
+                db_data_file.modified = False
+            adb.commit()
+        except Exception:
+            adb.rollback()
+            raise
 
 
 def delete_data_file(user_id: Optional[int], id: int) -> None:
@@ -1573,18 +1581,17 @@ def delete_data_file(user_id: Optional[int], id: int) -> None:
     :param user_id: current user ID (None if user auth is disabled)
     :param id: data file ID
     """
-    adb = get_data_file_db(user_id)
     root = get_root(user_id)
-
-    db_data_file = adb.query(DbDataFile).get(id)
-    if db_data_file is None:
-        raise UnknownDataFileError(file_id=id)
-    try:
-        adb.delete(db_data_file)
-        adb.commit()
-    except Exception:
-        adb.rollback()
-        raise
+    with get_data_file_db(user_id) as adb:
+        db_data_file = adb.query(DbDataFile).get(id)
+        if db_data_file is None:
+            raise UnknownDataFileError(file_id=id)
+        try:
+            adb.delete(db_data_file)
+            adb.commit()
+        except Exception:
+            adb.rollback()
+            raise
 
     for filename in glob(os.path.join(root, '{}.*'.format(id))):
         try:
@@ -1609,17 +1616,16 @@ def get_session(user_id: Optional[int], session_id: Union[int, str]) \
 
     :return: session object
     """
-    adb = get_data_file_db(user_id)
+    with get_data_file_db(user_id) as adb:
+        db_session = adb.query(DbSession).get(session_id)
+        if db_session is None:
+            db_session = adb.query(DbSession).filter(
+                DbSession.name == session_id).one_or_none()
+        if db_session is None:
+            raise UnknownSessionError(id=session_id)
 
-    db_session = adb.query(DbSession).get(session_id)
-    if db_session is None:
-        db_session = adb.query(DbSession).filter(
-            DbSession.name == session_id).one_or_none()
-    if db_session is None:
-        raise UnknownSessionError(id=session_id)
-
-    # Convert to data model object
-    return Session(db_session)
+        # Convert to data model object
+        return Session(db_session)
 
 
 def query_sessions(user_id: Optional[int]) -> TList[Session]:
@@ -1630,8 +1636,8 @@ def query_sessions(user_id: Optional[int]) -> TList[Session]:
 
     :return: list of session objects
     """
-    adb = get_data_file_db(user_id)
-    return [Session(db_session) for db_session in adb.query(DbSession)]
+    with get_data_file_db(user_id) as adb:
+        return [Session(db_session) for db_session in adb.query(DbSession)]
 
 
 def create_session(user_id: Optional[int], session: Session) -> Session:
@@ -1643,31 +1649,30 @@ def create_session(user_id: Optional[int], session: Session) -> Session:
 
     :return: new session object
     """
-    adb = get_data_file_db(user_id)
+    with get_data_file_db(user_id) as adb:
+        if adb.query(DbSession).filter(DbSession.name == session.name).count():
+            raise DuplicateSessionNameError(name=session.name)
 
-    if adb.query(DbSession).filter(DbSession.name == session.name).count():
-        raise DuplicateSessionNameError(name=session.name)
+        # Ignore session ID if provided
+        kw = session.to_dict()
+        try:
+            del kw['id']
+        except KeyError:
+            pass
 
-    # Ignore session ID if provided
-    kw = session.to_dict()
-    try:
-        del kw['id']
-    except KeyError:
-        pass
+        if not kw.get('name'):
+            raise errors.MissingFieldError('name')
 
-    if not kw.get('name'):
-        raise errors.MissingFieldError('name')
-
-    # Create new db session object
-    try:
-        db_session = DbSession(**kw)
-        adb.add(db_session)
-        adb.flush()
-        session = Session(db_session)
-        adb.commit()
-    except Exception:
-        adb.rollback()
-        raise
+        # Create new db session object
+        try:
+            db_session = DbSession(**kw)
+            adb.add(db_session)
+            adb.flush()
+            session = Session(db_session)
+            adb.commit()
+        except Exception:
+            adb.rollback()
+            raise
 
     return session
 
@@ -1683,26 +1688,25 @@ def update_session(user_id: Optional[int], session_id: int,
 
     :return: updated session object
     """
-    adb = get_data_file_db(user_id)
+    with get_data_file_db(user_id) as adb:
+        db_session = adb.query(DbSession).get(session_id)
+        if db_session is None:
+            raise UnknownSessionError(id=session_id)
 
-    db_session = adb.query(DbSession).get(session_id)
-    if db_session is None:
-        raise UnknownSessionError(id=session_id)
-
-    for key, val in session.to_dict().items():
-        if key == 'id':
-            # Don't allow changing session ID
-            continue
-        if key == 'name' and val != db_session.name and adb.query(
-                DbSession).filter(DbSession.name == val).count():
-            raise DuplicateSessionNameError(name=val)
-        setattr(db_session, key, val)
-    try:
-        session = Session(db_session)
-        adb.commit()
-    except Exception:
-        adb.rollback()
-        raise
+        for key, val in session.to_dict().items():
+            if key == 'id':
+                # Don't allow changing session ID
+                continue
+            if key == 'name' and val != db_session.name and adb.query(
+                    DbSession).filter(DbSession.name == val).count():
+                raise DuplicateSessionNameError(name=val)
+            setattr(db_session, key, val)
+        try:
+            session = Session(db_session)
+            adb.commit()
+        except Exception:
+            adb.rollback()
+            raise
 
     return session
 
@@ -1714,18 +1718,19 @@ def delete_session(user_id: Optional[int], session_id: int) -> None:
     :param user_id: current user ID (None if user auth is disabled)
     :param session_id: session ID to delete
     """
-    adb = get_data_file_db(user_id)
+    with get_data_file_db(user_id) as adb:
+        try:
+            db_session = adb.query(DbSession).get(session_id)
+            if db_session is None:
+                raise UnknownSessionError(id=session_id)
 
-    db_session = adb.query(DbSession).get(session_id)
-    if db_session is None:
-        raise UnknownSessionError(id=session_id)
+            file_ids = [data_file.id for data_file in db_session.data_files]
 
-    try:
-        for file_id in [data_file.id for data_file in db_session.data_files]:
-            delete_data_file(user_id, file_id)
+            adb.delete(db_session)
+            adb.commit()
+        except Exception:
+            adb.rollback()
+            raise
 
-        adb.delete(db_session)
-        adb.commit()
-    except Exception:
-        adb.rollback()
-        raise
+    for file_id in file_ids:
+        delete_data_file(user_id, file_id)

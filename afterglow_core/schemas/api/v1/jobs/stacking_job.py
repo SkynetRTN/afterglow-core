@@ -2,7 +2,7 @@
 Afterglow Core: image stacking job schemas
 """
 
-from typing import List as TList
+from typing import List as TList, Optional
 
 from marshmallow.fields import List, Nested, String, Integer
 
@@ -15,12 +15,13 @@ __all__ = ['StackingSettingsSchema', 'StackingJobResultSchema',
 
 
 class StackingSettingsSchema(AfterglowSchema):
-    mode: str = String(default='average')
-    scaling: str = String(default=None)
-    rejection: str = String(default=None)
-    percentile: int = Integer(default=50)
-    lo: float = Float(default=0)
-    hi: float = Float(default=100)
+    mode: str = String(dump_default='average')
+    scaling: str = String(dump_default=None)
+    rejection: str = String(dump_default=None)
+    percentile: int = Integer(dump_default=50)
+    lo: float = Float(dump_default=0)
+    hi: float = Float(dump_default=100)
+    smart_stacking: Optional[str] = String(dump_default=None)
 
 
 class StackingJobResultSchema(JobResultSchema):
@@ -31,9 +32,9 @@ class StackingJobSchema(JobSchema):
     type = 'stacking'
 
     result: StackingJobResultSchema = Nested(
-        StackingJobResultSchema, default={})
-    file_ids: TList[int] = List(Integer(), default=[])
+        StackingJobResultSchema, dump_default={})
+    file_ids: TList[int] = List(Integer(), dump_default=[])
     # alignment_settings: AlignmentSettingsSchema = Nested(
-    #     AlignmentSettings, default={})
+    #     AlignmentSettings, dump_default={})
     stacking_settings: StackingSettingsSchema = Nested(
-        StackingSettingsSchema, default={})
+        StackingSettingsSchema, dump_default={})

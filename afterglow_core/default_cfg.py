@@ -102,7 +102,8 @@ DATA_FILE_UPLOAD = False
 
 # Number of histogram bins or method for calculating the optimal bin size
 # ("auto", "fd", "doane", "scott", "rice", "sturges", or "sqrt", see
-# https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html)
+# https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html),
+# or "background" for the experimental background-based histogramming
 HISTOGRAM_BINS = 1024
 
 
@@ -165,3 +166,11 @@ JOB_POOL_MAX = 16
 # Maximum RAM in megabytes allowed to be allocated by certain memory-intensive
 # jobs
 JOB_MAX_RAM = 100.0
+
+# Job completion timeout in seconds: if job pool is exhausted, cancel jobs that
+# run longer than specified except those which progress is above
+# JOB_TIMEOUT_MAX_PROGRESS
+JOB_TIMEOUT = 900
+
+# Don't time out jobs with progress above the given percentage
+JOB_TIMEOUT_MAX_PROGRESS = 90

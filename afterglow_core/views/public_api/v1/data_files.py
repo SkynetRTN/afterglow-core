@@ -240,7 +240,8 @@ def data_files_header(id: int) -> Response:
                         modified = True
 
         if modified:
-            update_data_file(request.user.id, id, DataFile(), force=True)
+            update_data_file(
+                request.user.id, id, DataFile(only=[]), force=True)
 
     return json_response([
         dict(key=key, value=value, comment=hdr.comments[i])
@@ -292,7 +293,8 @@ def data_files_wcs(id: int) -> Response:
                         modified = True
 
         if modified:
-            update_data_file(request.user.id, id, DataFile(), force=True)
+            update_data_file(
+                request.user.id, id, DataFile(only=[]), force=True)
 
     wcs_hdr = None
     # noinspection PyBroadException
@@ -379,7 +381,8 @@ def data_files_phot_cal(id: int) -> Response:
                         modified = True
 
         if modified:
-            update_data_file(request.user.id, id, DataFile(), force=True)
+            update_data_file(
+                request.user.id, id, DataFile(only=[]), force=True)
 
     return json_response(phot_cal)
 
@@ -592,9 +595,8 @@ def sessions() -> Response:
         # Create session
         return json_response(SessionSchema(create_session(
             request.user.id,
-            Session(SessionSchema(
-                _set_defaults=True, **request.args.to_dict()),
-                _set_defaults=True))), 201)
+            Session(SessionSchema(**request.args.to_dict()),
+                    only=list(request.args.keys())))), 201)
 
 
 @app.route(url_prefix + 'sessions/<id>', methods=['GET', 'PUT', 'DELETE'])

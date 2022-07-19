@@ -2,8 +2,6 @@
 Afterglow Core: APASS catalog accessed via VizieR
 """
 
-from __future__ import absolute_import, division, print_function
-
 from .vizier_catalogs import VizierCatalog
 
 
@@ -27,6 +25,7 @@ class APASSCatalog(VizierCatalog):
     col_mapping = {
         'id': 'recno', 'ra_hours': 'RAJ2000/15', 'dec_degs': 'DEJ2000',
     }
+    sort = ['+Bmag']
     filter_lookup = {
         # naming
         "g'": 'gprime', "r'": 'rprime', "i'": 'iprime',

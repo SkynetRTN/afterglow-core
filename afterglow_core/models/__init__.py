@@ -13,11 +13,11 @@ to an underlying database object. Such objects are defined in the corresponding
 in :mod:`afterglow_core.models`, which serve as an extra isolation layer
 to facilitate an easier interaction with API schemas and to exchange data
 between the job server and the job worker processes. Other data models, like
-catalogs, data providers, and photometry data structures, do not have a database
-counterpart. For them, a data model instance defined here serves as the only
-representation of the data; it stores the object on the duration of the API
-request and is directly serialized to an API schema. This can be schematically
-illustrated by the following diagram:
+catalogs, data providers, and photometry data structures, do not have
+a database counterpart. For them, a data model instance defined here serves
+as the only representation of the data; it stores the object on the duration
+of the API request and is directly serialized to an API schema. This can
+be schematically illustrated by the following diagram:
 
      Database        |    Data Model                API
 (:mod:`resources`)   | (:mod:`models`)     (:mod:`schemas.api.v*`)
@@ -44,6 +44,7 @@ from .data_files import *
 from .data_providers import *
 from .errors import *
 from .field_cals import *
+from .image_properties import *
 from .jobs import *
 from .photometry import *
 from .source_extraction import *
