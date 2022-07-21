@@ -9,9 +9,10 @@ from marshmallow.fields import String, Integer, List, Nested
 from astropy.wcs import WCS
 
 from skylib.combine.alignment import apply_transform_stars, apply_transform_wcs
+from skylib.combine.pattern_matching import pattern_match
 
 from ...models import Job, JobResult, SourceExtractionData
-from ...schemas import AfterglowSchema, Boolean
+from ...schemas import AfterglowSchema, Boolean, Float
 from ...errors import AfterglowError, ValidationError
 from ..data_files import (
     create_data_file, get_data_file_data, get_data_file_db, get_root,
@@ -25,6 +26,11 @@ __all__ = ['AlignmentJob']
 class AlignmentSettings(AfterglowSchema):
     ref_image: str = String(dump_default='central')
     wcs_grid_points: int = Integer(dump_default=0)
+    scale_invariant: bool = Boolean(dump_default=False)
+    match_tol: float = Float(dump_default=0.002)
+    min_edge: float = Float(dump_default=0.003)
+    ratio_limit: float = Float(dump_default=10)
+    confidence: float = Float(dump_default=0.15)
     prefilter: bool = Boolean(dump_default=True)
 
 
@@ -99,17 +105,23 @@ class AlignmentJob(Job):
             ref_sources = [
                 source for source in self.sources
                 if getattr(source, 'file_id', None) == ref_file_id]
-            ref_stars = {getattr(source, 'id', None): (source.x, source.y)
-                         for source in ref_sources}
-            if not ref_stars:
+            if not ref_sources:
                 raise ValueError(
                     'Missing alignment stars for reference image')
-            if None in ref_stars and len(ref_sources) > 1:
+            ref_stars = {source.id: (source.x, source.y)
+                         for source in ref_sources
+                         if getattr(source, 'id', None) is not None}
+            anonymous_ref_stars = [(source.x, source.y)
+                                   for source in ref_sources
+                                   if getattr(source, 'id', None) is None]
+            if ref_stars and anonymous_ref_stars:
                 # Cannot mix sources with and without ID
-                raise ValueError('Missing reference image source ID')
+                raise ValueError(
+                    'Missing source ID for at least one reference image '
+                    'source')
         else:
             # WCS-based alignment
-            ref_stars = {}
+            ref_stars, anonymous_ref_stars = {}, []
 
         # Load data and extract WCS for reference image
         ref_data, ref_hdr = get_data_file_data(self.user_id, ref_file_id)
@@ -136,11 +148,10 @@ class AlignmentJob(Job):
                         img_sources = [
                             source for source in self.sources
                             if getattr(source, 'file_id', None) == file_id]
-                        img_stars = {getattr(source, 'id', None):
-                                     (source.x, source.y)
-                                     for source in img_sources}
-                        if None in img_stars and len(img_sources) > 1:
-                            raise ValueError('Missing source ID')
+                        img_stars = {
+                            source.id: (source.x, source.y)
+                            for source in img_sources
+                            if getattr(source, 'id', None) is not None}
                         src_stars, dst_stars = [], []
                         for src_id, src_star in img_stars.items():
                             try:
@@ -159,6 +170,43 @@ class AlignmentJob(Job):
                         nref = len(src_stars)
                         hist_msg = '{:d} star{}'.format(
                             nref, 's' if nref > 1 else '')
+
+                    elif anonymous_ref_stars:
+                        # Automatically match current image sources
+                        # to reference image sources
+                        img_stars = [
+                            (source.x, source.y) for source in self.sources
+                            if getattr(source, 'file_id', None) == file_id]
+                        if not img_stars:
+                            raise ValueError('Missing alignment star(s)')
+                        if len(anonymous_ref_stars) == 1 and \
+                                len(img_stars) == 1:
+                            # Trivial case: 1-star match
+                            src_stars = img_stars
+                            dst_stars = anonymous_ref_stars
+                        else:
+                            # Match two sets of points using pattern matching
+                            src_stars, dst_stars = [], []
+                            for k, l in enumerate(pattern_match(
+                                    img_stars, anonymous_ref_stars,
+                                    scale_invariant=settings.scale_invariant,
+                                    eps=settings.match_tol,
+                                    ksi=settings.min_edge,
+                                    r_limit=settings.ratio_limit,
+                                    confidence=settings.confidence)):
+                                if l >= 0:
+                                    src_stars.append(img_stars[k])
+                                    dst_stars.append(anonymous_ref_stars[l])
+                            if not src_stars:
+                                raise ValueError('Pattern matching failed')
+                        data = apply_transform_stars(
+                            data, src_stars, dst_stars, ref_width,
+                            ref_height, prefilter=settings.prefilter)
+
+                        nref = len(src_stars)
+                        hist_msg = '{:d} star{}{}'.format(
+                            nref, 's' if nref > 1 else '',
+                            '/pattern matching' if len(img_stars) > 1 else '')
 
                     else:
                         # Extract current image WCS
