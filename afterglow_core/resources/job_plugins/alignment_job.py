@@ -25,13 +25,17 @@ __all__ = ['AlignmentJob']
 
 class AlignmentSettings(AfterglowSchema):
     ref_image: str = String(dump_default='central')
+    prefilter: bool = Boolean(dump_default=True)
+    enable_rot: bool = Boolean(dump_default=True)
+    enable_scale: bool = Boolean(dump_default=True)
+    enable_skew: bool = Boolean(dump_default=True)
     wcs_grid_points: int = Integer(dump_default=0)
+    max_sources: int = Integer(dump_default=100)
     scale_invariant: bool = Boolean(dump_default=False)
     match_tol: float = Float(dump_default=0.002)
     min_edge: float = Float(dump_default=0.003)
     ratio_limit: float = Float(dump_default=10)
     confidence: float = Float(dump_default=0.15)
-    prefilter: bool = Boolean(dump_default=True)
 
 
 class AlignmentJobResult(JobResult):
@@ -117,8 +121,19 @@ class AlignmentJob(Job):
             if ref_stars and anonymous_ref_stars:
                 # Cannot mix sources with and without ID
                 raise ValueError(
-                    'Missing source ID for at least one reference image '
-                    'source')
+                    'All or none of the reference image source must have '
+                    'source ID')
+            if len(anonymous_ref_stars) > settings.max_sources:
+                # Too many stars for pattern matching; sort by brightness and
+                # use at most max_sources stars
+                ref_sources.sort(
+                    key=lambda source: getattr(
+                        source, 'mag', -getattr(source, 'flux', 0)))
+                ref_sources = ref_sources[:settings.max_sources]
+                anonymous_ref_stars = [
+                    (source.x, source.y) for source in ref_sources
+                ]
+
         else:
             # WCS-based alignment
             ref_stars, anonymous_ref_stars = {}, []
@@ -165,7 +180,10 @@ class AlignmentJob(Job):
                             raise ValueError('Missing alignment star(s)')
                         data = apply_transform_stars(
                             data, src_stars, dst_stars, ref_width,
-                            ref_height, prefilter=settings.prefilter)
+                            ref_height, prefilter=settings.prefilter,
+                            enable_rot=settings.enable_rot,
+                            enable_scale=settings.enable_scale,
+                            enable_skew=settings.enable_skew)
 
                         nref = len(src_stars)
                         hist_msg = '{:d} star{}'.format(
@@ -174,17 +192,29 @@ class AlignmentJob(Job):
                     elif anonymous_ref_stars:
                         # Automatically match current image sources
                         # to reference image sources
-                        img_stars = [
-                            (source.x, source.y) for source in self.sources
+                        img_sources = [
+                            source for source in self.sources
                             if getattr(source, 'file_id', None) == file_id]
-                        if not img_stars:
+                        if not img_sources:
                             raise ValueError('Missing alignment star(s)')
+
                         if len(anonymous_ref_stars) == 1 and \
-                                len(img_stars) == 1:
+                                len(img_sources) == 1:
                             # Trivial case: 1-star match
-                            src_stars = img_stars
+                            src_stars = [(img_sources[0].x, img_sources[0].y)]
                             dst_stars = anonymous_ref_stars
+
                         else:
+                            if len(img_sources) > settings.max_sources:
+                                img_sources.sort(
+                                    key=lambda source: getattr(
+                                        source, 'mag',
+                                        -getattr(source, 'flux', 0)))
+                                img_sources = \
+                                    img_sources[:settings.max_sources]
+                            img_stars = [
+                                (source.x, source.y) for source in img_sources
+                            ]
                             # Match two sets of points using pattern matching
                             src_stars, dst_stars = [], []
                             for k, l in enumerate(pattern_match(
@@ -199,14 +229,19 @@ class AlignmentJob(Job):
                                     dst_stars.append(anonymous_ref_stars[l])
                             if not src_stars:
                                 raise ValueError('Pattern matching failed')
+
                         data = apply_transform_stars(
                             data, src_stars, dst_stars, ref_width,
-                            ref_height, prefilter=settings.prefilter)
+                            ref_height, prefilter=settings.prefilter,
+                            enable_rot=settings.enable_rot,
+                            enable_scale=settings.enable_scale,
+                            enable_skew=settings.enable_skew)
 
                         nref = len(src_stars)
                         hist_msg = '{:d} star{}{}'.format(
                             nref, 's' if nref > 1 else '',
-                            '/pattern matching' if len(img_stars) > 1 else '')
+                            '/pattern matching'
+                            if len(img_sources) > 1 else '')
 
                     else:
                         # Extract current image WCS
@@ -223,7 +258,10 @@ class AlignmentJob(Job):
                         data = apply_transform_wcs(
                             data, wcs, ref_wcs, ref_width, ref_height,
                             grid_points=settings.wcs_grid_points,
-                            prefilter=settings.prefilter)
+                            prefilter=settings.prefilter,
+                            enable_rot=settings.enable_rot,
+                            enable_scale=settings.enable_scale,
+                            enable_skew=settings.enable_skew)
 
                         hist_msg = 'WCS'
 
