@@ -6,7 +6,7 @@ from typing import List as TList
 
 from marshmallow.fields import String, Integer, List, Nested
 
-from .... import AfterglowSchema, Boolean
+from .... import AfterglowSchema, Boolean, Float
 from ..job import JobSchema, JobResultSchema
 from ..source_extraction import SourceExtractionDataSchema
 
@@ -17,8 +17,17 @@ __all__ = ['AlignmentSettingsSchema', 'AlignmentJobResultSchema',
 
 class AlignmentSettingsSchema(AfterglowSchema):
     ref_image: str = String(dump_default='central')
-    wcs_grid_points: int = Integer(dump_default=0)
     prefilter: bool = Boolean(dump_default=True)
+    enable_rot: bool = Boolean(dump_default=True)
+    enable_scale: bool = Boolean(dump_default=True)
+    enable_skew: bool = Boolean(dump_default=True)
+    wcs_grid_points: int = Integer(dump_default=0)
+    max_sources: int = Integer(dump_default=100)
+    scale_invariant: bool = Boolean(dump_default=False)
+    match_tol: float = Float(dump_default=0.002)
+    min_edge: float = Float(dump_default=0.003)
+    ratio_limit: float = Float(dump_default=10)
+    confidence: float = Float(dump_default=0.15)
 
 
 class AlignmentJobResultSchema(JobResultSchema):

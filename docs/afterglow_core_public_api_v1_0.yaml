@@ -1372,18 +1372,62 @@ components:
               format: '#index'
             - type: integer
           default: 'central'
+        prefilter:
+          description: apply spline filter before interpolation to decrease blurring
+          type: boolean
+          default: true
+        enable_rot:
+          description: allow rotation transformation for >= 2 WCS grid points or sources
+          type: boolean
+          default: true
+        enable_scale:
+          description: allow scaling transformation for >= 2 WCS grid points or sources
+          type: boolean
+          default: true
+        enable_skew:
+          description: allow skew transformation for >= 2 WCS grid points or sources
+          type: boolean
+          default: true
         wcs_grid_points:
           description: 'number of grid points for WCS interpolation::
-            0: transform using WCS calculated for each pixel (no interpolation)
+            0: transform using WCS calculated for each pixel (no interpolation, slow)
             1: offset-only alignment using central pixel
             2: shift + rotation + uniform scale (2-star) alignment using two points
             >= 3: full affine transform using the given number of fake "alignment stars" generated from the WCS'
           type: integer
           default: 0
-        prefilter:
-          description: apply spline filter before interpolation to decrease blurring
+        max_sources:
+          description: maximum number of brightest sources for pattern matching
+          type: integer
+          minimum: 3
+          default: 100
+        scale_invariant:
+          description: use scale-invariant pattern matching
           type: boolean
-          default: true
+          default: false
+        match_tol:
+          description: edge ratio tolerance for pattern matching
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          default: 0.002
+        min_edge:
+          description: minimum allowed dimensionless edge length for pattern matching
+          type: number
+          minimum: 0
+          default: 0.003
+        ratio_limit:
+          description: maximum allowed edge ratio for pattern matching
+          type: number
+          minimum: 1
+          default: 10
+        confidence:
+          description: vote confidence level for pattern matching
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          maximum: 1
+          default: 0.15
       nullable: true
       default: null
 
@@ -1466,7 +1510,9 @@ components:
             settings:
               $ref: '#/components/schemas/AlignmentSettings'
             sources:
-              description: list of sources for each data file for source-based alignment; at least, file_id, id, x, y are required
+              description: 'list of sources for each data file for source-based alignment;
+                at least, "file_id", "x", "y" are required for automatic alignment
+                with pattern matching, plus "id" for manual alignment'
               type: array
               items:
                 $ref: '#/components/schemas/SourceExtractionData'
