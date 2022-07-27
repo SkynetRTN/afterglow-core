@@ -12,6 +12,8 @@ import numpy.fft
 import scipy.ndimage as ndimage
 import astropy.io.fits as pyfits
 
+from skylib.enhancement.wavelet import wavelet_sharpen
+
 from ...models import Job, JobResult
 from ...schemas import Boolean, Float
 from ..data_files import (
@@ -35,6 +37,8 @@ for _name in ['fft', 'ifft', 'rfft', 'irfft', 'hfft', 'ihfft', 'rfftn',
     context[_name] = getattr(numpy.fft, _name)
 # Keep a reference to numpy as some of its defs are overridden by scipy.ndimage
 context['np'] = numpy
+# Add some useful SkyLib defs
+context['wavelet_sharpen'] = wavelet_sharpen
 
 
 class PixelOpsJobResult(JobResult):

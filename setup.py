@@ -62,6 +62,7 @@ setup(
         'flask-oauthlib == 0.9.6',
         'Jinja2 == 3.0.3',
         'marshmallow == 3.14.1',
+        'numba == 0.55.2',
         'numpy == 1.22.2',
         'oauthlib == 2.1.0',
         'Pillow == 9.0.1',
