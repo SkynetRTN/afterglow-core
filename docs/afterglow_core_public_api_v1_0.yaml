@@ -2074,6 +2074,10 @@ components:
           global_snr:
             description: global image signal-to-noise ratio
             type: number
+          sharpness:
+            description: overall image sharpness
+            type: number
+            minimum: 0
 
     ImagePropsExtractionJob:
       description: Image property extraction job
