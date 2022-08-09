@@ -991,8 +991,16 @@ def get_data_file_fits(user_id: Optional[int], file_id: int,
     :return: FITS file object
     """
     try:
-        return pyfits.open(
-            get_data_file_path(user_id, file_id), mode, memmap=False)
+        with pyfits.open(get_data_file_path(user_id, file_id), mode,
+                         memmap=False) as fits:
+            if mode == 'readonly' and fits[0].data is not None and \
+                    fits[0].data.dtype.fields is None and len(fits) > 1:
+                # Image in primary HDU, mask in extension HDU, create
+                # a temporary in-memory FITS with masked values replaced by NaN
+                fits[0].data[fits[1].data] = numpy.nan
+                return pyfits.HDUList(pyfits.PrimaryHDU(
+                    fits[0].data, fits[0].header))
+            return fits
     except Exception:
         raise UnknownDataFileError(file_id=file_id)
 
@@ -1015,14 +1023,14 @@ def get_data_file_data(user_id: Optional[int], file_id: int) \
             # Table stored in extension HDU
             data = fits[1].data
         elif fits[0].data.dtype.fields is None:
-            # Image stored in the primary HDU, with an optional mask
-            if len(fits) == 1:
-                # Normal image data
-                data = fits[0].data
-            else:
+            # Image stored in the primary HDU, with NaNs for masked values
+            if numpy.isnan(fits[0].data).any():
                 # Masked data
                 data = numpy.ma.masked_array(
-                    fits[0].data, fits[1].data.astype(bool))
+                    fits[0].data, numpy.isnan(fits[0]), fill_value=numpy.nan)
+            else:
+                # Normal image data
+                data = fits[0].data
         else:
             # Table data in the primary HDU (?)
             data = fits[0].data
