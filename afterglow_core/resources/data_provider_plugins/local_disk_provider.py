@@ -678,7 +678,15 @@ class LocalDiskDataProvider(DataProvider):
             # noinspection PyUnresolvedReferences
             raise FilesystemError(reason=str(e))
 
-        return self._get_asset(path, filename)
+        try:
+            return self._get_asset(path, filename)
+        except Exception:
+            # Unsupported format or disk error
+            try:
+                os.remove(filename)
+            except Exception:
+                pass
+            raise
 
     def rename_asset(self, path: str, name: str, **kwargs) \
             -> DataProviderAsset:
