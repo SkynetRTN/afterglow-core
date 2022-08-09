@@ -997,7 +997,7 @@ def get_data_file_fits(user_id: Optional[int], file_id: int,
                     fits[0].data.dtype.fields is None and len(fits) > 1:
                 # Image in primary HDU, mask in extension HDU, create
                 # a temporary in-memory FITS with masked values replaced by NaN
-                fits[0].data[fits[1].data] = numpy.nan
+                fits[0].data[fits[1].data.nonzero()] = numpy.nan
                 return pyfits.HDUList(pyfits.PrimaryHDU(
                     fits[0].data, fits[0].header))
             return fits
