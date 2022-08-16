@@ -722,6 +722,8 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
             if rejected.any():
                 good = ~rejected
                 b = b[good]
+                if weights is not None:
+                    weights = weights[good]
                 good_stars = good_stars[good]
                 if not no_errors:
                     sigmas2 = sigmas2[good]
