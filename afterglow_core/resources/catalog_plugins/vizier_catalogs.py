@@ -167,6 +167,9 @@ class VizierCatalog(Catalog):
         :return: list of catalog objects
         """
         sources = []
+        if table is None:
+            # Empty response
+            return sources
 
         context = dict(numpy.__dict__)
 

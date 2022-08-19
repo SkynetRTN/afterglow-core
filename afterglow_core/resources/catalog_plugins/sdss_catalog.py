@@ -4,8 +4,9 @@ Afterglow Core: SDSS catalog
 
 from typing import Dict as TDict, List as TList, Optional
 
+import numpy as np
 from astropy.coordinates import SkyCoord
-from astropy.units import deg, hour
+from astropy.units import arcmin, deg, hour
 from astroquery.sdss import SDSS
 
 from ...models import CatalogSource
@@ -20,7 +21,8 @@ class SDSSCatalog(VizierCatalog):
     SDSS catalog plugin
     """
     name = 'SDSS'
-    display_name = 'Sloan Digital Sky Survey Data Release 15'
+    data_release = 17
+    display_name = f'Sloan Digital Sky Survey Data Release {data_release}'
     num_sources = 260562744
     row_limit = 5000
     col_mapping = {
@@ -55,29 +57,36 @@ class SDSSCatalog(VizierCatalog):
         rows = []
         for name in names:
             rows.append(sdss.query_object(
-                name, data_release=15, photoobj_fields=self._columns,
-                cache=self.cache)[0])
+                name, data_release=self.data_release,
+                photoobj_fields=self._columns, cache=self.cache)[0])
         return self.table_to_sources(rows)
 
-    def query_region(self, ra_hours: float, dec_degs: float,
-                     constraints: Optional[TDict[str, str]] = None,
-                     limit: Optional[int] = None,
-                     **region) -> TList[CatalogSource]:
+    def query_circ(self, ra_hours: float, dec_degs: float,
+                   radius_arcmins: float,
+                   constraints: Optional[TDict[str, str]] = None,
+                   limit: Optional[int] = None) -> TList[CatalogSource]:
         """
-        Return SDSS catalog objects within the specified rectangular region
+        Return catalog objects within the specified circular region
 
         :param ra_hours: right ascension of region center in hours
         :param dec_degs: declination of region center in degrees
+        :param radius_arcmins: region radius in arcminutes
         :param constraints: optional constraints on the column values
         :param limit: maximum number of rows to return
-        :param region: keywords defining the query region
 
-        :return: list of catalog objects within the specified rectangular
-            region
+        :return: list of catalog objects within the specified circular region
         """
+        if self.cache:
+            ra_hours = round(ra_hours*5400)/5400 % 24
+            dec_degs = round(dec_degs*360)/360
+            if dec_degs > 90:
+                dec_degs = 90
+            elif dec_degs < -90:
+                dec_degs = -90
+            radius_arcmins = np.ceil(radius_arcmins*5)/5
         sdss = SDSS()
         return self.table_to_sources(sdss.query_region(
             SkyCoord(ra=ra_hours, dec=dec_degs, unit=(hour, deg),
                      frame='icrs'),
-            data_release=15, photoobj_fields=self._columns, cache=self.cache,
-            **region))
+            data_release=self.data_release, photoobj_fields=self._columns,
+            cache=self.cache, radius=radius_arcmins*arcmin))
