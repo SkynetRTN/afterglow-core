@@ -149,7 +149,7 @@ class Catalog(AfterglowSchema):
             stars = [s for s in stars if s.dec_degs >= dec_min]
         else:
             # See http://janmatuschek.de/LatitudeLongitudeBoundingCoordinates
-            dra = np.rad2deg(np.arcsin(np.sin(np.deg2rad(width_arcmins/60)) /
+            dra = np.rad2deg(np.arcsin(np.sin(np.deg2rad(width_arcmins/120)) /
                                        np.cos(np.deg2rad(dec_degs))))/15
             ra_min, ra_max = ra_hours - dra, ra_hours + dra
             if ra_max >= ra_min + 24:
