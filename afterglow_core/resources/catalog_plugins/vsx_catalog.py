@@ -75,9 +75,9 @@ class VSXCatalog(VizierCatalog):
                 id=row['OID'],
                 name=row['Name'],
                 type=row['Type'],
-                mag=row['max'],
+                mag=row['max'] or row['min'] or None,
                 amplitude=row['min'] if row['f_min'] == '('
-                else row['min'] - row['max'],
+                else row['min'] - row['max'] or None,
                 period=row['Period'] or None,
                 ra_hours=row['RAJ2000']/15,
                 dec_degs=row['DEJ2000'],
