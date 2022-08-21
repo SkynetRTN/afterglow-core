@@ -5,11 +5,12 @@ Afterglow Core: image cropping job plugin
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List as TList, Optional, Tuple
+from typing import Dict as TDict, List as TList, Optional, Tuple
 
+import numpy
 from marshmallow.fields import Integer, List, Nested
 from numpy import ndarray
-from numpy.ma import MaskedArray
+from numpy.ma import MaskedArray, masked_array
 
 from ...models import Job, JobResult
 from ...schemas import AfterglowSchema, Boolean
@@ -111,7 +112,9 @@ def get_auto_crop(user_id: int, file_ids: TList[int]) \
 def run_cropping_job(job: Job,
                      settings: Optional[CroppingSettings],
                      job_file_ids: TList[int],
-                     inplace: bool = False) -> TList[int]:
+                     inplace: bool = False,
+                     masks: Optional[TDict[int, ndarray]] = None) \
+        -> TList[int]:
     """
     Image cropping job body; also used during alignment
 
@@ -119,9 +122,14 @@ def run_cropping_job(job: Job,
     :param settings: cropping settings
     :param job_file_ids: data file IDs to process
     :param inplace: crop in place instead of creating a new data file
+    :param masks: used by alignment job; contains the original data file masks
+        to apply after cropping
 
     :return: list of generated/modified data file IDs
     """
+    if masks is None:
+        masks = {}
+
     if settings:
         left = getattr(settings, 'left', None)
         if left is None:
@@ -183,6 +191,19 @@ def run_cropping_job(job: Job,
                         hdr['CRPIX2'] -= bottom
                     except (KeyError, ValueError):
                         pass
+
+                # Apply the original mask if any
+                try:
+                    mask = masks[file_id][bottom:-(top + 1), left:-(right + 1)]
+                    if isinstance(data, MaskedArray):
+                        if data.mask.shape and data.mask.any():
+                            data.mask |= mask
+                        else:
+                            data.mask = mask
+                    else:
+                        data = masked_array(data, mask)
+                except KeyError:
+                    pass
 
                 if inplace:
                     with get_data_file_db(job.user_id) as adb:
