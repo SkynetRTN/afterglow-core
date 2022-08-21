@@ -38,7 +38,8 @@ from .models import Job, JobResult, JobState, User, job_file_dir, job_file_path
 from .resources.base import Date, DateTime, JSONType, Time
 from .schemas import (
     AfterglowSchema, Boolean as BooleanField, Date as DateField,
-    DateTime as DateTimeField, Float as FloatField, Time as TimeField)
+    DateTime as DateTimeField, Float as FloatField, NestedPoly,
+    Time as TimeField)
 
 
 __all__ = ['init_jobs', 'msg_hdr', 'msg_hdr_size']
@@ -132,6 +133,7 @@ db_field_type_mapping = {
     DateField: Date,
     DateTimeField: DateTime,
     FloatField: Float,
+    NestedPoly: JSONType,
     TimeField: Time,
 }
 

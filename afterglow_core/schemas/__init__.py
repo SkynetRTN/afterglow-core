@@ -12,7 +12,7 @@ from marshmallow import Schema, fields, post_dump
 
 
 __all__ = [
-    'Boolean', 'DateTime', 'Date', 'Time', 'Float',
+    'Boolean', 'DateTime', 'Date', 'Time', 'Float', 'NestedPoly',
     'AfterglowSchema', 'Resource',
 ]
 
@@ -89,6 +89,19 @@ class Float(fields.Float):
         return super()._serialize(value, attr, obj)
 
 
+class NestedPoly(fields.Nested):
+    """
+    Nested field containing a polymorphic schema
+    """
+    def _serialize(self, value, attr, obj, **__):
+        if isinstance(value, Schema):
+            return value.dump(value, many=value.many or self.many)
+        if isinstance(value, dict):
+            # noinspection PyCallingNonCallable
+            return self.nested(value).dump(value, many=self.many)
+        return super()._serialize(value, attr, obj)
+
+
 class AfterglowSchema(Schema):
     """
     A :class:`marshmallow.Schema` subclass that allows initialization from an
@@ -118,14 +131,21 @@ class AfterglowSchema(Schema):
                 poly_identity = getattr(_obj, poly_attr)
             except AttributeError:
                 try:
-                    poly_identity = kwargs[poly_attr]
-                except KeyError:
-                    poly_identity = None
+                    poly_identity = _obj[poly_attr]
+                except (KeyError, TypeError):
+                    try:
+                        poly_identity = kwargs[poly_attr]
+                    except KeyError:
+                        poly_identity = None
             if poly_identity is not None:
                 for subclass in cls.__subclasses__():
                     if getattr(subclass, poly_attr, None) == poly_identity:
                         cls = subclass
-                        break
+                        if cls.__polymorphic_on__ == poly_attr:
+                            break
+
+                        # Handle multi-level polymorphism
+                        return AfterglowSchema.__new__(cls, _obj, **kwargs)
 
         # Instantiate the class
         return super().__new__(cls)
