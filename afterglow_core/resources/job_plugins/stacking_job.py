@@ -38,8 +38,6 @@ class StackingJob(Job):
 
     result: StackingJobResult = Nested(StackingJobResult, dump_default={})
     file_ids: TList[int] = List(Integer(), dump_default=[])
-    # alignment_settings: AlignmentSettings = Nested(
-    #     AlignmentSettings, dump_default={})
     stacking_settings: StackingSettings = Nested(
         StackingSettings, dump_default={})
 

@@ -5,14 +5,16 @@ Afterglow Core: image alignment job plugin
 from datetime import datetime
 from typing import List as TList
 
+from numpy.ma import MaskedArray
 from marshmallow.fields import String, Integer, List, Nested
 from astropy.wcs import WCS
+import cv2 as cv
 
-from skylib.combine.alignment import apply_transform_stars, apply_transform_wcs
+from skylib.combine.alignment import *
 from skylib.combine.pattern_matching import pattern_match
 
 from ...models import Job, JobResult, SourceExtractionData
-from ...schemas import AfterglowSchema, Boolean, Float
+from ...schemas import AfterglowSchema, Boolean, Float, NestedPoly
 from ...errors import AfterglowError, ValidationError
 from ..data_files import (
     create_data_file, get_data_file_data, get_data_file_db, get_root,
@@ -24,18 +26,106 @@ __all__ = ['AlignmentJob']
 
 
 class AlignmentSettings(AfterglowSchema):
+    __polymorphic_on__ = 'mode'
+
+    mode: str = String(dump_default='WCS', load_default='WCS')
     ref_image: str = String(dump_default='central')
     prefilter: bool = Boolean(dump_default=True)
     enable_rot: bool = Boolean(dump_default=True)
     enable_scale: bool = Boolean(dump_default=True)
     enable_skew: bool = Boolean(dump_default=True)
+
+
+class AlignmentSettingsWCS(AlignmentSettings):
+    mode = 'WCS'
     wcs_grid_points: int = Integer(dump_default=0)
+
+
+class AlignmentSettingsSources(AlignmentSettings):
+    mode = 'sources'
+    sources: TList[SourceExtractionData] = List(
+        Nested(SourceExtractionData), dump_default=[])
     max_sources: int = Integer(dump_default=100)
     scale_invariant: bool = Boolean(dump_default=False)
     match_tol: float = Float(dump_default=0.002)
     min_edge: float = Float(dump_default=0.003)
     ratio_limit: float = Float(dump_default=10)
     confidence: float = Float(dump_default=0.15)
+
+
+class AlignmentSettingsFeatures(AlignmentSettings):
+    __polymorphic_on__ = 'algorithm'
+
+    mode = 'features'
+
+    algorithm: str = String(dump_default='WCS', load_default='AKAZE')
+    ratio_threshold: float = Float(dump_default=0.7)
+    detect_edges: bool = Boolean(dump_default=False)
+
+
+class AlignmentSettingsFeaturesAKAZE(AlignmentSettingsFeatures):
+    algorithm = 'AKAZE'
+    descriptor_type: str = String(dump_default='MLDB')
+    descriptor_size: int = Integer(dump_default=0)
+    descriptor_channels: int = Integer(dump_default=3)
+    threshold: float = Float(dump_default=0.001)
+    octaves: int = Integer(dump_default=4)
+    octave_layers: int = Integer(dump_default=4)
+    diffusivity: str = String(dump_default='PM_G2')
+
+
+class AlignmentSettingsFeaturesBRISK(AlignmentSettingsFeatures):
+    algorithm = 'BRISK'
+    threshold: int = Integer(dump_default=30)
+    octaves: int = Integer(dump_default=3)
+    pattern_scale: float = Float(dump_default=1)
+
+
+class AlignmentSettingsFeaturesKAZE(AlignmentSettingsFeatures):
+    algorithm = 'KAZE'
+    extended: bool = Boolean(dump_default=False)
+    upright: bool = Boolean(dump_default=False)
+    threshold: float = Float(dump_default=0.001)
+    octaves: int = Integer(dump_default=4)
+    octave_layers: int = Integer(dump_default=4)
+    diffusivity: str = String(dump_default='PM_G2')
+
+
+class AlignmentSettingsFeaturesORB(AlignmentSettingsFeatures):
+    algorithm = 'ORB'
+    nfeatures: int = Integer(dump_default=500)
+    scale_factor: float = Float(dump_default=1.2)
+    nlevels: int = Integer(dump_default=8)
+    edge_threshold: int = Integer(dump_default=31)
+    first_level: int = Integer(dump_default=0)
+    wta_k: int = Integer(dump_default=2)
+    score_type: str = String(dump_default='Harris')
+    patch_size: int = Integer(dump_default=31)
+    fast_threshold: int = Integer(dump_default=20)
+
+
+class AlignmentSettingsFeaturesSIFT(AlignmentSettingsFeatures):
+    algorithm = 'SIFT'
+    nfeatures: int = Integer(dump_default=0)
+    octave_layers: int = Integer(dump_default=3)
+    contrast_threshold: float = Float(dump_default=0.04)
+    edge_threshold: float = Float(dump_default=10)
+    sigma: float = Float(dump_default=1.6)
+    descriptor_type: str = String(dump_default='32F')
+
+
+class AlignmentSettingsFeaturesSURF(AlignmentSettingsFeatures):
+    algorithm = 'SURF'
+    hessian_threshold: float = Float(dump_default=100)
+    octaves: int = Integer(dump_default=4)
+    octave_layers: int = Integer(dump_default=3)
+    extended: bool = Boolean(dump_default=False)
+    upright: bool = Boolean(dump_default=False)
+
+
+class AlignmentSettingsPixels(AlignmentSettings):
+    mode = 'pixels'
+    detect_edges: bool = Boolean(dump_default=False)
 
 
 class AlignmentJobResult(JobResult):
@@ -51,9 +141,8 @@ class AlignmentJob(Job):
 
     result: AlignmentJobResult = Nested(AlignmentJobResult, dump_default={})
     file_ids: TList[int] = List(Integer(), dump_default=[])
-    settings: AlignmentSettings = Nested(AlignmentSettings, dump_default={})
-    sources: TList[SourceExtractionData] = List(
-        Nested(SourceExtractionData), dump_default=[])
+    settings: AlignmentSettings = NestedPoly(
+        AlignmentSettings, dump_default={})
     inplace: bool = Boolean(dump_default=False)
     crop: bool = Boolean(dump_default=False)
 
@@ -98,16 +187,19 @@ class AlignmentJob(Job):
                 'data file ID, or #file_no', 422)
         ref_file_id = file_ids[ref_image]
 
-        if self.sources:
+        alignment_kwargs = {}
+        ref_stars = anonymous_ref_stars = []
+
+        if isinstance(settings, AlignmentSettingsSources):
             # Source-based alignment
             if any(not hasattr(source, 'file_id')
-                   for source in self.sources):
+                   for source in settings.sources):
                 raise ValueError(
                     'Missing data file ID for at least one source')
 
             # Extract alignment stars for reference image
             ref_sources = [
-                source for source in self.sources
+                source for source in settings.sources
                 if getattr(source, 'file_id', None) == ref_file_id]
             if not ref_sources:
                 raise ValueError(
@@ -133,6 +225,104 @@ class AlignmentJob(Job):
                 anonymous_ref_stars = [
                     (source.x, source.y) for source in ref_sources
                 ]
+        elif isinstance(settings, AlignmentSettingsFeatures):
+            # Extract algorithm-specific keywords
+            if isinstance(settings, AlignmentSettingsFeaturesAKAZE):
+                if settings.descriptor_type not in (
+                        'KAZE', 'KAZE_UPRIGHT', 'MLDB', 'MLDB_UPRIGHT'):
+                    raise ValueError(
+                        f'Invalid descriptor type '
+                        f'"{settings.descriptor_type}"')
+                if settings.diffusivity not in (
+                        'PM_G1', 'PM_G2', 'Weickert', 'Charbonnier'):
+                    raise ValueError(
+                        f'Invalid diffusivity "{settings.diffusivity}"')
+                alignment_kwargs = {
+                    'descriptor_type':
+                        cv.AKAZE_DESCRIPTOR_KAZE
+                        if settings.descriptor_type == 'KAZE' else
+                        cv.AKAZE_DESCRIPTOR_KAZE_UPRIGHT
+                        if settings.descriptor_type == 'KAZE_UPRIGHT' else
+                        cv.AKAZE_DESCRIPTOR_MLDB
+                        if settings.descriptor_type == 'MLDB' else
+                        cv.AKAZE_DESCRIPTOR_MLDB_UPRIGHT,
+                    'descriptor_size': settings.descriptor_size,
+                    'descriptor_channels': settings.descriptor_channels,
+                    'threshold': settings.threshold,
+                    'nOctaves': settings.octaves,
+                    'nOctaveLayers': settings.octave_layers,
+                    'diffusivity':
+                        cv.KAZE_DIFF_PM_G1
+                        if settings.diffusivity == 'PM_G1' else
+                        cv.KAZE_DIFF_PM_G2
+                        if settings.diffusivity == 'PM_G2' else
+                        cv.KAZE_DIFF_WEICKERT
+                        if settings.diffusivity == 'Weickert' else
+                        cv.KAZE_DIFF_CHARBONNIER,
+                }
+            elif isinstance(settings, AlignmentSettingsFeaturesBRISK):
+                alignment_kwargs = {
+                    'thresh': settings.threshold,
+                    'octaves': settings.octaves,
+                    'patternScale': settings.pattern_scale,
+                }
+            elif isinstance(settings, AlignmentSettingsFeaturesKAZE):
+                if settings.diffusivity not in (
+                        'PM_G1', 'PM_G2', 'Weickert', 'Charbonnier'):
+                    raise ValueError(
+                        f'Invalid diffusivity "{settings.diffusivity}"')
+                alignment_kwargs = {
+                    'extended': settings.extended,
+                    'upright': settings.upright,
+                    'threshold': settings.threshold,
+                    'nOctaves': settings.octaves,
+                    'nOctaveLayers': settings.octave_layers,
+                    'diffusivity':
+                        cv.KAZE_DIFF_PM_G1
+                        if settings.diffusivity == 'PM_G1' else
+                        cv.KAZE_DIFF_PM_G2
+                        if settings.diffusivity == 'PM_G2' else
+                        cv.KAZE_DIFF_WEICKERT
+                        if settings.diffusivity == 'Weickert' else
+                        cv.KAZE_DIFF_CHARBONNIER,
+                }
+            elif isinstance(settings, AlignmentSettingsFeaturesORB):
+                if settings.score_type not in ('Harris', 'fast'):
+                    raise ValueError(
+                        f'Invalid score type "{settings.score_type}"')
+                alignment_kwargs = {
+                    'nfeatures': settings.nfeatures,
+                    'scaleFactor': settings.scale_factor,
+                    'nlevels': settings.nlevels,
+                    'edgeThreshold': settings.edge_threshold,
+                    'firstLevel': settings.first_level,
+                    'WTA_K': settings.wta_k,
+                    'scoreType':
+                        cv.ORB_HARRIS_SCORE
+                        if settings.score_type == 'Harris' else
+                        cv.ORB_FAST_SCORE,
+                    'patchSize': settings.patch_size,
+                    'fastThreshold': settings.fast_threshold,
+                }
+            elif isinstance(settings, AlignmentSettingsFeaturesSIFT):
+                alignment_kwargs = {
+                    'nfeatures': settings.nfeatures,
+                    'nOctaveLayers': settings.octave_layers,
+                    'contrastThreshold': settings.contrast_threshold,
+                    'edgeThreshold': settings.edge_threshold,
+                    'sigma': settings.sigma,
+                    'descriptorType':
+                        cv.CV_32F if settings.descriptor_type == '32F' else
+                        cv.CV_8U,
+                }
+            elif isinstance(settings, AlignmentSettingsFeaturesSURF):
+                alignment_kwargs = {
+                    'hessianThreshold': settings.hessian_threshold,
+                    'nOctaves': settings.octaves,
+                    'nOctaveLayers': settings.octave_layers,
+                    'extended': settings.extended,
+                    'upright': settings.upright,
+                }
 
         else:
             # WCS-based alignment
@@ -151,99 +341,24 @@ class AlignmentJob(Job):
         if ref_wcs is None and not ref_stars:
             raise ValueError('Reference image has no WCS')
 
+        # Save and clear the original masks if auto-cropping is enabled
+        masks = {}
+
         for i, file_id in enumerate(file_ids):
             try:
+                original_mask = None
                 if i != ref_image:
-                    # Load and transform the current image based on either
-                    # star coordinates or WCS
+                    # Load and transform the current image based on the chosen
+                    # mode
                     data, hdr = get_data_file_data(self.user_id, file_id)
-                    if ref_stars:
-                        # Extract current image sources that are also
-                        # present in the reference image
-                        img_sources = [
-                            source for source in self.sources
-                            if getattr(source, 'file_id', None) == file_id]
-                        img_stars = {
-                            source.id: (source.x, source.y)
-                            for source in img_sources
-                            if getattr(source, 'id', None) is not None}
-                        src_stars, dst_stars = [], []
-                        for src_id, src_star in img_stars.items():
-                            try:
-                                dst_star = ref_stars[src_id]
-                            except KeyError:
-                                pass
-                            else:
-                                src_stars.append(src_star)
-                                dst_stars.append(dst_star)
-                        if not src_stars:
-                            raise ValueError('Missing alignment star(s)')
-                        data = apply_transform_stars(
-                            data, src_stars, dst_stars, ref_width,
-                            ref_height, prefilter=settings.prefilter,
-                            enable_rot=settings.enable_rot,
-                            enable_scale=settings.enable_scale,
-                            enable_skew=settings.enable_skew)
 
-                        nref = len(src_stars)
-                        hist_msg = '{:d} star{}'.format(
-                            nref, 's' if nref > 1 else '')
+                    if self.crop and isinstance(data, MaskedArray) and \
+                            data.mask.any():
+                        # Clear the original mask that would affect cropping
+                        original_mask = data.mask
+                        data = data.filled(data.mean())
 
-                    elif anonymous_ref_stars:
-                        # Automatically match current image sources
-                        # to reference image sources
-                        img_sources = [
-                            source for source in self.sources
-                            if getattr(source, 'file_id', None) == file_id]
-                        if not img_sources:
-                            raise ValueError('Missing alignment star(s)')
-
-                        if len(anonymous_ref_stars) == 1 and \
-                                len(img_sources) == 1:
-                            # Trivial case: 1-star match
-                            src_stars = [(img_sources[0].x, img_sources[0].y)]
-                            dst_stars = anonymous_ref_stars
-
-                        else:
-                            if len(img_sources) > settings.max_sources:
-                                img_sources.sort(
-                                    key=lambda source: getattr(
-                                        source, 'mag',
-                                        -getattr(source, 'flux', 0)))
-                                img_sources = \
-                                    img_sources[:settings.max_sources]
-                            img_stars = [
-                                (source.x, source.y) for source in img_sources
-                            ]
-                            # Match two sets of points using pattern matching
-                            src_stars, dst_stars = [], []
-                            for k, l in enumerate(pattern_match(
-                                    img_stars, anonymous_ref_stars,
-                                    scale_invariant=settings.scale_invariant,
-                                    eps=settings.match_tol,
-                                    ksi=settings.min_edge,
-                                    r_limit=settings.ratio_limit,
-                                    confidence=settings.confidence)):
-                                if l >= 0:
-                                    src_stars.append(img_stars[k])
-                                    dst_stars.append(anonymous_ref_stars[l])
-                            if not src_stars:
-                                raise ValueError('Pattern matching failed')
-
-                        data = apply_transform_stars(
-                            data, src_stars, dst_stars, ref_width,
-                            ref_height, prefilter=settings.prefilter,
-                            enable_rot=settings.enable_rot,
-                            enable_scale=settings.enable_scale,
-                            enable_skew=settings.enable_skew)
-
-                        nref = len(src_stars)
-                        hist_msg = '{:d} star{}{}'.format(
-                            nref, 's' if nref > 1 else '',
-                            '/pattern matching'
-                            if len(img_sources) > 1 else '')
-
-                    else:
+                    if isinstance(settings, AlignmentSettingsWCS):
                         # Extract current image WCS
                         # noinspection PyBroadException
                         try:
@@ -264,6 +379,122 @@ class AlignmentJob(Job):
                             enable_skew=settings.enable_skew)
 
                         hist_msg = 'WCS'
+
+                    elif isinstance(settings, AlignmentSettingsSources):
+                        if ref_stars:
+                            # Extract current image sources that are also
+                            # present in the reference image
+                            img_sources = [
+                                source for source in settings.sources
+                                if getattr(source, 'file_id', None) == file_id]
+                            img_stars = {
+                                source.id: (source.x, source.y)
+                                for source in img_sources
+                                if getattr(source, 'id', None) is not None}
+                            src_stars, dst_stars = [], []
+                            for src_id, src_star in img_stars.items():
+                                try:
+                                    dst_star = ref_stars[src_id]
+                                except KeyError:
+                                    pass
+                                else:
+                                    src_stars.append(src_star)
+                                    dst_stars.append(dst_star)
+                            if not src_stars:
+                                raise ValueError('Missing alignment star(s)')
+                            data = apply_transform_stars(
+                                data, src_stars, dst_stars, ref_width,
+                                ref_height, prefilter=settings.prefilter,
+                                enable_rot=settings.enable_rot,
+                                enable_scale=settings.enable_scale,
+                                enable_skew=settings.enable_skew)
+
+                            nref = len(src_stars)
+                            hist_msg = '{:d} star{}'.format(
+                                nref, 's' if nref > 1 else '')
+
+                        elif anonymous_ref_stars:
+                            # Automatically match current image sources
+                            # to reference image sources
+                            img_sources = [
+                                source for source in settings.sources
+                                if getattr(source, 'file_id', None) == file_id]
+                            if not img_sources:
+                                raise ValueError('Missing alignment star(s)')
+
+                            if len(anonymous_ref_stars) == 1 and \
+                                    len(img_sources) == 1:
+                                # Trivial case: 1-star match
+                                src_stars = [
+                                    (img_sources[0].x, img_sources[0].y)
+                                ]
+                                dst_stars = anonymous_ref_stars
+
+                            else:
+                                if len(img_sources) > settings.max_sources:
+                                    img_sources.sort(
+                                        key=lambda source: getattr(
+                                            source, 'mag',
+                                            -getattr(source, 'flux', 0)))
+                                    img_sources = \
+                                        img_sources[:settings.max_sources]
+                                img_stars = [
+                                    (source.x, source.y)
+                                    for source in img_sources
+                                ]
+                                # Match two sets of points using pattern
+                                # matching
+                                src_stars, dst_stars = [], []
+                                for k, l in enumerate(pattern_match(
+                                        img_stars, anonymous_ref_stars,
+                                        scale_invariant=settings
+                                        .scale_invariant,
+                                        eps=settings.match_tol,
+                                        ksi=settings.min_edge,
+                                        r_limit=settings.ratio_limit,
+                                        confidence=settings.confidence)):
+                                    if l >= 0:
+                                        src_stars.append(img_stars[k])
+                                        dst_stars.append(
+                                            anonymous_ref_stars[l])
+                                if not src_stars:
+                                    raise ValueError('Pattern matching failed')
+
+                            data = apply_transform_stars(
+                                data, src_stars, dst_stars, ref_width,
+                                ref_height, prefilter=settings.prefilter,
+                                enable_rot=settings.enable_rot,
+                                enable_scale=settings.enable_scale,
+                                enable_skew=settings.enable_skew)
+
+                            nref = len(src_stars)
+                            hist_msg = '{:d} star{}{}'.format(
+                                nref, 's' if nref > 1 else '',
+                                '/pattern matching'
+                                if len(img_sources) > 1 else '')
+
+                        else:
+                            # Should not happen
+                            raise ValueError('No reference stars')
+
+                    elif isinstance(settings, AlignmentSettingsFeatures):
+                        data = apply_transform_features(
+                            data, ref_data, settings.prefilter,
+                            settings.enable_rot, settings.enable_scale,
+                            settings.enable_skew, settings.algorithm,
+                            settings.ratio_threshold, **alignment_kwargs)
+                        hist_msg = f'{settings.algorithm} feature detection'
+
+                    elif isinstance(settings, AlignmentSettingsPixels):
+                        data = apply_transform_pixel(
+                            data, ref_data, settings.prefilter,
+                            settings.enable_rot, settings.enable_scale,
+                            settings.enable_skew)
+                        hist_msg = 'pixel matching'
+
+                    else:
+                        raise ValueError('Unknown alignment mode "{}"'
+                                         .format(settings.mode))
 
                     hdr.add_history(
                         '[{}] Aligned by Afterglow using {} with respect '
@@ -328,6 +559,9 @@ class AlignmentJob(Job):
 
                 if i != ref_image or ref_file_id in self.file_ids:
                     self.result.file_ids.append(file_id)
+
+                if original_mask is not None:
+                    masks[file_id] = original_mask
             except Exception as e:
                 self.add_error(e, {'file_id': file_ids[i]})
             finally:
@@ -335,4 +569,5 @@ class AlignmentJob(Job):
 
         # Optionally crop aligned files in place
         if self.crop:
-            run_cropping_job(self, None, self.result.file_ids, inplace=True)
+            run_cropping_job(
+                self, None, self.result.file_ids, inplace=True, masks=masks)
