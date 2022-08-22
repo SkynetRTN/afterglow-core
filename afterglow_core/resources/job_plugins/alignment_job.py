@@ -346,18 +346,17 @@ class AlignmentJob(Job):
 
         for i, file_id in enumerate(file_ids):
             try:
-                original_mask = None
+                # Load and transform the current image based on the chosen
+                # mode
+                data, hdr = get_data_file_data(self.user_id, file_id)
+
+                if self.crop and isinstance(data, MaskedArray) and \
+                        data.mask.any():
+                    # Clear the original mask that would affect cropping
+                    masks[file_id] = data.mask
+                    data = data.filled(data.mean())
+
                 if i != ref_image:
-                    # Load and transform the current image based on the chosen
-                    # mode
-                    data, hdr = get_data_file_data(self.user_id, file_id)
-
-                    if self.crop and isinstance(data, MaskedArray) and \
-                            data.mask.any():
-                        # Clear the original mask that would affect cropping
-                        original_mask = data.mask
-                        data = data.filled(data.mean())
-
                     if isinstance(settings, AlignmentSettingsWCS):
                         # Extract current image WCS
                         # noinspection PyBroadException
@@ -559,9 +558,6 @@ class AlignmentJob(Job):
 
                 if i != ref_image or ref_file_id in self.file_ids:
                     self.result.file_ids.append(file_id)
-
-                if original_mask is not None:
-                    masks[file_id] = original_mask
             except Exception as e:
                 self.add_error(e, {'file_id': file_ids[i]})
             finally:
