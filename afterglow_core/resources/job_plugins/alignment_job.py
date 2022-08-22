@@ -350,11 +350,14 @@ class AlignmentJob(Job):
                 # mode
                 data, hdr = get_data_file_data(self.user_id, file_id)
 
-                if self.crop and isinstance(data, MaskedArray) and \
-                        data.mask.any():
+                overwrite_ref = self.crop and \
+                    isinstance(data, MaskedArray) and data.mask.any()
+                if overwrite_ref:
                     # Clear the original mask that would affect cropping
                     masks[file_id] = data.mask
                     data = data.filled(data.mean())
+                    if i == ref_image:
+                        ref_data = data
 
                 if i != ref_image:
                     if isinstance(settings, AlignmentSettingsWCS):
@@ -532,7 +535,8 @@ class AlignmentJob(Job):
                     # Don't create a new data file for reference image that
                     # was not listed in file_ids but was instead passed in
                     # settings.ref_image
-                    if i != ref_image or ref_file_id in self.file_ids:
+                    if i != ref_image or overwrite_ref or \
+                            ref_file_id in self.file_ids:
                         hdr.add_history(
                             'Original data file ID: {:d}'.format(file_id))
                         with get_data_file_db(self.user_id) as adb:
@@ -545,7 +549,7 @@ class AlignmentJob(Job):
                             except Exception:
                                 adb.rollback()
                                 raise
-                elif i != ref_image:  # not replacing reference image
+                elif i != ref_image or overwrite_ref:
                     with get_data_file_db(self.user_id) as adb:
                         try:
                             save_data_file(
@@ -556,7 +560,8 @@ class AlignmentJob(Job):
                             adb.rollback()
                             raise
 
-                if i != ref_image or ref_file_id in self.file_ids:
+                if i != ref_image or overwrite_ref or \
+                        ref_file_id in self.file_ids:
                     self.result.file_ids.append(file_id)
             except Exception as e:
                 self.add_error(e, {'file_id': file_ids[i]})
