@@ -1533,7 +1533,7 @@ components:
               minimum: 1
               default: 4
             diffusivity:
-              description: diffusivirt type
+              description: diffusivity type
               type: string
               enum: [PM_G1, PM_G2, Weickert, Charbonnier]
               default: PM_G2
@@ -1550,7 +1550,7 @@ components:
               type: string
               enum: [BRISK]
             threshold:
-              description: AGAST detection hreshold score
+              description: AGAST detection threshold score
               type: number
               minimum: 0
               default: 30
@@ -1600,7 +1600,7 @@ components:
               minimum: 1
               default: 4
             diffusivity:
-              description: diffusivirt type
+              description: diffusivity type
               type: string
               enum: [PM_G1, PM_G2, Weickert, Charbonnier]
               default: PM_G2
@@ -1635,7 +1635,7 @@ components:
             nlevels:
               description: 'Number of pyramid levels. The smallest level will
                 have linear size equal to
-                input_image_linear_size/scaleFactor^(nlevels - first_level).'
+                input_image_linear_size/scale_factor^(nlevels - first_level).'
               type: integer
               minimum: 1
               default: 8
