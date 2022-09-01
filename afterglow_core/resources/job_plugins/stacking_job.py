@@ -10,7 +10,7 @@ from skylib.combine.stacking import combine
 
 from ... import app
 from ...models import Job, JobResult
-from ...schemas import AfterglowSchema, Float
+from ...schemas import AfterglowSchema, Boolean, Float
 from ..data_files import (
     create_data_file, get_data_file_fits, get_data_file_db, get_root)
 
@@ -22,6 +22,7 @@ class StackingSettings(AfterglowSchema):
     mode: str = String(dump_default='average')
     scaling: str = String(dump_default=None)
     rejection: str = String(dump_default=None)
+    propagate_mask: bool = Boolean(dump_default=True)
     percentile: int = Integer(dump_default=50)
     lo: float = Float(dump_default=0)
     hi: float = Float(dump_default=100)
@@ -118,7 +119,9 @@ class StackingJob(Job):
         # Combine using the given settings
         data, header = combine(
             data_files, mode=settings.mode, scaling=settings.scaling,
-            rejection=settings.rejection, percentile=settings.percentile,
+            rejection=settings.rejection,
+            propagate_mask=settings.propagate_mask,
+            percentile=settings.percentile,
             lo=lo, hi=hi, smart_stacking=settings.smart_stacking,
             max_mem_mb=app.config.get('JOB_MAX_RAM'),
             callback=self.update_progress)[0]

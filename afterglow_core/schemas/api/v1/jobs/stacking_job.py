@@ -6,7 +6,7 @@ from typing import List as TList, Optional
 
 from marshmallow.fields import List, Nested, String, Integer
 
-from .... import AfterglowSchema, Float
+from .... import AfterglowSchema, Boolean, Float
 from ..job import JobSchema, JobResultSchema
 
 
@@ -18,6 +18,7 @@ class StackingSettingsSchema(AfterglowSchema):
     mode: str = String(dump_default='average')
     scaling: str = String(dump_default=None)
     rejection: str = String(dump_default=None)
+    propagate_mask: bool = Boolean(dump_default=True)
     percentile: int = Integer(dump_default=50)
     lo: float = Float(dump_default=0)
     hi: float = Float(dump_default=100)

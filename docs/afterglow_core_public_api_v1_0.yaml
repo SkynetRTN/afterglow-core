@@ -1832,6 +1832,12 @@ components:
           enum: [chauvenet, iraf, minmax, sigclip]
           nullable: true
           default: null
+        propagate_mask:
+          description: 'when combining masked images, mask the output pixel
+            if it is masked in at least one input image; set to false
+            if constructing a mosaic'
+          type: boolean
+          default: true
         percentile:
           description: for `mode`="percentile"; 50 = median
           type: number
