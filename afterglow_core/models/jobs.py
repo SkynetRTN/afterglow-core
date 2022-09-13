@@ -354,13 +354,16 @@ class Job(AfterglowSchema):
             result=dict(warnings=self.result.warnings),
         ))
 
-    def update_progress(self, progress: float) -> None:
+    def update_progress(self, progress: float, stage: int = 0,
+                        total_stages: int = 1) -> None:
         """
         Set Job.state.progress and call :meth:`update`
 
-        :param progress: job progress (0 to 100)
+        :param progress: job stage progress (0 to 100)
+        :param stage: optional stage (0 to `total_stages`)
+        :param total_stages: total number of stages
         """
-        self.state.progress = progress
+        self.state.progress = (progress + stage*100)/total_stages
         self.update()
 
     def create_job_file(self, id: Union[int, str], data: bytes,

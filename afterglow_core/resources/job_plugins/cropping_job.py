@@ -113,7 +113,8 @@ def run_cropping_job(job: Job,
                      settings: Optional[CroppingSettings],
                      job_file_ids: TList[int],
                      inplace: bool = False,
-                     masks: Optional[TDict[int, ndarray]] = None) \
+                     masks: Optional[TDict[int, ndarray]] = None,
+                     stage: int = 0, total_stages: int = 1) \
         -> TList[int]:
     """
     Image cropping job body; also used during alignment
@@ -124,6 +125,9 @@ def run_cropping_job(job: Job,
     :param inplace: crop in place instead of creating a new data file
     :param masks: used by alignment job; contains the original data file masks
         to apply after cropping
+    :param stage: optional processing stage number; used to properly update
+        the job progress if cropping is a part of other job
+    :param total_stages: total number of stages in the enclosing job if any
 
     :return: list of generated/modified data file IDs
     """
@@ -246,7 +250,8 @@ def run_cropping_job(job: Job,
         except Exception as e:
             job.add_error(e, {'file_id': job_file_ids[i]})
         finally:
-            job.update_progress((i + 1)/len(job_file_ids)*100)
+            job.update_progress(
+                (i + 1)/len(job_file_ids)*100, stage, total_stages)
 
     return new_file_ids
 
