@@ -1369,13 +1369,14 @@ components:
           enum: [WCS, sources, features, pixels]
           default: WCS
         ref_image:
-          description: reference image; align with respect to first/last/central image or image with the given 0-based index
+          description: reference image; align with respect to first/last/central image or image with the given 0-based index; null means mosaicing instead of alignment
           oneOf:
             - type: string
               enum: [first, central, last]
             - type: string
               format: '#index'
             - type: integer
+          nullable: true
           default: 'central'
         prefilter:
           description: apply spline filter before interpolation to decrease blurring
@@ -1486,7 +1487,7 @@ components:
               description: Lowe's feature match test factor
               type: number
               minimum: 0
-              default: 0.7
+              default: 0.5
             detect_edges:
               description: apply edge detection before feature extraction
               type: boolean
