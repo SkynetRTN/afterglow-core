@@ -52,9 +52,10 @@ class StackingJob(Job):
 
         if settings.scaling is not None and \
                 settings.scaling.lower() not in ('none', 'average', 'median',
-                                                 'mode'):
+                                                 'mode', 'equalize'):
             raise ValueError(
-                'Scaling mode must be "none", "average", "median", or "mode"')
+                'Scaling mode must be "none", "average", "median", "mode", or '
+                '"equalize"')
         if settings.scaling is not None:
             settings.scaling = settings.scaling.lower()
             if settings.scaling == 'none':
