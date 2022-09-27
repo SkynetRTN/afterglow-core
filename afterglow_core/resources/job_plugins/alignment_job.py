@@ -43,7 +43,7 @@ class AlignmentSettings(AfterglowSchema):
 
 class AlignmentSettingsWCS(AlignmentSettings):
     mode = 'WCS'
-    wcs_grid_points: int = Integer(dump_default=0)
+    wcs_grid_points: int = Integer(dump_default=100)
 
 
 class AlignmentSettingsSources(AlignmentSettings):
