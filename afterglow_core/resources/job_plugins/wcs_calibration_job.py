@@ -153,7 +153,7 @@ class WcsCalibrationJob(Job):
                 # Extract sources
                 sources = run_source_extraction_job(
                     self, source_extraction_settings, [file_id],
-                    stage=0, total_stages=2*len(self.file_ids))[0]
+                    stage=2*i, total_stages=2*len(self.file_ids))[0]
                 xy = [(source.x, source.y) for source in sources]
                 fluxes = [source.flux for source in sources]
 
@@ -262,4 +262,4 @@ class WcsCalibrationJob(Job):
             except Exception as e:
                 self.add_error(e, {'file_id': self.file_ids[i]})
             finally:
-                self.update_progress(100, 1, 2*len(self.file_ids))
+                self.update_progress(100, 2*i + 1, 2*len(self.file_ids))
