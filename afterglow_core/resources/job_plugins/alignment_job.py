@@ -590,7 +590,8 @@ class AlignmentJob(Job):
 
         # In mosaicing mode, we'll potentially need to run multiple cropping
         # jobs
-        cropping_jobs = [[] for _ in range(len(mosaics))] if mosaics else [[]]
+        cropping_jobs = [[] for _ in range(len(mosaics))] if mosaics \
+            else [[ref_file_id]] if ref_file_id is not None else [[]]
 
         # Apply transforms
         for i, file_id in enumerate(file_ids):
