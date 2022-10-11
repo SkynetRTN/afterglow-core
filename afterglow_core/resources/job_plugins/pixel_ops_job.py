@@ -24,14 +24,21 @@ from ..data_files import (
 __all__ = ['PixelOpsJob']
 
 
-# Fixed part of the expression evaluation context; disable builtins for
-# security reasons; add numpy and scipy.ndimage non-module defs
-context = {'__builtins__': None}
+class NullBuiltins:
+    def __import__(self, *args, **kwargs):
+        pass
+
+
+# Initialize the constant part of the expression evaluation context; disable
+# builtins for security reasons
+context = {'__builtins__': NullBuiltins()}
+# Add numpy and scipy.ndimage non-module defs
 for _mod in (numpy, ndimage):
     for _name in _mod.__all__:
         _val = getattr(_mod, _name)
         if not isinstance(_val, ModuleType):
             context[_name] = _val
+# Add FFT functions
 for _name in ['fft', 'ifft', 'rfft', 'irfft', 'hfft', 'ihfft', 'rfftn',
               'irfftn', 'rfft2', 'irfft2', 'fft2', 'ifft2', 'fftn', 'ifftn']:
     context[_name] = getattr(numpy.fft, _name)
