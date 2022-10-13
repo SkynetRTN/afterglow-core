@@ -56,6 +56,8 @@ WCS_REGEX = re.compile(
     r'([AB]P?_(ORDER|\d\d?_\d\d?)[A-Z]?)|'
     # TNX and ZPX distortions
     r'(WAT\d_\d\d\d)|'
+    # GSC2 distortions
+    r'(AMDRE[XY]\d\d?)|'
     # The following must be kept intact if present and not set by solve_field()
     # r'(EQUINOX[A-Z]?)|'
     # r'(EPOCH)|'
