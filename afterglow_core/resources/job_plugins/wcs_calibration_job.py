@@ -30,7 +30,7 @@ WCS_REGEX = re.compile(
     # Paper I, Table 1
     r'(WCSAXES[A-Z]?)|'
     r'(CRVAL[1-9]\d?[A-Z]?)|'
-    r'(CRPIX[1-9]\d?[A-Z])|'
+    r'(CRPIX[1-9]\d?[A-Z]?)|'
     r'(PC[1-9]\d?_[1-9]\d?[A-Z]?)|'
     r'(CDELT[1-9]\d?[A-Z]?)|'
     r'(CD[1-9]\d?_[1-9]\d?[A-Z]?)|'
@@ -56,8 +56,12 @@ WCS_REGEX = re.compile(
     r'([AB]P?_(ORDER|\d\d?_\d\d?)[A-Z]?)|'
     # TNX and ZPX distortions
     r'(WAT\d_\d\d\d)|'
-    # GSC2 distortions
-    r'(AMDRE[XY]\d\d?)|'
+    # DSS-specific keywords causing WCSLib to interpret it as DSS distortions
+    r'(AMD(RE)?[XY]\d\d?)|'
+    r'(CNPIX[1-9]\d?)|'
+    r'(PPO[1-9])|'
+    r'([XY]PIXELSZ)|'
+    r'(PLT((RA[HMS])|(DEC(SN|[DMS]))))|'
     # The following must be kept intact if present and not set by solve_field()
     # r'(EQUINOX[A-Z]?)|'
     # r'(EPOCH)|'
