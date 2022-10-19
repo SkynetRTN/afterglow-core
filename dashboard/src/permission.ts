@@ -16,8 +16,12 @@ router.beforeEach(async (to: Route, _: Route, next: any) => {
   // Determine whether the user has logged in
   if (UserModule.siteAuth && UserModule.userId !== "") {
     if (to.name === "login") {
-      // If is logged in, redirect to the home page
-      next({ path: "/" });
+      // If is logged in, redirect to the home page or next from query
+      let nextPath: string = "/";
+      if (to.query.next && typeof to.query.next == "string") {
+        nextPath = to.query.next as string;
+      }
+      next({ path: nextPath });
       NProgress.done();
     } else {
       // Check whether the user has obtained his permission roles
