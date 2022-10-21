@@ -26,6 +26,7 @@ class StackingSettings(AfterglowSchema):
     percentile: int = Integer(dump_default=50)
     lo: float = Float(dump_default=0)
     hi: float = Float(dump_default=100)
+    equalize_order: int = Integer(dump_default=1)
     smart_stacking: Optional[str] = String(dump_default=None)
 
 
@@ -63,9 +64,9 @@ class StackingJob(Job):
 
         if settings.rejection is not None and \
                 settings.rejection.lower() not in ('none', 'chauvenet', 'iraf',
-                                                   'minmax', 'sigclip'):
+                                                   'minmax', 'sigclip', 'rcr'):
             raise ValueError(
-                'Rejection mode must be "none", "chauvenet", "iraf", '
+                'Rejection mode must be "none", "chauvenet", "rcr", "iraf", '
                 '"minmax", or "sigclip"')
         if settings.rejection is not None:
             settings.rejection = settings.rejection.lower()
@@ -86,6 +87,19 @@ class StackingJob(Job):
                         'Number of highest values to clip for rejection=iraf '
                         'must be integer')
                 hi = int(hi)
+        elif settings.rejection in ('chauvenet', 'rcr'):
+            if lo is not None:
+                if lo not in (0, 1):
+                    raise ValueError(
+                        'Negative clipping flag for rejection=chauvenet|rcr '
+                        'must be 0 or 1')
+                lo = bool(int(lo))
+            if hi is not None:
+                if hi not in (0, 1):
+                    raise ValueError(
+                        'Positive clipping flag for rejection=chauvenet|rcr '
+                        'must be 0 or 1')
+                hi = bool(int(hi))
 
         if settings.smart_stacking and settings.smart_stacking not in (
                 None, 'none', 'SNR'):
@@ -124,6 +138,7 @@ class StackingJob(Job):
             propagate_mask=settings.propagate_mask,
             percentile=settings.percentile,
             lo=lo, hi=hi, smart_stacking=settings.smart_stacking,
+            equalize_order=settings.equalize_order,
             max_mem_mb=app.config.get('JOB_MAX_RAM'),
             callback=self.update_progress)[0]
 

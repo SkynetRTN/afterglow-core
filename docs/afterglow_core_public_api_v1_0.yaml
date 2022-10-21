@@ -1825,12 +1825,13 @@ components:
         rejection:
           description: 'outlier rejection mode:
             null (default) -- do not reject outliers,
-            "chauvenet" -- use Chauvenet robust outlier rejection,
+            "chauvenet" -- use classic Chauvenet outlier rejection,
+            "rcr" -- use super-simplified Robust Chauvenet Rejection,
             "iraf" -- IRAF-like clipping of `lo` lowest and `hi` highest values,
             "minmax" -- reject values outside the absolute lower and upper limits (use with caution as `min_keep` below is not guaranteed, and you may end up in all values rejected for some or even all pixels),
             "sigclip" -- iteratively reject pixels below and/or above the baseline'
           type: string
-          enum: [chauvenet, iraf, minmax, sigclip]
+          enum: [chauvenet, rcr, iraf, minmax, sigclip]
           nullable: true
           default: null
         propagate_mask:
@@ -1849,14 +1850,21 @@ components:
           description: '
             `rejection` = "iraf": number of lowest values to clip; default: 1;
             `rejection` = "minmax": reject values below this limit; default: not set;
-            `rejection` = "sigclip": reject values more than `lo` sigmas below the baseline; default: 3'
+            `rejection` = "sigclip": reject values more than `lo` sigmas below the baseline; default: 3;
+            `rejection` = "chauvenet" | "rcr": reject negative outliers; default: true'
           type: number
         hi:
           description: '
             `rejection` = "iraf": number of highest values to clip; default: 1;
             `rejection` = "minmax": reject values above this limit; default: not set;
-            `rejection` = "sigclip": reject values more than `hi` sigmas above the baseline; default: 3'
+            `rejection` = "sigclip": reject values more than `hi` sigmas above the baseline; default: 3;
+            `rejection` = "chauvenet" | "rcr": reject positive outliers; default: true'
           type: number
+        equalize_order:
+          description: 'background equalization polynomial order; used with `scaling` = "equalize"'
+          type: integer
+          minimum: 0
+          default: 1
         smart_stacking:
           description: 'smart stacking mode for the automatic rejection of lower-quality images::
             null | "none" (default) -- regular stacking, don''t reject any images
