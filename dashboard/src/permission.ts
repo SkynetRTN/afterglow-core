@@ -14,7 +14,7 @@ router.beforeEach(async (to: Route, _: Route, next: any) => {
   // Start progress bar
   NProgress.start();
   // Determine whether the user has logged in
-  if (UserModule.siteAuth && UserModule.userId !== "") {
+  if (false && UserModule.siteAuth && UserModule.userId !== "") {
     if (to.name === "login") {
       // If is logged in, redirect to the home page or next from query
       let nextPath: string = "/";
