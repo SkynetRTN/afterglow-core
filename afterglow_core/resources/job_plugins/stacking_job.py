@@ -10,7 +10,7 @@ from skylib.combine.stacking import combine
 
 from ... import app
 from ...models import Job, JobResult
-from ...schemas import AfterglowSchema, Float
+from ...schemas import AfterglowSchema, Boolean, Float
 from ..data_files import (
     create_data_file, get_data_file_fits, get_data_file_db, get_root)
 
@@ -22,9 +22,11 @@ class StackingSettings(AfterglowSchema):
     mode: str = String(dump_default='average')
     scaling: str = String(dump_default=None)
     rejection: str = String(dump_default=None)
+    propagate_mask: bool = Boolean(dump_default=True)
     percentile: int = Integer(dump_default=50)
     lo: float = Float(dump_default=0)
     hi: float = Float(dump_default=100)
+    equalize_order: int = Integer(dump_default=1)
     smart_stacking: Optional[str] = String(dump_default=None)
 
 
@@ -51,9 +53,10 @@ class StackingJob(Job):
 
         if settings.scaling is not None and \
                 settings.scaling.lower() not in ('none', 'average', 'median',
-                                                 'mode'):
+                                                 'mode', 'equalize'):
             raise ValueError(
-                'Scaling mode must be "none", "average", "median", or "mode"')
+                'Scaling mode must be "none", "average", "median", "mode", or '
+                '"equalize"')
         if settings.scaling is not None:
             settings.scaling = settings.scaling.lower()
             if settings.scaling == 'none':
@@ -61,9 +64,9 @@ class StackingJob(Job):
 
         if settings.rejection is not None and \
                 settings.rejection.lower() not in ('none', 'chauvenet', 'iraf',
-                                                   'minmax', 'sigclip'):
+                                                   'minmax', 'sigclip', 'rcr'):
             raise ValueError(
-                'Rejection mode must be "none", "chauvenet", "iraf", '
+                'Rejection mode must be "none", "chauvenet", "rcr", "iraf", '
                 '"minmax", or "sigclip"')
         if settings.rejection is not None:
             settings.rejection = settings.rejection.lower()
@@ -84,6 +87,19 @@ class StackingJob(Job):
                         'Number of highest values to clip for rejection=iraf '
                         'must be integer')
                 hi = int(hi)
+        elif settings.rejection in ('chauvenet', 'rcr'):
+            if lo is not None:
+                if lo not in (0, 1):
+                    raise ValueError(
+                        'Negative clipping flag for rejection=chauvenet|rcr '
+                        'must be 0 or 1')
+                lo = bool(int(lo))
+            if hi is not None:
+                if hi not in (0, 1):
+                    raise ValueError(
+                        'Positive clipping flag for rejection=chauvenet|rcr '
+                        'must be 0 or 1')
+                hi = bool(int(hi))
 
         if settings.smart_stacking and settings.smart_stacking not in (
                 None, 'none', 'SNR'):
@@ -118,8 +134,11 @@ class StackingJob(Job):
         # Combine using the given settings
         data, header = combine(
             data_files, mode=settings.mode, scaling=settings.scaling,
-            rejection=settings.rejection, percentile=settings.percentile,
+            rejection=settings.rejection,
+            propagate_mask=settings.propagate_mask,
+            percentile=settings.percentile,
             lo=lo, hi=hi, smart_stacking=settings.smart_stacking,
+            equalize_order=settings.equalize_order,
             max_mem_mb=app.config.get('JOB_MAX_RAM'),
             callback=self.update_progress)[0]
 

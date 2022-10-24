@@ -83,7 +83,7 @@ class SourceExtractionJob(Job):
 def run_source_extraction_job(job: Job,
                               settings: SourceExtractionSettings,
                               job_file_ids: TList[int],
-                              update_progress: bool = True) -> \
+                              stage: int = 0, total_stages: int = 1) -> \
         Tuple[TList[SourceExtractionData],
               TDict[int, Tuple[ndarray, ndarray]]]:
     """
@@ -92,8 +92,10 @@ def run_source_extraction_job(job: Job,
     :param job: job class instance
     :param settings: source extraction settings
     :param job_file_ids: data file IDs to process
-    :param update_progress: set to False when called by another job (e.g. WCS
-        calibration)
+    :param stage: optional processing stage number; used to properly update
+        the job progress if cropping is a part of other job
+    :param total_stages: total number of stages in the enclosing job if any;
+        set to 0 to disable progress updates
 
     :return: list of source extraction results plus background and RMS map
         pairs indexed by file IDs
@@ -184,8 +186,9 @@ def run_source_extraction_job(job: Job,
                     exp_length=texp,
                 )
                 for row in source_table]
-            if update_progress:
-                job.update_progress((file_no + 1)/len(job_file_ids)*100)
+            if total_stages:
+                job.update_progress(
+                    (file_no + 1)/len(job_file_ids)*100, stage, total_stages)
         except Exception as e:
             job.add_error(e, {'file_id': id})
 

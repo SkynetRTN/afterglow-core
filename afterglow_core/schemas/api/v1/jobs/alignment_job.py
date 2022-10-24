@@ -2,7 +2,7 @@
 Afterglow Core: image alignment job schemas
 """
 
-from typing import List as TList
+from typing import List as TList, Optional
 
 from marshmallow.fields import String, Integer, List, Nested
 
@@ -19,7 +19,7 @@ class AlignmentSettingsSchema(AfterglowSchema):
     __polymorphic_on__ = 'mode'
 
     mode: str = String(dump_default='WCS', load_default='WCS')
-    ref_image: str = String(dump_default='central')
+    ref_image: Optional[str] = String(dump_default='central', allow_none=True)
     prefilter: bool = Boolean(dump_default=True)
     enable_rot: bool = Boolean(dump_default=True)
     enable_scale: bool = Boolean(dump_default=True)
@@ -28,7 +28,7 @@ class AlignmentSettingsSchema(AfterglowSchema):
 
 class AlignmentSettingsWCSSchema(AlignmentSettingsSchema):
     mode = 'WCS'
-    wcs_grid_points: int = Integer(dump_default=0)
+    wcs_grid_points: int = Integer(dump_default=100)
 
 
 class AlignmentSettingsSourcesSchema(AlignmentSettingsSchema):
@@ -49,7 +49,7 @@ class AlignmentSettingsFeaturesSchema(AlignmentSettingsSchema):
     mode = 'features'
 
     algorithm: str = String(dump_default='WCS', load_default='AKAZE')
-    ratio_threshold: float = Float(dump_default=0.7)
+    ratio_threshold: float = Float(dump_default=0.5)
     detect_edges: bool = Boolean(dump_default=False)
 
 

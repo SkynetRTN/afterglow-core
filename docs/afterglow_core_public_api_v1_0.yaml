@@ -1369,13 +1369,14 @@ components:
           enum: [WCS, sources, features, pixels]
           default: WCS
         ref_image:
-          description: reference image; align with respect to first/last/central image or image with the given 0-based index
+          description: reference image; align with respect to first/last/central image or image with the given 0-based index; null means mosaicing instead of alignment
           oneOf:
             - type: string
               enum: [first, central, last]
             - type: string
               format: '#index'
             - type: integer
+          nullable: true
           default: 'central'
         prefilter:
           description: apply spline filter before interpolation to decrease blurring
@@ -1486,7 +1487,7 @@ components:
               description: Lowe's feature match test factor
               type: number
               minimum: 0
-              default: 0.7
+              default: 0.5
             detect_edges:
               description: apply edge detection before feature extraction
               type: boolean
@@ -1824,14 +1825,21 @@ components:
         rejection:
           description: 'outlier rejection mode:
             null (default) -- do not reject outliers,
-            "chauvenet" -- use Chauvenet robust outlier rejection,
+            "chauvenet" -- use classic Chauvenet outlier rejection,
+            "rcr" -- use super-simplified Robust Chauvenet Rejection,
             "iraf" -- IRAF-like clipping of `lo` lowest and `hi` highest values,
             "minmax" -- reject values outside the absolute lower and upper limits (use with caution as `min_keep` below is not guaranteed, and you may end up in all values rejected for some or even all pixels),
             "sigclip" -- iteratively reject pixels below and/or above the baseline'
           type: string
-          enum: [chauvenet, iraf, minmax, sigclip]
+          enum: [chauvenet, rcr, iraf, minmax, sigclip]
           nullable: true
           default: null
+        propagate_mask:
+          description: 'when combining masked images, mask the output pixel
+            if it is masked in at least one input image; set to false
+            if constructing a mosaic'
+          type: boolean
+          default: true
         percentile:
           description: for `mode`="percentile"; 50 = median
           type: number
@@ -1842,14 +1850,21 @@ components:
           description: '
             `rejection` = "iraf": number of lowest values to clip; default: 1;
             `rejection` = "minmax": reject values below this limit; default: not set;
-            `rejection` = "sigclip": reject values more than `lo` sigmas below the baseline; default: 3'
+            `rejection` = "sigclip": reject values more than `lo` sigmas below the baseline; default: 3;
+            `rejection` = "chauvenet" | "rcr": reject negative outliers; default: true'
           type: number
         hi:
           description: '
             `rejection` = "iraf": number of highest values to clip; default: 1;
             `rejection` = "minmax": reject values above this limit; default: not set;
-            `rejection` = "sigclip": reject values more than `hi` sigmas above the baseline; default: 3'
+            `rejection` = "sigclip": reject values more than `hi` sigmas above the baseline; default: 3;
+            `rejection` = "chauvenet" | "rcr": reject positive outliers; default: true'
           type: number
+        equalize_order:
+          description: 'background equalization polynomial order; used with `scaling` = "equalize"'
+          type: integer
+          minimum: 0
+          default: 1
         smart_stacking:
           description: 'smart stacking mode for the automatic rejection of lower-quality images::
             null | "none" (default) -- regular stacking, don''t reject any images

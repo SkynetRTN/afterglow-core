@@ -9,7 +9,7 @@ from marshmallow.fields import Integer, List, Nested
 import numpy
 from numpy import (
     arange, arcsin, argsort, array, asarray, clip, cos, deg2rad, degrees, inf,
-    isfinite, median, nan, ndarray, quantile, radians, sin, sqrt, transpose)
+    isfinite, nan, ndarray, radians, sin, sqrt, transpose)
 from scipy.spatial import cKDTree
 from scipy.optimize import brenth
 from astropy.wcs import WCS
@@ -70,7 +70,7 @@ class FieldCalJob(Job):
             # Detect sources using settings provided
             detected_sources = run_source_extraction_job(
                 self, self.source_extraction_settings, self.file_ids,
-                update_progress=False)[0]
+                stage=0, total_stages=2)[0]
             if not detected_sources:
                 raise RuntimeError('Could not detect any sources')
         else:
@@ -389,8 +389,11 @@ class FieldCalJob(Job):
             # photometric calibration even if present in data file headers
             # by setting field_cal_results to False since we need raw
             # (uncalibrated) mags here
+            total_stages = 1 + int(
+                getattr(self, 'source_extraction_settings', None) is not None)
             phot_data = [source for source in run_photometry_job(
-                self, photometry_settings, file_ids, catalog_sources)
+                self, photometry_settings, file_ids, catalog_sources,
+                stage=total_stages - 1, total_stages=total_stages)
                 if source.mag]
             if not phot_data:
                 raise RuntimeError('No catalog sources could be photometered')
@@ -712,13 +715,12 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
     while True:
         while True:
             if weights is None:
-                bmed = median(b)
-                sigma68 = quantile(abs(b - bmed), 0.683)
+                rejected = chauvenet(
+                    b, mean='median', sigma='absdev68', max_iter=1)
             else:
                 bmed = weighted_median(b, weights)
                 sigma68 = weighted_quantile(abs(b - bmed), weights, 0.683)
-
-            rejected = chauvenet(b, mean=bmed, sigma=sigma68)
+                rejected = chauvenet(b, mean=bmed, sigma=sigma68, max_iter=1)
             if rejected.any():
                 good = ~rejected
                 b = b[good]

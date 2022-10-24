@@ -51,7 +51,7 @@ class ImagePropsExtractionJob(Job):
                 # Detect sources using the settings provided
                 sources, background_info = run_source_extraction_job(
                     self, source_extraction_settings, [file_id],
-                    update_progress=False)
+                    total_stages=0)
                 if not sources:
                     raise RuntimeError('Could not detect any sources')
                 background, background_rms = background_info.get(
@@ -123,4 +123,5 @@ class ImagePropsExtractionJob(Job):
             except Exception as e:
                 self.add_error(e, {'file_id': file_id})
             finally:
-                self.update_progress((file_no + 1)/len(self.file_ids)*100)
+                self.update_progress(
+                    (file_no + 1)/len(self.file_ids)*100, 1, 2)
