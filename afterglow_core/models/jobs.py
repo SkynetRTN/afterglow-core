@@ -12,7 +12,7 @@ import errno
 from marshmallow.fields import Integer, List, Nested, String
 from werkzeug.http import HTTP_STATUS_CODES
 
-from .. import app
+from flask import current_app as app
 from ..errors import MethodNotImplementedError
 from ..errors.job import CannotCreateJobFileError
 from ..schemas import AfterglowSchema, DateTime, Float

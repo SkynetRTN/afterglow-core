@@ -7,7 +7,8 @@ from flask import Response, request, _request_ctx_stack
 
 from ...auth import oauth_plugins
 
-from ... import app, json_response
+from flask import current_app as app
+from ... import json_response
 from ...auth import set_access_cookies
 from ...resources.users import db, DbUser, DbIdentity, DbRole
 from ...errors import MissingFieldError

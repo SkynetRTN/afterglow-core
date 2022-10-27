@@ -6,7 +6,8 @@ from typing import Optional, Union
 
 from flask import Response, request
 
-from .... import app, errors, json_response
+from flask import current_app as app
+from .... import errors, json_response
 from ....auth import auth_required
 from ....resources.data_providers import providers
 from ....resources.data_files import (

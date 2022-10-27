@@ -13,7 +13,8 @@ from flask import Response, request
 
 from skylib.io.conversion import get_image
 
-from .... import app, json_response
+from flask import current_app as app
+from .... import json_response
 from ....auth import auth_required
 from ....resources.imaging_surveys import survey_scales, default_size
 from ....errors import MissingFieldError, NotAcceptedError, ValidationError

@@ -10,7 +10,8 @@ from marshmallow.fields import Integer, String
 
 from ...oauth2 import oauth_clients
 
-from ... import app, json_response
+from flask import current_app as app
+from ... import json_response
 from ...auth import auth_required, set_access_cookies
 from ...resources.users import DbPersistentToken, db, DbUser, DbIdentity, DbRole
 from ...schemas import Resource

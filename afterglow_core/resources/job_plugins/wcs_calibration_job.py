@@ -11,7 +11,7 @@ from astropy.wcs import WCS
 
 from skylib.astrometry import Solver, solve_field_glob
 
-from ... import app
+from flask import current_app as app
 from ...models import Job, JobResult
 from ...schemas import AfterglowSchema, Boolean, Float
 from ...errors import ValidationError

@@ -16,7 +16,8 @@ from astropy.wcs import WCS
 
 from skylib.extraction import histogram
 
-from .... import app, json_response, auth, errors
+from flask import current_app as app
+from .... import json_response, auth, errors
 from ....models import DataFile, Session
 from ....errors.data_file import UnknownDataFileError
 from ....resources.data_files import *

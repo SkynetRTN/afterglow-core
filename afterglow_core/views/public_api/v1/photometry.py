@@ -7,7 +7,8 @@ from flask import Response, request
 from numpy import array
 from astropy.wcs import WCS
 
-from .... import app, auth, errors, json_response
+from flask import current_app as app
+from .... import auth, errors, json_response
 from ....resources.data_files import (
     get_exp_length, get_gain, get_data_file_data)
 from ....resources.photometry import get_photometry

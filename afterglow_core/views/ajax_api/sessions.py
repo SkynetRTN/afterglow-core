@@ -2,7 +2,8 @@
 from flask import request, session, _request_ctx_stack
 from flask_security.utils import verify_password
 
-from ... import app, json_response
+from flask import current_app as app
+from ... import json_response
 from ...auth import auth_required, set_access_cookies, clear_access_cookies
 from ...resources.users import DbUser
 from ...errors import ValidationError

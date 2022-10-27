@@ -9,7 +9,7 @@ import zipfile
 import zipimport
 from typing import Any, Dict as TDict, List as TList, Union
 
-from . import app
+from flask import current_app as app
 
 # List of valid Python module suffixes
 try:

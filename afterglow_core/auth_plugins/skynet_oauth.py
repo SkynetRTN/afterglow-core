@@ -7,7 +7,7 @@ import requests
 from urllib.parse import urljoin
 from typing import Optional
 
-from .. import app
+from flask import current_app as app
 from ..errors.auth import NotAuthenticatedError
 from . import OAuthServerPluginBase, OAuthToken
 

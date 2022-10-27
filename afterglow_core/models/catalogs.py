@@ -10,7 +10,8 @@ from typing import Dict as TDict, List as TList, Optional
 import numpy as np
 from marshmallow.fields import Dict, Integer, List, Nested, String
 
-from .. import app, errors
+from flask import current_app as app
+from .. import errors
 from ..schemas import AfterglowSchema
 from .photometry import IPhotometry, Mag
 from .source_extraction import IAstrometry

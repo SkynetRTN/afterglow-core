@@ -8,7 +8,7 @@ from marshmallow.fields import Integer, List, Nested, String
 
 from skylib.combine.stacking import combine
 
-from ... import app
+from flask import current_app as app
 from ...models import Job, JobResult
 from ...schemas import AfterglowSchema, Boolean, Float
 from ..data_files import (

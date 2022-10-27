@@ -15,7 +15,8 @@ except ImportError:
 from marshmallow.fields import Dict, Integer, List, String
 from flask import request
 
-from .. import PaginationInfo, app, errors
+from flask import current_app as app
+from .. import PaginationInfo, errors
 from ..errors.auth import NotAuthenticatedError
 from ..errors.data_provider import (
     AssetNotFoundError, NonBrowseableDataProviderError, QuotaExceededError)

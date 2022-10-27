@@ -4,6 +4,7 @@ import cProfile
 import ctypes
 import errno
 import gc
+import logging
 import os
 import pickle
 import shutil
@@ -15,6 +16,7 @@ import sys
 import threading
 import traceback
 import tracemalloc
+from flask import current_app
 from datetime import datetime, timedelta
 from glob import glob
 from importlib import reload
@@ -30,7 +32,7 @@ from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from werkzeug.http import HTTP_STATUS_CODES
 
-from . import app, plugins
+from . import plugins
 from .errors import AfterglowError, MissingFieldError
 from .errors.auth import UnknownUserError
 from .errors.job import *
@@ -324,7 +326,8 @@ class JobWorkerProcess(Process):
     """
     abort_event = None
 
-    def __init__(self, job_queue, result_queue):
+    def __init__(self, job_queue, result_queue, app_config):
+        self.app_config = app_config
         if WINDOWS:
             self.abort_event = Event()
 
@@ -386,13 +389,13 @@ class JobWorkerProcess(Process):
         from . import auth
 
         # Memory leak detection support
-        trace_malloc = app.config.get('JOB_TRACE_MALLOC')
+        trace_malloc = self.app_config.get('JOB_TRACE_MALLOC')
         if trace_malloc:
             tracemalloc.start()
         prev_snapshot = None
 
         # Wait for an incoming job request
-        app.logger.info('%s Waiting for jobs', prefix)
+        logging.info('%s Waiting for jobs', prefix)
         while True:
             job_descr = job = None
 
@@ -401,9 +404,9 @@ class JobWorkerProcess(Process):
                 job_descr = job_queue.get()
                 if not job_descr:
                     # Empty job request = terminate worker
-                    app.logger.info('%s Terminating', prefix)
+                    logging.info('%s Terminating', prefix)
                     break
-                app.logger.debug('%s Got job request: %s', prefix, job_descr)
+                logging.debug('%s Got job request: %s', prefix, job_descr)
 
                 # Save user object proxy from the job server to app context
                 # for the duration of the job
@@ -416,7 +419,7 @@ class JobWorkerProcess(Process):
                     job = Job(_queue=result_queue, **job_descr)
                 except Exception as e:
                     # Report job creation error to job server
-                    app.logger.warning(
+                    logging.warning(
                         '%s Could not create job', prefix, exc_info=True)
                     result_queue.put(dict(
                         id=job_descr['id'],
@@ -435,7 +438,7 @@ class JobWorkerProcess(Process):
                 job.state.started_on = datetime.utcnow()
                 job.update()
                 try:
-                    if app.config.get('PROFILE'):
+                    if self.app_config.get('PROFILE'):
                         # Profile the job if enabled
                         print('{}\nProfiling job "{}" (ID {})'.format(
                             '-'*80, job.type, job.id))
@@ -477,14 +480,14 @@ class JobWorkerProcess(Process):
                 # started
                 pass
             except Exception:
-                app.logger.warning(
+                logging.warning(
                     '%s Internal job queue error', prefix, exc_info=True)
 
             if trace_malloc:
                 snapshot = tracemalloc.take_snapshot()
                 if prev_snapshot is not None:
                     stats = snapshot.compare_to(prev_snapshot, 'lineno')
-                    app.logger.info(
+                    logging.info(
                         '\n%s: %s -> %s\n%s\n',
                         prefix, job_descr,
                         (job.result.errors or 'OK') if job is not None
@@ -524,9 +527,10 @@ class JobWorkerProcessWrapper(object):
         """Worker process ID"""
         return self.process.ident
 
-    def __init__(self, job_queue, result_queue):
+    def __init__(self, job_queue, result_queue, app_config):
         self._job_id_lock = RWLock()
-        self.process = JobWorkerProcess(job_queue, result_queue)
+        self.process = JobWorkerProcess(job_queue, result_queue, app_config)
+        self.app_config = app_config
 
     def cancel_current_job(self):
         """
@@ -644,7 +648,7 @@ class JobRequestHandler(BaseRequestHandler):
                         # All workers are currently busy
                         if server.max_pool_size and \
                                 pool_size >= server.max_pool_size:
-                            app.logger.warning(
+                            logging.warning(
                                 'All job worker processes are busy; '
                                 'consider increasing JOB_POOL_MAX')
 
@@ -652,24 +656,24 @@ class JobRequestHandler(BaseRequestHandler):
                             for db_job_state in session.query(DbJobState) \
                                     .filter(DbJobState.status == 'in_progress',
                                             DbJobState.progress <
-                                            app.config.get(
+                                            self.app_config.get(
                                                 'JOB_TIMEOUT_MAX_PROGRESS',
                                                 90),
                                             DbJobState.started_on <
                                             datetime.utcnow() - timedelta(
-                                                seconds=app.config.get(
+                                                seconds=self.app_config.get(
                                                     'JOB_TIMEOUT', 900))):
                                 job_id = db_job_state.id
                                 with server.pool_lock.acquire_read():
                                     for p in server.pool:
                                         if p.job_id == job_id:
                                             p.cancel_current_job()
-                                            app.logger.warning(
+                                            logging.warning(
                                                 'Job %s timed out, canceled',
                                                 job_id)
                                             break
                         else:
-                            app.logger.info(
+                            logging.info(
                                 'Adding one more worker to job pool')
                             with server.pool_lock.acquire_write():
                                 server.pool.append(JobWorkerProcessWrapper(
@@ -885,7 +889,7 @@ class JobRequestHandler(BaseRequestHandler):
         except Exception:
             # noinspection PyBroadException
             try:
-                app.logger.warning(
+                logging.warning(
                     'Error closing job request handler session', exc_info=True)
             except Exception:
                 pass
@@ -900,13 +904,13 @@ class JobRequestHandler(BaseRequestHandler):
         except Exception:
             # noinspection PyBroadException
             try:
-                app.logger.warning(
+                logging.warning(
                     'Error sending job server response', exc_info=True)
             except Exception:
                 pass
 
 
-def job_server(notify_queue):
+def job_server(notify_queue, app_config):
     """
     Main job server process
 
@@ -924,21 +928,22 @@ def job_server(notify_queue):
     # Start TCP server, listen on the configured port
     try:
         tcp_server = ThreadingTCPServer(
-            ('localhost', app.config['JOB_SERVER_PORT']), JobRequestHandler)
+            ('localhost', app_config['JOB_SERVER_PORT']), JobRequestHandler)
     except Exception as e:
+        print(traceback.format_exc())
         notify_queue.put(('exception', e))
         return
     tcp_server.job_queue = job_queue
     tcp_server.result_queue = result_queue
-    app.logger.info(
+    logging.info(
         'Started Afterglow job server on port %d, pid %d',
-        app.config['JOB_SERVER_PORT'], os.getpid())
+        app_config['JOB_SERVER_PORT'], os.getpid())
 
     # Initialize worker process pool
-    min_pool_size = app.config.get('JOB_POOL_MIN', 1)
-    max_pool_size = app.config.get('JOB_POOL_MAX', 16)
+    min_pool_size = app_config.get('JOB_POOL_MIN', 1)
+    max_pool_size = app_config.get('JOB_POOL_MAX', 16)
     if min_pool_size > 0:
-        pool = [JobWorkerProcessWrapper(job_queue, result_queue)
+        pool = [JobWorkerProcessWrapper(job_queue, result_queue, app_config)
                 for _ in range(min_pool_size)]
     else:
         pool = []
@@ -947,12 +952,12 @@ def job_server(notify_queue):
     tcp_server.max_pool_size = max_pool_size
     tcp_server.pool = pool
     tcp_server.pool_lock = pool_lock
-    app.logger.info(
+    logging.info(
         'Started %d job worker process%s', min_pool_size,
         '' if min_pool_size == 1 else 'es')
 
     try:
-        if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
+        if app_config.get('DB_BACKEND', 'sqlite') == 'sqlite':
             # Enable foreign keys in sqlite; required for ON DELETE CASCADE
             # to work when deleting jobs; set journal mode to WAL to allow
             # concurrent access from multiple Apache processes
@@ -967,7 +972,7 @@ def job_server(notify_queue):
             # Recreate the job db file on startup; also erase shared memory and
             # journal files
             db_path = os.path.join(
-                os.path.abspath(app.config['DATA_ROOT']), 'jobs.db')
+                os.path.abspath(app_config['DATA_ROOT']), 'jobs.db')
             for fp in glob(db_path + '*'):
                 try:
                     os.remove(fp)
@@ -976,18 +981,22 @@ def job_server(notify_queue):
             engine = create_engine(
                 'sqlite:///{}'.format(db_path),
                 connect_args={'check_same_thread': False,
-                              'isolation_level': None,
-                              'timeout': app.config.get('DB_TIMEOUT', 30)},
+                            'isolation_level': None,
+                            'timeout': app_config.get('DB_TIMEOUT', 30)},
             )
         else:
             # If using database server instead of sqlite, reuse the same
             # database engine as the main Afterglow database; drop and recreate
             # all job tables on startup
             from .resources import users
-            users.db.engine.dispose()
+            # users.db.engine.dispose()
             # noinspection PyTypeChecker
-            reload(users)
-            engine = users.db.engine
+            # reload(users)
+            # engine = users.db.engine
+            
+            # TODO: Find better way to handle the engine access inside the job server
+            # users.db.engine is not accessible in the separate thread/process since it relies on the current app context
+            engine = create_engine(app_config['SQLALCHEMY_DATABASE_URI'])
             JobBase.metadata.drop_all(bind=engine)
         JobBase.metadata.create_all(bind=engine)
         session_factory = scoped_session(sessionmaker(bind=engine))
@@ -1016,7 +1025,7 @@ def job_server(notify_queue):
                         not isinstance(msg['state'], dict) or \
                         'result' in msg and \
                         not isinstance(msg['result'], dict):
-                    app.logger.warning(
+                    logging.warning(
                         'Job state listener got unexpected message "%s"', msg)
                     continue
 
@@ -1036,7 +1045,7 @@ def job_server(notify_queue):
                                 found = True
                                 break
                     if not found:
-                        app.logger.warning(
+                        logging.warning(
                             'Job state listener got a job assignment message '
                             'for non-existent worker process %s', job_pid)
                     continue
@@ -1055,7 +1064,7 @@ def job_server(notify_queue):
                             sess.commit()
                         except Exception:
                             sess.rollback()
-                            app.logger.warning(
+                            logging.warning(
                                 'Could not add job file "%s" to database',
                                 exc_info=True)
                         continue
@@ -1083,7 +1092,7 @@ def job_server(notify_queue):
                         sess.commit()
                     except Exception:
                         sess.rollback()
-                        app.logger.warning(
+                        logging.warning(
                             'Could not update job state/result "%s"',
                             msg, exc_info=True)
                 finally:
@@ -1100,7 +1109,7 @@ def job_server(notify_queue):
 
         # Send the actual port number to the main process
         notify_queue.put(('success', tcp_server.server_address[1]))
-        app.logger.info('Afterglow job server initialized')
+        logging.info('Afterglow job server initialized')
 
         # Serve job resource requests until requested to terminate
         tcp_server.serve_forever()
@@ -1110,8 +1119,9 @@ def job_server(notify_queue):
     except Exception as e:
         # Make sure the main process receives at least an error message if job
         # server process initialization failed
+        print(traceback.format_exc())
         notify_queue.put(('exception', e))
-        app.logger.warning('Error in job server process', exc_info=True)
+        logging.warning('Error in job server process', exc_info=True)
     finally:
         # Stop all worker processes
         with pool_lock.acquire_write():
@@ -1126,7 +1136,7 @@ def job_server(notify_queue):
         if state_update_listener is not None:
             state_update_listener.join()
 
-        app.logger.info('Job server terminated')
+        logging.info('Job server terminated')
 
 
 def init_jobs():
@@ -1135,9 +1145,19 @@ def init_jobs():
 
     :return: None
     """
+    from flask import current_app as app
+
     # Start job server process
+    config = dict()
+    for key, value in app.config.items():
+        try:
+            pickle.dumps(value)
+            config[key]=value
+        except:
+            pass
+
     notify_queue = Queue()
-    p = Process(target=job_server, name='JobServer', args=(notify_queue,))
+    p = Process(target=job_server, name='JobServer', args=(notify_queue, config))
     p.start()
 
     # Wait for initialization

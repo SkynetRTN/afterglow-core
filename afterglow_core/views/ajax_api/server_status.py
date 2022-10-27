@@ -4,7 +4,8 @@ Afterglow Core: settings routes
 
 from flask import Response
 
-from ... import app, json_response
+from flask import current_app as app
+from ... import json_response
 from ...resources.users import DbUser
 from . import url_prefix
 

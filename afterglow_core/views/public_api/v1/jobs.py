@@ -6,7 +6,8 @@ from typing import Any, Dict as TDict, Union
 
 from flask import Response, request, send_file
 
-from .... import app, auth, json_response
+from flask import current_app as app
+from .... import auth, json_response
 from ....resources.jobs import job_server_request
 from ....schemas.api.v1 import JobSchema, JobStateSchema
 from . import url_prefix

@@ -17,7 +17,7 @@ from astropy.units import arcmin, deg, hour
 from astroquery import query
 from astroquery.vizier import Vizier
 
-from ... import app
+from flask import current_app as app
 from ...models import Catalog, CatalogSource, Mag
 
 

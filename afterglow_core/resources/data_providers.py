@@ -7,7 +7,8 @@ DATA_PROVIDERS configuration variable.
 
 from typing import Dict as TDict, Union
 
-from .. import app, plugins
+from flask import current_app as app
+from .. import plugins
 from ..models import DataProvider
 
 

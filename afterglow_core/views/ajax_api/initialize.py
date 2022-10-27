@@ -2,7 +2,8 @@
 from flask import Response, request
 from flask_security.utils import hash_password
 
-from ... import app, json_response
+from flask import current_app as app
+from ... import json_response
 from ...resources.users import DbUser, DbRole, db
 from ...schemas.api.v1 import UserSchema
 from ...errors import MissingFieldError

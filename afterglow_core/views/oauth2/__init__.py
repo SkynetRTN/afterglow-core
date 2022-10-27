@@ -4,7 +4,7 @@ Afterglow Core: OAuth2 server routes
 
 from werkzeug.urls import url_encode
 from flask import redirect, request
-from ... import app
+from flask import current_app as app
 from ...auth import auth_required
 from ...oauth2 import oauth_server
 from ...resources.users import DbUserClient

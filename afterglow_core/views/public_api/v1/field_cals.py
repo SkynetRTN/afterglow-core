@@ -4,7 +4,8 @@ Afterglow Core: API v1 field cal views
 
 from flask import Response, request
 
-from .... import app, auth, json_response
+from flask import current_app as app
+from .... import auth, json_response
 from ....models import FieldCal
 from ....resources.field_cals import *
 from ....schemas.api.v1 import FieldCalSchema

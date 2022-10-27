@@ -7,7 +7,8 @@ import secrets
 from flask import Response, request
 from marshmallow.fields import Integer, String
 
-from ... import app, json_response
+from flask import current_app as app
+from ... import json_response
 from ...auth import auth_required
 from ...resources.users import DbPersistentToken, db
 from ...schemas import Resource

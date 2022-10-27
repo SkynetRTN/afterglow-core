@@ -34,7 +34,8 @@ from astropy.io.fits.verify import VerifyWarning
 from portalocker import Lock as FileLock  # , RedisLock
 import redis.exceptions
 
-from .. import app, errors
+from flask import current_app as app
+from .. import errors
 from ..models import DataFile, Session
 from ..errors.data_file import *
 from ..errors.data_provider import UnknownDataProviderError

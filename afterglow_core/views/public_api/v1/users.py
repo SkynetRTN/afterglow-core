@@ -4,7 +4,8 @@ Afterglow Core: login and user account management routes
 
 from flask import Response, request
 
-from .... import app, json_response
+from flask import current_app as app
+from .... import json_response
 from ....auth import auth_required
 from ....models import User
 from ....resources.users import *

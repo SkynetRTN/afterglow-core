@@ -11,7 +11,7 @@ from flask import Response, request
 from werkzeug import exceptions
 from werkzeug.http import HTTP_STATUS_CODES
 
-from .. import app
+from flask import current_app as app
 
 
 __all__ = [

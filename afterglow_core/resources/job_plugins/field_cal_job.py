@@ -761,7 +761,7 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
     m0_error = 1/sqrt((1/(sigmas2 + sigma2)).sum())
 
     import os
-    from ... import app
+    from flask import current_app as app
     with open(os.path.join(app.config['DATA_ROOT'], 'field_cal.csv'),
               'w') as f:
         for i, source in enumerate(sources):

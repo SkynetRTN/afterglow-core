@@ -16,7 +16,8 @@ from marshmallow.fields import Dict, String
 
 from flask import url_for
 
-from .. import app, errors
+from flask import current_app as app
+from .. import errors
 from ..schemas import AfterglowSchema
 from ..errors.auth import NotAuthenticatedError
 

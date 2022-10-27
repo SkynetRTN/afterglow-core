@@ -13,7 +13,7 @@ from typing import Any, Dict as TDict
 
 from werkzeug.http import HTTP_STATUS_CODES
 
-from .. import app
+from flask import current_app as app
 from ..errors import AfterglowError, MissingFieldError
 from ..errors.job import JobServerError, UnknownJobError, UnknownJobFileError
 from ..job_server import DbJob, DbJobFile, job_types, msg_hdr, msg_hdr_size

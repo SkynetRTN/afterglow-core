@@ -6,7 +6,8 @@ from typing import Optional
 
 from flask import Response
 
-from .... import app, json_response
+from flask import current_app as app
+from .... import json_response
 from ....auth import auth_required
 from ....resources.catalogs import catalogs
 from ....schemas.api.v1 import CatalogSchema

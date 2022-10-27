@@ -14,7 +14,8 @@ from flask_security import (
     Security, UserMixin, RoleMixin, SQLAlchemyUserDatastore)
 from flask_security.utils import hash_password
 
-from .. import app, cipher
+from flask import current_app as app
+from .. import cipher
 from ..models import User
 from ..errors import MissingFieldError, ValidationError
 from ..errors.auth import DuplicateUsernameError, UnknownUserError

@@ -31,7 +31,7 @@ import secrets
 
 from flask import request
 
-from . import app
+from flask import current_app as app
 
 
 __all__ = [
