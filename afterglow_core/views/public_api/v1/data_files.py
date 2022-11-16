@@ -115,8 +115,8 @@ def data_files() -> Response:
         - return a list of all user's data files associated with the given
           session or with the default anonymous session if unspecified
 
-    POST /data-files?name=...&width=...&height=...&pixel_value=...&
-        session_id=...
+    POST /data-files?name=...&width=...&height=...&pixel_value=...
+        [&session_id=...]
         - create a single data file of the given width and height, with data
           values set to pixel_value (0 by default); associate with the given
           session (anonymous if not set)
@@ -125,16 +125,19 @@ def data_files() -> Response:
         - import data file from multipart/form-data to the given session
 
     POST /data-files?provider_id=...&path=...&duplicates=...&recurse=...
-                     session_id=...
+                     [&session_id=...]
         - import file(s) to the given session (anonymous by default) from
           a data provider asset at the given path; if the path identifies
-          a collection asset of a browseable data provider, import all
+          a collection asset of a browsable data provider, import all
           non-collection child assets (and, optionally, all collection assets
           too if recurse=1); the `duplicates` argument defines the import
           behavior in the case when a certain non-collection asset was already
           imported: "ignore" (default) = skip already imported assets,
           "overwrite" = re-import, "append" = always create a new data file;
           multiple asset paths can be passed as a JSON list
+
+    POST /data-files?name=...&file_id=...[&session_id=...]
+        - duplicate the given data file
 
     :return:
         GET: JSON response containing the list of serialized data file objects
