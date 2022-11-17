@@ -392,7 +392,7 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
             elif group_name is not None:
                 update_data_file_group_asset(
                     request.user.id, group_name, id, asset.path,
-                    asset.metadata, asset.name)
+                    asset.metadata)
 
             return json_response(
                 DataProviderAssetSchema(asset),

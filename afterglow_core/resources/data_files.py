@@ -1550,7 +1550,8 @@ def update_data_file(user_id: Optional[int], data_file_id: int,
     return data_file
 
 
-def update_data_file_asset(user_id: Optional[int], data_file_id: int,
+def update_data_file_asset(user_id: Optional[int],
+                           data_file_id: Union[int, str],
                            provider_id: str, asset_path: str,
                            asset_metadata: dict, name: str) -> None:
     """
@@ -1582,7 +1583,7 @@ def update_data_file_asset(user_id: Optional[int], data_file_id: int,
 
 def update_data_file_group_asset(user_id: Optional[int], group_name: str,
                                  provider_id: str, asset_path: str,
-                                 asset_metadata: dict, name: str) -> None:
+                                 asset_metadata: dict) -> None:
     """
     Link data file group to a new asset; called after exporting group to asset
 
@@ -1591,7 +1592,6 @@ def update_data_file_group_asset(user_id: Optional[int], group_name: str,
     :param provider_id: data provider ID/name
     :param asset_path: data provider asset path
     :param asset_metadata: data provider asset metadata
-    :param name: new data file name
     """
     with get_data_file_db(user_id) as adb:
         db_data_files = adb.query(DbDataFile) \
@@ -1604,7 +1604,6 @@ def update_data_file_group_asset(user_id: Optional[int], group_name: str,
                 db_data_file.data_provider = provider_id
                 db_data_file.asset_path = asset_path
                 db_data_file.asset_metadata = asset_metadata
-                db_data_file.name = name
                 db_data_file.modified = False
             adb.commit()
         except Exception:
