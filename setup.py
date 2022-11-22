@@ -64,7 +64,7 @@ setup(
         'marshmallow == 3.14.1',
         'numpy == 1.22.2',
         'oauthlib == 2.1.0',
-        'Pillow == 9.0.1',
+        'Pillow == 9.3.0',
         'plaster_pastedeploy == 0.7',
         'portalocker[redis]',
         'pycryptodome == 3.14.1',
