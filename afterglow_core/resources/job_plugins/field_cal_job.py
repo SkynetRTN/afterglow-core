@@ -710,9 +710,9 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
     no_errors = not sigmas2.any()
     if no_errors:
         sigmas2 = 0
-    sigma2 = 0
+    m0 = sigma2 = 0
     weights = None
-    while True:
+    for _ in range(1000):
         while True:
             if weights is None:
                 rejected = chauvenet(
@@ -751,27 +751,11 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
                 sigma2 = brenth(sigma_eq, left, right, (sigmas2, b, m0))
             except Exception:
                 # Unable to find the root; use unweighted sigma
-                pass
+                break
         if prev_sigma2 and abs(sigma2 - prev_sigma2) < 1e-8:
             break
 
         if not no_errors:
             weights: Optional[ndarray] = 1/(sigmas2 + sigma2)
 
-    m0_error = 1/sqrt((1/(sigmas2 + sigma2)).sum())
-
-    import os
-    from ... import app
-    with open(os.path.join(app.config['DATA_ROOT'], 'field_cal.csv'),
-              'w') as f:
-        for i, source in enumerate(sources):
-            # noinspection PyUnresolvedReferences
-            print('{},{},{},{},{}'.format(
-                source.mag,
-                getattr(source, 'mag_error', None) or '',
-                source.ref_mag,
-                getattr(source, 'ref_mag_error', None) or '',
-                int(i not in good_stars),
-            ), file=f)
-
-    return m0, m0_error
+    return m0, 1/sqrt((1/(sigmas2 + sigma2)).sum())
