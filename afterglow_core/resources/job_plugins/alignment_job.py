@@ -21,6 +21,8 @@ from ...errors import AfterglowError, ValidationError
 from ..data_files import (
     create_data_file, get_data_file_data, get_data_file_db, get_data_file_fits,
     get_root, save_data_file)
+from .source_extraction_job import (
+    SourceExtractionSettings, run_source_extraction_job)
 from .cropping_job import run_cropping_job
 
 
@@ -47,15 +49,24 @@ class AlignmentSettingsWCS(AlignmentSettings):
 
 
 class AlignmentSettingsSources(AlignmentSettings):
-    mode = 'sources'
-    sources: TList[SourceExtractionData] = List(
-        Nested(SourceExtractionData), dump_default=[])
-    max_sources: int = Integer(dump_default=100)
     scale_invariant: bool = Boolean(dump_default=False)
     match_tol: float = Float(dump_default=0.002)
     min_edge: float = Float(dump_default=0.003)
     ratio_limit: float = Float(dump_default=10)
     confidence: float = Float(dump_default=0.15)
+
+
+class AlignmentSettingsSourcesManual(AlignmentSettingsSources):
+    mode = 'sources_manual'
+    max_sources: int = Integer(dump_default=100)
+    sources: TList[SourceExtractionData] = List(
+        Nested(SourceExtractionData), dump_default=[])
+
+
+class AlignmentSettingsSourcesAuto(AlignmentSettingsSources):
+    mode = 'sources_auto'
+    source_extraction_settings: Optional[SourceExtractionSettings] = Nested(
+        SourceExtractionSettings, allow_none=True, dump_default=None)
 
 
 class AlignmentSettingsFeatures(AlignmentSettings):
@@ -199,8 +210,10 @@ class AlignmentJob(Job):
 
         alignment_kwargs = {}
 
-        if isinstance(settings, AlignmentSettingsSources):
+        if isinstance(settings, AlignmentSettingsSourcesManual):
             # Check that all sources have file IDs
+            if not settings.sources:
+                raise ValueError('Missing sources for manual alignment')
             if any(not hasattr(source, 'file_id')
                    for source in settings.sources):
                 raise ValueError(
@@ -319,8 +332,8 @@ class AlignmentJob(Job):
                     continue
                 try:
                     transforms[file_id], history[file_id] = get_transform(
-                        settings, alignment_kwargs, self.user_id, file_id,
-                        ref_file_id, wcs_cache, data_cache, ref_star_cache)
+                        self, alignment_kwargs, file_id, ref_file_id,
+                        wcs_cache, data_cache, ref_star_cache)
                 except Exception as e:
                     self.add_error(e, {'file_id': file_ids[i]})
                 finally:
@@ -373,9 +386,8 @@ class AlignmentJob(Job):
                     try:
                         rel_transforms[file_id, other_file_id], \
                             history[file_id] = get_transform(
-                                settings, alignment_kwargs, self.user_id,
-                                other_file_id, file_id, wcs_cache, data_cache,
-                                ref_star_cache)
+                                self, alignment_kwargs, other_file_id, file_id,
+                                wcs_cache, data_cache, ref_star_cache)
                     except Exception:
                         pass
                     k += 1
@@ -739,15 +751,17 @@ def get_data(user_id: Optional[int], file_id: int,
     return data
 
 
-def get_transform(settings: AlignmentSettings,
-                  alignment_kwargs: TDict[str, Any],
-                  user_id: Optional[int], file_id: int, ref_file_id: int,
-                  wcs_cache: TDict[int, WCS],
+def get_transform(job: AlignmentJob,
+                  alignment_kwargs: TDict[str, Any], file_id: int,
+                  ref_file_id: int, wcs_cache: TDict[int, WCS],
                   data_cache: TDict[int, ndarray],
                   ref_star_cache: TDict[
                       int, Tuple[TDict[str, Tuple[float, float]],
                                  TList[Tuple[float, float]]]],
                   ) -> Tuple[Tuple[Optional[ndarray], ndarray], str]:
+    settings = job.settings
+    user_id = job.user_id
+
     if isinstance(settings, AlignmentSettingsWCS):
         # Extract current and reference image WCS
         wcs = get_wcs(user_id, file_id, wcs_cache)
@@ -768,38 +782,53 @@ def get_transform(settings: AlignmentSettings,
         try:
             ref_stars, anonymous_ref_stars = ref_star_cache[ref_file_id]
         except KeyError:
-            ref_sources = [
-                source for source in settings.sources
-                if getattr(source, 'file_id', None) == ref_file_id]
-            if not ref_sources:
+            if isinstance(settings, AlignmentSettingsSourcesManual):
+                ref_sources = [
+                    source for source in settings.sources
+                    if getattr(source, 'file_id', None) == ref_file_id]
+                if not ref_sources:
+                    raise ValueError(
+                        'Missing alignment stars for reference image')
+                ref_stars = {source.id: (source.x, source.y)
+                             for source in ref_sources
+                             if getattr(source, 'id', None) is not None}
+                anonymous_ref_stars = [(source.x, source.y)
+                                       for source in ref_sources
+                                       if getattr(source, 'id', None) is None]
+                if ref_stars and anonymous_ref_stars:
+                    # Cannot mix sources with and without ID
+                    raise ValueError(
+                        'All or none of the reference image source must have '
+                        'source ID')
+                if len(anonymous_ref_stars) > settings.max_sources:
+                    # Too many stars for pattern matching; sort by brightness
+                    # and use at most max_sources stars
+                    ref_sources.sort(
+                        key=lambda source: getattr(
+                            source, 'mag', -getattr(source, 'flux', 0)))
+                    ref_sources = ref_sources[:settings.max_sources]
+                    anonymous_ref_stars = [
+                        (source.x, source.y) for source in ref_sources
+                    ]
+            elif isinstance(settings, AlignmentSettingsSourcesAuto):
+                ref_sources = run_source_extraction_job(
+                    job, settings.source_extraction_settings, [ref_file_id],
+                    total_stages=0)[0]
+                if not ref_sources:
+                    raise ValueError(
+                        'Cannot extract any alignment stars from reference '
+                        'image')
+                ref_stars = {}
+                anonymous_ref_stars = [(source.x, source.y)
+                                       for source in ref_sources]
+            else:
                 raise ValueError(
-                    'Missing alignment stars for reference image')
-            ref_stars = {source.id: (source.x, source.y)
-                         for source in ref_sources
-                         if getattr(source, 'id', None) is not None}
-            anonymous_ref_stars = [(source.x, source.y)
-                                   for source in ref_sources
-                                   if getattr(source, 'id', None) is None]
-            if ref_stars and anonymous_ref_stars:
-                # Cannot mix sources with and without ID
-                raise ValueError(
-                    'All or none of the reference image source must have '
-                    'source ID')
-            if len(anonymous_ref_stars) > settings.max_sources:
-                # Too many stars for pattern matching; sort by brightness and
-                # use at most max_sources stars
-                ref_sources.sort(
-                    key=lambda source: getattr(
-                        source, 'mag', -getattr(source, 'flux', 0)))
-                ref_sources = ref_sources[:settings.max_sources]
-                anonymous_ref_stars = [
-                    (source.x, source.y) for source in ref_sources
-                ]
+                    'Unknown alignment mode "{}"'.format(settings.mode))
             ref_star_cache[ref_file_id] = ref_stars, anonymous_ref_stars
 
         if ref_stars:
-            # Extract current image sources that are also present
-            # in the reference image
+            # Explicit matching by source IDs: extract current image sources
+            # that are also present in the reference image
             img_sources = [
                 source for source in settings.sources
                 if getattr(source, 'file_id', None) == file_id]
@@ -826,22 +855,32 @@ def get_transform(settings: AlignmentSettings,
                 '{:d} star{}'.format(nref, 's' if nref > 1 else '')
 
         # Automatically match current image sources to reference image sources
-        img_sources = [
-            source for source in settings.sources
-            if getattr(source, 'file_id', None) == file_id]
-        if not img_sources:
-            raise ValueError('Missing alignment star(s)')
+        if isinstance(settings, AlignmentSettingsSourcesManual):
+            img_sources = [
+                source for source in settings.sources
+                if getattr(source, 'file_id', None) == file_id]
+            if not img_sources:
+                raise ValueError('Missing alignment star(s)')
+            if len(img_sources) > settings.max_sources:
+                img_sources.sort(
+                    key=lambda source: getattr(
+                        source, 'mag', -getattr(source, 'flux', 0)))
+                img_sources = img_sources[:settings.max_sources]
+        elif isinstance(settings, AlignmentSettingsSourcesAuto):
+            img_sources = run_source_extraction_job(
+                job, settings.source_extraction_settings, [file_id],
+                total_stages=0)[0]
+            if not img_sources:
+                raise ValueError('Cannot extract any alignment stars')
+        else:
+            raise ValueError(
+                'Unknown alignment mode "{}"'.format(settings.mode))
 
         if len(anonymous_ref_stars) == 1 and len(img_sources) == 1:
             # Trivial case: 1-star match
             src_stars = [(img_sources[0].x, img_sources[0].y)]
             dst_stars = anonymous_ref_stars
         else:
-            if len(img_sources) > settings.max_sources:
-                img_sources.sort(
-                    key=lambda source: getattr(
-                        source, 'mag', -getattr(source, 'flux', 0)))
-                img_sources = img_sources[:settings.max_sources]
             img_stars = [(source.x, source.y) for source in img_sources]
             # Match two sets of points using pattern
             # matching

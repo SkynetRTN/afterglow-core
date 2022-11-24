@@ -9,6 +9,7 @@ from marshmallow.fields import String, Integer, List, Nested
 from .... import AfterglowSchema, Boolean, Float, NestedPoly
 from ..job import JobSchema, JobResultSchema
 from ..source_extraction import SourceExtractionDataSchema
+from .source_extraction_job import SourceExtractionSettingsSchema
 
 
 __all__ = ['AlignmentSettingsSchema', 'AlignmentJobResultSchema',
@@ -32,15 +33,25 @@ class AlignmentSettingsWCSSchema(AlignmentSettingsSchema):
 
 
 class AlignmentSettingsSourcesSchema(AlignmentSettingsSchema):
-    mode = 'sources'
-    sources: TList[SourceExtractionDataSchema] = List(
-        Nested(SourceExtractionDataSchema), dump_default=[])
-    max_sources: int = Integer(dump_default=100)
     scale_invariant: bool = Boolean(dump_default=False)
     match_tol: float = Float(dump_default=0.002)
     min_edge: float = Float(dump_default=0.003)
     ratio_limit: float = Float(dump_default=10)
     confidence: float = Float(dump_default=0.15)
+
+
+class AlignmentSettingsSourcesManualSchema(AlignmentSettingsSourcesSchema):
+    mode = 'sources_manual'
+    max_sources: int = Integer(dump_default=100)
+    sources: TList[SourceExtractionDataSchema] = List(
+        Nested(SourceExtractionDataSchema), dump_default=[])
+
+
+class AlignmentSettingsSourcesAutoSchema(AlignmentSettingsSourcesSchema):
+    mode = 'sources_auto'
+    source_extraction_settings: Optional[SourceExtractionSettingsSchema] = \
+        Nested(
+            SourceExtractionSettingsSchema, allow_none=True, dump_default=None)
 
 
 class AlignmentSettingsFeaturesSchema(AlignmentSettingsSchema):

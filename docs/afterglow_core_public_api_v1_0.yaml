@@ -1366,7 +1366,7 @@ components:
         mode:
           description: alignment mode
           type: string
-          enum: [WCS, sources, features, pixels]
+          enum: [WCS, sources_manual, sources_auto, features, pixels]
           default: WCS
         ref_image:
           description: reference image; align with respect to first/last/central image or image with the given 0-based index; null means mosaicing instead of alignment
@@ -1418,28 +1418,12 @@ components:
               default: 0
 
     AlignmentSettingsSources:
-      description: settings for source-based alignment (pattern matching)
+      description: settings for source-based alignment (manual or pattern matching)
       type: object
       allOf:
         - $ref: '#/components/schemas/AlignmentSettings'
         - type: object
           properties:
-            mode:
-              description: 'alignment mode: sources'
-              type: string
-              enum: [sources]
-            sources:
-              description: 'list of sources for each data file for source-based alignment;
-                at least, "file_id", "x", "y" are required for automatic alignment
-                with pattern matching, plus "id" for manual alignment'
-              type: array
-              items:
-                $ref: '#/components/schemas/SourceExtractionData'
-            max_sources:
-              description: maximum number of brightest sources for pattern matching
-              type: integer
-              minimum: 3
-              default: 100
             scale_invariant:
               description: use scale-invariant pattern matching
               type: boolean
@@ -1467,6 +1451,44 @@ components:
               exclusiveMinimum: true
               maximum: 1
               default: 0.15
+
+    AlignmentSettingsSourcesManual:
+      description: settings for source-based alignment with explicitly provided sources
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/AlignmentSettingsSources'
+        - type: object
+          properties:
+            mode:
+              description: 'alignment mode: sources_manual'
+              type: string
+              enum: [sources_manual]
+            max_sources:
+              description: maximum number of brightest sources for pattern matching
+              type: integer
+              minimum: 3
+              default: 100
+            sources:
+              description: 'list of sources for each data file for source-based alignment;
+                at least, "file_id", "x", "y" are required for automatic alignment
+                with pattern matching, plus "id" for manual alignment'
+              type: array
+              items:
+                $ref: '#/components/schemas/SourceExtractionData'
+
+    AlignmentSettingsSourcesAuto:
+      description: settings for source-based alignment with automatic source extraction
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/AlignmentSettingsSources'
+        - type: object
+          properties:
+            mode:
+              description: 'alignment mode: sources_auto'
+              type: string
+              enum: [sources_auto]
+            source_extraction_settings:
+              $ref: '#/components/schemas/SourceExtractionSettings'
 
     AlignmentSettingsFeatures:
       description: settings for feature-based alignment
