@@ -2,7 +2,7 @@
 Afterglow Core: AJAX API endpoints
 """
 
-url_prefix = '/ajax/'
+url_prefix = '/'
 
 from .app_authorizations import *
 from .tokens import *

@@ -27,7 +27,7 @@ def oauth2_providers() -> Response:
     """
 
     plugins = [dict(id=p.id, icon=p.icon, description=p.description,
-                    authorizeUrl=p.authorize_url, client_id=p.client_id,
+                    authorize_url=p.authorize_url, client_id=p.client_id,
                     request_token_params=p.request_token_params)
                for p in oauth_plugins.values()]
 

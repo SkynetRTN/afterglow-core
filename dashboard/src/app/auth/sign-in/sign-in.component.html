@@ -1,0 +1,98 @@
+<div class="flex flex-col">
+
+  <ng-container *ngIf="!(clientsLoading$ | async); else loadingBlock">
+    <ng-container *ngIf="next$ | async; let next; else invalidClientBlock">
+      <div class="mt-8 text-4xl font-extrabold tracking-tight leading-tight">Sign in</div>
+      <!-- <div class="flex items-baseline mt-0.5 font-medium">
+            <div>Don't have an account?</div>
+            <a class="ml-1 text-primary-500 hover:underline" [routerLink]="['/sign-up']">Sign up </a>
+          </div> -->
+
+      <!-- Alert -->
+      <!-- <fuse-alert
+            class="mt-8 -mb-4"
+            *ngIf="showAlert"
+            [appearance]="'outline'"
+            [showIcon]="false"
+            [type]="alert.type"
+            [@shake]="alert.type === 'error'"
+          >
+            {{ alert.message }}
+          </fuse-alert> -->
+
+      <!-- Sign in form -->
+      <form class="mt-8" [formGroup]="signInForm" #signInNgForm="ngForm">
+        <!-- Email field -->
+        <mat-form-field class="w-full">
+          <mat-label>Username or Email</mat-label>
+          <input id="username" matInput [formControlName]="'username'" />
+          <mat-error *ngIf="signInForm.get('username')?.hasError('required')"> Username or email is required
+          </mat-error>
+        </mat-form-field>
+
+        <!-- Password field -->
+        <mat-form-field class="w-full">
+          <mat-label>Password</mat-label>
+          <input id="password" matInput type="password" [formControlName]="'password'" #passwordField />
+          <button mat-icon-button type="button" (click)="
+                  passwordField.type === 'password' ? (passwordField.type = 'text') : (passwordField.type = 'password')
+                " matSuffix>
+            <mat-icon class="icon-size-5" *ngIf="passwordField.type === 'password'">
+              visibility
+            </mat-icon>
+            <mat-icon class="icon-size-5" *ngIf="passwordField.type === 'text'">
+              visibility_off
+            </mat-icon>
+          </button>
+          <mat-error> Password is required </mat-error>
+        </mat-form-field>
+
+        <!-- Actions -->
+        <!-- <div class="inline-flex items-end justify-between w-full mt-1.5">
+          <mat-checkbox [color]="'primary'" [formControlName]="'rememberMe'"> Remember me </mat-checkbox>
+          <a class="text-md font-medium text-primary-500 hover:underline" [routerLink]="['/forgot-password']">Forgot
+            password?
+          </a>
+        </div> -->
+
+        <!-- Submit button -->
+        <button class="fuse-mat-button-large w-full mt-6" mat-flat-button [color]="'primary'"
+          [disabled]="signInForm.disabled" (click)="signIn()">
+          <span *ngIf="!signInForm.disabled"> Sign in </span>
+          <mat-progress-spinner *ngIf="signInForm.disabled" [diameter]="24" [mode]="'indeterminate'">
+          </mat-progress-spinner>
+        </button>
+
+        <!-- Separator -->
+        <div class="flex items-center mt-8">
+          <div class="flex-auto mt-px border-t"></div>
+          <div class="mx-2 text-secondary">Or continue with</div>
+          <div class="flex-auto mt-px border-t"></div>
+        </div>
+
+        <!-- Single sign-on buttons -->
+        <div class="flex flex-col gap-4 items-center mt-8 ">
+          <ng-container *ngIf="!(providersLoading$ | async); else loadingBlock;">
+            <a class="w-full" *ngFor="let provider of (providers$ | async)" mat-raised-button
+              [href]="getAuthorizeUrl(provider, next)">
+              <img *ngIf="provider.icon" class="w-14 p-3 pl-0 inline-flex" [src]="'assets/images/' + provider.icon" />
+              <span>{{ provider.description }}</span>
+            </a>
+          </ng-container>
+        </div>
+      </form>
+    </ng-container>
+    <ng-template #invalidClientBlock>
+      <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4" role="alert">
+        <p class="font-bold">Invalid Client</p>
+        <p>You must provide a valid client ID and redirect URI to the Afterglow authentication server.</p>
+      </div>
+    </ng-template>
+
+  </ng-container>
+
+</div>
+
+<ng-template #loadingBlock>
+  <mat-progress-spinner></mat-progress-spinner>
+</ng-template>
