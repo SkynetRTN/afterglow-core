@@ -4,7 +4,8 @@ Afterglow Core: image property extraction job plugin
 
 from typing import List as TList
 
-from numpy import median, sqrt
+from numpy import array, median, sqrt
+from scipy.ndimage import convolve
 from astropy.wcs import WCS
 from marshmallow.fields import Integer, List, Nested
 
@@ -15,6 +16,10 @@ from .source_extraction_job import (
 
 
 __all__ = ['ImagePropsExtractionJob']
+
+
+# Laplacian kernel
+L = array([[0, -1, 0], [-1, 4, -1], [0, -1, 0]], float)/6
 
 
 class ImagePropsExtractionJobResult(JobResult):
@@ -46,13 +51,14 @@ class ImagePropsExtractionJob(Job):
                 # Detect sources using the settings provided
                 sources, background_info = run_source_extraction_job(
                     self, source_extraction_settings, [file_id],
-                    update_progress=False)
+                    total_stages=0)
                 if not sources:
                     raise RuntimeError('Could not detect any sources')
                 background, background_rms = background_info.get(
                     file_id, (None, None))
-                flux = (get_data_file_data(self.user_id, file_id)[0] -
-                        background).sum()
+                signal = (get_data_file_data(self.user_id, file_id)[0] -
+                          background)
+                flux = signal.sum()
                 noise = flux + (background_rms**2).sum()
                 if noise > 0:
                     global_snr = flux/sqrt(noise)
@@ -91,6 +97,14 @@ class ImagePropsExtractionJob(Job):
                 else:
                     seeing_arcsec = None
 
+                # Calculate sharpness as stddev of absolute value of Laplacian
+                m = signal.mean()
+                if m:
+                    sharpness = abs(
+                        convolve(signal/m, L, mode='nearest')).std()
+                else:
+                    sharpness = 0
+
                 self.result.data.append(ImageProperties(
                     file_id=file_id,
                     background_counts=background,
@@ -103,9 +117,11 @@ class ImagePropsExtractionJob(Job):
                     seeing_arcsec=seeing_arcsec,
                     ellipticity=ellipticity,
                     global_snr=global_snr,
+                    sharpness=sharpness,
                 ))
 
             except Exception as e:
                 self.add_error(e, {'file_id': file_id})
             finally:
-                self.update_progress((file_no + 1)/len(self.file_ids)*100)
+                self.update_progress(
+                    (file_no + 1)/len(self.file_ids)*100, 1, 2)

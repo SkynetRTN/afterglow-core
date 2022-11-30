@@ -209,7 +209,7 @@ class DSSImageDataProvider(DataProvider):
         ra_degs, dec_degs, width, height = self._get_asset_params(path)
         try:
             if self.server == 'STScI':
-                url = 'https://stdatu.stsci.edu/cgi-bin/dss_search'
+                url = 'https://archive.stsci.edu/cgi-bin/dss_search'
                 params = {
                     'v': 'poss2ukstu_red',
                     'r': str(ra_degs),

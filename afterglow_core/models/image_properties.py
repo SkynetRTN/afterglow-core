@@ -25,3 +25,4 @@ class ImageProperties(AfterglowSchema):
     seeing_arcsec: Optional[float] = Float()
     ellipticity: Optional[float] = Float()
     global_snr: Optional[float] = Float()
+    sharpness: Optional[float] = Float()

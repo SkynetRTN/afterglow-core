@@ -15,6 +15,7 @@ from werkzeug.datastructures import CombinedMultiDict, MultiDict
 from werkzeug.urls import url_encode
 from flask import Flask, Response, request
 from cryptography.fernet import Fernet
+import astropy.io.fits as pyfits
 
 from .schemas import AfterglowSchema
 
@@ -29,7 +30,7 @@ class AfterglowSchemaEncoder(json.JSONEncoder):
     """
 
     def default(self, obj):
-        if isinstance(obj, type(missing)):
+        if isinstance(obj, type(missing)) or isinstance(obj, pyfits.Undefined):
             return None
         if isinstance(obj, AfterglowSchema):
             return obj.dump(obj)

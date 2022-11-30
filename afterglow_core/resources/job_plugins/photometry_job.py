@@ -25,7 +25,8 @@ __all__ = ['PhotometryJob', 'run_photometry_job']
 
 def run_photometry_job(job: Job, settings: PhotSettings,
                        job_file_ids: TList[int],
-                       job_sources: TList[SourceExtractionData]) \
+                       job_sources: TList[SourceExtractionData],
+                       stage: int = 0, total_stages: int = 1) \
         -> TList[PhotometryData]:
     """
     Batch photometry job body; also used during photometric calibration
@@ -34,6 +35,10 @@ def run_photometry_job(job: Job, settings: PhotSettings,
     :param settings: photometry settings
     :param job_file_ids: data file IDs to process
     :param job_sources: list of SourceExtractionData-compatible source defs
+    :param stage: optional processing stage number; used to properly update
+        the job progress if cropping is a part of other job
+    :param total_stages: total number of stages in the enclosing job if any;
+        set to 0 to disable progress updates
 
     :return: list of photometry results
     """
@@ -198,7 +203,9 @@ def run_photometry_job(job: Job, settings: PhotSettings,
                 if row['flag'] & (0xF0 & ~sep.APER_HASMASKED) == 0 and
                 isfinite([row['x'], row['y'], row['flux'], row['flux_err'],
                           row['mag'], row['mag_err']]).all()]
-            job.update_progress((file_no + 1)/len(file_ids)*100)
+            if total_stages:
+                job.update_progress(
+                    (file_no + 1)/len(file_ids)*100, stage, total_stages)
         except Exception as e:
             job.add_error(e, {'file_id': file_id})
 

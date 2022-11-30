@@ -30,7 +30,7 @@ WCS_REGEX = re.compile(
     # Paper I, Table 1
     r'(WCSAXES[A-Z]?)|'
     r'(CRVAL[1-9]\d?[A-Z]?)|'
-    r'(CRPIX[1-9]\d?[A-Z])|'
+    r'(CRPIX[1-9]\d?[A-Z]?)|'
     r'(PC[1-9]\d?_[1-9]\d?[A-Z]?)|'
     r'(CDELT[1-9]\d?[A-Z]?)|'
     r'(CD[1-9]\d?_[1-9]\d?[A-Z]?)|'
@@ -56,6 +56,12 @@ WCS_REGEX = re.compile(
     r'([AB]P?_(ORDER|\d\d?_\d\d?)[A-Z]?)|'
     # TNX and ZPX distortions
     r'(WAT\d_\d\d\d)|'
+    # DSS-specific keywords causing WCSLib to interpret it as DSS distortions
+    r'(AMD(RE)?[XY]\d\d?)|'
+    r'(CNPIX[1-9]\d?)|'
+    r'(PPO[1-9])|'
+    r'([XY]PIXELSZ)|'
+    r'(PLT((RA[HMS])|(DEC(SN|[DMS]))))|'
     # The following must be kept intact if present and not set by solve_field()
     # r'(EQUINOX[A-Z]?)|'
     # r'(EPOCH)|'
@@ -153,7 +159,7 @@ class WcsCalibrationJob(Job):
                 # Extract sources
                 sources = run_source_extraction_job(
                     self, source_extraction_settings, [file_id],
-                    update_progress=False)[0]
+                    stage=2*i, total_stages=2*len(self.file_ids))[0]
                 xy = [(source.x, source.y) for source in sources]
                 fluxes = [source.flux for source in sources]
 
@@ -262,4 +268,4 @@ class WcsCalibrationJob(Job):
             except Exception as e:
                 self.add_error(e, {'file_id': self.file_ids[i]})
             finally:
-                self.update_progress((i + 1)/len(self.file_ids)*100)
+                self.update_progress(100, 2*i + 1, 2*len(self.file_ids))

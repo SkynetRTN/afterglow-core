@@ -185,11 +185,15 @@ def data_providers_assets(id: Union[int, str]) -> Response:
             force = bool(int(force))
 
         # Check that the asset at the given path exists
-        asset = provider.get_asset(path)
+        # noinspection PyBroadException
+        try:
+            is_collection = provider.get_asset(path).collection
+        except Exception:
+            is_collection = False
 
         # "force" is required to recursively delete a non-empty collection
         # asset
-        if asset.collection and provider.get_child_assets(path)[0] and \
+        if is_collection and provider.get_child_assets(path)[0] and \
                 not force:
             raise CannotDeleteNonEmptyCollectionAssetError()
 
@@ -388,7 +392,7 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
             elif group_name is not None:
                 update_data_file_group_asset(
                     request.user.id, group_name, id, asset.path,
-                    asset.metadata, asset.name)
+                    asset.metadata)
 
             return json_response(
                 DataProviderAssetSchema(asset),

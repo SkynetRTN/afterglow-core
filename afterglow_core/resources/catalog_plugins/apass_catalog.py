@@ -34,4 +34,8 @@ class APASSCatalog(VizierCatalog):
         # Lupton (2005)
         'R': "rprime - 0.2936*(rprime - iprime) - 0.1439",
         'I': "iprime - 0.3136*(rprime - iprime) - 0.3539",
+        # Map astrophotography filters to JC
+        'Red': "rprime - 0.2936*(rprime - iprime) - 0.1439",
+        'Green': 'V',
+        'Blue': 'B',
     }

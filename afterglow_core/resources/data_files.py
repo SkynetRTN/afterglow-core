@@ -426,7 +426,7 @@ def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
                      allow_duplicate_group_name: bool = False) -> DbDataFile:
     """
     Create a database entry for a new data file and save it to data file
-    directory as an single (image) or double (image + mask) HDU FITS or
+    directory as a single (image) or double (image + mask) HDU FITS or
     a primary + table HDU FITS, depending on whether the input HDU contains
     an image or a table
 
@@ -991,8 +991,16 @@ def get_data_file_fits(user_id: Optional[int], file_id: int,
     :return: FITS file object
     """
     try:
-        return pyfits.open(
-            get_data_file_path(user_id, file_id), mode, memmap=False)
+        with pyfits.open(get_data_file_path(user_id, file_id), mode,
+                         memmap=False) as fits:
+            if mode == 'readonly' and fits[0].data is not None and \
+                    fits[0].data.dtype.fields is None and len(fits) > 1:
+                # Image in primary HDU, mask in extension HDU, create
+                # a temporary in-memory FITS with masked values replaced by NaN
+                fits[0].data[fits[1].data.nonzero()] = numpy.nan
+                return pyfits.HDUList(pyfits.PrimaryHDU(
+                    fits[0].data, fits[0].header))
+            return fits
     except Exception:
         raise UnknownDataFileError(file_id=file_id)
 
@@ -1015,14 +1023,15 @@ def get_data_file_data(user_id: Optional[int], file_id: int) \
             # Table stored in extension HDU
             data = fits[1].data
         elif fits[0].data.dtype.fields is None:
-            # Image stored in the primary HDU, with an optional mask
-            if len(fits) == 1:
-                # Normal image data
-                data = fits[0].data
-            else:
+            # Image stored in the primary HDU, with NaNs for masked values
+            if numpy.isnan(fits[0].data).any():
                 # Masked data
                 data = numpy.ma.masked_array(
-                    fits[0].data, fits[1].data.astype(bool))
+                    fits[0].data, numpy.isnan(fits[0].data),
+                    fill_value=numpy.nan)
+            else:
+                # Normal image data
+                data = fits[0].data
         else:
             # Table data in the primary HDU (?)
             data = fits[0].data
@@ -1323,9 +1332,10 @@ def query_data_files(user_id: Optional[int], session_id: Optional[int]) \
 
 
 def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
-                      provider_id: Union[int, str] = None,
+                      provider_id: Optional[Union[int, str]] = None,
                       path: Optional[Union[TList[str], str]] = None,
                       name: Optional[str] = None,
+                      file_id: Optional[int] = None,
                       duplicates: str = 'ignore',
                       recurse: bool = False,
                       width: Optional[int] = None,
@@ -1347,14 +1357,17 @@ def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
     :param provider_id: optional data provider ID to import from
     :param path: asset path(s) within the data provider, JSON or Python list;
         used if `provider_id` != None
+    :param file_id: duplicate the given data file; mutually exclusive with
+        `provider_id`, `files`, and `width`/`height`
     :param name: data file name; if omitted, obtained from asset metadata
         on import, filename on upload, or automatically generated otherwise
-    :param width: new image width; ignored unless `provider_id` or `files`
+    :param width: new image width; mutually exclusive with `provider_id`,
+        `file_id`, and `files`
         are provided
-    :param height: new image height; ignored unless `provider_id` or `files`
-        are provided
-    :param pixel_value: new image counts; ignored unless `provider_id` or
-        `files` are provided
+    :param height: new image height; mutually exclusive with `provider_id`,
+        `file_id`, and `files`
+    :param pixel_value: new image counts; used in conjunction with `width` and
+        `height`
     :param duplicates: optional duplicate handling mode used if the data file
         with the same provider, path, and layer was already imported before:
         "ignore" (default) = don't re-import the existing data file,
@@ -1371,7 +1384,7 @@ def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
     all_data_files = []
     with get_data_file_db(user_id) as adb:
         try:
-            if provider_id is None and not files:
+            if provider_id is None and file_id is None and not files:
                 # Create an empty image data file
                 if width is None:
                     raise errors.MissingFieldError('width')
@@ -1408,19 +1421,8 @@ def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
                 all_data_files.append(create_data_file(
                     adb, name, root, data, duplicates='append',
                     session_id=session_id))
-            elif provider_id is None:
-                # Data file upload: get from multipart/form-data; use filename
-                # for the 2nd and subsequent files or if the "name" parameter
-                # is not provided
-                if not app.config.get('DATA_FILE_UPLOAD'):
-                    raise DataFileUploadNotAllowedError()
-                for i, (filename, file) in enumerate(files.items()):
-                    all_data_files += import_data_file(
-                        adb, root, None, None, {}, BytesIO(file.read()),
-                        filename if i else name or filename,
-                        duplicates='append', session_id=session_id)
-            else:
-                # Import data file
+            elif provider_id is not None:
+                # Import data file(s)
                 if path is None:
                     raise errors.MissingFieldError('path')
 
@@ -1456,6 +1458,43 @@ def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
                     if not isinstance(path, list):
                         path = [path]
                 all_data_files += sum([recursive_import(p) for p in path], [])
+            elif file_id is not None:
+                # Duplicate existing data file
+                try:
+                    df = adb.query(DbDataFile).get(int(file_id))
+                except ValueError:
+                    df = None
+                if df is None:
+                    raise UnknownDataFileError(file_id=file_id)
+                data, hdr = get_data_file_data(user_id, file_id)
+                # Append to the end of the group
+                last_df = adb.query(DbDataFile) \
+                    .filter(DbDataFile.group_name == df.group_name) \
+                    .order_by(DbDataFile.group_order.desc()).first()
+                all_data_files.append(create_data_file(
+                    adb, name, root, data, hdr, duplicates='append',
+                    session_id=session_id, provider=df.data_provider,
+                    path=df.asset_path, file_type=df.asset_type,
+                    metadata=df.asset_metadata, layer=df.layer,
+                    group_name=df.group_name,
+                    group_order=(last_df.group_order if last_df is not None
+                                 else df.group_order) + 1,
+                    allow_duplicate_file_name=True,
+                    allow_duplicate_group_name=True))
+            elif files:
+                # Data file upload: get from multipart/form-data; use filename
+                # for the 2nd and subsequent files or if the "name" parameter
+                # is not provided
+                if not app.config.get('DATA_FILE_UPLOAD'):
+                    raise DataFileUploadNotAllowedError()
+                for i, (filename, file) in enumerate(files.items()):
+                    all_data_files += import_data_file(
+                        adb, root, None, None, {}, BytesIO(file.read()),
+                        filename if i else name or filename,
+                        duplicates='append', session_id=session_id)
+            else:
+                raise errors.MissingFieldError(
+                    'provider_id|file_id|width|files')
 
             if all_data_files:
                 adb.commit()
@@ -1511,7 +1550,8 @@ def update_data_file(user_id: Optional[int], data_file_id: int,
     return data_file
 
 
-def update_data_file_asset(user_id: Optional[int], data_file_id: int,
+def update_data_file_asset(user_id: Optional[int],
+                           data_file_id: Union[int, str],
                            provider_id: str, asset_path: str,
                            asset_metadata: dict, name: str) -> None:
     """
@@ -1543,7 +1583,7 @@ def update_data_file_asset(user_id: Optional[int], data_file_id: int,
 
 def update_data_file_group_asset(user_id: Optional[int], group_name: str,
                                  provider_id: str, asset_path: str,
-                                 asset_metadata: dict, name: str) -> None:
+                                 asset_metadata: dict) -> None:
     """
     Link data file group to a new asset; called after exporting group to asset
 
@@ -1552,7 +1592,6 @@ def update_data_file_group_asset(user_id: Optional[int], group_name: str,
     :param provider_id: data provider ID/name
     :param asset_path: data provider asset path
     :param asset_metadata: data provider asset metadata
-    :param name: new data file name
     """
     with get_data_file_db(user_id) as adb:
         db_data_files = adb.query(DbDataFile) \
@@ -1565,7 +1604,6 @@ def update_data_file_group_asset(user_id: Optional[int], group_name: str,
                 db_data_file.data_provider = provider_id
                 db_data_file.asset_path = asset_path
                 db_data_file.asset_metadata = asset_metadata
-                db_data_file.name = name
                 db_data_file.modified = False
             adb.commit()
         except Exception:
