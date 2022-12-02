@@ -1046,7 +1046,11 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
             session_factory = scoped_session(sessionmaker(bind=engine))
         else:
             # If using database server instead of sqlite, reuse the same
-            # database engine as the main Afterglow database
+            # database engine as the main Afterglow database; recreate job
+            # databases from scratch
+            engine = current_app.db.engine
+            JobBase.metadata.drop_all(bind=engine)
+            JobBase.metadata.create_all(bind=engine)
             session_factory = current_app.db.session
 
         # Erase old job files
