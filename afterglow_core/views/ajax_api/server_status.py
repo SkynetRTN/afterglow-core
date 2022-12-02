@@ -13,7 +13,7 @@ __all__ = ['register']
 
 
 blp = Blueprint(
-    'server_status', __name__, url_prefix=url_prefix + 'server-status')
+    'server_status', __name__, url_prefix=url_prefix + 'server_status')
 
 
 def register(app: Flask) -> None:
