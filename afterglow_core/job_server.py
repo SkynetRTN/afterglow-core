@@ -4,6 +4,7 @@ import cProfile
 import ctypes
 import errno
 import gc
+import multiprocessing
 import os
 import pickle
 import shutil
@@ -17,20 +18,22 @@ import traceback
 import tracemalloc
 from datetime import datetime, timedelta
 from glob import glob
-from importlib import reload
+from socketserver import BaseRequestHandler, TCPServer
 from multiprocessing import Event, Process, Queue
-from socketserver import BaseRequestHandler, ThreadingTCPServer
 
 from marshmallow import Schema, fields, missing
 from sqlalchemy import (
     Boolean, Column, Float, ForeignKey, Index, Integer, String, Text,
-    create_engine, event, text)
+    create_engine, event)
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import relationship, scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from werkzeug.http import HTTP_STATUS_CODES
+from flask import Flask, current_app, g, request
+from flask.ctx import RequestContext
+from flask.globals import _cv_request
 
-from . import app, plugins
+from . import plugins
 from .errors import AfterglowError, MissingFieldError
 from .errors.auth import UnknownUserError
 from .errors.job import *
@@ -324,31 +327,45 @@ class JobWorkerProcess(Process):
     """
     abort_event = None
 
-    def __init__(self, job_queue, result_queue):
+    def __init__(self, job_queue: multiprocessing.Queue,
+                 result_queue: multiprocessing.Queue):
+        """
+        Create a job worker process
+
+        :param job_queue: single-producer multiple-consumer task queue; holds
+            incoming jobs -- serialized Job objects
+        :param result_queue: multiple-producer single-consumer result queue;
+            holds job state/result updates
+        """
         if WINDOWS:
             self.abort_event = Event()
 
         super(JobWorkerProcess, self).__init__(
-            target=self.body, args=(job_queue, result_queue, self.abort_event))
+            target=self.body,
+            args=(job_queue, result_queue, self.abort_event))
         self.daemon = True
 
         self.start()
 
-    def body(self, job_queue, result_queue, abort_event):
+    def body(self, job_queue: multiprocessing.Queue,
+             result_queue: multiprocessing.Queue,
+             abort_event: multiprocessing.Event):
         """
-        Job worker process
+        Job worker process body
 
-        :param multiprocessing.Queue job_queue: single-producer
-            multiple-consumer task queue; holds incoming jobs -- serialized Job
-            objects
-        :param multiprocessing.Queue result_queue: multiple-producer
-            single-consumer result queue; holds job state/result updates
-        :param multiprocessing.Event abort_event: event object used to cancel
-            a job; only used on Windows, other systems use OS signals
+        :param job_queue: single-producer multiple-consumer task queue; holds
+            incoming jobs -- serialized Job objects
+        :param result_queue: multiple-producer single-consumer result queue;
+            holds job state/result updates
+        :param abort_event: event object used to cancel a job; only used on
+            Windows, other systems use OS signals
 
         :return: None
         """
         prefix = '[Job worker {}]'.format(os.getpid())
+
+        # Create a fake Flask environment
+        app = create_flask_env()
 
         if WINDOWS:
             # Start an extra thread waiting for abort event and raising
@@ -374,16 +391,7 @@ class JobWorkerProcess(Process):
         else:
             stop_event = abort_event_listener = None
 
-        # Close all possible data file db engine connections inherited from the
-        # parent process
         from .resources import data_files
-        for engine, session in data_files.data_file_engine.values():
-            session.close_all()
-            engine.dispose()
-        # noinspection PyTypeChecker
-        reload(data_files)
-
-        from . import auth
 
         # Memory leak detection support
         trace_malloc = app.config.get('JOB_TRACE_MALLOC')
@@ -405,9 +413,8 @@ class JobWorkerProcess(Process):
                     break
                 app.logger.debug('%s Got job request: %s', prefix, job_descr)
 
-                # Save user object proxy from the job server to app context
-                # for the duration of the job
-                auth.current_user = job_descr.pop('user', None)
+                # Generate a fake request context with login user
+                g._login_user = request.user = job_descr.pop('user', None)
 
                 # Create job object from description; job_descr is guaranteed
                 # to contain at least type, ID, and user ID, and
@@ -563,7 +570,9 @@ class JobRequestHandler(BaseRequestHandler):
     def handle(self):
         server = self.server
         # noinspection PyUnresolvedReferences
-        session = self.server.session_factory()
+        session = server.session_factory()
+
+        logger = current_app.logger
 
         http_status = 200
 
@@ -591,8 +600,8 @@ class JobRequestHandler(BaseRequestHandler):
 
             if method == 'terminate':
                 # Server shutdown request
-                self.server.shutdown()
-                self.server.server_close()
+                server.shutdown()
+                server.server_close()
                 return
 
             try:
@@ -644,7 +653,7 @@ class JobRequestHandler(BaseRequestHandler):
                         # All workers are currently busy
                         if server.max_pool_size and \
                                 pool_size >= server.max_pool_size:
-                            app.logger.warning(
+                            logger.warning(
                                 'All job worker processes are busy; '
                                 'consider increasing JOB_POOL_MAX')
 
@@ -652,24 +661,24 @@ class JobRequestHandler(BaseRequestHandler):
                             for db_job_state in session.query(DbJobState) \
                                     .filter(DbJobState.status == 'in_progress',
                                             DbJobState.progress <
-                                            app.config.get(
+                                            current_app.config.get(
                                                 'JOB_TIMEOUT_MAX_PROGRESS',
                                                 90),
                                             DbJobState.started_on <
                                             datetime.utcnow() - timedelta(
-                                                seconds=app.config.get(
+                                                seconds=current_app.config.get(
                                                     'JOB_TIMEOUT', 900))):
                                 job_id = db_job_state.id
                                 with server.pool_lock.acquire_read():
                                     for p in server.pool:
                                         if p.job_id == job_id:
                                             p.cancel_current_job()
-                                            app.logger.warning(
+                                            logger.warning(
                                                 'Job %s timed out, canceled',
                                                 job_id)
                                             break
                         else:
-                            app.logger.info(
+                            logger.info(
                                 'Adding one more worker to job pool')
                             with server.pool_lock.acquire_write():
                                 server.pool.append(JobWorkerProcessWrapper(
@@ -691,7 +700,7 @@ class JobRequestHandler(BaseRequestHandler):
                         finally:
                             # Clean up the flask_sqlalchemy session in the same
                             # way as it is done at the end of a Flask request
-                            users.db.session.remove()
+                            current_app.db.session.remove()
                     try:
                         # Convert message arguments to polymorphic job model
                         # and create an appropriate db job class instance
@@ -885,7 +894,7 @@ class JobRequestHandler(BaseRequestHandler):
         except Exception:
             # noinspection PyBroadException
             try:
-                app.logger.warning(
+                logger.warning(
                     'Error closing job request handler session', exc_info=True)
             except Exception:
                 pass
@@ -900,21 +909,75 @@ class JobRequestHandler(BaseRequestHandler):
         except Exception:
             # noinspection PyBroadException
             try:
-                app.logger.warning(
+                logger.warning(
                     'Error sending job server response', exc_info=True)
             except Exception:
                 pass
 
 
-def job_server(notify_queue):
+class JobRequestServer(TCPServer):
+    """
+    A TCP server that runs inside the job server process and handles
+    job-related requests sent by the views via
+    :func:`afterglow_core.jobs.job_server_request`
+    """
+    def process_request_thread(self, req, client_address, ctx):
+        with ctx:
+            # noinspection PyBroadException
+            try:
+                self.finish_request(req, client_address)
+            except Exception:
+                self.handle_error(req, client_address)
+            finally:
+                self.shutdown_request(req)
+
+    def process_request(self, req, client_address):
+        # Duplicate the current request context
+        ctx = copy_request_ctx()
+        threading.Thread(
+            target=self.process_request_thread,
+            args=(req, client_address, ctx)
+        ).start()
+
+
+def create_flask_env() -> Flask:
+    """
+    Create a fake Flask environment (app and request context) used during
+    the lifetime of the job server and worker processes
+
+    :return: initialized Flask application
+    """
+    from . import create_app
+    app = create_app()
+    app.app_context().push()
+    app.request_context(
+        {'wsgi.url_scheme': 'http',
+         'wsgi.errors': {},
+         'REQUEST_METHOD': 'GET'}
+    ).push()
+    return app
+
+
+def copy_request_ctx() -> RequestContext:
+    """
+    Duplicate the current request context for use in another thread
+
+    :return: a fresh copy of the current request context
+    """
+    ctx = _cv_request.get(None)
+    return RequestContext(ctx.app, environ=dict(ctx.request.environ))
+
+
+def job_server(notify_queue: multiprocessing.Queue) -> None:
     """
     Main job server process
 
-    :param multiprocessing.Queue notify_queue: queue used to send messages to
-        the main process on the job server process initialization and errors
-
-    :return: None
+    :param notify_queue: queue used to send messages to the main process
+        on the job server process initialization and errors
     """
+    # Create a fake Flask environment
+    app = create_flask_env()
+
     # Create sync structures
     job_queue = Queue()
     result_queue = Queue()
@@ -923,7 +986,7 @@ def job_server(notify_queue):
 
     # Start TCP server, listen on the configured port
     try:
-        tcp_server = ThreadingTCPServer(
+        tcp_server = JobRequestServer(
             ('localhost', app.config['JOB_SERVER_PORT']), JobRequestHandler)
     except Exception as e:
         notify_queue.put(('exception', e))
@@ -979,27 +1042,23 @@ def job_server(notify_queue):
                               'isolation_level': None,
                               'timeout': app.config.get('DB_TIMEOUT', 30)},
             )
+            JobBase.metadata.create_all(bind=engine)
+            session_factory = scoped_session(sessionmaker(bind=engine))
         else:
             # If using database server instead of sqlite, reuse the same
-            # database engine as the main Afterglow database; drop and recreate
-            # all job tables on startup
-            from .resources import users
-            users.db.engine.dispose()
-            # noinspection PyTypeChecker
-            reload(users)
-            engine = users.db.engine
-            JobBase.metadata.drop_all(bind=engine)
-        JobBase.metadata.create_all(bind=engine)
-        session_factory = scoped_session(sessionmaker(bind=engine))
+            # database engine as the main Afterglow database
+            session_factory = current_app.db.session
 
         # Erase old job files
         try:
-            shutil.rmtree(job_file_dir)
+            shutil.rmtree(job_file_dir())
         except OSError as e:
             if e.errno != errno.ENOENT:
                 raise
 
         # Listen for job state updates in a separate thread
+        state_update_flask_ctx = copy_request_ctx()
+
         def state_update_listener_body():
             """
             Thread that listens for job state/result updates from worker
@@ -1007,87 +1066,90 @@ def job_server(notify_queue):
 
             :return: None
             """
-            while not terminate_listener_event.is_set():
-                msg = result_queue.get()
-                if not msg:
-                    continue
-                if not isinstance(msg, dict) or 'id' not in msg or \
-                        'state' in msg and \
-                        not isinstance(msg['state'], dict) or \
-                        'result' in msg and \
-                        not isinstance(msg['result'], dict):
-                    app.logger.warning(
-                        'Job state listener got unexpected message "%s"', msg)
-                    continue
-
-                job_id = msg['id']
-                job_state = msg.get('state', {})
-                job_result = msg.get('result', {})
-                job_pid = msg.get('pid')
-                job_file = msg.get('file')
-
-                if job_pid is not None:
-                    # Worker process assignment message
-                    found = False
-                    with pool_lock.acquire_read():
-                        for _p in pool:
-                            if _p.ident == job_pid:
-                                _p.job_id = job_id
-                                found = True
-                                break
-                    if not found:
+            with state_update_flask_ctx:
+                while not terminate_listener_event.is_set():
+                    msg = result_queue.get()
+                    if not msg:
+                        continue
+                    if not isinstance(msg, dict) or 'id' not in msg or \
+                            'state' in msg and \
+                            not isinstance(msg['state'], dict) or \
+                            'result' in msg and \
+                            not isinstance(msg['result'], dict):
                         app.logger.warning(
-                            'Job state listener got a job assignment message '
-                            'for non-existent worker process %s', job_pid)
-                    continue
+                            'Job state listener got unexpected message "%s"',
+                            msg)
+                        continue
 
-                sess = session_factory()
-                try:
-                    if job_file is not None:
-                        # Job file creation message
+                    job_id = msg['id']
+                    job_state = msg.get('state', {})
+                    job_result = msg.get('result', {})
+                    job_pid = msg.get('pid')
+                    job_file = msg.get('file')
+
+                    if job_pid is not None:
+                        # Worker process assignment message
+                        found = False
+                        with pool_lock.acquire_read():
+                            for _p in pool:
+                                if _p.ident == job_pid:
+                                    _p.job_id = job_id
+                                    found = True
+                                    break
+                        if not found:
+                            app.logger.warning(
+                                'Job state listener got a job assignment '
+                                'message for non-existent worker process %s',
+                                job_pid)
+                        continue
+
+                    sess = session_factory()
+                    try:
+                        if job_file is not None:
+                            # Job file creation message
+                            # noinspection PyBroadException
+                            try:
+                                sess.add(DbJobFile(
+                                    job_id=job_id,
+                                    file_id=job_file['id'],
+                                    mimetype=job_file.get('mimetype'),
+                                    headers=job_file.get('headers')))
+                                sess.commit()
+                            except Exception:
+                                sess.rollback()
+                                app.logger.warning(
+                                    'Could not add job file "%s" to database',
+                                    exc_info=True)
+                            continue
+
+                        if not job_state and not job_result:
+                            # Empty message, nothing to do
+                            continue
+
+                        job = sess.query(DbJob).get(job_id)
+                        if job is None:
+                            # State update for a job that was already deleted;
+                            # silently ignore
+                            continue
+
                         # noinspection PyBroadException
                         try:
-                            sess.add(DbJobFile(
-                                job_id=job_id,
-                                file_id=job_file['id'],
-                                mimetype=job_file.get('mimetype'),
-                                headers=job_file.get('headers')))
+                            # Update job result
+                            for name, val in job_result.items():
+                                setattr(job.result, name, val)
+
+                            # Update job state
+                            for name, val in job_state.items():
+                                setattr(job.state, name, val)
+
                             sess.commit()
                         except Exception:
                             sess.rollback()
                             app.logger.warning(
-                                'Could not add job file "%s" to database',
-                                exc_info=True)
-                        continue
-
-                    if not job_state and not job_result:
-                        # Empty message, nothing to do
-                        continue
-
-                    job = sess.query(DbJob).get(job_id)
-                    if job is None:
-                        # State update for a job that was already deleted;
-                        # silently ignore
-                        continue
-
-                    # noinspection PyBroadException
-                    try:
-                        # Update job result
-                        for name, val in job_result.items():
-                            setattr(job.result, name, val)
-
-                        # Update job state
-                        for name, val in job_state.items():
-                            setattr(job.state, name, val)
-
-                        sess.commit()
-                    except Exception:
-                        sess.rollback()
-                        app.logger.warning(
-                            'Could not update job state/result "%s"',
-                            msg, exc_info=True)
-                finally:
-                    sess.close()
+                                'Could not update job state/result "%s"',
+                                msg, exc_info=True)
+                    finally:
+                        sess.close()
 
         state_update_listener = threading.Thread(
             target=state_update_listener_body)
@@ -1129,11 +1191,9 @@ def job_server(notify_queue):
         app.logger.info('Job server terminated')
 
 
-def init_jobs():
+def init_jobs() -> None:
     """
     Initialize the job subsystem
-
-    :return: None
     """
     # Start job server process
     notify_queue = Queue()
@@ -1160,7 +1220,7 @@ def init_jobs():
         try:
             msg = pickle.dumps(dict(method='terminate'))
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect(('localhost', app.config['JOB_SERVER_PORT']))
+            sock.connect(('localhost', current_app.config['JOB_SERVER_PORT']))
             try:
                 sock.sendall(struct.pack(msg_hdr, len(msg)) + msg)
             finally:

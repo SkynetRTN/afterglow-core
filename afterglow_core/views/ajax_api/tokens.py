@@ -4,20 +4,35 @@ Afterglow Core: settings routes
 
 import secrets
 
-from flask import Response, request
+from flask import Blueprint, Flask, Response, current_app, request
 from marshmallow.fields import Integer, String
 
-from ... import app, json_response
+from ... import json_response
 from ...auth import auth_required
-from ...resources.users import DbPersistentToken, db
+from ...resources.users import DbPersistentToken
 from ...schemas import Resource
 from ...errors import ValidationError
 from ...errors.auth import UnknownTokenError
 from . import url_prefix
 
 
+__all__ = ['register']
+
+
+blp = Blueprint('tokens', __name__, url_prefix=url_prefix + 'tokens')
+
+
+def register(app: Flask) -> None:
+    """
+    Register endpoints
+
+    :param app: Flask application
+    """
+    app.register_blueprint(blp)
+
+
 class TokenSchema(Resource):
-    __get_view__ = 'tokens'
+    __get_view__ = 'tokens.tokens'
 
     id: int = Integer()
     user_id: int = Integer()
@@ -28,7 +43,7 @@ class TokenSchema(Resource):
     note: str = String()
 
 
-@app.route(url_prefix + 'tokens', methods=['GET', 'POST'])
+@blp.route('/', methods=['GET', 'POST'])
 @auth_required
 def tokens() -> Response:
     """
@@ -55,12 +70,12 @@ def tokens() -> Response:
             note=note,
         )
         try:
-            db.session.add(personal_token)
-            db.session.commit()
+            current_app.db.session.add(personal_token)
+            current_app.db.session.commit()
         except Exception:
             # noinspection PyBroadException
             try:
-                db.session.rollback()
+                current_app.db.session.rollback()
             except Exception:
                 pass
             raise
@@ -68,7 +83,7 @@ def tokens() -> Response:
         return json_response(TokenSchema(personal_token), 201)
 
 
-@app.route(url_prefix + 'tokens/<int:token_id>', methods=['DELETE'])
+@blp.route('/<int:token_id>', methods=['DELETE'])
 @auth_required
 def token(token_id: int) -> Response:
     """
@@ -89,12 +104,12 @@ def token(token_id: int) -> Response:
             raise UnknownTokenError()
 
         try:
-            db.session.delete(personal_token)
-            db.session.commit()
+            current_app.db.session.delete(personal_token)
+            current_app.db.session.commit()
         except Exception:
             # noinspection PyBroadException
             try:
-                db.session.rollback()
+                current_app.db.session.rollback()
             except Exception:
                 pass
             raise

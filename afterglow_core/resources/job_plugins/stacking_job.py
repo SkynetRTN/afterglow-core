@@ -5,10 +5,10 @@ Afterglow Core: image stacking job plugin
 from typing import List as TList, Optional
 
 from marshmallow.fields import Integer, List, Nested, String
+from flask import current_app
 
 from skylib.combine.stacking import combine
 
-from ... import app
 from ...models import Job, JobResult
 from ...schemas import AfterglowSchema, Boolean, Float
 from ..data_files import (
@@ -139,7 +139,7 @@ class StackingJob(Job):
             percentile=settings.percentile,
             lo=lo, hi=hi, smart_stacking=settings.smart_stacking,
             equalize_order=settings.equalize_order,
-            max_mem_mb=app.config.get('JOB_MAX_RAM'),
+            max_mem_mb=current_app.config.get('JOB_MAX_RAM'),
             callback=self.update_progress)[0]
 
         # Create a new data file in the given session and return its ID

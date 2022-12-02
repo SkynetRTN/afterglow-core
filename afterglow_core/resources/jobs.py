@@ -12,8 +12,9 @@ import traceback
 from typing import Any, Dict as TDict
 
 from werkzeug.http import HTTP_STATUS_CODES
+from flask import current_app
+from flask_login import current_user
 
-from .. import app
 from ..errors import AfterglowError, MissingFieldError
 from ..errors.job import JobServerError, UnknownJobError, UnknownJobFileError
 from ..job_server import DbJob, DbJobFile, job_types, msg_hdr, msg_hdr_size
@@ -34,20 +35,18 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
 
     :return: response message
     """
-    from .. import auth
-    user_id = getattr(auth.current_user, 'id', None)
+    user_id = getattr(current_user, 'id', None)
 
     if resource in ('jobs', 'jobs/state', 'jobs/result') and 'id' in args and \
             method.lower() == 'get' and \
-            app.config.get('DB_BACKEND', 'sqlite') != 'sqlite':
+            current_app.config.get('DB_BACKEND', 'sqlite') != 'sqlite':
         # Fast path for getting job result when using non-sqlite backends:
         # retrieve job result directly from the database to avoid extra
         # serialization of large data
         # Return job result
-        from .users import db
         try:
             job_id = args['id']
-            db_job = db.session.query(DbJob).get(job_id)
+            db_job = current_app.db.session.query(DbJob).get(job_id)
             if db_job is None or db_job.user_id != user_id:
                 raise UnknownJobError(id=job_id)
 
@@ -65,7 +64,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
                 except KeyError:
                     raise MissingFieldError(field='file_id')
 
-                job_file = db.session.query(DbJobFile).filter_by(
+                job_file = current_app.db.session.query(DbJobFile).filter_by(
                     job_id=job_id, file_id=file_id).one_or_none()
                 if job_file is None or job_file.job.user_id != user_id:
                     raise UnknownJobFileError(id=file_id)
@@ -121,7 +120,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
 
         # Send message
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect(('localhost', app.config['JOB_SERVER_PORT']))
+        sock.connect(('localhost', current_app.config['JOB_SERVER_PORT']))
         try:
             sock.sendall(struct.pack(msg_hdr, len(msg)) + msg)
 

@@ -2,9 +2,9 @@
 Afterglow Core: login and user account management routes
 """
 
-from flask import Response, request
+from flask import Blueprint, Flask, Response, request
 
-from .... import app, json_response
+from .... import json_response
 from ....auth import auth_required
 from ....models import User
 from ....resources.users import *
@@ -15,7 +15,23 @@ from ....errors.auth import (
 from . import url_prefix
 
 
-@app.route(url_prefix + 'users', methods=['GET', 'POST'])
+__all__ = ['register']
+
+
+blp = Blueprint('users', __name__, url_prefix=url_prefix + 'users')
+user_blp = Blueprint('user', __name__, url_prefix=url_prefix + 'user')
+
+
+def register(app: Flask) -> None:
+    """
+    Register endpoints
+
+    :param app: Flask application
+    """
+    app.register_blueprint(blp)
+
+
+@blp.route('/', methods=['GET', 'POST'])
 @auth_required
 def users() -> Response:
     """
@@ -56,8 +72,7 @@ def users() -> Response:
             only=list(request.args.keys())))), 201)
 
 
-@app.route(url_prefix + 'users/<int:user_id>',
-           methods=['GET', 'PUT', 'DELETE'])
+@blp.route('/<int:user_id>', methods=['GET', 'PUT', 'DELETE'])
 @auth_required
 def user(user_id: int) -> Response:
     """
@@ -129,7 +144,7 @@ def user(user_id: int) -> Response:
 
 
 # Aliases for logged in user
-@app.route(url_prefix + 'user', methods=['GET', 'PUT'])
+@user_blp.route('/', methods=['GET', 'PUT'])
 @auth_required
 def current_user() -> Response:
     """

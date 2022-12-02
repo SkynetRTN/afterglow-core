@@ -3,13 +3,14 @@ Afterglow Core: settings routes
 """
 
 # noinspection PyProtectedMember
-from flask import Response, request, _request_ctx_stack
+from flask import (
+    Blueprint, Flask, Response, current_app, request, _request_ctx_stack)
 
 from ...auth import oauth_plugins
 
-from ... import app, json_response
+from ... import json_response
 from ...auth import set_access_cookies
-from ...resources.users import db, DbUser, DbIdentity, DbRole
+from ...resources.users import DbUser, DbIdentity, DbRole
 from ...errors import MissingFieldError
 from ...errors.auth import (
     NotInitializedError, UnknownAuthMethodError, NotAuthenticatedError)
@@ -17,7 +18,23 @@ from ...errors.auth import (
 from . import url_prefix
 
 
-@app.route(url_prefix + '/oauth2/providers', methods=['GET'])
+__all__ = ['register']
+
+
+blp = Blueprint(
+    'oauth2_providers', __name__, url_prefix=url_prefix + 'oauth2/providers')
+
+
+def register(app: Flask) -> None:
+    """
+    Register endpoints
+
+    :param app: Flask application
+    """
+    app.register_blueprint(blp)
+
+
+@blp.route('/', methods=['GET'])
 def oauth2_providers() -> Response:
     """
     Return available OAuth2 plugins
@@ -34,7 +51,7 @@ def oauth2_providers() -> Response:
     return json_response(plugins)
 
 
-@app.route(url_prefix + '/oauth2/providers/<string:plugin_id>/authorized')
+@blp.route('/<string:plugin_id>/authorized')
 def oauth2_authorized(plugin_id: str) -> Response:
     """
     OAuth2.0 authorization code granted redirect endpoint
@@ -92,16 +109,16 @@ def oauth2_authorized(plugin_id: str) -> Response:
                 identity.user.email = user_profile.get('email') or None
                 identity.user.birth_date = \
                     user_profile.get('birth_date') or None
-                db.session.commit()
+                current_app.db.session.commit()
             except Exception:
-                db.session.rollback()
+                current_app.db.session.rollback()
                 raise
     if identity is None:
         # Authenticated but not in the db; register a new Afterglow user if
         # allowed by plugin or the global config option
         register_users = oauth_plugin.register_users
         if register_users is None:
-            register_users = app.config.get(
+            register_users = current_app.config.get(
                 'REGISTER_AUTHENTICATED_USERS', True)
         if not register_users:
             raise NotAuthenticatedError(
@@ -123,7 +140,7 @@ def oauth2_authorized(plugin_id: str) -> Response:
                     user_profile['id']):
                 if username_candidate and str(username_candidate).strip() and \
                         not DbUser.query.filter(
-                            db.func.lower(DbUser.username) ==
+                            current_app.db.func.lower(DbUser.username) ==
                             username_candidate.lower()).count():
                     username = username_candidate
                     break
@@ -134,18 +151,18 @@ def oauth2_authorized(plugin_id: str) -> Response:
                 email=user_profile.get('email') or None,
                 roles=[DbRole.query.filter_by(name='user').one()],
             )
-            db.session.add(user)
-            db.session.flush()
+            current_app.db.session.add(user)
+            current_app.db.session.flush()
             identity = DbIdentity(
                 user_id=user.id,
                 name=user_profile['id'],
                 auth_method=oauth_plugin.name,
                 data=user_profile,
             )
-            db.session.add(identity)
-            db.session.commit()
+            current_app.db.session.add(identity)
+            current_app.db.session.commit()
         except Exception:
-            db.session.rollback()
+            current_app.db.session.rollback()
             raise
     else:
         user = identity.user
@@ -154,9 +171,9 @@ def oauth2_authorized(plugin_id: str) -> Response:
             # login, update it
             try:
                 identity.data = user_profile
-                db.session.commit()
+                current_app.db.session.commit()
             except Exception:
-                db.session.rollback()
+                current_app.db.session.rollback()
                 raise
 
     _request_ctx_stack.top.user = request.user = user

@@ -16,8 +16,8 @@ from astropy.table import Table
 from astropy.units import arcmin, deg, hour
 from astroquery import query
 from astroquery.vizier import Vizier
+from flask import current_app
 
-from ... import app
 from ...models import Catalog, CatalogSource, Mag
 
 
@@ -32,7 +32,7 @@ _AstroQuery = query.AstroQuery
 
 def to_cache(*args, **kwargs):
     """Cache a query; erase old cache items"""
-    max_age = app.config.get('VIZIER_CACHE_AGE', timedelta(days=30))
+    max_age = current_app.config.get('VIZIER_CACHE_AGE', timedelta(days=30))
     if not isinstance(max_age, timedelta):
         max_age = timedelta(days=max_age)
     cutoff = time.time() - max_age.total_seconds()
@@ -108,9 +108,10 @@ class VizierCatalog(Catalog):
 
         :param kwargs: catalog plugin initialization parameters
         """
-        kwargs.setdefault('vizier_server', app.config.get(
+        kwargs.setdefault('vizier_server', current_app.config.get(
             'VIZIER_SERVER', 'vizier.cfa.harvard.edu'))
-        kwargs.setdefault('cache', app.config.get('VIZIER_CACHE', True))
+        kwargs.setdefault('cache', current_app.config.get(
+            'VIZIER_CACHE', True))
         super().__init__(**kwargs)
 
         # Save the list of VizieR column names derived from column mapping
@@ -348,7 +349,7 @@ class VizierCatalog(Catalog):
 
 
 # Load custom VizieR catalogs defined in the user's config
-for kw in app.config.get('CUSTOM_VIZIER_CATALOGS', []):
+for kw in current_app.config.get('CUSTOM_VIZIER_CATALOGS', []):
     # noinspection PyBroadException
     try:
         # Generate Python class name from catalog name by removing all illegal
@@ -362,5 +363,5 @@ for kw in app.config.get('CUSTOM_VIZIER_CATALOGS', []):
         globals()[classname] = newclass
         __all__.append(classname)
     except Exception:
-        app.logger.warning(
+        current_app.logger.warning(
             'Could not initialize custom VizieR catalog', exc_info=True)

@@ -7,12 +7,12 @@ import traceback
 from datetime import datetime
 from typing import Dict, List as TList, Optional, Union
 from multiprocessing import Queue
-
 import errno
+
 from marshmallow.fields import Integer, List, Nested, String
 from werkzeug.http import HTTP_STATUS_CODES
+from flask import current_app
 
-from .. import app
 from ..errors import MethodNotImplementedError
 from ..errors.job import CannotCreateJobFileError
 from ..schemas import AfterglowSchema, DateTime, Float
@@ -333,7 +333,7 @@ class Job(AfterglowSchema):
         if status == 500:
             error.setdefault('meta', {})['traceback'] = \
                 traceback.format_tb(sys.exc_info()[-1]),
-        if app.config.get('DEBUG'):
+        if current_app.config.get('DEBUG'):
             error.setdefault('meta', {})['traceback'] = \
                 traceback.format_tb(sys.exc_info()[-1]),
         self.result.errors.append(error)
@@ -404,8 +404,12 @@ class Job(AfterglowSchema):
         self._queue.put(dict(id=self.id, file=file_def))
 
 
-job_file_dir = os.path.join(
-    os.path.abspath(app.config['DATA_ROOT']), 'job_files')
+def job_file_dir() -> str:
+    """
+    Return job file directory
+    """
+    return os.path.join(
+        os.path.abspath(current_app.config['DATA_ROOT']), 'job_files')
 
 
 def job_file_path(user_id: Union[int, str], job_id: Union[int, str],
@@ -420,7 +424,7 @@ def job_file_path(user_id: Union[int, str], job_id: Union[int, str],
     :return: path to job file
     """
     if user_id:
-        p = os.path.join(job_file_dir, str(user_id))
+        p = os.path.join(job_file_dir(), str(user_id))
     else:
-        p = job_file_dir
+        p = job_file_dir()
     return os.path.join(p, '{}_{}'.format(job_id, file_id))

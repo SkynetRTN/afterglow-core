@@ -298,11 +298,12 @@ class Resource(AfterglowSchema):
     from afterglow_core import Resource, url_prefix
 
     class MyResource(Resource):
-        __get_view__ = 'my_resource'
+        __get_view__ = 'my_resources.my_resource'
         id = Integer(dump_default=None)
         ...
 
-    @api.route(url_prefix + 'my_resource/[id]')
+    blp = Blueprint('my_resources', __name__, url_prefix='/my_resources')
+    @blp.route('/[id]')
     def my_resource(id):
         ...
     """

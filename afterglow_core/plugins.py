@@ -2,14 +2,11 @@
 Afterglow Core: plugin support
 """
 
-from __future__ import absolute_import, division, print_function
-
+import logging
 import os
 import zipfile
 import zipimport
 from typing import Any, Dict as TDict, List as TList, Union
-
-from . import app
 
 # List of valid Python module suffixes
 try:
@@ -71,7 +68,7 @@ def add_plugin(plugins: TDict[Union[str, int], Any], descr: str, instance: Any,
     else:
         plugins[instance.id] = instance
 
-    app.logger.info(
+    logging.info(
         'Loaded %s plugin "%s"%s', descr, instance.display_name,
         ' (ID {})'.format(instance.id) if instance.id is not None else '')
 
@@ -102,7 +99,7 @@ def load_plugins(descr: str, package: str, plugin_class: Any,
 
     directory = os.path.normpath(os.path.join(
         os.path.dirname(__file__), package.replace('.', os.path.sep)))
-    app.logger.debug('Looking for %s plugins in %s', descr, directory)
+    logging.debug('Looking for %s plugins in %s', descr, directory)
 
     # Search for modules within the specified directory
     # noinspection PyBroadException
@@ -132,7 +129,7 @@ def load_plugins(descr: str, package: str, plugin_class: Any,
                  os.path.splitext(f)[0] != '__init__'}:
         # noinspection PyBroadException
         try:
-            app.logger.debug('Checking module "%s"', name)
+            logging.debug('Checking module "%s"', name)
             # A potential plugin module is found; load it
             m = __import__(
                 'afterglow_core.' + package + '.' + name, globals(), locals(),
@@ -158,14 +155,14 @@ def load_plugins(descr: str, package: str, plugin_class: Any,
                             item.__module__ == m.__name__:
                         plugin_classes[getattr(item,
                                                item.__polymorphic_on__)] = item
-                        app.logger.debug(
+                        logging.debug(
                             'Found %s plugin "%s"', descr,
                             getattr(item, item.__polymorphic_on__))
                 except TypeError:
                     pass
         except Exception:
             # Ignore modules that could not be imported
-            app.logger.debug(
+            logging.debug(
                 'Could not import module "%s"', name, exc_info=True)
 
     plugins = {}
@@ -180,7 +177,7 @@ def load_plugins(descr: str, package: str, plugin_class: Any,
                     **{klass.__polymorphic_on__:
                        getattr(klass, klass.__polymorphic_on__)})
             except Exception:
-                app.logger.exception(
+                logging.exception(
                     'Error loading %s plugin "%s"', descr, name)
                 raise
 
@@ -205,7 +202,7 @@ def load_plugins(descr: str, package: str, plugin_class: Any,
             try:
                 instance = klass(**spec)
             except Exception:
-                app.logger.exception(
+                logging.exception(
                     'Error loading %s plugin "%s" with options %s',
                     descr, name, spec)
                 raise

@@ -33,8 +33,9 @@ from astropy.wcs import FITSFixedWarning
 from astropy.io.fits.verify import VerifyWarning
 from portalocker import Lock as FileLock  # , RedisLock
 import redis.exceptions
+from flask import current_app
 
-from .. import app, errors
+from .. import errors
 from ..models import DataFile, Session
 from ..errors.data_file import *
 from ..errors.data_provider import UnknownDataProviderError
@@ -137,7 +138,7 @@ def get_root(user_id: Optional[int]) -> str:
 
     :return: user's data storage path
     """
-    root = app.config['DATA_FILE_ROOT']
+    root = current_app.config['DATA_FILE_ROOT']
     if user_id:
         root = os.path.join(root, str(user_id))
     return os.path.abspath(os.path.expanduser(root))
@@ -1061,7 +1062,7 @@ def get_data_file_uint8(user_id: Optional[int], file_id: int) -> numpy.ndarray:
     return data
 
 
-def get_data_file_bytes(user_id: Optional[int], file_id: int,
+def get_data_file_bytes(user_id: Optional[int], file_id: Union[int, str],
                         fmt: Optional[str] = None) -> bytes:
     """
     Return FITS file data for data file with the given ID
@@ -1266,7 +1267,8 @@ def get_gain(hdr: pyfits.Header) -> float:
     return gain
 
 
-def get_data_file(user_id: Optional[int], file_id: int) -> DataFile:
+def get_data_file(user_id: Optional[int], file_id: Union[int, str]) \
+        -> DataFile:
     """
     Return data file object for the given ID
 
@@ -1485,7 +1487,7 @@ def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
                 # Data file upload: get from multipart/form-data; use filename
                 # for the 2nd and subsequent files or if the "name" parameter
                 # is not provided
-                if not app.config.get('DATA_FILE_UPLOAD'):
+                if not current_app.config.get('DATA_FILE_UPLOAD'):
                     raise DataFileUploadNotAllowedError()
                 for i, (filename, file) in enumerate(files.items()):
                     all_data_files += import_data_file(
@@ -1636,7 +1638,7 @@ def delete_data_file(user_id: Optional[int], id: int) -> None:
             os.remove(filename)
         except Exception as e:
             # noinspection PyUnresolvedReferences
-            app.logger.warning(
+            current_app.logger.warning(
                 'Error removing data file "%s" (ID %d) [%s]',
                 filename, id,
                 e.message if hasattr(e, 'message') and e.message

@@ -2,19 +2,31 @@
 Afterglow Core: API v1 field cal views
 """
 
-from flask import Response, request
+from flask import Blueprint, Flask, Response, request
 
-from .... import app, auth, json_response
+from .... import auth, json_response
 from ....models import FieldCal
 from ....resources.field_cals import *
 from ....schemas.api.v1 import FieldCalSchema
 from . import url_prefix
 
 
-resource_prefix = url_prefix + 'field-cals/'
+__all__ = ['register']
 
 
-@app.route(resource_prefix[:-1], methods=['GET', 'POST'])
+blp = Blueprint('field_cals', __name__, url_prefix=url_prefix + 'field-cals')
+
+
+def register(app: Flask) -> None:
+    """
+    Register endpoints
+
+    :param app: Flask application
+    """
+    app.register_blueprint(blp)
+
+
+@blp.route('/', methods=['GET', 'POST'])
 @auth.auth_required('user')
 def field_cals() -> Response:
     """
@@ -44,7 +56,7 @@ def field_cals() -> Response:
                      only=list(request.args.keys())))), 201)
 
 
-@app.route(resource_prefix + '<id_or_name>', methods=['GET', 'PUT', 'DELETE'])
+@blp.route('/<id_or_name>', methods=['GET', 'PUT', 'DELETE'])
 @auth.auth_required('user')
 def field_cal(id_or_name: str) -> Response:
     """

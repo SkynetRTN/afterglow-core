@@ -2,18 +2,35 @@
 Afterglow Core: login and user account management routes
 """
 
-from flask import Response, request
+from flask import Blueprint, Flask, Response, current_app, request
 
-from ... import app, json_response
+from ... import json_response
 from ...auth import auth_required
 from ...oauth2 import oauth_clients
-from ...resources.users import db, DbUserClient
+from ...resources.users import DbUserClient
 from ...errors.oauth2 import UnknownClientError, MissingClientIdError
 from . import url_prefix
 
 
-@app.route(url_prefix + 'app-authorizations', methods=['GET', 'POST'])
-@app.route(url_prefix + 'app-authorizations/<int:id>', methods=['DELETE'])
+__all__ = ['register']
+
+
+blp = Blueprint(
+    'app_authorizations', __name__,
+    url_prefix=url_prefix + 'app-authorizations')
+
+
+def register(app: Flask) -> None:
+    """
+    Register endpoints
+
+    :param app: Flask application
+    """
+    app.register_blueprint(blp)
+
+
+@blp.route('/', methods=['GET', 'POST'])
+@blp.route('/<int:id>', methods=['DELETE'])
 @auth_required
 def app_authorizations(id: int = None) -> Response:
     user_id = request.user.id
@@ -48,11 +65,11 @@ def app_authorizations(id: int = None) -> Response:
 
         if not user_client:
             try:
-                db.session.add(DbUserClient(
+                current_app.db.session.add(DbUserClient(
                     user_id=user_id, client_id=client_id))
-                db.session.commit()
+                current_app.db.session.commit()
             except Exception:
-                db.session.rollback()
+                current_app.db.session.rollback()
                 raise
             return json_response('', 201)
 
@@ -63,9 +80,9 @@ def app_authorizations(id: int = None) -> Response:
         try:
             DbUserClient.query.filter_by(user_id=user_id, id=id).delete()
 
-            db.session.commit()
+            current_app.db.session.commit()
         except Exception:
-            db.session.rollback()
+            current_app.db.session.rollback()
             raise
 
         return json_response({})

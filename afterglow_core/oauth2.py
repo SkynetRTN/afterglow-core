@@ -29,13 +29,11 @@ expiration time.
 import time
 import secrets
 
-from flask import request
-
-from . import app
+from flask import current_app, request
 
 
 __all__ = [
-    'oauth_clients', 'oauth_server', 'Token',
+    'init_oauth', 'oauth_clients', 'oauth_server', 'Token',
 ]
 
 
@@ -45,7 +43,7 @@ oauth_clients = {}
 oauth_server = None
 
 
-def _init_oauth():
+def init_oauth():
     """
     Initialize Afterglow OAuth2 server
 
@@ -57,10 +55,13 @@ def _init_oauth():
     from authlib.integrations.sqla_oauth2 import (
         OAuth2AuthorizationCodeMixin, OAuth2TokenMixin, create_save_token_func)
     from authlib.integrations.flask_oauth2 import AuthorizationServer
-    from .resources.users import DbUser, db
+    from .resources.users import DbUser
 
     global Token, oauth_server
 
+    db = current_app.db
+
+    # noinspection PyAbstractClass
     class OAuth2Client(ClientMixin):
         """
         OAuth2 client definition class
@@ -230,7 +231,7 @@ def _init_oauth():
             if self.revoked:
                 return False
             expires_at = self.issued_at + \
-                app.config.get('REFRESH_TOKEN_EXPIRES')
+                current_app.config.get('REFRESH_TOKEN_EXPIRES')
             return expires_at >= time.time()
 
     Token = _Token
@@ -297,19 +298,19 @@ def _init_oauth():
                 db.session.rollback()
                 raise
 
-    for client_def in app.config.get('OAUTH_CLIENTS', []):
+    for client_def in current_app.config.get('OAUTH_CLIENTS', []):
         oauth_clients[client_def.get('client_id')] = OAuth2Client(**client_def)
 
     def access_token_generator(*_):
         return secrets.token_hex(20)
 
     # Configure Afterglow OAuth2 tokens
-    app.config['OAUTH2_ACCESS_TOKEN_GENERATOR'] = \
-        app.config['OAUTH2_REFRESH_TOKEN_GENERATOR'] = \
+    current_app.config['OAUTH2_ACCESS_TOKEN_GENERATOR'] = \
+        current_app.config['OAUTH2_REFRESH_TOKEN_GENERATOR'] = \
         access_token_generator
 
     oauth_server = AuthorizationServer(
-        app,
+        current_app,
         query_client=lambda client_id: oauth_clients.get(client_id),
         save_token=create_save_token_func(db.session, Token),
     )
@@ -319,8 +320,4 @@ def _init_oauth():
         AuthorizationCodeGrant, [CodeChallenge(required=True)])
     oauth_server.register_grant(RefreshTokenGrant)
 
-    app.logger.info('Initialized Afterglow OAuth2 Service')
-
-
-if app.config.get('AUTH_ENABLED'):
-    _init_oauth()
+    current_app.logger.info('Initialized Afterglow OAuth2 Service')

@@ -9,11 +9,11 @@ from typing import Optional
 from astropy import units as u
 from astropy.coordinates import Angle
 from astroquery.skyview import SkyView
-from flask import Response, request
+from flask import Blueprint, Flask, Response, request
 
 from skylib.io.conversion import get_image
 
-from .... import app, json_response
+from .... import json_response
 from ....auth import auth_required
 from ....resources.imaging_surveys import survey_scales, default_size
 from ....errors import MissingFieldError, NotAcceptedError, ValidationError
@@ -22,11 +22,24 @@ from ....errors.imaging_survey import (
 from . import url_prefix
 
 
-resource_prefix = url_prefix + 'imaging-surveys/'
+__all__ = ['register']
 
 
-@app.route(resource_prefix[:-1])
-@app.route(resource_prefix + '<name>')
+blp = Blueprint(
+    'imaging_surveys', __name__, url_prefix=url_prefix + 'imaging-surveys')
+
+
+def register(app: Flask) -> None:
+    """
+    Register endpoints
+
+    :param app: Flask application
+    """
+    app.register_blueprint(blp)
+
+
+@blp.route('/')
+@blp.route('/<name>')
 @auth_required('user')
 def get_imaging_surveys(name: Optional[str] = None) -> Response:
     """
@@ -117,7 +130,8 @@ def get_imaging_surveys(name: Optional[str] = None) -> Response:
             if not -90 <= ra <= 90:
                 raise ValueError()
         except ValueError:
-            raise ValidationError('dec_degs', 'Expected -90 <= dec_degs <= +90')
+            raise ValidationError(
+                'dec_degs', 'Expected -90 <= dec_degs <= +90')
         # noinspection PyUnresolvedReferences
         position = '{}, {}'.format(
             Angle(ra*u.hour).to_string(sep=' ', precision=3, pad=2),
@@ -162,8 +176,8 @@ def get_imaging_surveys(name: Optional[str] = None) -> Response:
             allow_json = allow_bin = True
 
         if allow_bin:
-            # Make sure data are in little-endian byte order before sending over
-            # the net
+            # Make sure data are in little-endian byte order before sending
+            # over the net
             if data.dtype.byteorder == '>' or \
                     data.dtype.byteorder == '=' and sys.byteorder == 'big':
                 data = data.byteswap()

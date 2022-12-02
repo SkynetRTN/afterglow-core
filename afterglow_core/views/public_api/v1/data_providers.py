@@ -4,9 +4,9 @@ Afterglow Core: API v1 data provider views
 
 from typing import Optional, Union
 
-from flask import Response, request
+from flask import Blueprint, Flask, Response, request
 
-from .... import app, errors, json_response
+from .... import errors, json_response
 from ....auth import auth_required
 from ....resources.data_providers import providers
 from ....resources.data_files import (
@@ -24,11 +24,24 @@ from ....errors.data_file import UnknownDataFileGroupError
 from . import url_prefix
 
 
-resource_prefix = url_prefix + 'data-providers/'
+__all__ = ['register']
 
 
-@app.route(resource_prefix[:-1])
-@app.route(resource_prefix + '<id>')
+blp = Blueprint(
+    'data_providers', __name__, url_prefix=url_prefix + 'data-providers')
+
+
+def register(app: Flask) -> None:
+    """
+    Register endpoints
+
+    :param app: Flask application
+    """
+    app.register_blueprint(blp)
+
+
+@blp.route('/')
+@blp.route('/<id>')
 @auth_required('user')
 def data_providers(id: Optional[Union[int, str]] = None) -> Response:
     """
@@ -74,7 +87,7 @@ def data_providers(id: Optional[Union[int, str]] = None) -> Response:
     return json_response(DataProviderSchema(provider))
 
 
-@app.route(resource_prefix + '<id>/assets', methods=('GET', 'PUT', 'DELETE'))
+@blp.route('/<id>/assets', methods=('GET', 'PUT', 'DELETE'))
 @auth_required('user')
 def data_providers_assets(id: Union[int, str]) -> Response:
     """
@@ -201,8 +214,7 @@ def data_providers_assets(id: Union[int, str]) -> Response:
         return json_response()
 
 
-@app.route(resource_prefix + '<id>/assets/data',
-           methods=('GET', 'POST', 'PUT'))
+@blp.route('/<id>/assets/data', methods=('GET', 'POST', 'PUT'))
 @auth_required('user')
 def data_providers_assets_data(id: Union[int, str]) -> Response:
     """
