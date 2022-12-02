@@ -48,7 +48,11 @@ class Token(AfterglowSchema):
     user_id: int = Integer()
     token_type: str = String()
     access_token: str = String()
+    refresh_token: str = String()
+    scope: str = String()
     issued_at: int = Integer()
+    access_token_revoked_at: int = Integer()
+    refresh_token_revoked_at: int = Integer()
     expires_in: int = Integer()
     note: str = String()
 

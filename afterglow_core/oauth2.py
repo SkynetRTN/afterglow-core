@@ -43,6 +43,7 @@ oauth_clients = {}
 oauth_server = None
 
 
+# noinspection PyRedeclaration
 def init_oauth():
     """
     Initialize Afterglow OAuth2 server
@@ -202,7 +203,7 @@ def init_oauth():
 
         user = db.relationship('DbUser', uselist=False, backref='oauth_codes')
 
-    class _Token(db.Model, OAuth2TokenMixin):
+    class Token(db.Model, OAuth2TokenMixin):
         """
         Token object; stored in the memory database
         """
@@ -221,20 +222,14 @@ def init_oauth():
 
         @property
         def active(self) -> bool:
-            if self.revoked:
-                return False
-            if not self.expires_in:
-                return True
-            return self.issued_at + self.expires_in >= time.time()
+            return not self.is_revoked() and not self.is_expired()
 
         def is_refresh_token_active(self):
-            if self.revoked:
+            if self.refresh_token_revoked_at:
                 return False
             expires_at = self.issued_at + \
                 current_app.config.get('REFRESH_TOKEN_EXPIRES')
             return expires_at >= time.time()
-
-    Token = _Token
 
     class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
         def save_authorization_code(self, code, req) -> None:
@@ -286,11 +281,12 @@ def init_oauth():
             if token and token.is_refresh_token_active():
                 return token
 
-        def authenticate_user(self, credential) -> DbUser:
+        def authenticate_user(self, credential: Token) -> DbUser:
             return credential.user
 
-        def revoke_old_credential(self, credential) -> None:
-            credential.revoked = True
+        def revoke_old_credential(self, credential: Token) -> None:
+            credential.access_token_revoked_at = \
+                credential.refresh_token_revoked_at = int(time.time())
             try:
                 db.session.add(credential)
                 db.session.commit()

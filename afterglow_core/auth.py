@@ -230,8 +230,8 @@ def init_auth() -> None:
                         user_id=user_id,
                         token_type='cookie') \
                     .one_or_none()
-                if not token or not token.active:
-                    if token:
+                if token is None or not token.active:
+                    if token is not None:
                         # Delete revoked/expired tokens from the db
                         # noinspection PyBroadException
                         try:
@@ -320,14 +320,13 @@ def init_auth() -> None:
                         access_token=access_token,
                         token_type=token_type).one_or_none()
                 else:
-                    token = Token.query.filter_by(
-                        access_token=access_token,
-                        # token_type=token_type,
-                        revoked=False).one_or_none()
-                if not token:
+                    token = Token.query.filter(
+                        Token.access_token == access_token,
+                        Token.access_token_revoked_at != False).one_or_none()
+                if token is None:
                     raise ValueError('Token does not exist')
                 if not token.active:
-                    raise ValueError('Token expired')
+                    raise ValueError('Token revoked or expired')
 
                 user = token.user
 
