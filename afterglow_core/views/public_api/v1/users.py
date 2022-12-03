@@ -29,6 +29,7 @@ def register(app: Flask) -> None:
     :param app: Flask application
     """
     app.register_blueprint(blp)
+    app.register_blueprint(user_blp)
 
 
 @blp.route('/', methods=['GET', 'POST'])
