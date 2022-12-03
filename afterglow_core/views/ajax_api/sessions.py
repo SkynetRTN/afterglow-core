@@ -1,5 +1,5 @@
 
-from flask import Blueprint, Flask, request, session, _request_ctx_stack
+from flask import g, request, session
 from flask_security.utils import verify_password
 
 from ... import json_response
@@ -7,27 +7,12 @@ from ...auth import auth_required, set_access_cookies, clear_access_cookies
 from ...resources.users import DbUser
 from ...errors import ValidationError
 from ...errors.auth import HttpAuthFailedError
-from . import url_prefix
-
-
-__all__ = ['register']
-
-
-blp = Blueprint('ajax_sessions', __name__, url_prefix=url_prefix + 'sessions')
-
-
-def register(app: Flask) -> None:
-    """
-    Register endpoints
-
-    :param app: Flask application
-    """
-    app.register_blueprint(blp)
+from . import ajax_blp as blp
 
 
 # @csrf.exempt
-@blp.route('/', methods=['POST'])
-def post():
+@blp.route('/sessions', methods=['POST'])
+def sessions_post():
     # Login using local identity
     username = request.args.get('username')
     if not username:
@@ -45,13 +30,13 @@ def post():
         raise HttpAuthFailedError()
 
     # Set token cookies
-    _request_ctx_stack.top.user = request.user = user
+    g._login_user = request.user = user
 
     return set_access_cookies(json_response(), user.id)
 
 
-@blp.route('/', methods=['DELETE'])
+@blp.route('/sessions', methods=['DELETE'])
 @auth_required
-def delete():
+def sessions_delete():
     session.clear()
     return clear_access_cookies(json_response())

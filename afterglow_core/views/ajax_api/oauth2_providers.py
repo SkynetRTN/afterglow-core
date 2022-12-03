@@ -3,38 +3,18 @@ Afterglow Core: settings routes
 """
 
 # noinspection PyProtectedMember
-from flask import (
-    Blueprint, Flask, Response, current_app, request, _request_ctx_stack)
-
-from ...auth import oauth_plugins
+from flask import Response, current_app, request, _request_ctx_stack
 
 from ... import json_response
-from ...auth import set_access_cookies
+from ...auth import oauth_plugins, set_access_cookies
 from ...resources.users import DbUser, DbIdentity, DbRole
 from ...errors import MissingFieldError
 from ...errors.auth import (
     NotInitializedError, UnknownAuthMethodError, NotAuthenticatedError)
-
-from . import url_prefix
-
-
-__all__ = ['register']
+from . import ajax_blp as blp
 
 
-blp = Blueprint(
-    'oauth2_providers', __name__, url_prefix=url_prefix + 'oauth2/providers')
-
-
-def register(app: Flask) -> None:
-    """
-    Register endpoints
-
-    :param app: Flask application
-    """
-    app.register_blueprint(blp)
-
-
-@blp.route('/', methods=['GET'])
+@blp.route('/oauth2/providers', methods=['GET'])
 def oauth2_providers() -> Response:
     """
     Return available OAuth2 plugins
@@ -51,7 +31,7 @@ def oauth2_providers() -> Response:
     return json_response(plugins)
 
 
-@blp.route('/<string:plugin_id>/authorized')
+@blp.route('/oauth2/providers/<string:plugin_id>/authorized')
 def oauth2_authorized(plugin_id: str) -> Response:
     """
     OAuth2.0 authorization code granted redirect endpoint

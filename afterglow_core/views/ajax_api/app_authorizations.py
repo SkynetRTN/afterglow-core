@@ -2,35 +2,18 @@
 Afterglow Core: login and user account management routes
 """
 
-from flask import Blueprint, Flask, Response, current_app, request
+from flask import Response, current_app, request
 
 from ... import json_response
 from ...auth import auth_required
 from ...oauth2 import oauth_clients
 from ...resources.users import DbUserClient
 from ...errors.oauth2 import UnknownClientError, MissingClientIdError
-from . import url_prefix
+from . import ajax_blp as blp
 
 
-__all__ = ['register']
-
-
-blp = Blueprint(
-    'app_authorizations', __name__,
-    url_prefix=url_prefix + 'app-authorizations')
-
-
-def register(app: Flask) -> None:
-    """
-    Register endpoints
-
-    :param app: Flask application
-    """
-    app.register_blueprint(blp)
-
-
-@blp.route('/', methods=['GET', 'POST'])
-@blp.route('/<int:id>', methods=['DELETE'])
+@blp.route('/app-authorizations', methods=['GET', 'POST'])
+@blp.route('/app-authorizations/<int:id>', methods=['DELETE'])
 @auth_required
 def app_authorizations(id: int = None) -> Response:
     user_id = request.user.id

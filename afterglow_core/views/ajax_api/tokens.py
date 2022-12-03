@@ -4,7 +4,7 @@ Afterglow Core: settings routes
 
 import secrets
 
-from flask import Blueprint, Flask, Response, current_app, request
+from flask import Response, current_app, request
 from marshmallow.fields import Integer, String
 
 from ... import json_response
@@ -13,26 +13,11 @@ from ...resources.users import DbPersistentToken
 from ...schemas import Resource
 from ...errors import ValidationError
 from ...errors.auth import UnknownTokenError
-from . import url_prefix
-
-
-__all__ = ['register']
-
-
-blp = Blueprint('tokens', __name__, url_prefix=url_prefix + 'tokens')
-
-
-def register(app: Flask) -> None:
-    """
-    Register endpoints
-
-    :param app: Flask application
-    """
-    app.register_blueprint(blp)
+from . import ajax_blp as blp
 
 
 class TokenSchema(Resource):
-    __get_view__ = 'tokens.tokens'
+    __get_view__ = 'ajax_api.tokens'
 
     id: int = Integer()
     user_id: int = Integer()
@@ -43,7 +28,7 @@ class TokenSchema(Resource):
     note: str = String()
 
 
-@blp.route('/', methods=['GET', 'POST'])
+@blp.route('/tokens', methods=['GET', 'POST'])
 @auth_required
 def tokens() -> Response:
     """
@@ -83,7 +68,7 @@ def tokens() -> Response:
         return json_response(TokenSchema(personal_token), 201)
 
 
-@blp.route('/<int:token_id>', methods=['DELETE'])
+@blp.route('/tokens/<int:token_id>', methods=['DELETE'])
 @auth_required
 def token(token_id: int) -> Response:
     """

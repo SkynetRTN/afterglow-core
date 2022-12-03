@@ -1,5 +1,5 @@
 
-from flask import Blueprint, Flask, Response, current_app, request
+from flask import Response, current_app, request
 from flask_security.utils import hash_password
 
 from ... import json_response
@@ -7,25 +7,10 @@ from ...resources.users import DbUser, DbRole
 from ...schemas.api.v1 import UserSchema
 from ...errors import MissingFieldError
 from ...errors.auth import InitPageNotAvailableError
-from . import url_prefix
+from . import ajax_blp as blp
 
 
-__all__ = ['register']
-
-
-blp = Blueprint('initialize', __name__, url_prefix=url_prefix + 'initialize')
-
-
-def register(app: Flask) -> None:
-    """
-    Register endpoints
-
-    :param app: Flask application
-    """
-    app.register_blueprint(blp)
-
-
-@blp.route('/', methods=['POST'])
+@blp.route('/initialize', methods=['POST'])
 def initialize() -> Response:
     """
     Afterglow Core initialization
