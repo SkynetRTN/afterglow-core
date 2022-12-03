@@ -7,7 +7,7 @@ from flask import Blueprint, Flask, current_app, redirect, request
 
 from ...auth import auth_required
 from ...oauth2 import oauth_server
-from ...resources.users import DbUserClient
+from ...resources import users
 from ...errors import MissingFieldError
 
 
@@ -34,7 +34,7 @@ def oauth2_authorize():
         raise MissingFieldError('client_id')
 
     # Check that the user allowed the client
-    if not DbUserClient.query.filter_by(
+    if not users.DbUserClient.query.filter_by(
             user_id=request.user.id, client_id=client_id).count():
         # Redirect users to consent page if the client was not confirmed yet
         dashboard_prefix = current_app.config.get("DASHBOARD_PREFIX")

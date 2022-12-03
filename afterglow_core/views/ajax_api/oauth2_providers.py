@@ -7,7 +7,7 @@ from flask import Response, current_app, request, _request_ctx_stack
 
 from ... import json_response
 from ...auth import oauth_plugins, set_access_cookies
-from ...resources.users import DbUser, DbIdentity, DbRole
+from ...resources import users
 from ...errors import MissingFieldError
 from ...errors.auth import (
     NotInitializedError, UnknownAuthMethodError, NotAuthenticatedError)
@@ -41,7 +41,7 @@ def oauth2_authorized(plugin_id: str) -> Response:
     :return: redirect to original request URL
     """
     # Do not allow login if Afterglow Core has not yet been configured
-    if DbUser.query.count() == 0:
+    if users.DbUser.query.count() == 0:
         raise NotInitializedError()
 
     if not plugin_id or plugin_id not in oauth_plugins.keys():
@@ -64,7 +64,7 @@ def oauth2_authorized(plugin_id: str) -> Response:
         raise NotAuthenticatedError(error_msg='No user profile data returned')
 
     # Get the user from db
-    identity = DbIdentity.query \
+    identity = users.DbIdentity.query \
         .filter_by(auth_method=oauth_plugin.name, name=user_profile['id']) \
         .one_or_none()
     if identity is None and oauth_plugin.name == 'skynet':
@@ -72,7 +72,7 @@ def oauth2_authorized(plugin_id: str) -> Response:
         # versions that used Skynet usernames instead of IDs; a potential
         # security issue is a Skynet user with a numeric username matching
         # some other user's Skynet user ID
-        identity = DbIdentity.query \
+        identity = users.DbIdentity.query \
             .filter_by(auth_method=oauth_plugin.name,
                        name=user_profile['username']) \
             .one_or_none()
@@ -119,21 +119,21 @@ def oauth2_authorized(plugin_id: str) -> Response:
                          if user_profile.get('last_name') else [])),
                     user_profile['id']):
                 if username_candidate and str(username_candidate).strip() and \
-                        not DbUser.query.filter(
-                            current_app.db.func.lower(DbUser.username) ==
+                        not users.DbUser.query.filter(
+                            current_app.db.func.lower(users.DbUser.username) ==
                             username_candidate.lower()).count():
                     username = username_candidate
                     break
-            user = DbUser(
+            user = users.DbUser(
                 username=username or None,
                 first_name=user_profile.get('first_name') or None,
                 last_name=user_profile.get('last_name') or None,
                 email=user_profile.get('email') or None,
-                roles=[DbRole.query.filter_by(name='user').one()],
+                roles=[users.DbRole.query.filter_by(name='user').one()],
             )
             current_app.db.session.add(user)
             current_app.db.session.flush()
-            identity = DbIdentity(
+            identity = users.DbIdentity(
                 user_id=user.id,
                 name=user_profile['id'],
                 auth_method=oauth_plugin.name,

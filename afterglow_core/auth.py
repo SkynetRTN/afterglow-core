@@ -284,7 +284,7 @@ def init_auth() -> None:
 
         :param roles: list of authenticated user role IDs or a single role ID
         """
-        from .resources.users import DbPersistentToken
+        from .resources import users
         from .oauth2 import Token
 
         # If access token in HTTP Authorization header, verify and authorize.
@@ -316,7 +316,7 @@ def init_auth() -> None:
             try:
                 if token_type == 'personal':
                     # Should be an existing permanent token
-                    token = DbPersistentToken.query.filter_by(
+                    token = users.DbPersistentToken.query.filter_by(
                         access_token=access_token,
                         token_type=token_type).one_or_none()
                 else:

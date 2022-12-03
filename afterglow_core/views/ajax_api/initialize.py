@@ -3,7 +3,7 @@ from flask import Response, current_app, request
 from flask_security.utils import hash_password
 
 from ... import json_response
-from ...resources.users import DbUser, DbRole
+from ...resources import users
 from ...schemas.api.v1 import UserSchema
 from ...errors import MissingFieldError
 from ...errors.auth import InitPageNotAvailableError
@@ -25,7 +25,7 @@ def initialize() -> Response:
         GET: initialization page HTML
         POST: JSON-serialized :class:`UserSchema`
     """
-    if DbUser.query.count() != 0:
+    if users.DbUser.query.count() != 0:
         raise InitPageNotAvailableError()
 
     if request.method == 'POST':
@@ -39,7 +39,7 @@ def initialize() -> Response:
         # TODO check security of password
 
         try:
-            u = DbUser(
+            u = users.DbUser(
                 username=username,
                 password=hash_password(password),
                 email=request.args.get('email'),
@@ -47,8 +47,8 @@ def initialize() -> Response:
                 last_name=request.args.get('last_name'),
                 active=True,
                 roles=[
-                    DbRole.query.filter_by(name='admin').one(),
-                    DbRole.query.filter_by(name='user').one(),
+                    users.DbRole.query.filter_by(name='admin').one(),
+                    users.DbRole.query.filter_by(name='user').one(),
                 ],
                 settings=request.args.get('settings'),
             )

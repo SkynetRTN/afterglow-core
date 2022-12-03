@@ -7,7 +7,7 @@ from flask import Response, current_app, request
 from ... import json_response
 from ...auth import auth_required
 from ...oauth2 import oauth_clients
-from ...resources.users import DbUserClient
+from ...resources import users
 from ...errors.oauth2 import UnknownClientError, MissingClientIdError
 from . import ajax_blp as blp
 
@@ -19,9 +19,8 @@ def app_authorizations(id: int = None) -> Response:
     user_id = request.user.id
 
     if request.method == 'GET':
-        user_clients = DbUserClient.query.filter_by(user_id=user_id).all()
         result = []
-        for user_client in user_clients:
+        for user_client in users.DbUserClient.query.filter_by(user_id=user_id):
             client = oauth_clients[user_client.client_id]
             result.append(dict(
                 id=user_client.id,
@@ -43,12 +42,12 @@ def app_authorizations(id: int = None) -> Response:
         if client_id not in oauth_clients:
             raise UnknownClientError(id=client_id)
 
-        user_client = DbUserClient.query.filter_by(
+        user_client = users.DbUserClient.query.filter_by(
             user_id=user_id, client_id=client_id).one_or_none()
 
         if not user_client:
             try:
-                current_app.db.session.add(DbUserClient(
+                current_app.db.session.add(users.DbUserClient(
                     user_id=user_id, client_id=client_id))
                 current_app.db.session.commit()
             except Exception:
@@ -61,7 +60,7 @@ def app_authorizations(id: int = None) -> Response:
     if request.method == 'DELETE':
         # TODO remove all active tokens associated with user/client
         try:
-            DbUserClient.query.filter_by(user_id=user_id, id=id).delete()
+            users.DbUserClient.query.filter_by(user_id=user_id, id=id).delete()
 
             current_app.db.session.commit()
         except Exception:

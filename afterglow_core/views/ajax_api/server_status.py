@@ -5,7 +5,7 @@ Afterglow Core: settings routes
 from flask import Response
 
 from ... import json_response
-from ...resources.users import DbUser
+from ...resources import users
 from . import ajax_blp as blp, __version__
 
 
@@ -17,9 +17,7 @@ def server_status() -> Response:
     :return:
         GET /ajax/server_status: server status
     """
-    # TODO: import version number from module
-
     return json_response({
-        'initialized': DbUser.query.count() != 0,
+        'initialized': users.DbUser.query.count() != 0,
         'version': '.'.join(str(i) for i in __version__)
     })

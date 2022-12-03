@@ -56,7 +56,7 @@ def init_oauth():
     from authlib.integrations.sqla_oauth2 import (
         OAuth2AuthorizationCodeMixin, OAuth2TokenMixin, create_save_token_func)
     from authlib.integrations.flask_oauth2 import AuthorizationServer
-    from .resources.users import DbUser
+    from .resources import users
 
     global Token, oauth_server
 
@@ -270,8 +270,8 @@ def init_oauth():
                 db.session.rollback()
                 raise
 
-        def authenticate_user(self, authorization_code) -> DbUser:
-            return DbUser.query.get(authorization_code.user_id)
+        def authenticate_user(self, authorization_code) -> users.DbUser:
+            return users.DbUser.query.get(authorization_code.user_id)
 
     class RefreshTokenGrant(grants.RefreshTokenGrant):
         def authenticate_refresh_token(self, refresh_token) -> Token:
@@ -281,7 +281,7 @@ def init_oauth():
             if token and token.is_refresh_token_active():
                 return token
 
-        def authenticate_user(self, credential: Token) -> DbUser:
+        def authenticate_user(self, credential: Token) -> users.DbUser:
             return credential.user
 
         def revoke_old_credential(self, credential: Token) -> None:

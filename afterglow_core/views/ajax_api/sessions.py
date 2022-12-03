@@ -4,7 +4,7 @@ from flask_security.utils import verify_password
 
 from ... import json_response
 from ...auth import auth_required, set_access_cookies, clear_access_cookies
-from ...resources.users import DbUser
+from ...resources import users
 from ...errors import ValidationError
 from ...errors.auth import HttpAuthFailedError
 from . import ajax_blp as blp
@@ -22,7 +22,7 @@ def sessions_post():
     if not password:
         raise ValidationError('password', 'Password cannot be empty')
 
-    user = DbUser.query.filter_by(username=username).one_or_none()
+    user = users.DbUser.query.filter_by(username=username).one_or_none()
     if user is None:
         raise HttpAuthFailedError()
 
