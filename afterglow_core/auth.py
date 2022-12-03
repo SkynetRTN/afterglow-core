@@ -320,9 +320,9 @@ def init_auth() -> None:
                         access_token=access_token,
                         token_type=token_type).one_or_none()
                 else:
-                    token = Token.query.filter(
-                        Token.access_token == access_token,
-                        Token.access_token_revoked_at != False).one_or_none()
+                    token = Token.query.filter_by(
+                        access_token=access_token,
+                        access_token_revoked_at=0).one_or_none()
                 if token is None:
                     raise ValueError('Token does not exist')
                 if not token.active:
