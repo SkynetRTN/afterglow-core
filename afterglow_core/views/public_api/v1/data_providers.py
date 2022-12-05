@@ -8,7 +8,7 @@ from flask import Blueprint, Flask, Response, request
 
 from .... import errors, json_response
 from ....auth import auth_required
-from ....resources import data_providers
+from ....resources import data_providers as dp
 from ....resources.data_files import (
     get_data_file, get_data_file_bytes, get_data_file_group,
     get_data_file_group_bytes, update_data_file_asset,
@@ -61,9 +61,8 @@ def data_providers(id: Optional[Union[int, str]] = None) -> Response:
     if id is None:
         # List only data providers allowed for the current user's auth method
         allowed_providers = []
-        for id in sorted({provider.id
-                          for provider in data_providers.providers.values()}):
-            provider = data_providers.providers[id]
+        for id in sorted({provider.id for provider in dp.providers.values()}):
+            provider = dp.providers[id]
             try:
                 provider.check_auth()
             except NotAuthenticatedError:
@@ -74,10 +73,10 @@ def data_providers(id: Optional[Union[int, str]] = None) -> Response:
             [DataProviderSchema(provider) for provider in allowed_providers])
 
     try:
-        provider = data_providers.providers[id]
+        provider = dp.providers[id]
     except KeyError:
         try:
-            provider = data_providers.providers[int(id)]
+            provider = dp.providers[int(id)]
         except (KeyError, ValueError):
             raise UnknownDataProviderError(id=id)
 
@@ -119,10 +118,10 @@ def data_providers_assets(id: Union[int, str]) -> Response:
     :return: request-dependent JSON response, see above
     """
     try:
-        provider = data_providers.providers[id]
+        provider = dp.providers[id]
     except KeyError:
         try:
-            provider = data_providers.providers[int(id)]
+            provider = dp.providers[int(id)]
         except (KeyError, ValueError):
             raise UnknownDataProviderError(id=id)
     provider.check_auth()
@@ -286,10 +285,10 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
     :return: request-dependent JSON response, see above
     """
     try:
-        provider = data_providers.providers[id]
+        provider = dp.providers[id]
     except KeyError:
         try:
-            provider = data_providers.providers[int(id)]
+            provider = dp.providers[int(id)]
         except (KeyError, ValueError):
             raise UnknownDataProviderError(id=id)
     provider.check_auth()
@@ -427,10 +426,10 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
             src_provider = provider
         else:
             try:
-                src_provider = data_providers.providers[src_provider_id]
+                src_provider = dp.providers[src_provider_id]
             except KeyError:
                 try:
-                    src_provider = data_providers.providers[
+                    src_provider = dp.providers[
                         int(src_provider_id)]
                 except (KeyError, ValueError):
                     raise UnknownDataProviderError(id=src_provider_id)
