@@ -33,11 +33,9 @@ from flask import current_app, request
 
 
 __all__ = [
-    'init_oauth', 'oauth_clients', 'oauth_server', 'Token',
+    'init_oauth', 'oauth_clients', 'oauth_server',
 ]
 
-
-Token = None
 
 oauth_clients = {}
 oauth_server = None
@@ -53,14 +51,13 @@ def init_oauth():
     from authlib.oauth2.rfc6749 import ClientMixin
     from authlib.oauth2.rfc6749 import grants
     from authlib.oauth2.rfc7636 import CodeChallenge
-    from authlib.integrations.sqla_oauth2 import (
-        OAuth2AuthorizationCodeMixin, OAuth2TokenMixin, create_save_token_func)
+    from authlib.integrations.sqla_oauth2 import create_save_token_func
     from authlib.integrations.flask_oauth2 import AuthorizationServer
     from .resources import users
 
-    global Token, oauth_server
+    global oauth_server
 
-    db = current_app.db
+    db = users.db
 
     # noinspection PyAbstractClass
     class OAuth2Client(ClientMixin):
@@ -192,45 +189,6 @@ def init_oauth():
             """
             return grant_type in self.allowed_grant_types
 
-    class OAuth2AuthorizationCode(db.Model, OAuth2AuthorizationCodeMixin):
-        __tablename__ = 'oauth_codes'
-        __table_args__ = dict(sqlite_autoincrement=True)
-
-        id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(
-            db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
-            nullable=False)
-
-        user = db.relationship('DbUser', uselist=False, backref='oauth_codes')
-
-    class Token(db.Model, OAuth2TokenMixin):
-        """
-        Token object; stored in the memory database
-        """
-        __tablename__ = 'oauth_tokens'
-        __table_args__ = dict(sqlite_autoincrement=True)
-
-        id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(
-            db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
-            nullable=False)
-        # override Mixin to set default=oauth2
-        token_type = db.Column(db.String(40), default='oauth2')
-        note = db.Column(db.Text, default='')
-
-        user = db.relationship('DbUser', uselist=False, backref='oauth_tokens')
-
-        @property
-        def active(self) -> bool:
-            return not self.is_revoked() and not self.is_expired()
-
-        def is_refresh_token_active(self):
-            if self.refresh_token_revoked_at:
-                return False
-            expires_at = self.issued_at + \
-                current_app.config.get('REFRESH_TOKEN_EXPIRES')
-            return expires_at >= time.time()
-
     class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
         def save_authorization_code(self, code, req) -> None:
             """Save authorization_code for later use"""
@@ -241,7 +199,7 @@ def init_oauth():
                     'code_challenge_method')
 
                 # noinspection PyArgumentList
-                db.session.add(OAuth2AuthorizationCode(
+                db.session.add(users.OAuth2AuthorizationCode(
                     code=code,
                     client_id=req.client.client_id,
                     redirect_uri=req.redirect_uri,
@@ -256,8 +214,8 @@ def init_oauth():
                 raise
 
         def query_authorization_code(self, code, client) \
-                -> OAuth2AuthorizationCode:
-            item = OAuth2AuthorizationCode.query.filter_by(
+                -> users.OAuth2AuthorizationCode:
+            item = users.OAuth2AuthorizationCode.query.filter_by(
                 code=code, client_id=client.client_id).first()
             if item and not item.is_expired():
                 return item
@@ -274,17 +232,17 @@ def init_oauth():
             return users.DbUser.query.get(authorization_code.user_id)
 
     class RefreshTokenGrant(grants.RefreshTokenGrant):
-        def authenticate_refresh_token(self, refresh_token) -> Token:
-            token = Token.query \
+        def authenticate_refresh_token(self, refresh_token) -> users.Token:
+            token = users.Token.query \
                 .filter_by(refresh_token=refresh_token) \
                 .first()
             if token and token.is_refresh_token_active():
                 return token
 
-        def authenticate_user(self, credential: Token) -> users.DbUser:
+        def authenticate_user(self, credential: users.Token) -> users.DbUser:
             return credential.user
 
-        def revoke_old_credential(self, credential: Token) -> None:
+        def revoke_old_credential(self, credential: users.Token) -> None:
             credential.access_token_revoked_at = \
                 credential.refresh_token_revoked_at = int(time.time())
             try:
@@ -308,7 +266,7 @@ def init_oauth():
     oauth_server = AuthorizationServer(
         current_app,
         query_client=lambda client_id: oauth_clients.get(client_id),
-        save_token=create_save_token_func(db.session, Token),
+        save_token=create_save_token_func(db.session, users.Token),
     )
     oauth_server.register_grant(grants.ImplicitGrant)
     oauth_server.register_grant(grants.ClientCredentialsGrant)

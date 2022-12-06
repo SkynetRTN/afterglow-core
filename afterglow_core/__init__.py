@@ -21,7 +21,7 @@ import astropy.io.fits as pyfits
 from .schemas import AfterglowSchema
 
 
-__all__ = ['create_app', 'cipher', 'json_response', 'PaginationInfo']
+__all__ = ['app', 'cipher', 'json_response', 'PaginationInfo']
 
 
 class AfterglowSchemaEncoder(json.JSONEncoder):
@@ -252,6 +252,7 @@ def create_app() -> Flask:
     """
     global cipher, cors
 
+    # noinspection PyShadowingNames
     app = Flask(__name__)
     cors = CORS(app, resources={'/api/*': {'origins': '*'}})
     app.config.from_object('afterglow_core.default_cfg')
@@ -348,3 +349,6 @@ def create_app() -> Flask:
         register(app)
 
     return app
+
+
+app = create_app()

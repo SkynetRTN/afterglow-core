@@ -3,7 +3,7 @@ Afterglow Core: settings routes
 """
 
 # noinspection PyProtectedMember
-from flask import Response, current_app, request, _request_ctx_stack
+from flask import Response, current_app, request, g
 
 from ... import json_response
 from ...auth import oauth_plugins, set_access_cookies
@@ -89,9 +89,9 @@ def oauth2_authorized(plugin_id: str) -> Response:
                 identity.user.email = user_profile.get('email') or None
                 identity.user.birth_date = \
                     user_profile.get('birth_date') or None
-                current_app.db.session.commit()
+                users.db.session.commit()
             except Exception:
-                current_app.db.session.rollback()
+                users.db.session.rollback()
                 raise
     if identity is None:
         # Authenticated but not in the db; register a new Afterglow user if
@@ -120,7 +120,7 @@ def oauth2_authorized(plugin_id: str) -> Response:
                     user_profile['id']):
                 if username_candidate and str(username_candidate).strip() and \
                         not users.DbUser.query.filter(
-                            current_app.db.func.lower(users.DbUser.username) ==
+                            users.db.func.lower(users.DbUser.username) ==
                             username_candidate.lower()).count():
                     username = username_candidate
                     break
@@ -131,18 +131,18 @@ def oauth2_authorized(plugin_id: str) -> Response:
                 email=user_profile.get('email') or None,
                 roles=[users.DbRole.query.filter_by(name='user').one()],
             )
-            current_app.db.session.add(user)
-            current_app.db.session.flush()
+            users.db.session.add(user)
+            users.db.session.flush()
             identity = users.DbIdentity(
                 user_id=user.id,
                 name=user_profile['id'],
                 auth_method=oauth_plugin.name,
                 data=user_profile,
             )
-            current_app.db.session.add(identity)
-            current_app.db.session.commit()
+            users.db.session.add(identity)
+            users.db.session.commit()
         except Exception:
-            current_app.db.session.rollback()
+            users.db.session.rollback()
             raise
     else:
         user = identity.user
@@ -151,10 +151,10 @@ def oauth2_authorized(plugin_id: str) -> Response:
             # login, update it
             try:
                 identity.data = user_profile
-                current_app.db.session.commit()
+                users.db.session.commit()
             except Exception:
-                current_app.db.session.rollback()
+                users.db.session.rollback()
                 raise
 
-    _request_ctx_stack.top.user = request.user = user
+    g._login_user = request.user = user
     return set_access_cookies(json_response(), user.id)

@@ -1,5 +1,5 @@
 
-from flask import Response, current_app, request
+from flask import Response, request
 from flask_security.utils import hash_password
 
 from ... import json_response
@@ -52,10 +52,10 @@ def initialize() -> Response:
                 ],
                 settings=request.args.get('settings'),
             )
-            current_app.db.session.add(u)
-            current_app.db.session.commit()
+            users.db.session.add(u)
+            users.db.session.commit()
         except Exception:
-            current_app.db.session.rollback()
+            users.db.session.rollback()
             raise
         else:
             return json_response(UserSchema().dump(u), 201)

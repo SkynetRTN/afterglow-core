@@ -261,8 +261,8 @@ def get_data_file_db(user_id: Optional[int]):
                                 ), engine.connect() as connection:
                             alembic_context.configure(connection=connection)
 
-                            with alembic_context.begin_transaction():
-                                alembic_context.run_migrations()
+                            # with alembic_context.begin_transaction():
+                            alembic_context.run_migrations()
                     except Exception:
                         # Data file db migration failed due to an incompatible
                         # migration, wipe the user's data file dir and recreate

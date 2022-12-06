@@ -2,7 +2,7 @@
 Afterglow Core: login and user account management routes
 """
 
-from flask import Response, current_app, request
+from flask import Response, request
 
 from ... import json_response
 from ...auth import auth_required
@@ -47,11 +47,11 @@ def app_authorizations(id: int = None) -> Response:
 
         if not user_client:
             try:
-                current_app.db.session.add(users.DbUserClient(
+                users.db.session.add(users.DbUserClient(
                     user_id=user_id, client_id=client_id))
-                current_app.db.session.commit()
+                users.db.session.commit()
             except Exception:
-                current_app.db.session.rollback()
+                users.db.session.rollback()
                 raise
             return json_response('', 201)
 
@@ -62,9 +62,9 @@ def app_authorizations(id: int = None) -> Response:
         try:
             users.DbUserClient.query.filter_by(user_id=user_id, id=id).delete()
 
-            current_app.db.session.commit()
+            users.db.session.commit()
         except Exception:
-            current_app.db.session.rollback()
+            users.db.session.rollback()
             raise
 
         return json_response({})

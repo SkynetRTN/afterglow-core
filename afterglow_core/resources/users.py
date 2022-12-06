@@ -14,6 +14,8 @@ from flask_sqlalchemy import Model, SQLAlchemy
 from flask_security import (
     Security, UserMixin, RoleMixin, SQLAlchemyUserDatastore)
 from flask_security.utils import hash_password
+from authlib.integrations.sqla_oauth2 import (
+    OAuth2AuthorizationCodeMixin, OAuth2TokenMixin)
 
 from ..models import User
 from ..errors import MissingFieldError, ValidationError
@@ -22,22 +24,17 @@ from .base import DateTime, JSONType
 
 
 __all__ = [
-    'AnonymousUser', 'AnonymousUserRole', 'DbIdentity', 'DbPersistentToken',
-    'DbRole', 'DbUser', 'DbUserClient',
-    'user_datastore', 'init_users',
+    'AnonymousUser', 'AnonymousUserRole',
+    'DbIdentity', 'DbPersistentToken', 'DbRole', 'DbUser', 'DbUserClient',
+    'db', 'user_datastore', 'init_users',
     'query_users', 'get_user', 'create_user', 'update_user', 'delete_user',
 ]
-
-user_datastore = security = user_roles = None
 
 
 class AnonymousUserRole(object):
     id = None
     name = 'user'
     description = 'Anonymous Afterglow User'
-
-
-DbRole: Union[Model, AnonymousUserRole] = AnonymousUserRole
 
 
 class AnonymousUser(object):
@@ -64,9 +61,198 @@ class AnonymousUser(object):
         return self.id
 
 
-DbUser: Union[Model, AnonymousUser] = AnonymousUser
+db = SQLAlchemy()
 
-DbIdentity = DbUserClient = DbPersistentToken = None
+user_roles = db.Table(
+    'user_roles',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id')),
+    db.Column('role_id', db.Integer, db.ForeignKey('roles.id')))
+
+
+class DbRole(db.Model, RoleMixin):
+    __tablename__ = 'roles'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(
+        db.String, db.CheckConstraint('length(name) <= 80'), nullable=False,
+        unique=True)
+    description = db.Column(
+        db.String,
+        db.CheckConstraint(
+            'description is null or length(description) <= 255'))
+
+
+class DbUser(db.Model, UserMixin):
+    __tablename__ = 'users'
+    __table_args__ = dict(sqlite_autoincrement=True)
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(
+        db.String,
+        db.CheckConstraint('username is null or length(username) <= 255'),
+        nullable=True, unique=True)
+    password = db.Column(
+        db.String,
+        db.CheckConstraint('password is null or length(password) <= 255'))
+    email = db.Column(
+        db.String,
+        db.CheckConstraint('email is null or length(email) <= 255'))
+    first_name = db.Column(
+        db.String,
+        db.CheckConstraint(
+            'first_name is null or length(first_name) <= 255'))
+    last_name = db.Column(
+        db.String,
+        db.CheckConstraint(
+            'last_name is null or length(last_name) <= 255'))
+    active = db.Column(db.Boolean, server_default='1')
+    created_at = db.Column(DateTime, default=db.func.current_timestamp())
+    modified_at = db.Column(
+        DateTime, default=db.func.current_timestamp(),
+        onupdate=db.func.current_timestamp())
+    roles = db.relationship(
+        'DbRole', secondary=user_roles,
+        backref=db.backref('users', lazy='dynamic'))
+    settings = db.Column(
+        db.Text,
+        db.CheckConstraint(
+            'settings is null or length(settings) <= 1048576'), default='')
+
+    @property
+    def full_name(self):
+        full_name = []
+        if self.first_name:
+            full_name.append(self.first_name)
+        if self.last_name:
+            full_name.append(self.last_name)
+        return ' '.join(full_name)
+
+    @property
+    def display_name(self):
+        if self.full_name:
+            return self.full_name
+        if self.email:
+            return self.email
+        return 'Anonymous'
+
+    @property
+    def is_admin(self):
+        """Does the user have admin role?"""
+        return DbRole.query.filter_by(name='admin').one() in self.roles
+
+    def get_user_id(self):
+        """Return user ID; required by authlib"""
+        return self.id
+
+
+class DbIdentity(db.Model):
+    __tablename__ = 'identities'
+    __table_args__ = dict(sqlite_autoincrement=True)
+
+    id = db.Column(db.Integer, primary_key=True, nullable=False)
+    name = db.Column(
+        db.String, db.CheckConstraint('length(name) <= 255'), nullable=False)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False)
+    auth_method = db.Column(
+        db.String,
+        db.CheckConstraint('length(auth_method) <= 40'), nullable=False)
+    data = db.Column(JSONType, default={})
+
+    user = db.relationship(DbUser, uselist=False, backref='identities')
+
+
+class DbPersistentToken(db.Model):
+    __tablename__ = 'tokens'
+    __table_args__ = dict(sqlite_autoincrement=True)
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False)
+    token_type = db.Column(db.String(40), default='personal')
+    access_token = db.Column(db.String(255), unique=True, nullable=False)
+    issued_at = db.Column(
+        db.Integer, nullable=False, default=lambda: int(time.time())
+    )
+    expires_in = db.Column(db.Integer, nullable=False, default=0)
+    note = db.Column(db.Text, default='')
+
+    user = db.relationship(DbUser, uselist=False, backref='tokens')
+
+    @property
+    def active(self):
+        if not self.expires_in:
+            return True
+        return self.issued_at + self.expires_in >= time.time()
+
+    def get_expires_at(self):
+        return self.issued_at + self.expires_in
+
+
+# Need to place this here because OAuth2 clients are stored in the user
+# database and initialized/migrated by Alembic along with the other
+# user-related tables
+class DbUserClient(db.Model):
+    """
+    List of clients allowed for the user; stored in the main Afterglow
+    database
+    """
+    __tablename__ = 'user_oauth_clients'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False, index=True)
+    user = db.relationship('DbUser', uselist=False)
+    client_id = db.Column(
+        db.String, db.CheckConstraint('length(client_id) <= 40'),
+        nullable=False, index=True)
+
+
+class OAuth2AuthorizationCode(db.Model, OAuth2AuthorizationCodeMixin):
+    __tablename__ = 'oauth_codes'
+    __table_args__ = dict(sqlite_autoincrement=True)
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False)
+
+    user = db.relationship('DbUser', uselist=False, backref='oauth_codes')
+
+
+class Token(db.Model, OAuth2TokenMixin):
+    """
+    Token object; stored in the memory database
+    """
+    __tablename__ = 'oauth_tokens'
+    __table_args__ = dict(sqlite_autoincrement=True)
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False)
+    # override Mixin to set default=oauth2
+    token_type = db.Column(db.String(40), default='oauth2')
+    note = db.Column(db.Text, default='')
+
+    user = db.relationship('DbUser', uselist=False, backref='oauth_tokens')
+
+    @property
+    def active(self) -> bool:
+        return not self.is_revoked() and not self.is_expired()
+
+    def is_refresh_token_active(self):
+        if self.refresh_token_revoked_at:
+            return False
+        expires_at = self.issued_at + \
+            current_app.config.get('REFRESH_TOKEN_EXPIRES')
+        return expires_at >= time.time()
+
+
+user_datastore = SQLAlchemyUserDatastore(db, DbUser, DbRole)
 
 
 def init_users(app: Flask) -> None:
@@ -75,9 +261,6 @@ def init_users(app: Flask) -> None:
 
     :param app: Flask application
     """
-    global DbRole, DbUser, DbIdentity, DbPersistentToken, DbUserClient, \
-        user_datastore, security, user_roles
-
     if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
         app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///{}'.format(
             os.path.join(os.path.abspath(app.config['DATA_ROOT']),
@@ -113,155 +296,6 @@ def init_users(app: Flask) -> None:
         del _db_pass
     app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
 
-    current_app.db = db = SQLAlchemy(app)
-
-    user_roles = db.Table(
-        'user_roles',
-        db.Column('user_id', db.Integer, db.ForeignKey('users.id')),
-        db.Column('role_id', db.Integer, db.ForeignKey('roles.id')))
-
-    class DbRole(db.Model, RoleMixin):
-        __tablename__ = 'roles'
-
-        id = db.Column(db.Integer, primary_key=True)
-        name = db.Column(
-            db.String, db.CheckConstraint('length(name) <= 80'),
-            nullable=False, unique=True)
-        description = db.Column(
-            db.String,
-            db.CheckConstraint(
-                'description is null or length(description) <= 255'))
-
-    class DbUser(db.Model, UserMixin):
-        __tablename__ = 'users'
-        __table_args__ = dict(sqlite_autoincrement=True)
-
-        id = db.Column(db.Integer, primary_key=True)
-        username = db.Column(
-            db.String,
-            db.CheckConstraint('username is null or length(username) <= 255'),
-            nullable=True, unique=True)
-        password = db.Column(
-            db.String,
-            db.CheckConstraint('password is null or length(password) <= 255'))
-        email = db.Column(
-            db.String,
-            db.CheckConstraint('email is null or length(email) <= 255'))
-        first_name = db.Column(
-            db.String,
-            db.CheckConstraint(
-                'first_name is null or length(first_name) <= 255'))
-        last_name = db.Column(
-            db.String,
-            db.CheckConstraint(
-                'last_name is null or length(last_name) <= 255'))
-        active = db.Column(db.Boolean, server_default='1')
-        created_at = db.Column(DateTime, default=db.func.current_timestamp())
-        modified_at = db.Column(
-            DateTime, default=db.func.current_timestamp(),
-            onupdate=db.func.current_timestamp())
-        roles = db.relationship(
-            'DbRole', secondary=user_roles,
-            backref=db.backref('users', lazy='dynamic'))
-        settings = db.Column(
-            db.Text,
-            db.CheckConstraint(
-                'settings is null or length(settings) <= 1048576'),
-            default='')
-
-        @property
-        def full_name(self):
-            full_name = []
-            if self.first_name:
-                full_name.append(self.first_name)
-            if self.last_name:
-                full_name.append(self.last_name)
-            return ' '.join(full_name)
-
-        @property
-        def display_name(self):
-            if self.full_name:
-                return self.full_name
-            if self.email:
-                return self.email
-            return 'Anonymous'
-
-        @property
-        def is_admin(self):
-            """Does the user have admin role?"""
-            return DbRole.query.filter_by(name='admin').one() in self.roles
-
-        def get_user_id(self):
-            """Return user ID; required by authlib"""
-            return self.id
-
-    class DbIdentity(db.Model):
-        __tablename__ = 'identities'
-        __table_args__ = dict(sqlite_autoincrement=True)
-
-        id = db.Column(db.Integer, primary_key=True, nullable=False)
-        name = db.Column(
-            db.String, db.CheckConstraint('length(name) <= 255'),
-            nullable=False)
-        user_id = db.Column(
-            db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
-            nullable=False)
-        auth_method = db.Column(
-            db.String,
-            db.CheckConstraint('length(auth_method) <= 40'), nullable=False)
-        data = db.Column(JSONType, default={})
-
-        user = db.relationship(DbUser, uselist=False, backref='identities')
-
-    class DbPersistentToken(db.Model):
-        __tablename__ = 'tokens'
-        __table_args__ = dict(sqlite_autoincrement=True)
-
-        id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(
-            db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
-            nullable=False)
-        token_type = db.Column(db.String(40), default='personal')
-        access_token = db.Column(db.String(255), unique=True, nullable=False)
-        issued_at = db.Column(
-            db.Integer, nullable=False, default=lambda: int(time.time())
-        )
-        expires_in = db.Column(db.Integer, nullable=False, default=0)
-        note = db.Column(db.Text, default='')
-
-        user = db.relationship(DbUser, uselist=False, backref='tokens')
-
-        @property
-        def active(self):
-            if not self.expires_in:
-                return True
-            return self.issued_at + self.expires_in >= time.time()
-
-        def get_expires_at(self):
-            return self.issued_at + self.expires_in
-
-    # Need to place this here because OAuth2 clients are stored in the user
-    # database and initialized/migrated by Alembic along with the other
-    # user-related tables
-    class DbUserClient(db.Model):
-        """
-        List of clients allowed for the user; stored in the main Afterglow
-        database
-        """
-        __tablename__ = 'user_oauth_clients'
-
-        id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(
-            db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
-            nullable=False, index=True)
-        user = db.relationship('DbUser', uselist=False)
-        client_id = db.Column(
-            db.String, db.CheckConstraint('length(client_id) <= 40'),
-            nullable=False, index=True)
-
-    # noinspection PyUnresolvedReferences
-    from .. import oauth2  # register oauth token-related models
-
     # All imports put here to avoid unnecessary loading of packages on startup
     # if user auth is disabled
     from alembic import (
@@ -269,10 +303,8 @@ def init_users(app: Flask) -> None:
     from alembic.script import ScriptDirectory
     from alembic.runtime.environment import EnvironmentContext
 
-    global user_datastore, security
-
-    user_datastore = SQLAlchemyUserDatastore(db, DbUser, DbRole)
-    security = Security(app, user_datastore, register_blueprint=False)
+    db.init_app(app)
+    Security(app, user_datastore, register_blueprint=False)
 
     # Make sure that the database directory exists
     try:
@@ -298,8 +330,11 @@ def init_users(app: Flask) -> None:
             tag=None), db.engine.connect() as connection:
         alembic_context.configure(connection=connection)
 
-        with alembic_context.begin_transaction():
+        if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
             alembic_context.run_migrations()
+        else:
+            with alembic_context.begin_transaction():
+                alembic_context.run_migrations()
 
     # Initialize user roles if missing
     try:
@@ -375,8 +410,7 @@ def create_user(user: User) -> User:
     if getattr(user, 'active') is False:
         raise ValidationError('active', 'Cannot create inactive account')
     if DbUser.query.filter(
-            current_app.db.func.lower(User.username) ==
-            user.username.lower()).count():
+            db.func.lower(User.username) == user.username.lower()).count():
         raise DuplicateUsernameError(username=user.username)
 
     kw = user.to_dict()
@@ -402,12 +436,12 @@ def create_user(user: User) -> User:
     try:
         # noinspection PyArgumentList
         db_user = DbUser(**kw)
-        current_app.db.session.add(db_user)
-        current_app.db.session.flush()
+        db.session.add(db_user)
+        db.session.flush()
         user = User(db_user)
-        current_app.db.session.commit()
+        db.session.commit()
     except Exception:
-        current_app.db.session.rollback()
+        db.session.rollback()
         raise
 
     return user
@@ -432,15 +466,15 @@ def update_user(user_id: int, user: User) -> User:
             continue
         if key == 'username' and val != db_user.username and \
                 DbUser.query.filter(
-                    current_app.db.func.lower(User.username) ==
-                    val.lower(), User.id != user_id).count():
+                    db.func.lower(User.username) == val.lower(),
+                    User.id != user_id).count():
             raise DuplicateUsernameError(username=val)
         setattr(db_user, key, val)
     try:
         user = User(db_user)
-        current_app.db.session.commit()
+        db.session.commit()
     except Exception:
-        current_app.db.session.rollback()
+        db.session.rollback()
         raise
 
     return user
@@ -458,10 +492,10 @@ def delete_user(user_id: int) -> None:
 
     try:
         db_user.roles = []
-        current_app.db.session.delete(db_user)
-        current_app.db.session.commit()
+        db.session.delete(db_user)
+        db.session.commit()
     except Exception:
-        current_app.db.session.rollback()
+        db.session.rollback()
         raise
     else:
         data_file_dir = os.path.join(

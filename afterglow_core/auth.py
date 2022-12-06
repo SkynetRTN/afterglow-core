@@ -207,20 +207,20 @@ def init_auth() -> None:
 
         :return: Flask response
         """
-        from .oauth2 import Token
+        from .resources.users import Token, db
         expires_in = current_app.config.get('COOKIE_TOKEN_EXPIRES_IN', 86400)
         try:
             if not access_token:
                 # Generate a new token
                 access_token = secrets.token_hex(20)
-                current_app.db.session.add(Token(
+                db.session.add(Token(
                     token_type='cookie',
                     access_token=access_token,
                     user_id=user_id,
                     expires_in=expires_in,
                     issued_at=time.time(),
                 ))
-                current_app.db.session.commit()
+                db.session.commit()
             else:
                 # Check that the token provided by the user exists
                 # and not expired
@@ -235,13 +235,13 @@ def init_auth() -> None:
                         # Delete revoked/expired tokens from the db
                         # noinspection PyBroadException
                         try:
-                            current_app.db.session.delete(token)
-                            current_app.db.session.commit()
+                            db.session.delete(token)
+                            db.session.commit()
                         except Exception:
-                            current_app.db.session.rollback()
+                            db.session.rollback()
                     return clear_access_cookies(response)
         except Exception:
-            current_app.db.session.rollback()
+            db.session.rollback()
             raise
 
         csrf_token = generate_csrf()
@@ -285,7 +285,6 @@ def init_auth() -> None:
         :param roles: list of authenticated user role IDs or a single role ID
         """
         from .resources import users
-        from .oauth2 import Token
 
         # If access token in HTTP Authorization header, verify and authorize.
         # otherwise, attempt to reconstruct token from cookies
@@ -320,7 +319,7 @@ def init_auth() -> None:
                         access_token=access_token,
                         token_type=token_type).one_or_none()
                 else:
-                    token = Token.query.filter_by(
+                    token = users.Token.query.filter_by(
                         access_token=access_token,
                         access_token_revoked_at=0).one_or_none()
                 if token is None:

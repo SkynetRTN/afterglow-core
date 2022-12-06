@@ -700,7 +700,7 @@ class JobRequestHandler(BaseRequestHandler):
                         finally:
                             # Clean up the flask_sqlalchemy session in the same
                             # way as it is done at the end of a Flask request
-                            current_app.db.session.remove()
+                            users.db.session.remove()
                     try:
                         # Convert message arguments to polymorphic job model
                         # and create an appropriate db job class instance
@@ -1048,10 +1048,11 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
             # If using database server instead of sqlite, reuse the same
             # database engine as the main Afterglow database; recreate job
             # databases from scratch
-            engine = current_app.db.engine
+            from .resources.users import db
+            engine = db.engine
             JobBase.metadata.drop_all(bind=engine)
             JobBase.metadata.create_all(bind=engine)
-            session_factory = current_app.db.session
+            session_factory = db.session
 
         # Erase old job files
         try:

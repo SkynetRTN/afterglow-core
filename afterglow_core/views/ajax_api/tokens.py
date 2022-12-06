@@ -4,12 +4,12 @@ Afterglow Core: settings routes
 
 import secrets
 
-from flask import Response, current_app, request
+from flask import Response, request
 from marshmallow.fields import Integer, String
 
 from ... import json_response
 from ...auth import auth_required
-from ...resources.users import DbPersistentToken
+from ...resources import users
 from ...schemas import Resource
 from ...errors import ValidationError
 from ...errors.auth import UnknownTokenError
@@ -49,18 +49,18 @@ def tokens() -> Response:
 
         access_token = secrets.token_hex(20)
 
-        personal_token = DbPersistentToken(
+        personal_token = users.DbPersistentToken(
             access_token=access_token,
             user_id=request.user.id,
             note=note,
         )
         try:
-            current_app.db.session.add(personal_token)
-            current_app.db.session.commit()
+            users.db.session.add(personal_token)
+            users.db.session.commit()
         except Exception:
             # noinspection PyBroadException
             try:
-                current_app.db.session.rollback()
+                users.db.session.rollback()
             except Exception:
                 pass
             raise
@@ -78,7 +78,7 @@ def token(token_id: int) -> Response:
         DELETE /api/v1/tokens/[token id]: empty response
     """
     if request.method == 'DELETE':
-        personal_token = DbPersistentToken.query \
+        personal_token = users.DbPersistentToken.query \
             .filter_by(
                 token_type='personal',
                 user_id=request.user.id,
@@ -89,12 +89,12 @@ def token(token_id: int) -> Response:
             raise UnknownTokenError()
 
         try:
-            current_app.db.session.delete(personal_token)
-            current_app.db.session.commit()
+            users.db.session.delete(personal_token)
+            users.db.session.commit()
         except Exception:
             # noinspection PyBroadException
             try:
-                current_app.db.session.rollback()
+                users.db.session.rollback()
             except Exception:
                 pass
             raise

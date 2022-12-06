@@ -19,6 +19,7 @@ from ..errors import AfterglowError, MissingFieldError
 from ..errors.job import JobServerError, UnknownJobError, UnknownJobFileError
 from ..job_server import DbJob, DbJobFile, job_types, msg_hdr, msg_hdr_size
 from ..models.jobs import Job, JobState, job_file_path
+from . import users
 
 
 __all__ = ['job_server_request']
@@ -46,7 +47,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
         # Return job result
         try:
             job_id = args['id']
-            db_job = current_app.db.session.query(DbJob).get(job_id)
+            db_job = users.db.session.query(DbJob).get(job_id)
             if db_job is None or db_job.user_id != user_id:
                 raise UnknownJobError(id=job_id)
 
@@ -64,7 +65,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, Any]:
                 except KeyError:
                     raise MissingFieldError(field='file_id')
 
-                job_file = current_app.db.session.query(DbJobFile).filter_by(
+                job_file = users.db.session.query(DbJobFile).filter_by(
                     job_id=job_id, file_id=file_id).one_or_none()
                 if job_file is None or job_file.job.user_id != user_id:
                     raise UnknownJobFileError(id=file_id)
