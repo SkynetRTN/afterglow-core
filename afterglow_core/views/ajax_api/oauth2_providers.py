@@ -44,8 +44,8 @@ def oauth2_authorized(plugin_id: str) -> Response:
     :return: redirect to original request URL
     """
     # Do not allow login if Afterglow Core has not yet been configured
-    if DbUser.query.count() == 0:
-        raise NotInitializedError()
+    # if DbUser.query.count() == 0:
+    #     raise NotInitializedError()
 
     if not plugin_id or plugin_id not in oauth_plugins.keys():
         raise UnknownAuthMethodError(method=plugin_id)
