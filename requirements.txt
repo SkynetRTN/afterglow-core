@@ -29,7 +29,7 @@ rawpy == 0.17.3
 requests == 2.27.1
 requests-oauthlib == 1.1.0
 scipy == 1.9.3
-sep == 1.0.3
+sep == 1.2.1
 # 'SkyLib >= 0.2.0
 SQLAlchemy == 1.4.31
 Werkzeug == 2.0.3
