@@ -4,6 +4,7 @@ Afterglow Core: AJAX API endpoints
 
 from flask import Blueprint, Flask
 
+
 __all__ = ['register', 'ajax_blp']
 
 __version__ = 1, 0, 1
