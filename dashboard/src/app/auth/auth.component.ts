@@ -11,7 +11,7 @@ export class AuthComponent implements OnInit {
   background: string;
 
   constructor() {
-    this.background = `url("/assets/images/backgrounds/${this.backgrounds[Math.floor(Math.random() * this.backgrounds.length)]
+    this.background = `url("./assets/images/backgrounds/${this.backgrounds[Math.floor(Math.random() * this.backgrounds.length)]
       }")`;
   }
 
