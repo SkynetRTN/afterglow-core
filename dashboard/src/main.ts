@@ -1,24 +1,12 @@
-/* Styles */
-import './scss/main.scss'
+import { enableProdMode } from '@angular/core';
+import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
 
-/* Core */
-import Vue from 'vue'
-import Buefy from 'buefy'
+import { AppModule } from './app/app.module';
+import { environment } from './environments/environment';
 
-import App from './App.vue'
-import store from './store'
-import router from './router'
-import VueClipboard from 'vue-clipboard2'
-import './permission'
+if (environment.production) {
+  enableProdMode();
+}
 
-/* Service Worker */
-import './registerServiceWorker'
-
-Vue.config.productionTip = false
-Vue.use(Buefy)
-Vue.use(VueClipboard);
-new Vue({
-  router,
-  store,
-  render: (h) => h(App)
-}).$mount('#app')
+platformBrowserDynamic().bootstrapModule(AppModule)
+  .catch(err => console.error(err));

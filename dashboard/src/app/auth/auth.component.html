@@ -1,0 +1,21 @@
+<div class="flex flex-col sm:flex-row items-center md:items-start sm:justify-center md:justify-start flex-auto min-w-0">
+
+    <div class="relative hidden md:flex flex-auto items-center justify-center h-full p-16 lg:px-28 overflow-hidden bg-gray-800 dark:border-r bg-cover"
+        [style.background-image]="background">
+
+        <div class="z-10 relative w-full max-w-md">
+            <div
+                class="text-7xl font-bold leading-none text-gray-100 bg-gray-900 bg-opacity-90 p-6 border-3 rounded-xl border-gray-800 border-solid">
+                <div class="text-center">
+                    <img class="w-full" src="./assets/images/logo-full.png" />
+                </div>
+            </div>
+        </div>
+    </div>
+    <div
+        class="md:flex md:justify-end w-full sm:w-auto md:h-full py-8 px-4 sm:p-12 md:p-16 md:pt-24 sm:rounded-2xl md:rounded-none sm:shadow md:shadow-none sm:bg-card">
+        <div class="w-full max-w-80 sm:w-80 mx-auto sm:mx-0">
+            <router-outlet></router-outlet>
+        </div>
+    </div>
+</div>

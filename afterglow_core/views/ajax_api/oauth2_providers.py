@@ -24,7 +24,7 @@ def oauth2_providers() -> Response:
     """
 
     plugins = [dict(id=p.id, icon=p.icon, description=p.description,
-                    authorizeUrl=p.authorize_url, client_id=p.client_id,
+                    authorize_url=p.authorize_url, client_id=p.client_id,
                     request_token_params=p.request_token_params)
                for p in oauth_plugins.values()]
 
@@ -41,8 +41,8 @@ def oauth2_authorized(plugin_id: str) -> Response:
     :return: redirect to original request URL
     """
     # Do not allow login if Afterglow Core has not yet been configured
-    if users.DbUser.query.count() == 0:
-        raise NotInitializedError()
+    # if DbUser.query.count() == 0:
+    #     raise NotInitializedError()
 
     if not plugin_id or plugin_id not in oauth_plugins.keys():
         raise UnknownAuthMethodError(method=plugin_id)
