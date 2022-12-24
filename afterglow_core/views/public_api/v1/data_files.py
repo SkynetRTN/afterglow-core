@@ -249,7 +249,8 @@ def data_files_header(id: int) -> Response:
                     else:
                         modified = True
                 else:
-                    if hasattr(val, '__len__'):
+                    if isinstance(val, list) and len(val) == 2:
+                        # Value + comment
                         if hdr.get(name) != val[0]:
                             hdr[name] = tuple(val)
                             modified = True
@@ -302,7 +303,8 @@ def data_files_wcs(id: int) -> Response:
                     else:
                         modified = True
                 else:
-                    if hasattr(val, '__len__'):
+                    if isinstance(val, list) and len(val) == 2:
+                        # Value + comment
                         if hdr.get(name) != val[0]:
                             hdr[name] = tuple(val)
                             modified = True
