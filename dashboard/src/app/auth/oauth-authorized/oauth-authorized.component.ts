@@ -1,4 +1,5 @@
 import { AfterViewInit, Component, OnInit, ViewEncapsulation } from '@angular/core';
+import { Location } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { AjaxApiService, AjaxErrorResponse, AjaxResponse } from 'src/app/api/ajax-api.service';
 import { AuthService } from '../auth.service';
@@ -12,7 +13,7 @@ import { AuthService } from '../auth.service';
 export class OauthAuthorizedComponent implements OnInit, AfterViewInit {
   error = '';
 
-  constructor(private activatedRoute: ActivatedRoute, private ajaxApiService: AjaxApiService, private authService: AuthService) { }
+  constructor(private activatedRoute: ActivatedRoute, private ajaxApiService: AjaxApiService, private authService: AuthService, private location: Location) { }
 
   ngOnInit(): void {
 
@@ -44,7 +45,7 @@ export class OauthAuthorizedComponent implements OnInit, AfterViewInit {
 
     let next = stateObj.next;
     let pluginId = stateObj.plugin;
-    let redirectUri = window.location.origin + '/oauth2/authorized'
+    let redirectUri = window.location.origin + this.location.prepareExternalUrl('/oauth2/authorized')
 
     this.ajaxApiService.signInWithOauthCode({ pluginId, code, next, redirectUri }).subscribe({
       next: () => {
