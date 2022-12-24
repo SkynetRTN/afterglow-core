@@ -187,7 +187,7 @@ export class AuthSignInComponent implements OnInit {
             next: next
         };
 
-        let redirectUri = this._location.prepareExternalUrl('/oauth2/authorized');
+        let redirectUri = window.location.origin + this._location.prepareExternalUrl('/oauth2/authorized');
 
         let params = new URLSearchParams();
         params.append("response_type", "code");
