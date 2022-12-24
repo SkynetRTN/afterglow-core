@@ -9,7 +9,7 @@ __all__ = ['register', 'ajax_blp']
 
 __version__ = 1, 0, 1
 
-ajax_blp = Blueprint('ajax_api', __name__, url_prefix='/ajax')
+ajax_blp = Blueprint('ajax_api', __name__, url_prefix='/')
 
 
 def register(app: Flask) -> None:
