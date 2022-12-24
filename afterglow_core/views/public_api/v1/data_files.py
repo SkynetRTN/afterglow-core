@@ -302,7 +302,7 @@ def data_files_wcs(id: int) -> Response:
                     else:
                         modified = True
                 else:
-                    if hasattr(val, '__len__'):
+                    if False and hasattr(val, '__len__'):
                         if hdr.get(name) != val[0]:
                             hdr[name] = tuple(val)
                             modified = True
