@@ -1,6 +1,7 @@
 // @ts-ignore
 
 import { Component, NgZone, OnInit, ViewChild, ViewEncapsulation } from '@angular/core';
+import { Location } from '@angular/common';
 import { FormBuilder, FormGroup, NgForm, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router'
 import { BehaviorSubject, combineLatest, map, take } from 'rxjs';
@@ -54,7 +55,8 @@ export class AuthSignInComponent implements OnInit {
         private _ajaxApiService: AjaxApiService,
         private _formBuilder: FormBuilder,
         private _router: Router,
-        private _zone: NgZone
+        private _zone: NgZone,
+        private _location: Location,
     ) {
 
 
@@ -185,7 +187,7 @@ export class AuthSignInComponent implements OnInit {
             next: next
         };
 
-        let redirectUri = window.location.origin + '/oauth2/authorized'
+        let redirectUri = this._location.prepareExternalUrl('/oauth2/authorized');
 
         let params = new URLSearchParams();
         params.append("response_type", "code");
