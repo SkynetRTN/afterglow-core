@@ -611,6 +611,8 @@ class AlignmentJob(Job):
                 try:
                     mat, offset = transforms[file_id]
                 except KeyError:
+                    if file_id != ref_file_id:
+                        raise RuntimeError('Cannot align image')
                     continue
 
                 data, hdr = get_data_file_data(self.user_id, file_id)
