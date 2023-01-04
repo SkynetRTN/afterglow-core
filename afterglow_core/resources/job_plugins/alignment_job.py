@@ -5,6 +5,7 @@ Afterglow Core: image alignment job plugin
 from datetime import datetime
 from typing import Any, Dict as TDict, List as TList, Tuple, Optional
 
+import numpy as np
 from numpy import ceil, dot, floor, indices, ndarray, tensordot, zeros
 from numpy.ma import MaskedArray
 from numpy.linalg import inv
@@ -14,6 +15,7 @@ import cv2 as cv
 
 from skylib.combine.alignment import *
 from skylib.combine.pattern_matching import pattern_match
+from skylib.util.fits import get_fits_fov
 
 from ...models import Job, JobResult, SourceExtractionData
 from ...schemas import AfterglowSchema, Boolean, Float, NestedPoly
@@ -37,6 +39,7 @@ class AlignmentSettings(AfterglowSchema):
 
     mode: str = String(dump_default='WCS', load_default='WCS')
     ref_image: Optional[str] = String(dump_default='central', allow_none=True)
+    mosaic_search_radius: float = Float(dump_default=1)
     prefilter: bool = Boolean(dump_default=True)
     enable_rot: bool = Boolean(dump_default=True)
     enable_scale: bool = Boolean(dump_default=True)
@@ -381,15 +384,29 @@ class AlignmentJob(Job):
             total_pairs = n*(n - 1)//2
             k = 0
             for i, file_id in enumerate(file_ids[:-1]):
+                ra0, dec0, r0 = get_fits_fov(
+                    get_data_file_fits(self.user_id, file_id)[0].header)
                 for other_file_id in file_ids[i + 1:]:
-                    # noinspection PyBroadException
-                    try:
-                        rel_transforms[file_id, other_file_id], \
-                            history[file_id] = get_transform(
-                                self, alignment_kwargs, other_file_id, file_id,
-                                wcs_cache, data_cache, ref_star_cache)
-                    except Exception:
-                        pass
+                    other_ra0, other_dec0, other_r0 = get_fits_fov(
+                        get_data_file_fits(
+                            self.user_id, other_file_id)[0].header)
+                    if any(x is None for x in (ra0, dec0, r0, other_ra0,
+                                               other_dec0, other_r0)) or \
+                            np.rad2deg(np.asin(np.sqrt(
+                                np.sin(np.deg2rad(dec0 - other_dec0)/2)**2 +
+                                np.sin(np.deg2rad(ra0 - other_ra0)/2)**2 *
+                                np.cos(np.deg2rad(dec0)) *
+                                np.cos(np.deg2rad(other_dec0))))) < \
+                            (r0 + other_r0)*settings.mosaic_search_radius:
+                        # noinspection PyBroadException
+                        try:
+                            rel_transforms[file_id, other_file_id], \
+                                history[file_id] = get_transform(
+                                    self, alignment_kwargs, other_file_id,
+                                    file_id, wcs_cache, data_cache,
+                                    ref_star_cache)
+                        except Exception:
+                            pass
                     k += 1
                     self.update_progress(k/total_pairs*100, 0, total_stages)
 
@@ -427,10 +444,8 @@ class AlignmentJob(Job):
                 if matching_mosaics:
                     if len(matching_mosaics) > 1:
                         # Image has a match in multiple mosaics; join them
-                        new_mosaics = [
-                            set(sum([list(mosaic)
-                            for mosaic in matching_mosaics], []))
-                        ]
+                        new_mosaics = [set(sum([
+                            list(mosaic) for mosaic in matching_mosaics], []))]
                         new_mosaics[0].add(file_id)
                         for mosaic in mosaics:
                             if mosaic not in matching_mosaics:

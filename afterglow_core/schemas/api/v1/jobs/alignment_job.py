@@ -21,6 +21,7 @@ class AlignmentSettingsSchema(AfterglowSchema):
 
     mode: str = String(dump_default='WCS', load_default='WCS')
     ref_image: Optional[str] = String(dump_default='central', allow_none=True)
+    mosaic_search_radius: float = Float(dump_default=1)
     prefilter: bool = Boolean(dump_default=True)
     enable_rot: bool = Boolean(dump_default=True)
     enable_scale: bool = Boolean(dump_default=True)

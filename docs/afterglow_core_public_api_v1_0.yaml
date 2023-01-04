@@ -1378,6 +1378,12 @@ components:
             - type: integer
           nullable: true
           default: 'central'
+        mosaic_search_radius:
+          description: mosaic tile search factor in units of FOV radius, used in conjunction with ref_image = null
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          default: 1
         prefilter:
           description: apply spline filter before interpolation to decrease blurring
           type: boolean
