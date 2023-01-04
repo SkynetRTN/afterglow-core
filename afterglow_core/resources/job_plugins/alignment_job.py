@@ -392,7 +392,7 @@ class AlignmentJob(Job):
                             self.user_id, other_file_id)[0].header)
                     if any(x is None for x in (ra0, dec0, r0, other_ra0,
                                                other_dec0, other_r0)) or \
-                            np.rad2deg(np.asin(np.sqrt(
+                            np.rad2deg(np.arcsin(np.sqrt(
                                 np.sin(np.deg2rad(dec0 - other_dec0)/2)**2 +
                                 np.sin(np.deg2rad(ra0 - other_ra0)/2)**2 *
                                 np.cos(np.deg2rad(dec0)) *
