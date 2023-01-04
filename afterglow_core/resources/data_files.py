@@ -27,7 +27,7 @@ from sqlalchemy.engine import Engine
 from alembic import config as alembic_config, context as alembic_context
 from alembic.script import ScriptDirectory
 from alembic.runtime.environment import EnvironmentContext
-import numpy
+import numpy as np
 import astropy.io.fits as pyfits
 from astropy.wcs import FITSFixedWarning
 from astropy.io.fits.verify import VerifyWarning
@@ -65,7 +65,7 @@ __all__ = [
     # Paths
     'get_root', 'get_data_file_path',
     # Metadata
-    'convert_exif_field', 'get_exp_length', 'get_gain', 'get_image_time',
+    'convert_exif_field',
     # Data/metadata retrieval
     'get_data_file_bytes', 'get_data_file_data', 'get_data_file_fits',
     'get_data_file_group_bytes', 'get_subframe',
@@ -316,7 +316,7 @@ def get_data_file_db(user_id: Optional[int]):
 
 
 def save_data_file(adb, root: str, file_id: int,
-                   data: Union[numpy.ndarray, numpy.ma.MaskedArray], hdr,
+                   data: Union[np.ndarray, np.ma.MaskedArray], hdr,
                    modified: bool = True) \
         -> None:
     """
@@ -339,18 +339,18 @@ def save_data_file(adb, root: str, file_id: int,
 
     if data.dtype.fields is None:
         # Convert image data to float32
-        data = data.astype(numpy.float32)
-        if isinstance(data, numpy.ma.MaskedArray) and not data.mask.any():
+        data = data.astype(np.float32)
+        if isinstance(data, np.ma.MaskedArray) and not data.mask.any():
             # Empty mask, save as normal array
             data = data.data
-        if isinstance(data, numpy.ma.MaskedArray):
+        if isinstance(data, np.ma.MaskedArray):
             # Store masked array in two HDUs
             fits = pyfits.HDUList(
                 [pyfits.PrimaryHDU(data.data, hdr),
-                 pyfits.ImageHDU(data.mask.astype(numpy.uint8), name='MASK')])
+                 pyfits.ImageHDU(data.mask.astype(np.uint8), name='MASK')])
         else:
             # Treat normal arrays with NaN's as masked arrays
-            mask = numpy.isnan(data).astype(numpy.uint8)
+            mask = np.isnan(data).astype(np.uint8)
             if mask.any():
                 fits = pyfits.HDUList(
                     [pyfits.PrimaryHDU(data, hdr),
@@ -414,7 +414,7 @@ def append_suffix(name: str, suffix: str):
     return name
 
 
-def create_data_file(adb, name: Optional[str], root: str, data: numpy.ndarray,
+def create_data_file(adb, name: Optional[str], root: str, data: np.ndarray,
                      hdr=None, provider: Optional[str] = None,
                      path: Optional[str] = None,
                      file_type: Optional[str] = None,
@@ -730,8 +730,8 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                     else:
                         bands = (im,)
                     channels = [
-                        (band_name, numpy.frombuffer(
-                            band.tobytes(), numpy.uint8).reshape(
+                        (band_name, np.frombuffer(
+                            band.tobytes(), np.uint8).reshape(
                             [height, width]))
                         for band_name, band in zip(band_names, bands)]
                     if exifread is None:
@@ -758,7 +758,7 @@ def import_data_file(adb, root: str, provider_id: Optional[Union[int, str]],
                     asset_metadata['image_mode'] = im.color_desc.decode(
                         'ascii')
                     asset_metadata['layers'] = im.num_colors
-                    r, g, b = numpy.rollaxis(im.postprocess(output_bps=16), 2)
+                    r, g, b = np.rollaxis(im.postprocess(output_bps=16), 2)
                 finally:
                     im.close()
                 channels = [('R', r), ('G', g), ('B', b)]
@@ -886,7 +886,7 @@ def convert_exif_field(val):
 def get_subframe(user_id: Optional[int], file_id: int,
                  x0: Optional[int] = None, y0: Optional[int] = None,
                  w: Optional[int] = None, h: Optional[int] = None) \
-        -> numpy.ndarray:
+        -> np.ndarray:
     """
     Return pixel data for the given image data file ID within a rectangle
     defined by the optional request parameters "x", "y", "width", and "height";
@@ -964,7 +964,7 @@ def get_subframe(user_id: Optional[int], file_id: int,
 
     # For tables, convert Astropy FITS table to NumPy structured array and
     # extract the required range of columns, then the required range of rows
-    data = numpy.array(data)
+    data = np.array(data)
     return data[list(data.dtype.names[x0:x0+w])][y0:y0+h]
 
 
@@ -998,7 +998,7 @@ def get_data_file_fits(user_id: Optional[int], file_id: int,
                     fits[0].data.dtype.fields is None and len(fits) > 1:
                 # Image in primary HDU, mask in extension HDU, create
                 # a temporary in-memory FITS with masked values replaced by NaN
-                fits[0].data[fits[1].data.nonzero()] = numpy.nan
+                fits[0].data[fits[1].data.nonzero()] = np.nan
                 return pyfits.HDUList(pyfits.PrimaryHDU(
                     fits[0].data, fits[0].header))
             return fits
@@ -1007,7 +1007,7 @@ def get_data_file_fits(user_id: Optional[int], file_id: int,
 
 
 def get_data_file_data(user_id: Optional[int], file_id: int) \
-        -> Tuple[Union[numpy.ndarray, numpy.ma.MaskedArray], pyfits.Header]:
+        -> Tuple[Union[np.ndarray, np.ma.MaskedArray], pyfits.Header]:
     """
     Return FITS file data and header for a data file with the given ID; handles
     masked images
@@ -1025,11 +1025,10 @@ def get_data_file_data(user_id: Optional[int], file_id: int) \
             data = fits[1].data
         elif fits[0].data.dtype.fields is None:
             # Image stored in the primary HDU, with NaNs for masked values
-            if numpy.isnan(fits[0].data).any():
+            if np.isnan(fits[0].data).any():
                 # Masked data
-                data = numpy.ma.masked_array(
-                    fits[0].data, numpy.isnan(fits[0].data),
-                    fill_value=numpy.nan)
+                data = np.ma.masked_array(
+                    fits[0].data, np.isnan(fits[0].data), fill_value=np.nan)
             else:
                 # Normal image data
                 data = fits[0].data
@@ -1040,7 +1039,7 @@ def get_data_file_data(user_id: Optional[int], file_id: int) \
         return data, fits[0].header
 
 
-def get_data_file_uint8(user_id: Optional[int], file_id: int) -> numpy.ndarray:
+def get_data_file_uint8(user_id: Optional[int], file_id: int) -> np.ndarray:
     """
     Return image file data array scaled to 8-bit unsigned integer format
     suitable for exporting to PNG, JPEG, etc.
@@ -1055,10 +1054,10 @@ def get_data_file_uint8(user_id: Optional[int], file_id: int) -> numpy.ndarray:
         raise DataFileExportError(reason='Cannot export non-image data files')
     mn, mx = data.min(), data.max()
     if mn >= mx:
-        return numpy.zeros(data.shape, numpy.uint8)
-    data = ((data - mn)/(mx - mn)*255 + 0.5).astype(numpy.uint8)
-    if isinstance(data, numpy.ma.MaskedArray) and data.mask is not None:
-        data = numpy.where(data.mask, 0, data.data)
+        return np.zeros(data.shape, np.uint8)
+    data = ((data - mn)/(mx - mn)*255 + 0.5).astype(np.uint8)
+    if isinstance(data, np.ma.MaskedArray) and data.mask is not None:
+        data = np.where(data.mask, 0, data.data)
     return data
 
 
@@ -1192,79 +1191,6 @@ def get_data_file_group_bytes(user_id: Optional[int], group_name: str,
         except Exception as e:
             raise DataFileExportError(reason=str(e))
     return buf.getvalue()
-
-
-def get_image_time(hdr: pyfits.Header) -> Optional[datetime]:
-    """
-    Get exposure start time from FITS header
-
-    :param hdr: FITS file header
-
-    :return: exposure start time; None if unknown
-    """
-    try:
-        dateobs = hdr['DATE-OBS']
-    except KeyError:
-        raise Exception('Unable to determine image time.  '
-                        'Key DATE-OBS must be present')
-
-    # check if time is also in date by looking for 'T'
-    if 'T' not in dateobs:
-        try:
-            timeobs = hdr['TIME-OBS']
-        except KeyError:
-            return None
-        else:
-            # Normalize to standard format
-            dateobs += 'T' + timeobs
-
-    try:
-        return datetime.strptime(dateobs, '%Y-%m-%dT%H:%M:%S')
-    except ValueError:
-        try:
-            return datetime.strptime(dateobs, '%Y-%m-%dT%H:%M:%S.%f')
-        except ValueError:
-            return None
-
-
-def get_exp_length(hdr: pyfits.Header) -> float:
-    """
-    Get exposure length from FITS header
-
-    :param hdr: FITS file header
-
-    :return: exposure length in seconds; None if unknown
-    """
-    # noinspection PyUnusedLocal
-    texp = None
-    for name in ('EXPOSURE', 'EXPTIME'):
-        try:
-            texp = float(hdr[name])
-        except (KeyError, ValueError):
-            continue
-        else:
-            break
-    return texp
-
-
-def get_gain(hdr: pyfits.Header) -> float:
-    """
-    Get effective gain from FITS header
-
-    :param hdr: FITS file header
-
-    :return: effective gain in e-/ADU; None if unknown
-    """
-    # noinspection PyUnusedLocal
-    gain = None
-    for name in ('GAIN', 'EGAIN', 'EPERADU'):
-        try:
-            gain = float(hdr[name])
-        except (KeyError, ValueError):
-            continue
-        else:
-            break
-    return gain
 
 
 def get_data_file(user_id: Optional[int], file_id: Union[int, str]) \
@@ -1409,7 +1335,7 @@ def import_data_files(user_id: Optional[int], session_id: Optional[int] = None,
                     raise errors.ValidationError(
                         'width', 'Width must be a positive integer')
 
-                data = numpy.zeros([height, width], dtype=numpy.float32)
+                data = np.zeros([height, width], dtype=np.float32)
                 if pixel_value is not None:
                     try:
                         pixel_value = float(pixel_value)

@@ -15,6 +15,7 @@ from flask import Blueprint, Flask, Response, current_app, request
 from astropy.wcs import WCS
 
 from skylib.extraction import histogram
+from skylib.util.fits import get_fits_exp_length, get_fits_gain
 
 from .... import json_response, auth, errors
 from ....models import DataFile, Session
@@ -809,8 +810,9 @@ def data_file_photometry(id: Union[int, str]) -> Response:
 
     res = [
         get_photometry(
-            data, get_exp_length(hdr), get_gain(hdr), _x, _y, a, b, theta,
-            a_in, a_out, b_out, theta_out, centroid_radius=centroid_radius)
+            data, get_fits_exp_length(hdr), get_fits_gain(hdr), _x, _y, a, b,
+            theta, a_in, a_out, b_out, theta_out,
+            centroid_radius=centroid_radius)
         for _x, _y in zip(x, y)]
 
     if multiple:

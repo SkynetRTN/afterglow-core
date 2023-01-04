@@ -14,12 +14,13 @@ from scipy.spatial import cKDTree
 from scipy.optimize import brenth
 from astropy.wcs import WCS
 
+from skylib.util.fits import get_fits_time
 from skylib.util.stats import chauvenet, weighted_median, weighted_quantile
 
 from ...models import (
     Job, JobResult, CatalogSource, FieldCal, FieldCalResult, Mag, PhotSettings,
     PhotometryData, SourceExtractionData, get_source_radec)
-from ..data_files import get_data_file_fits, get_image_time
+from ..data_files import get_data_file_fits
 from ..field_cals import get_field_cal
 from ..catalogs import catalogs as known_catalogs
 from .catalog_query_job import run_catalog_query_job
@@ -159,11 +160,7 @@ class FieldCalJob(Job):
                 except Exception:
                     pass
                 else:
-                    # noinspection PyBroadException
-                    try:
-                        epoch = get_image_time(hdr)
-                    except Exception:
-                        epoch = None
+                    epoch = get_fits_time(hdr)[0]
                     if epoch is not None:
                         epochs[file_id] = epoch
                     # noinspection PyBroadException

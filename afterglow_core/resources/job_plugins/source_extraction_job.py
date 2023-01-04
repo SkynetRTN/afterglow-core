@@ -9,11 +9,12 @@ from numpy import ndarray
 from astropy.wcs import WCS
 
 from skylib.extraction import auto_sat_level, extract_sources
+from skylib.util.fits import (
+    get_fits_exp_length, get_fits_gain, get_fits_time)
 
 from ...models import Job, JobResult, SourceExtractionData
 from ...schemas import AfterglowSchema, Boolean, Float
-from ..data_files import (
-    get_data_file_data, get_exp_length, get_gain, get_image_time, get_subframe)
+from ..data_files import get_data_file_data, get_subframe
 from .source_merge_job import SourceMergeSettings, merge_sources
 
 
@@ -134,12 +135,12 @@ def run_source_extraction_job(job: Job,
             hdr = get_data_file_data(job.user_id, id)[1]
 
             if settings.gain is None:
-                gain = get_gain(hdr)
+                gain = get_fits_gain(hdr)
             else:
                 gain = settings.gain
 
-            epoch = get_image_time(hdr)
-            texp = get_exp_length(hdr)
+            epoch = get_fits_time(hdr)[0]
+            texp = get_fits_exp_length(hdr)
             flt = hdr.get('FILTER')
             scope = hdr.get('TELESCOP')
 

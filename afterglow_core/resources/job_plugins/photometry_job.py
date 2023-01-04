@@ -12,12 +12,13 @@ import sep
 
 from skylib.photometry import aperture_photometry
 from skylib.extraction.centroiding import centroid_sources
+from skylib.util.fits import (
+    get_fits_exp_length, get_fits_gain, get_fits_time)
 
 from ...models import (
     Job, JobResult, SourceExtractionData, PhotSettings, PhotometryData,
     sigma_to_fwhm, get_source_xy)
-from ..data_files import (
-    get_data_file_data, get_exp_length, get_gain, get_image_time)
+from ..data_files import get_data_file_data
 
 
 __all__ = ['PhotometryJob', 'run_photometry_job']
@@ -115,14 +116,14 @@ def run_photometry_job(job: Job, settings: PhotSettings,
             data, hdr = get_data_file_data(job.user_id, file_id)
 
             if settings.gain is None:
-                gain = get_gain(hdr)
+                gain = get_fits_gain(hdr)
             else:
                 gain = settings.gain
             if gain:
                 phot_kw['gain'] = gain
 
-            epoch = get_image_time(hdr)
-            texp = get_exp_length(hdr)
+            epoch = get_fits_time(hdr)[0]
+            texp = get_fits_exp_length(hdr)
             flt = hdr.get('FILTER')
             scope = hdr.get('TELESCOP')
 
