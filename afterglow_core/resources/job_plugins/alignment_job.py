@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import Any, Dict as TDict, List as TList, Tuple, Optional
 
 import numpy as np
-from numpy import ceil, dot, floor, indices, ndarray, tensordot, zeros
 from numpy.ma import MaskedArray
 from numpy.linalg import inv
 from scipy.sparse.csgraph import shortest_path
@@ -415,7 +414,7 @@ class AlignmentJob(Job):
                     inv_offset = -offset
                 else:
                     inv_mat = inv(mat)
-                    inv_offset = -dot(inv_mat, offset)
+                    inv_offset = -np.dot(inv_mat, offset)
                 inverse_rel_transforms[other_file_id, file_id] = (
                     inv_mat, inv_offset)
                 distances[other_file_id, file_id] = distances[
@@ -478,7 +477,7 @@ class AlignmentJob(Job):
                 # Establish the global reference frame based on the first image
                 ref_height, ref_width = get_data_file_data(
                     self.user_id, mosaic[0])[0].shape
-                transforms[mosaic[0]] = None, zeros(2)
+                transforms[mosaic[0]] = None, np.zeros(2)
 
                 # Update the mosaic image shape and transformations by adding
                 # each subsequent image
@@ -492,10 +491,7 @@ class AlignmentJob(Job):
                     # transforms along the path
                     j = 0
                     while True:
-                        j1 = pred[j, i]
-                        if j1 == j:
-                            # Reached i-th tile
-                            j1 = i
+                        j1 = pred[i, j]
 
                         # Get the transform from j-th to the intermediate j1-th
                         # tile
@@ -508,11 +504,13 @@ class AlignmentJob(Job):
                             offset = offset + offset1
                         else:
                             if mat1 is not None:
-                                mat = dot(mat, mat1)
-                            offset = offset + dot(mat, offset1)
+                                mat = np.dot(mat, mat1)
+                            offset = offset + np.dot(mat, offset1)
 
                         if j1 == i:
+                            # Reached the current tile
                             break
+
                         j = j1
 
                     # Got new transform; check that the transformed tile fits
@@ -520,14 +518,14 @@ class AlignmentJob(Job):
                     transforms[file_id] = mat, offset
                     dy, dx = offset
                     shape = get_data_file_data(self.user_id, file_id)[0].shape
-                    y, x = indices(shape)
+                    y, x = np.indices(shape)
                     if mat is None:
                         x = x + dx  # adding float to int
                         y = y + dy
                     else:
-                        y, x = tensordot(mat, [y, x], 1) + [[[dy]], [[dx]]]
-                    xmin, xmax = int(floor(x.min())), int(ceil(x.max()))
-                    ymin, ymax = int(floor(y.min())), int(ceil(y.max()))
+                        y, x = np.tensordot(mat, [y, x], 1) + [[[dy]], [[dx]]]
+                    xmin, xmax = int(np.floor(x.min())), int(np.ceil(x.max()))
+                    ymin, ymax = int(np.floor(y.min())), int(np.ceil(y.max()))
                     if xmin < 0:
                         # Shift all existing transformations and extend
                         # the mosaic to the left
@@ -560,7 +558,7 @@ class AlignmentJob(Job):
                         offset = -offset
                     else:
                         mat = inv(mat)
-                        offset = -dot(mat, offset)
+                        offset = -np.dot(mat, offset)
                     transforms[file_id] = mat, offset
 
                 # Set the reference image sizes for all images in the mosaic
@@ -730,7 +728,7 @@ def get_transform(job: AlignmentJob,
                   ref_star_cache: TDict[
                       int, Tuple[TDict[str, Tuple[float, float]],
                                  TList[Tuple[float, float]]]],
-                  ) -> Tuple[Tuple[Optional[ndarray], ndarray], str]:
+                  ) -> Tuple[Tuple[Optional[np.ndarray], np.ndarray], str]:
     settings = job.settings
     user_id = job.user_id
 
