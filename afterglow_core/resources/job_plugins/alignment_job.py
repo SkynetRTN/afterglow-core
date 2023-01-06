@@ -484,12 +484,12 @@ class AlignmentJob(Job):
                         # Get the transform from j-th to the intermediate j1-th
                         # tile
                         try:
-                            mat1, offset1 = rel_transforms[mosaic[j1],
-                                                           mosaic[j]]
-                        except KeyError:
-                            # Have inverse transform only
                             mat1, offset1 = rel_transforms[mosaic[j],
                                                            mosaic[j1]]
+                        except KeyError:
+                            # Have inverse transform only
+                            mat1, offset1 = rel_transforms[mosaic[j1],
+                                                           mosaic[j]]
                             if mat1 is None:
                                 offset1 = -offset1
                             else:
