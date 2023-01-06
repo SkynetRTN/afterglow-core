@@ -406,6 +406,22 @@ class AlignmentJob(Job):
                     k += 1
                     self.update_progress(k/total_pairs*100, 0, total_stages)
 
+            # Add inverse transformations
+            inverse_rel_transforms = {}
+            for (file_id, other_file_id), (mat, offset) in \
+                    rel_transforms.items():
+                if mat is None:
+                    inv_mat = None
+                    inv_offset = -offset
+                else:
+                    inv_mat = inv(mat)
+                    inv_offset = -dot(inv_mat, offset)
+                inverse_rel_transforms[other_file_id, file_id] = (
+                    inv_mat, inv_offset)
+                distances[other_file_id, file_id] = distances[
+                    file_id, other_file_id]
+            rel_transforms.update(inverse_rel_transforms)
+
             # Include each image in one of the sets of connected images
             # ("mosaics") if it has at least one match
             ref_widths, ref_heights, ref_wcss = {}, {}, {}
@@ -456,7 +472,7 @@ class AlignmentJob(Job):
                         # Different mosaic
                         pass
                     else:
-                        graph[i, j] = graph[j, i] = d
+                        graph[i, j] = d
                 pred = shortest_path(graph, return_predecessors=True)[1]
 
                 # Establish the global reference frame based on the first image
@@ -483,18 +499,7 @@ class AlignmentJob(Job):
 
                         # Get the transform from j-th to the intermediate j1-th
                         # tile
-                        try:
-                            mat1, offset1 = rel_transforms[mosaic[j],
-                                                           mosaic[j1]]
-                        except KeyError:
-                            # Have inverse transform only
-                            mat1, offset1 = rel_transforms[mosaic[j1],
-                                                           mosaic[j]]
-                            if mat1 is None:
-                                offset1 = -offset1
-                            else:
-                                mat1 = inv(mat1)
-                                offset1 = -dot(mat1, offset1)
+                        mat1, offset1 = rel_transforms[mosaic[j1], mosaic[j]]
 
                         # Chain the transform with the already established
                         # transform from 1st to j-th tile
