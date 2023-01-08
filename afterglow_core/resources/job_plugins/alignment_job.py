@@ -379,9 +379,8 @@ class AlignmentJob(Job):
             max_r = settings.mosaic_search_radius
             k = 0
             for i, file_id in enumerate(file_ids[:-1]):
-                ra0, dec0, r0 = get_fits_fov(
+                fovs[file_id] = ra0, dec0, r0 = get_fits_fov(
                     get_data_file_fits(self.user_id, file_id)[0].header)
-                fovs[file_id] = ra0, dec0, r0
                 for other_file_id in file_ids[i + 1:]:
                     other_ra0, other_dec0, other_r0 = get_fits_fov(
                         get_data_file_fits(
@@ -405,6 +404,8 @@ class AlignmentJob(Job):
                             weights[file_id, other_file_id] = gcd
                     k += 1
                     self.update_progress(k/total_pairs*100, 0, total_stages)
+            fovs[file_ids[-1]] = get_fits_fov(
+                get_data_file_fits(self.user_id, file_ids[-1])[0].header)
 
             # Add inverse transformations
             inverse_rel_transforms = {}
