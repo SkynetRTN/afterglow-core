@@ -29,23 +29,20 @@ expiration time.
 import time
 import secrets
 
-from flask import request
-
-from . import app
+from flask import current_app, request
 
 
 __all__ = [
-    'oauth_clients', 'oauth_server', 'Token',
+    'init_oauth', 'oauth_clients', 'oauth_server',
 ]
 
-
-Token = None
 
 oauth_clients = {}
 oauth_server = None
 
 
-def _init_oauth():
+# noinspection PyRedeclaration
+def init_oauth():
     """
     Initialize Afterglow OAuth2 server
 
@@ -54,13 +51,15 @@ def _init_oauth():
     from authlib.oauth2.rfc6749 import ClientMixin
     from authlib.oauth2.rfc6749 import grants
     from authlib.oauth2.rfc7636 import CodeChallenge
-    from authlib.integrations.sqla_oauth2 import (
-        OAuth2AuthorizationCodeMixin, OAuth2TokenMixin, create_save_token_func)
+    from authlib.integrations.sqla_oauth2 import create_save_token_func
     from authlib.integrations.flask_oauth2 import AuthorizationServer
-    from .resources.users import DbUser, db
+    from .resources import users
 
-    global Token, oauth_server
+    global oauth_server
 
+    db = users.db
+
+    # noinspection PyAbstractClass
     class OAuth2Client(ClientMixin):
         """
         OAuth2 client definition class
@@ -190,51 +189,6 @@ def _init_oauth():
             """
             return grant_type in self.allowed_grant_types
 
-    class OAuth2AuthorizationCode(db.Model, OAuth2AuthorizationCodeMixin):
-        __tablename__ = 'oauth_codes'
-        __table_args__ = dict(sqlite_autoincrement=True)
-
-        id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(
-            db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
-            nullable=False)
-
-        user = db.relationship('DbUser', uselist=False, backref='oauth_codes')
-
-    class _Token(db.Model, OAuth2TokenMixin):
-        """
-        Token object; stored in the memory database
-        """
-        __tablename__ = 'oauth_tokens'
-        __table_args__ = dict(sqlite_autoincrement=True)
-
-        id = db.Column(db.Integer, primary_key=True)
-        user_id = db.Column(
-            db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
-            nullable=False)
-        # override Mixin to set default=oauth2
-        token_type = db.Column(db.String(40), default='oauth2')
-        note = db.Column(db.Text, default='')
-
-        user = db.relationship('DbUser', uselist=False, backref='oauth_tokens')
-
-        @property
-        def active(self) -> bool:
-            if self.revoked:
-                return False
-            if not self.expires_in:
-                return True
-            return self.issued_at + self.expires_in >= time.time()
-
-        def is_refresh_token_active(self):
-            if self.revoked:
-                return False
-            expires_at = self.issued_at + \
-                app.config.get('REFRESH_TOKEN_EXPIRES')
-            return expires_at >= time.time()
-
-    Token = _Token
-
     class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
         def save_authorization_code(self, code, req) -> None:
             """Save authorization_code for later use"""
@@ -245,7 +199,7 @@ def _init_oauth():
                     'code_challenge_method')
 
                 # noinspection PyArgumentList
-                db.session.add(OAuth2AuthorizationCode(
+                db.session.add(users.OAuth2AuthorizationCode(
                     code=code,
                     client_id=req.client.client_id,
                     redirect_uri=req.redirect_uri,
@@ -260,8 +214,8 @@ def _init_oauth():
                 raise
 
         def query_authorization_code(self, code, client) \
-                -> OAuth2AuthorizationCode:
-            item = OAuth2AuthorizationCode.query.filter_by(
+                -> users.OAuth2AuthorizationCode:
+            item = users.OAuth2AuthorizationCode.query.filter_by(
                 code=code, client_id=client.client_id).first()
             if item and not item.is_expired():
                 return item
@@ -274,22 +228,23 @@ def _init_oauth():
                 db.session.rollback()
                 raise
 
-        def authenticate_user(self, authorization_code) -> DbUser:
-            return DbUser.query.get(authorization_code.user_id)
+        def authenticate_user(self, authorization_code) -> users.DbUser:
+            return users.DbUser.query.get(authorization_code.user_id)
 
     class RefreshTokenGrant(grants.RefreshTokenGrant):
-        def authenticate_refresh_token(self, refresh_token) -> Token:
-            token = Token.query \
+        def authenticate_refresh_token(self, refresh_token) -> users.Token:
+            token = users.Token.query \
                 .filter_by(refresh_token=refresh_token) \
                 .first()
             if token and token.is_refresh_token_active():
                 return token
 
-        def authenticate_user(self, credential) -> DbUser:
+        def authenticate_user(self, credential: users.Token) -> users.DbUser:
             return credential.user
 
-        def revoke_old_credential(self, credential) -> None:
-            credential.revoked = True
+        def revoke_old_credential(self, credential: users.Token) -> None:
+            credential.access_token_revoked_at = \
+                credential.refresh_token_revoked_at = int(time.time())
             try:
                 db.session.add(credential)
                 db.session.commit()
@@ -297,21 +252,21 @@ def _init_oauth():
                 db.session.rollback()
                 raise
 
-    for client_def in app.config.get('OAUTH_CLIENTS', []):
+    for client_def in current_app.config.get('OAUTH_CLIENTS', []):
         oauth_clients[client_def.get('client_id')] = OAuth2Client(**client_def)
 
     def access_token_generator(*_):
         return secrets.token_hex(20)
 
     # Configure Afterglow OAuth2 tokens
-    app.config['OAUTH2_ACCESS_TOKEN_GENERATOR'] = \
-        app.config['OAUTH2_REFRESH_TOKEN_GENERATOR'] = \
+    current_app.config['OAUTH2_ACCESS_TOKEN_GENERATOR'] = \
+        current_app.config['OAUTH2_REFRESH_TOKEN_GENERATOR'] = \
         access_token_generator
 
     oauth_server = AuthorizationServer(
-        app,
+        current_app,
         query_client=lambda client_id: oauth_clients.get(client_id),
-        save_token=create_save_token_func(db.session, Token),
+        save_token=create_save_token_func(db.session, users.Token),
     )
     oauth_server.register_grant(grants.ImplicitGrant)
     oauth_server.register_grant(grants.ClientCredentialsGrant)
@@ -319,8 +274,4 @@ def _init_oauth():
         AuthorizationCodeGrant, [CodeChallenge(required=True)])
     oauth_server.register_grant(RefreshTokenGrant)
 
-    app.logger.info('Initialized Afterglow OAuth2 Service')
-
-
-if app.config.get('AUTH_ENABLED'):
-    _init_oauth()
+    current_app.logger.info('Initialized Afterglow OAuth2 Service')

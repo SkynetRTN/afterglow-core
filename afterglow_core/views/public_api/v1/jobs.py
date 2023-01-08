@@ -4,15 +4,27 @@ Afterglow Core: API v1 job views
 
 from typing import Any, Dict as TDict, Union
 
-from flask import Response, request, send_file
+from flask import Blueprint, Flask, Response, request, send_file
 
-from .... import app, auth, json_response
+from .... import auth, json_response
 from ....resources.jobs import job_server_request
 from ....schemas.api.v1 import JobSchema, JobStateSchema
 from . import url_prefix
 
 
-resource_prefix = url_prefix + 'jobs/'
+__all__ = ['register']
+
+
+blp = Blueprint('jobs', __name__, url_prefix=url_prefix + 'jobs')
+
+
+def register(app: Flask) -> None:
+    """
+    Register endpoints
+
+    :param app: Flask application
+    """
+    app.register_blueprint(blp)
 
 
 def error_response(msg: TDict[str, Any]) -> Response:
@@ -29,7 +41,7 @@ def error_response(msg: TDict[str, Any]) -> Response:
         headers=msg.get('headers'))
 
 
-@app.route(resource_prefix[:-1], methods=('GET', 'POST'))
+@blp.route('/', methods=('GET', 'POST'))
 @auth.auth_required('user')
 def jobs() -> Response:
     """
@@ -69,7 +81,7 @@ def jobs() -> Response:
         return json_response(JobSchema(exclude=['result'], **msg['json']))
 
 
-@app.route(resource_prefix + '<int:id>', methods=('GET', 'DELETE'))
+@blp.route('/<int:id>', methods=('GET', 'DELETE'))
 @auth.auth_required('user')
 def job(id: Union[int, str]) -> Response:
     """
@@ -99,7 +111,7 @@ def job(id: Union[int, str]) -> Response:
         return json_response()
 
 
-@app.route(resource_prefix + '<int:id>/state', methods=['GET', 'PUT'])
+@blp.route('/<int:id>/state', methods=['GET', 'PUT'])
 @auth.auth_required('user')
 def jobs_state(id: Union[int, str]) -> Response:
     """
@@ -131,7 +143,7 @@ def jobs_state(id: Union[int, str]) -> Response:
     return json_response(JobStateSchema(**msg['json']))
 
 
-@app.route(resource_prefix + '<int:id>/result')
+@blp.route('/<int:id>/result')
 @auth.auth_required('user')
 def jobs_result(id: Union[int, str]) -> Response:
     """
@@ -158,7 +170,7 @@ def jobs_result(id: Union[int, str]) -> Response:
         job_schema().fields['result'].nested(**msg['json']))
 
 
-@app.route(resource_prefix + '<int:id>/result/files/<file_id>')
+@blp.route('/<int:id>/result/files/<file_id>')
 @auth.auth_required('user')
 def jobs_result_files(id: Union[int, str], file_id: str) -> Response:
     """

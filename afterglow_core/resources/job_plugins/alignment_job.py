@@ -5,15 +5,18 @@ Afterglow Core: image alignment job plugin
 from datetime import datetime
 from typing import Any, Dict as TDict, List as TList, Tuple, Optional
 
-from numpy import ceil, dot, floor, indices, ndarray, tensordot, zeros
+import numpy as np
 from numpy.ma import MaskedArray
 from numpy.linalg import inv
+from scipy.sparse.csgraph import shortest_path
 from marshmallow.fields import String, Integer, List, Nested
 from astropy.wcs import WCS
 import cv2 as cv
 
 from skylib.combine.alignment import *
 from skylib.combine.pattern_matching import pattern_match
+from skylib.util.angle import angdist, average_radec
+from skylib.util.fits import get_fits_fov
 
 from ...models import Job, JobResult, SourceExtractionData
 from ...schemas import AfterglowSchema, Boolean, Float, NestedPoly
@@ -37,6 +40,7 @@ class AlignmentSettings(AfterglowSchema):
 
     mode: str = String(dump_default='WCS', load_default='WCS')
     ref_image: Optional[str] = String(dump_default='central', allow_none=True)
+    mosaic_search_radius: float = Float(dump_default=1)
     prefilter: bool = Boolean(dump_default=True)
     enable_rot: bool = Boolean(dump_default=True)
     enable_scale: bool = Boolean(dump_default=True)
@@ -321,7 +325,7 @@ class AlignmentJob(Job):
         # optional cropping
         total_stages = 2 + int(self.crop)
 
-        wcs_cache, data_cache, ref_star_cache = {}, {}, {}
+        wcs_cache, ref_star_cache = {}, {}
         transforms, history = {}, {}
         mosaics = []
 
@@ -333,16 +337,12 @@ class AlignmentJob(Job):
                 try:
                     transforms[file_id], history[file_id] = get_transform(
                         self, alignment_kwargs, file_id, ref_file_id,
-                        wcs_cache, data_cache, ref_star_cache)
+                        wcs_cache, ref_star_cache)
                 except Exception as e:
                     self.add_error(e, {'file_id': file_ids[i]})
                 finally:
                     try:
                         del wcs_cache[file_id]
-                    except KeyError:
-                        pass
-                    try:
-                        del data_cache[file_id]
                     except KeyError:
                         pass
                     try:
@@ -352,11 +352,8 @@ class AlignmentJob(Job):
                     self.update_progress(
                         (i + 1)/len(file_ids)*100, 0, total_stages)
 
-            try:
-                ref_height, ref_width = data_cache[ref_file_id].shape
-            except KeyError:
-                ref_height, ref_width = get_data_file_data(
-                    self.user_id, ref_file_id)[0].shape
+            ref_height, ref_width = get_data_file_data(
+                self.user_id, ref_file_id)[0].shape
             try:
                 ref_wcs = wcs_cache[ref_file_id]
             except KeyError:
@@ -376,22 +373,39 @@ class AlignmentJob(Job):
         else:
             # Mosaicing mode
             # Find all possible pairwise transformations
-            rel_transforms = {}
+            rel_transforms, weights, fovs = {}, {}, {}
             n = len(file_ids)
             total_pairs = n*(n - 1)//2
+            max_r = settings.mosaic_search_radius
             k = 0
             for i, file_id in enumerate(file_ids[:-1]):
+                fovs[file_id] = ra0, dec0, r0 = get_fits_fov(
+                    get_data_file_fits(self.user_id, file_id)[0].header)
                 for other_file_id in file_ids[i + 1:]:
-                    # noinspection PyBroadException
-                    try:
-                        rel_transforms[file_id, other_file_id], \
-                            history[file_id] = get_transform(
-                                self, alignment_kwargs, other_file_id, file_id,
-                                wcs_cache, data_cache, ref_star_cache)
-                    except Exception:
-                        pass
+                    other_ra0, other_dec0, other_r0 = get_fits_fov(
+                        get_data_file_fits(
+                            self.user_id, other_file_id)[0].header)
+                    gcd = angdist(ra0, dec0, other_ra0, other_dec0)
+                    if any(x is None for x in (ra0, dec0, r0, other_ra0,
+                                               other_dec0, other_r0)) or \
+                            gcd < (r0 + other_r0)*max_r:
+                        # noinspection PyBroadException
+                        try:
+                            rel_transforms[file_id, other_file_id], \
+                                history[file_id] = get_transform(
+                                    self, alignment_kwargs, other_file_id,
+                                    file_id, wcs_cache, ref_star_cache)
+                        except Exception:
+                            pass
+                        else:
+                            # Assume that the tiles are aligned to XY, then
+                            # weight(i,j) = reciprocal of overlap area between
+                            # FOVxFOV square tiles i and j in Euclidean space
+                            weights[file_id, other_file_id] = gcd
                     k += 1
                     self.update_progress(k/total_pairs*100, 0, total_stages)
+            fovs[file_ids[-1]] = get_fits_fov(
+                get_data_file_fits(self.user_id, file_ids[-1])[0].header)
 
             # Add inverse transformations
             inverse_rel_transforms = {}
@@ -402,9 +416,11 @@ class AlignmentJob(Job):
                     inv_offset = -offset
                 else:
                     inv_mat = inv(mat)
-                    inv_offset = -dot(inv_mat, offset)
+                    inv_offset = -np.dot(inv_mat, offset)
                 inverse_rel_transforms[other_file_id, file_id] = (
                     inv_mat, inv_offset)
+                weights[other_file_id, file_id] = weights[
+                    file_id, other_file_id]
             rel_transforms.update(inverse_rel_transforms)
 
             # Include each image in one of the sets of connected images
@@ -427,10 +443,8 @@ class AlignmentJob(Job):
                 if matching_mosaics:
                     if len(matching_mosaics) > 1:
                         # Image has a match in multiple mosaics; join them
-                        new_mosaics = [
-                            set(sum([list(mosaic)
-                            for mosaic in matching_mosaics], []))
-                        ]
+                        new_mosaics = [set(sum([
+                            list(mosaic) for mosaic in matching_mosaics], []))]
                         new_mosaics[0].add(file_id)
                         for mosaic in mosaics:
                             if mosaic not in matching_mosaics:
@@ -446,109 +460,87 @@ class AlignmentJob(Job):
 
             # Process each mosaic separately
             for mosaic in mosaics:
-                # Based on the existing pairwise transformations, build
-                # the missing transformations between all pairs of images
-                # within the mosaic so that we are guaranteed to have
-                # an (i) -> (i + 1) transformation for each i
+                # Put the tile closest to the average mosaic RA/Dec first;
+                # this will be the reference tile
                 mosaic = list(mosaic)
+                ra0, dec0 = average_radec(
+                    [fovs[file_id][:2] for file_id in mosaic])
+                i = np.argmin([angdist(ra0, dec0, *fovs[file_id][:2])
+                               for file_id in mosaic])
+                if i:
+                    mosaic = [mosaic[i]] + mosaic[:i] + mosaic[i+1:]
+
+                # Based on the existing pairwise transformations, build
+                # an undirected weighted graph with vertices representing
+                # tile centers and edge weights equal to great circle distances
                 n = len(mosaic)
-                i = 0
-                while i < n:
-                    restart = False
-                    file_id1 = mosaic[i]
-                    j = 0
-                    while j < n:
-                        if i == j:
-                            j += 1
-                            continue
-                        file_id2 = mosaic[j]
-                        if (file_id1, file_id2) not in rel_transforms:
-                            # Useless 1 -> 2 transform
-                            j += 1
-                            continue
-                        mat1, offset1 = rel_transforms[file_id1, file_id2]
-                        for file_id3 in mosaic:
-                            if file_id3 in (file_id1, file_id2) or \
-                                    (file_id2, file_id3) \
-                                    not in rel_transforms or \
-                                    (file_id1, file_id3) in rel_transforms:
-                                continue
-                            # Found a useful 2 -> 3 transform, construct
-                            # 1 -> 3 and 3 -> 1
-                            mat2, offset2 = rel_transforms[file_id2, file_id3]
-                            if mat2 is None:
-                                mat = mat1
-                                offset = offset1 + offset2
-                            else:
-                                if mat1 is None:
-                                    mat = mat2
-                                else:
-                                    mat = dot(mat2, mat1)
-                                offset = dot(mat2, offset1) + offset2
-                            if mat is None:
-                                inv_mat = None
-                                inv_offset = -offset
-                            else:
-                                inv_mat = inv(mat)
-                                inv_offset = -dot(inv_mat, offset)
-                            rel_transforms[file_id1, file_id3] = mat, offset
-                            rel_transforms[file_id3, file_id1] = (
-                                inv_mat, inv_offset)
-                            restart = True
-                            break
-                        if restart:
-                            break
-                        j += 1
-                    if restart:
-                        i = 0
-                        continue
-                    i += 1
+                graph = np.full((n, n), np.nan, np.float64)
+                for idx, d in weights.items():
+                    try:
+                        i, j = mosaic.index(idx[0]), mosaic.index(idx[1])
+                    except ValueError:
+                        # Different mosaic
+                        pass
+                    else:
+                        graph[i, j] = d
+                pred = shortest_path(graph, return_predecessors=True)[1]
 
                 # Establish the global reference frame based on the first image
-                try:
-                    ref_height, ref_width = data_cache[mosaic[0]].shape
-                except KeyError:
-                    ref_height, ref_width = get_data_file_data(
-                        self.user_id, mosaic[0])[0].shape
-                transforms[mosaic[0]] = None, zeros(2)
+                ref_height, ref_width = get_data_file_data(
+                    self.user_id, mosaic[0])[0].shape
+                transforms[mosaic[0]] = None, np.zeros(2)
 
                 # Update the mosaic image shape and transformations by adding
                 # each subsequent image
-                for i in range(n - 1):
-                    file_id1, file_id2 = mosaic[i:i + 2]
-                    mat1, offset1 = transforms[file_id1]
+                for i in range(1, n):
+                    file_id = mosaic[i]
+                    mat, offset = transforms[mosaic[0]]
 
-                    # Project the current image coordinates onto the global
-                    # reference frame
-                    mat2, offset2 = rel_transforms[file_id2, file_id1]
-                    if mat1 is None:
-                        mat = mat2
-                        offset = offset1 + offset2
-                    else:
-                        if mat2 is None:
+                    # Reconstruct the shortest path from the first tile in
+                    # the graph and project the current image coordinates onto
+                    # the global reference frame by chaining pairwise
+                    # transforms along the path
+                    j = 0
+                    while True:
+                        j1 = pred[i, j]
+
+                        # Get the transform from j-th to the intermediate j1-th
+                        # tile
+                        mat1, offset1 = rel_transforms[mosaic[j1], mosaic[j]]
+
+                        # Chain the transform with the already established
+                        # transform from 1st to j-th tile
+                        if mat is None:
                             mat = mat1
+                            offset = offset + offset1
                         else:
-                            mat = dot(mat1, mat2)
-                        offset = dot(mat1, offset2) + offset1
-                    transforms[file_id2] = mat, offset
+                            if mat1 is not None:
+                                mat = np.dot(mat, mat1)
+                            offset = offset + np.dot(mat, offset1)
+
+                        if j1 == i:
+                            # Reached the current tile
+                            break
+
+                        j = j1
+
+                    # Got new transform; check that the transformed tile fits
+                    # within the current global mosaic frame
+                    transforms[file_id] = mat, offset
                     dy, dx = offset
-                    try:
-                        shape = data_cache[file_id2].shape
-                    except KeyError:
-                        shape = get_data_file_data(
-                            self.user_id, file_id2)[0].shape
-                    y, x = indices(shape)
+                    shape = get_data_file_data(self.user_id, file_id)[0].shape
+                    y, x = np.indices(shape)
                     if mat is None:
                         x = x + dx  # adding float to int
                         y = y + dy
                     else:
-                        y, x = tensordot(mat, [y, x], 1) + [[[dy]], [[dx]]]
-                    xmin, xmax = int(floor(x.min())), int(ceil(x.max()))
-                    ymin, ymax = int(floor(y.min())), int(ceil(y.max()))
+                        y, x = np.tensordot(mat, [y, x], 1) + [[[dy]], [[dx]]]
+                    xmin, xmax = int(np.floor(x.min())), int(np.ceil(x.max()))
+                    ymin, ymax = int(np.floor(y.min())), int(np.ceil(y.max()))
                     if xmin < 0:
                         # Shift all existing transformations and extend
                         # the mosaic to the left
-                        for j in range(i + 2):
+                        for j in range(i + 1):
                             transforms[mosaic[j]][1][1] -= xmin
                         ref_width -= xmin
                     if xmax > ref_width - 1:
@@ -557,7 +549,7 @@ class AlignmentJob(Job):
                     if ymin < 0:
                         # Shift all existing transformations and extend
                         # the mosaic to the bottom
-                        for j in range(i + 2):
+                        for j in range(i + 1):
                             transforms[mosaic[j]][1][0] -= ymin
                         ref_height -= ymin
                     if ymax > ref_height - 1:
@@ -577,7 +569,7 @@ class AlignmentJob(Job):
                         offset = -offset
                     else:
                         mat = inv(mat)
-                        offset = -dot(mat, offset)
+                        offset = -np.dot(mat, offset)
                     transforms[file_id] = mat, offset
 
                 # Set the reference image sizes for all images in the mosaic
@@ -594,8 +586,6 @@ class AlignmentJob(Job):
                             ref_wcss[other_file_id] = wcs
                         break
 
-        del data_cache
-
         # Save and later temporarily clear the original masks if auto-cropping
         # is enabled; the masks will be restored by the cropping job
         masks = {}
@@ -611,6 +601,8 @@ class AlignmentJob(Job):
                 try:
                     mat, offset = transforms[file_id]
                 except KeyError:
+                    if file_id != ref_file_id:
+                        raise RuntimeError('Cannot align image')
                     continue
 
                 data, hdr = get_data_file_data(self.user_id, file_id)
@@ -741,24 +733,13 @@ def get_wcs(user_id: Optional[int], file_id: int, wcs_cache: TDict[int, WCS]) \
     return wcs
 
 
-def get_data(user_id: Optional[int], file_id: int,
-             data_cache: TDict[int, ndarray]) -> ndarray:
-    try:
-        data = data_cache[file_id]
-    except KeyError:
-        data = get_data_file_data(user_id, file_id)[0]
-        data_cache[file_id] = data
-    return data
-
-
 def get_transform(job: AlignmentJob,
                   alignment_kwargs: TDict[str, Any], file_id: int,
                   ref_file_id: int, wcs_cache: TDict[int, WCS],
-                  data_cache: TDict[int, ndarray],
                   ref_star_cache: TDict[
                       int, Tuple[TDict[str, Tuple[float, float]],
                                  TList[Tuple[float, float]]]],
-                  ) -> Tuple[Tuple[Optional[ndarray], ndarray], str]:
+                  ) -> Tuple[Tuple[Optional[np.ndarray], np.ndarray], str]:
     settings = job.settings
     user_id = job.user_id
 
@@ -910,8 +891,8 @@ def get_transform(job: AlignmentJob,
 
     if isinstance(settings, AlignmentSettingsFeatures):
         return get_transform_features(
-            get_data(user_id, file_id, data_cache),
-            get_data(user_id, ref_file_id, data_cache),
+            get_data_file_data(user_id, file_id)[0],
+            get_data_file_data(user_id, ref_file_id)[0],
             enable_rot=settings.enable_rot,
             enable_scale=settings.enable_scale,
             enable_skew=settings.enable_skew,
@@ -921,8 +902,8 @@ def get_transform(job: AlignmentJob,
 
     if isinstance(settings, AlignmentSettingsPixels):
         return get_transform_pixel(
-            get_data(user_id, file_id, data_cache),
-            get_data(user_id, ref_file_id, data_cache),
+            get_data_file_data(user_id, file_id)[0],
+            get_data_file_data(user_id, ref_file_id)[0],
             enable_rot=settings.enable_rot,
             enable_scale=settings.enable_scale,
             enable_skew=settings.enable_skew), 'pixel matching'

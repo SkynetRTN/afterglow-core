@@ -2,17 +2,23 @@
 Afterglow Core: AJAX API endpoints
 """
 
-url_prefix = '/ajax/'
-
-from .app_authorizations import *
-from .tokens import *
-from .sessions import *
-from .initialize import *
-from .oauth2_providers import *
-from .oauth2_clients import *
-from .server_status import *
+from flask import Blueprint, Flask
 
 
+__all__ = ['register', 'ajax_blp']
+
+__version__ = 1, 0, 1
+
+ajax_blp = Blueprint('ajax_api', __name__, url_prefix='/ajax')
 
 
+def register(app: Flask) -> None:
+    """
+    Register endpoints
 
+    :param app: Flask application
+    """
+    from . import (
+        app_authorizations, tokens, sessions, initialize, oauth2_providers,
+        oauth2_clients, server_status)
+    app.register_blueprint(ajax_blp)

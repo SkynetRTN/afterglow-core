@@ -12,7 +12,7 @@ from ...models import Job, JobResult
 from ...schemas import AfterglowSchema, Boolean
 from ...errors.data_provider import UnknownDataProviderError
 from ...errors.data_file import CannotImportFromCollectionAssetError
-from ..data_providers import providers
+from .. import data_providers
 from ..data_files import get_data_file_db, get_root, import_data_file
 
 
@@ -53,7 +53,8 @@ class BatchImportJob(Job):
                         asset_path = settings.path
 
                         try:
-                            provider = providers[settings.provider_id]
+                            provider = data_providers.providers[
+                                settings.provider_id]
                         except KeyError:
                             raise UnknownDataProviderError(
                                 id=settings.provider_id)

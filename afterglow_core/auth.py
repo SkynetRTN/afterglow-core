@@ -21,29 +21,26 @@ import os
 from datetime import timedelta
 from functools import wraps
 import time
-from typing import Any, Callable, Optional, Sequence, Union
+from typing import Callable, Optional, Sequence, Union
 
 from werkzeug.urls import url_encode
 from flask import Response, request, make_response, redirect
 # noinspection PyProtectedMember
-from flask import _request_ctx_stack
+from flask import current_app, g
 from flask_wtf.csrf import generate_csrf
 
-from . import app
 from .errors.auth import NotAuthenticatedError
 
 
 __all__ = [
-    'oauth_plugins', 'auth_required', 'authenticate',
-    'current_user', 'jwt_manager',
-    'set_access_cookies', 'clear_access_cookies',
+    'init_auth', 'oauth_plugins', 'auth_required', 'authenticate',
+    'jwt_manager', 'set_access_cookies', 'clear_access_cookies',
 ]
 
 
 oauth_plugins = {}
 http_auth_plugins = {}
 
-current_user: Any = None
 jwt_manager = None
 
 USER_REALM = 'Registered Afterglow Users Only'
@@ -60,7 +57,7 @@ def authenticate(roles: Optional[Union[str, Sequence[str]]] = None):
         :class:`AuthError` on authentication error
     """
     from .resources.users import AnonymousUser
-    user = _request_ctx_stack.top.user = request.user = AnonymousUser()
+    user = g._login_user = request.user = AnonymousUser()
     return user
 
 
@@ -121,7 +118,7 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
 
         except NotAuthenticatedError:
             if kwargs.get('allow_redirect'):
-                dashboard_prefix = app.config.get("DASHBOARD_PREFIX")
+                dashboard_prefix = current_app.config.get("DASHBOARD_PREFIX")
                 args = url_encode(dict(next=request.url))
                 return redirect(
                     '{dashboard_prefix}/login?{args}'
@@ -186,21 +183,18 @@ def clear_access_cookies(response: Response, **__) -> Response:
     return response
 
 
-def _init_auth() -> None:
+def init_auth() -> None:
     """Initialize multi-user mode with authentication plugins"""
     # To reduce dependencies, only import marshmallow, flask-security, and
     # flask-sqlalchemy if user auth is enabled
     # noinspection PyProtectedMember
-    from flask_security import current_user as _current_user
     from .plugins import load_plugins
     from .auth_plugins import (
         AuthnPluginBase, OAuthServerPluginBase, HttpAuthPluginBase)
 
     # noinspection PyGlobalUndefined
-    global oauth_plugins, http_auth_plugins, authenticate, current_user, \
+    global oauth_plugins, http_auth_plugins, authenticate, \
         set_access_cookies, clear_access_cookies
-
-    current_user = _current_user
 
     def _set_access_cookies(response: Response, user_id: Optional[int] = None,
                             access_token: Optional[str] = None) -> Response:
@@ -213,9 +207,8 @@ def _init_auth() -> None:
 
         :return: Flask response
         """
-        from .resources.users import db
-        from .oauth2 import Token
-        expires_in = app.config.get('COOKIE_TOKEN_EXPIRES_IN', 86400)
+        from .resources.users import Token, db
+        expires_in = current_app.config.get('COOKIE_TOKEN_EXPIRES_IN', 86400)
         try:
             if not access_token:
                 # Generate a new token
@@ -237,8 +230,8 @@ def _init_auth() -> None:
                         user_id=user_id,
                         token_type='cookie') \
                     .one_or_none()
-                if not token or not token.active:
-                    if token:
+                if token is None or not token.active:
+                    if token is not None:
                         # Delete revoked/expired tokens from the db
                         # noinspection PyBroadException
                         try:
@@ -291,8 +284,7 @@ def _init_auth() -> None:
 
         :param roles: list of authenticated user role IDs or a single role ID
         """
-        from .resources.users import DbPersistentToken
-        from .oauth2 import Token
+        from .resources import users
 
         # If access token in HTTP Authorization header, verify and authorize.
         # otherwise, attempt to reconstruct token from cookies
@@ -323,18 +315,17 @@ def _init_auth() -> None:
             try:
                 if token_type == 'personal':
                     # Should be an existing permanent token
-                    token = DbPersistentToken.query.filter_by(
+                    token = users.DbPersistentToken.query.filter_by(
                         access_token=access_token,
                         token_type=token_type).one_or_none()
                 else:
-                    token = Token.query.filter_by(
+                    token = users.Token.query.filter_by(
                         access_token=access_token,
-                        # token_type=token_type,
-                        revoked=False).one_or_none()
-                if not token:
+                        access_token_revoked_at=0).one_or_none()
+                if token is None:
                     raise ValueError('Token does not exist')
                 if not token.active:
-                    raise ValueError('Token expired')
+                    raise ValueError('Token revoked or expired')
 
                 user = token.user
 
@@ -344,10 +335,7 @@ def _init_auth() -> None:
                     raise ValueError('The user is deactivated')
 
                 user_roles = [user_role.name for user_role in user.roles]
-
-                # db.session.commit()
             except Exception as e:
-                # db.session.rollback()
                 error_msgs.append('{} (type: {})'.format(e, token_type))
             else:
                 break
@@ -365,9 +353,8 @@ def _init_auth() -> None:
                     raise NotAuthenticatedError(
                         error_msg='"{}" role required'.format(role))
 
-        # Make the authenticated user object available via `current_user` and
-        # request.user
-        _request_ctx_stack.top.user = request.user = user
+        # Make the authenticated user object available via `current_user`
+        g._login_user = request.user = user
         return user
 
     authenticate = _authenticate
@@ -375,7 +362,7 @@ def _init_auth() -> None:
     # Load auth plugins
     authn_plugins = load_plugins(
         'authentication', 'auth_plugins', AuthnPluginBase,
-        app.config.get('AUTH_PLUGINS', []))
+        current_app.config.get('AUTH_PLUGINS', []))
 
     for name, plugin in authn_plugins.items():
         if isinstance(plugin, OAuthServerPluginBase):
@@ -384,13 +371,10 @@ def _init_auth() -> None:
             http_auth_plugins[name] = plugin
 
     # Initialize security subsystem
-    app.config.setdefault('SECURITY_TOKEN_MAX_AGE', None)
-    app.config.setdefault('SECURITY_PASSWORD_HASH', 'sha512_crypt')
-    app.config.setdefault('SECURITY_PASSWORD_SALT', 'afterglow-core')
-    app.config.setdefault('SECURITY_DEFAULT_HTTP_AUTH_REALM', USER_REALM)
-    app.config.setdefault('ACCESS_TOKEN_EXPIRES', timedelta(days=1))
-    app.config.setdefault('REFRESH_TOKEN_EXPIRES', None)
-
-
-if app.config.get('AUTH_ENABLED'):
-    _init_auth()
+    current_app.config.setdefault('SECURITY_TOKEN_MAX_AGE', None)
+    current_app.config.setdefault('SECURITY_PASSWORD_HASH', 'sha512_crypt')
+    current_app.config.setdefault('SECURITY_PASSWORD_SALT', 'afterglow-core')
+    current_app.config.setdefault(
+        'SECURITY_DEFAULT_HTTP_AUTH_REALM', USER_REALM)
+    current_app.config.setdefault('ACCESS_TOKEN_EXPIRES', timedelta(days=1))
+    current_app.config.setdefault('REFRESH_TOKEN_EXPIRES', None)

@@ -14,9 +14,9 @@ from typing import Optional
 
 from marshmallow.fields import Dict, String
 
-from flask import url_for
+from flask import current_app, url_for
 
-from .. import app, errors
+from .. import errors
 from ..schemas import AfterglowSchema
 from ..errors.auth import NotAuthenticatedError
 
@@ -27,7 +27,7 @@ __all__ = [
 ]
 
 
-if app.config.get('DEBUG'):
+if current_app.config.get('DEBUG'):
     # Skip SSL certificate validation in debug mode
     if sys.version_info[0] < 3:
         # noinspection PyCompatibility,PyUnresolvedReferences
@@ -89,7 +89,8 @@ class HttpAuthPluginBase(AuthnPluginBase):
     def get_user(self, username: str, password: str) -> dict:
         """
         Provider-specific user getter; implemented by HTTP auth plugin that
-        retrieves the user's profile based on the provided username and password
+        retrieves the user's profile based on the provided username
+        and password
 
         :param username: username
         :param password: password
@@ -232,7 +233,7 @@ class OAuthServerPluginBase(AuthnPluginBase):
         the token using an authorization code
 
         :param code: authorization code
-        :param base_url: root URL
+        :param redirect_uri: redirect URI
 
         :return: OAuthToken containing access, refresh, and expiration
         """
@@ -257,7 +258,7 @@ class OAuthServerPluginBase(AuthnPluginBase):
             resp = requests.request(
                 self.access_token_method, self.access_token_url,
                 params=args, data=data, headers=self.access_token_headers,
-                verify=False if app.config.get('DEBUG') else None)
+                verify=False if current_app.config.get('DEBUG') else None)
             if resp.status_code not in (200, 201):
                 raise Exception(
                     'OAuth server returned HTTP status {}, message: {}'.format(

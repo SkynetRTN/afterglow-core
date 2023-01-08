@@ -13,6 +13,7 @@ import scipy.ndimage as ndimage
 import astropy.io.fits as pyfits
 
 from skylib.enhancement.wavelet import wavelet_sharpen
+from skylib.color.radio import radio_nat
 
 from ...models import Job, JobResult
 from ...schemas import Boolean, Float
@@ -46,6 +47,7 @@ for _name in ['fft', 'ifft', 'rfft', 'irfft', 'hfft', 'ihfft', 'rfftn',
 context['np'] = numpy
 # Add some useful SkyLib defs
 context['wavelet_sharpen'] = wavelet_sharpen
+context['radio_nat'] = radio_nat
 
 
 class PixelOpsJobResult(JobResult):
@@ -66,11 +68,14 @@ class PixelOpsJob(Job):
           transformation like adding a constant or resampling)::
             F(img)  # apply F() to all images, e.g. img = img + 1
 
-        - reduce input images into a single output image (e.g. add)::
-            F(imgs)  # create a single data file; e.g. sum(imgs)
+        - map all input images to one or more output images::
+            F(imgs)  # create a single data file; e.g. sum(imgs, axis=0)
+            F(imgs[0], imgs[1], ...)  # apply different operations to all input
+                                  # images at once; e.g. (imgs[0], imgs[1] + 1)
 
-        - combine input images into multiple output images (e.g. difference
-          images); creates as many data files as possible by looping over "i"
+        - apply the same operation to multiple sets of input images, resulting
+          in a single or multiple output images (e.g. difference images);
+          creates as many data files as possible by looping over "i"
           (the difference with the previous case is that the free variable "i"
           must be present in the expression)::
             F(imgs[i], imgs[i+1] ...)  # e.g. imgs[i+1] - imgs[i]
@@ -135,7 +140,7 @@ class PixelOpsJob(Job):
                 for i in range(len(data_files)):
                     local_vars['i'] = i
                     try:
-                        self.handle_expr(expr, local_vars, self.file_ids[i])
+                        self.handle_expr(expr, local_vars, [self.file_ids[i]])
                     except IndexError:
                         pass
                     except Exception as e:
@@ -143,87 +148,93 @@ class PixelOpsJob(Job):
                     finally:
                         self.update_progress((i + 1)/len(data_files)*100)
             else:
-                # Case 2: reduce to a single image/scalar; always create a new
-                # data file if non-scalar
-                self.handle_expr(
-                    expr, local_vars,
-                    self.file_ids[0] if self.file_ids else None)
+                # Case 2: reduce to a single image/scalar or many-to-many
+                # mapping
+                self.handle_expr(expr, local_vars, self.file_ids)
         else:
             # Case 1: iterate over all input images
             for i in range(len(data_files)):
                 local_vars['img'], local_vars['hdr'] = data_files[i]
 
                 try:
-                    self.handle_expr(expr, local_vars, self.file_ids[i])
+                    self.handle_expr(expr, local_vars, [self.file_ids[i]])
                 except Exception as e:
                     self.add_error(e, {'file_id': self.file_ids[i]})
                 finally:
                     self.update_progress((i + 1)/len(data_files)*100)
 
-    def handle_expr(self, expr, local_vars, file_id=None):
+    def handle_expr(self, expr, local_vars, file_ids):
         """
         Evaluate expression for a single output data file
 
         :param str expr: expression to evaluate (right-hand part only,
             if applicable)
         :param dict local_vars: local definitions: "img", "imgs", "hdr", "hdrs"
-        :param int file_id: optional original data file ID
+        :param list[int | None] file_ids: original data file IDs, used with
+            inplace=True
 
         :return: None
         """
         res = eval(expr, context, local_vars)
 
         nd = numpy.ndim(res)
-        if nd:
-            # Evaluation yields an array; replace the original data file or
-            # create a new one
-            if nd != 2:
-                raise ValueError('Expression must yield a 2D array or scalar')
+        if not nd:
+            # Evaluation yields a scalar; append to result
+            self.result.data.append(float(res))
+            return
 
-            if not isinstance(res, numpy.ndarray):
-                # Cannot blindly apply asarray() to masked arrays
-                res = numpy.asarray(res)
-            res = res.astype(numpy.float32)
-            if self.inplace:
-                hdr = get_data_file_data(self.user_id, file_id)[1]
+        # Evaluation yields one or more arrays
+        if nd not in (2, 3):
+            raise ValueError(
+                'Expression must yield either a scalar or one or multiple 2D '
+                'arrays')
+
+        # Convert output to a list of (optionally masked) float32 arrays
+        if nd == 2:
+            res = [res]
+        res = [(data if isinstance(data, numpy.ma.MaskedArray)
+                else numpy.asarray(data)).astype(numpy.float32)
+               for data in res]
+
+        # Match file IDs to output arrays
+        if self.inplace and len(res) != len(file_ids):
+            raise ValueError(
+                'Number of inputs and outputs must be the same for '
+                'inplace=True')
+        if len(file_ids) < len(res):
+            file_ids = file_ids + [None]*(len(res) - len(file_ids))
+
+        for file_id, data in zip(file_ids, res):
+            if file_id is None:
+                hdr = pyfits.Header()
                 hdr.add_history(
-                    '[{}] Updated by Afterglow by evaluating expression '
-                    '"{}"'.format(datetime.utcnow(), expr))
-
-                with get_data_file_db(self.user_id) as adb:
-                    try:
-                        save_data_file(
-                            adb, get_root(self.user_id), file_id, res, hdr)
-                        adb.commit()
-                    except Exception:
-                        adb.rollback()
-                        raise
+                    '[{}] Created by Afterglow by evaluating '
+                    'expression "{}"'.format(datetime.utcnow(), expr))
             else:
-                if file_id is None:
-                    hdr = pyfits.Header()
+                hdr = get_data_file_data(self.user_id, file_id)[1]
+                if self.inplace:
                     hdr.add_history(
-                        '[{}] Created by Afterglow by evaluating '
-                        'expression "{}"'.format(datetime.utcnow(), expr))
+                        '[{}] Updated by Afterglow by evaluating expression '
+                        '"{}"'.format(datetime.utcnow(), expr))
                 else:
-                    hdr = get_data_file_data(self.user_id, file_id)[1]
                     hdr.add_history(
                         '[{}] Created by Afterglow from data file {:d} by '
                         'evaluating expression "{}"'
                         .format(datetime.utcnow(), file_id, expr))
 
-                with get_data_file_db(self.user_id) as adb:
-                    try:
-                        # Create data file in the same session as input data
-                        # file or, if created from expression not involving
+            with get_data_file_db(self.user_id) as adb:
+                try:
+                    if self.inplace:
+                        # Overwrite the existing data file
+                        save_data_file(
+                            adb, get_root(self.user_id), file_id, data, hdr)
+                    else:
                         file_id = create_data_file(
-                            adb, None, get_root(self.user_id), res, hdr,
+                            adb, None, get_root(self.user_id), data, hdr,
                             duplicates='append', session_id=self.session_id).id
-                        adb.commit()
-                    except Exception:
-                        adb.rollback()
-                        raise
+                    adb.commit()
+                except Exception:
+                    adb.rollback()
+                    raise
 
             self.result.file_ids.append(file_id)
-        else:
-            # Evaluation yields a scalar; append to result
-            self.result.data.append(float(res))

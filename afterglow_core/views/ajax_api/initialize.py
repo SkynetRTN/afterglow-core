@@ -2,15 +2,15 @@
 from flask import Response, request
 from flask_security.utils import hash_password
 
-from ... import app, json_response
-from ...resources.users import DbUser, DbRole, db
+from ... import json_response
+from ...resources import users
 from ...schemas.api.v1 import UserSchema
 from ...errors import MissingFieldError
 from ...errors.auth import InitPageNotAvailableError
-from . import url_prefix
+from . import ajax_blp as blp
 
 
-@app.route(url_prefix + 'initialize', methods=['POST'])
+@blp.route('/initialize', methods=['POST'])
 def initialize() -> Response:
     """
     Afterglow Core initialization
@@ -25,7 +25,7 @@ def initialize() -> Response:
         GET: initialization page HTML
         POST: JSON-serialized :class:`UserSchema`
     """
-    if DbUser.query.count() != 0:
+    if users.DbUser.query.count() != 0:
         raise InitPageNotAvailableError()
 
     if request.method == 'POST':
@@ -39,7 +39,7 @@ def initialize() -> Response:
         # TODO check security of password
 
         try:
-            u = DbUser(
+            u = users.DbUser(
                 username=username,
                 password=hash_password(password),
                 email=request.args.get('email'),
@@ -47,15 +47,15 @@ def initialize() -> Response:
                 last_name=request.args.get('last_name'),
                 active=True,
                 roles=[
-                    DbRole.query.filter_by(name='admin').one(),
-                    DbRole.query.filter_by(name='user').one(),
+                    users.DbRole.query.filter_by(name='admin').one(),
+                    users.DbRole.query.filter_by(name='user').one(),
                 ],
                 settings=request.args.get('settings'),
             )
-            db.session.add(u)
-            db.session.commit()
+            users.db.session.add(u)
+            users.db.session.commit()
         except Exception:
-            db.session.rollback()
+            users.db.session.rollback()
             raise
         else:
             return json_response(UserSchema().dump(u), 201)

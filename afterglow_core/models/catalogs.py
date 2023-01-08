@@ -9,8 +9,9 @@ from typing import Dict as TDict, List as TList, Optional
 
 import numpy as np
 from marshmallow.fields import Dict, Integer, List, Nested, String
+from flask import current_app
 
-from .. import app, errors
+from .. import errors
 from ..schemas import AfterglowSchema
 from .photometry import IPhotometry, Mag
 from .source_extraction import IAstrometry
@@ -90,7 +91,8 @@ class Catalog(AfterglowSchema):
         # Override catalog option defaults with CATALOG_OPTIONS config var
         # for the current catalog
         kwargs = dict(kwargs)
-        kwargs.update(app.config.get('CATALOG_OPTIONS', {}).get(self.name, {}))
+        kwargs.update(
+            current_app.config.get('CATALOG_OPTIONS', {}).get(self.name, {}))
 
         super().__init__(**kwargs)
 

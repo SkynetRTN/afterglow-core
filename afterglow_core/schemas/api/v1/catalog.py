@@ -37,7 +37,7 @@ class CatalogSchema(Resource):
             '(3*B + 5*R)/8', "r'": 'rprime'}; used by field cal job
     """
     __polymorphic_on__ = 'name'
-    __get_view__ = 'get_catalogs'
+    __get_view__ = 'catalogs.get_catalogs'
 
     name = String(dump_default=None)
     display_name = String(dump_default=None)

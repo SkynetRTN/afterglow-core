@@ -7,17 +7,36 @@ import json
 import traceback
 from typing import Optional
 
-from flask import Response, request
+from flask import Flask, Response, request
 from werkzeug import exceptions
 from werkzeug.http import HTTP_STATUS_CODES
-
-from .. import app
 
 
 __all__ = [
     'AfterglowError', 'MethodNotImplementedError', 'ValidationError',
     'MissingFieldError', 'NotAcceptedError',
+    'register',
 ]
+
+
+exc_classes = {}
+
+
+def register(app: Flask) -> None:
+    """
+    Install app error handlers
+
+    :param app: Flask application
+    """
+    # Install standard HTTP error handlers
+    app.register_error_handler(401, unauthorized_error_handler)
+    app.register_error_handler(403, forbidden_error_handler)
+    app.register_error_handler(404, not_found_error_handler)
+    app.register_error_handler(500, internal_server_error_handler)
+
+    # Install error handlers for all defined exceptions
+    for c in exc_classes.values():
+        app.register_error_handler(c, afterglow_error_handler)
 
 
 def afterglow_error_handler(e: Exception) -> Response:
@@ -56,7 +75,6 @@ def afterglow_error_handler(e: Exception) -> Response:
         headers=dict(getattr(e, 'headers', [])))
 
 
-@app.errorhandler(401)
 def unauthorized_error_handler(e: Exception) -> Response:
     """
     Error handling function for non-Afterglow HTTP 401 (UNAUTHORIZED) errors
@@ -76,7 +94,6 @@ def unauthorized_error_handler(e: Exception) -> Response:
         }), 401, mimetype='application/json')
 
 
-@app.errorhandler(403)
 def forbidden_error_handler(e: Exception) -> Response:
     """
     Error handling function for non-Afterglow HTTP 403 (FORBIDDEN) errors
@@ -96,7 +113,6 @@ def forbidden_error_handler(e: Exception) -> Response:
         }), 403, mimetype='application/json')
 
 
-@app.errorhandler(404)
 def not_found_error_handler(e: Exception) -> Response:
     """
     Error handling function for non-Afterglow HTTP 404 (NOT FOUND) errors;
@@ -117,7 +133,6 @@ def not_found_error_handler(e: Exception) -> Response:
         }), 404, mimetype='application/json')
 
 
-@app.errorhandler(500)
 def internal_server_error_handler(e: Exception) -> Response:
     """
     Error handling function for non-Afterglow HTTP 500 (INTERNAL SERVER ERROR)
@@ -150,7 +165,7 @@ class AfterglowErrorMeta(type):
     """
     def __new__(mcs, *args, **kwargs):
         c = type.__new__(mcs, *args, **kwargs)
-        app.register_error_handler(c, afterglow_error_handler)
+        exc_classes[c.__name__] = c
         return c
 
 

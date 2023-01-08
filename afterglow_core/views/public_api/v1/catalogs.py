@@ -4,9 +4,9 @@ Afterglow Core: API v1 catalog views
 
 from typing import Optional
 
-from flask import Response
+from flask import Blueprint, Flask, Response
 
-from .... import app, json_response
+from .... import json_response
 from ....auth import auth_required
 from ....resources.catalogs import catalogs
 from ....schemas.api.v1 import CatalogSchema
@@ -14,11 +14,23 @@ from ....errors.catalog import UnknownCatalogError
 from . import url_prefix
 
 
-resource_prefix = url_prefix + 'catalogs/'
+__all__ = ['register']
 
 
-@app.route(resource_prefix[:-1])
-@app.route(resource_prefix + '<name>')
+blp = Blueprint('catalogs', __name__, url_prefix=url_prefix + 'catalogs')
+
+
+def register(app: Flask) -> None:
+    """
+    Register endpoints
+
+    :param app: Flask application
+    """
+    app.register_blueprint(blp)
+
+
+@blp.route('/')
+@blp.route('/<name>')
 @auth_required('user')
 def get_catalogs(name: Optional[str] = None) -> Response:
     """

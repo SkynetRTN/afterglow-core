@@ -13,6 +13,7 @@ from glob import glob
 from typing import List as TList, Optional, Tuple, Union
 import warnings
 
+from flask_login import current_user
 import astropy.io.fits as pyfits
 from astropy.wcs import FITSFixedWarning
 from astropy.io.fits.verify import VerifyWarning
@@ -32,7 +33,7 @@ try:
 except ImportError:
     exifread = None
 
-from ... import PaginationInfo, auth, errors
+from ... import PaginationInfo, errors
 from ...models import DataProvider, DataProviderAsset
 from ...errors import ValidationError
 from ...errors.data_provider import (
@@ -172,8 +173,7 @@ class LocalDiskDataProvider(DataProvider):
         """
         p = os.path.abspath(os.path.expanduser(self.root))
         if self.peruser:
-            user_id = auth.current_user.id \
-                if auth.current_user is not None else None
+            user_id = getattr(current_user, 'id', None)
             if user_id:
                 p = os.path.join(p, str(user_id))
 
@@ -244,6 +244,7 @@ class LocalDiskDataProvider(DataProvider):
                 layers = 0
                 flt = []
                 for hdu in f:
+                    # noinspection PyBroadException
                     try:
                         hdr = hdu.header
                         imwidth = hdr['NAXIS1']
@@ -682,6 +683,7 @@ class LocalDiskDataProvider(DataProvider):
             return self._get_asset(path, filename)
         except Exception:
             # Unsupported format or disk error
+            # noinspection PyBroadException
             try:
                 os.remove(filename)
             except Exception:
@@ -800,6 +802,6 @@ class RestrictedRWLocalDiskDataProvider(LocalDiskDataProvider):
         if item == 'readonly':
             # Dynamic readonly attr implementation based on the currently
             # authenticated user's username
-            return auth.current_user.username not in object.__getattribute__(
-                self, 'writers')
+            return getattr(current_user, 'username', None) not in \
+                   object.__getattribute__(self, 'writers')
         return super().__getattribute__(item)

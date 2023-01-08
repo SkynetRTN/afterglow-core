@@ -8,10 +8,10 @@ from typing import List as TList, Optional
 
 from marshmallow.fields import Integer, List, Nested
 from astropy.wcs import WCS
+from flask import current_app
 
 from skylib.astrometry import Solver, solve_field_glob
 
-from ... import app
 from ...models import Job, JobResult
 from ...schemas import AfterglowSchema, Boolean, Float
 from ...errors import ValidationError
@@ -149,7 +149,7 @@ class WcsCalibrationJob(Job):
         if solver is None:
             # Initialize the solver on first use; job worker processes
             # are single-threaded, so we shouldn't care about locking
-            solver = Solver(app.config['ANET_INDEX_PATH'])
+            solver = Solver(current_app.config['ANET_INDEX_PATH'])
 
         for i, file_id in enumerate(self.file_ids):
             try:

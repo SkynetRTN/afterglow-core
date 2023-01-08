@@ -1,5 +1,5 @@
 """
-Afterglow Core: catalog endpoint
+Afterglow Core: catalog resource
 """
 
 from .. import plugins
@@ -10,4 +10,5 @@ __all__ = ['catalogs']
 
 
 # Load catalog plugins
-catalogs = plugins.load_plugins('catalog', 'resources.catalog_plugins', Catalog)
+catalogs = plugins.load_plugins(
+    'catalog', 'resources.catalog_plugins', Catalog)

@@ -61,7 +61,7 @@ class JobSchema(Resource):
         result: job result structure, an instance of JobResult or its subclass
     """
     __polymorphic_on__ = 'type'
-    __get_view__ = 'jobs'
+    __get_view__ = 'jobs.jobs'
 
     id: int = Integer(dump_default=None)
     type: str = String()

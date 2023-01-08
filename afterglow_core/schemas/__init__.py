@@ -4,7 +4,7 @@ Afterglow Core: custom marshmallow schemas for API objects
 
 import datetime
 from math import isinf, isnan
-from typing import Any, Dict as TDict, Optional, Set, Sequence, Union
+from typing import Any, Dict as TDict, Optional, Set, Sequence, Type, Union
 from urllib.parse import quote
 
 from flask import url_for
@@ -138,12 +138,11 @@ class AfterglowSchema(Schema):
                     except KeyError:
                         poly_identity = None
             if poly_identity is not None:
-                for subclass in cls.__subclasses__():
-                    if getattr(subclass, poly_attr, None) == poly_identity:
-                        cls = subclass
-                        if cls.__polymorphic_on__ == poly_attr:
-                            break
-
+                subclass = find_polymorphic_class(
+                    cls, poly_attr, poly_identity)
+                if subclass is not None:
+                    cls = subclass
+                    if cls.__polymorphic_on__ != poly_attr:
                         # Handle multi-level polymorphism
                         return AfterglowSchema.__new__(cls, _obj, **kwargs)
 
@@ -281,6 +280,20 @@ class AfterglowSchema(Schema):
         return self.dumps(self)
 
 
+def find_polymorphic_class(
+        cls: Type[AfterglowSchema], poly_attr: str, poly_identity: str) \
+        -> Optional[Type[AfterglowSchema]]:
+    for subclass in cls.__subclasses__():
+        if getattr(subclass, poly_attr, None) == poly_identity:
+            return subclass
+
+        if subclass.__subclasses__():
+            poly_class = find_polymorphic_class(
+                subclass, poly_attr, poly_identity)
+            if poly_class is not None:
+                return poly_class
+
+
 class Resource(AfterglowSchema):
     """
     Base class for Afterglow Core resources (data providers, data files, etc.)
@@ -298,11 +311,12 @@ class Resource(AfterglowSchema):
     from afterglow_core import Resource, url_prefix
 
     class MyResource(Resource):
-        __get_view__ = 'my_resource'
+        __get_view__ = 'my_resources.my_resource'
         id = Integer(dump_default=None)
         ...
 
-    @api.route(url_prefix + 'my_resource/[id]')
+    blp = Blueprint('my_resources', __name__, url_prefix='/my_resources')
+    @blp.route('/[id]')
     def my_resource(id):
         ...
     """

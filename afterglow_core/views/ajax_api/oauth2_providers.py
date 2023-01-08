@@ -3,21 +3,18 @@ Afterglow Core: settings routes
 """
 
 # noinspection PyProtectedMember
-from flask import Response, request, _request_ctx_stack
+from flask import Response, current_app, request, g
 
-from ...auth import oauth_plugins
-
-from ... import app, json_response
-from ...auth import set_access_cookies
-from ...resources.users import db, DbUser, DbIdentity, DbRole
+from ... import json_response
+from ...auth import oauth_plugins, set_access_cookies
+from ...resources import users
 from ...errors import MissingFieldError
 from ...errors.auth import (
     NotInitializedError, UnknownAuthMethodError, NotAuthenticatedError)
+from . import ajax_blp as blp
 
-from . import url_prefix
 
-
-@app.route(url_prefix + '/oauth2/providers', methods=['GET'])
+@blp.route('/oauth2/providers', methods=['GET'])
 def oauth2_providers() -> Response:
     """
     Return available OAuth2 plugins
@@ -27,14 +24,14 @@ def oauth2_providers() -> Response:
     """
 
     plugins = [dict(id=p.id, icon=p.icon, description=p.description,
-                    authorizeUrl=p.authorize_url, client_id=p.client_id,
+                    authorize_url=p.authorize_url, client_id=p.client_id,
                     request_token_params=p.request_token_params)
                for p in oauth_plugins.values()]
 
     return json_response(plugins)
 
 
-@app.route(url_prefix + '/oauth2/providers/<string:plugin_id>/authorized')
+@blp.route('/oauth2/providers/<string:plugin_id>/authorized')
 def oauth2_authorized(plugin_id: str) -> Response:
     """
     OAuth2.0 authorization code granted redirect endpoint
@@ -44,8 +41,8 @@ def oauth2_authorized(plugin_id: str) -> Response:
     :return: redirect to original request URL
     """
     # Do not allow login if Afterglow Core has not yet been configured
-    if DbUser.query.count() == 0:
-        raise NotInitializedError()
+    # if DbUser.query.count() == 0:
+    #     raise NotInitializedError()
 
     if not plugin_id or plugin_id not in oauth_plugins.keys():
         raise UnknownAuthMethodError(method=plugin_id)
@@ -67,7 +64,7 @@ def oauth2_authorized(plugin_id: str) -> Response:
         raise NotAuthenticatedError(error_msg='No user profile data returned')
 
     # Get the user from db
-    identity = DbIdentity.query \
+    identity = users.DbIdentity.query \
         .filter_by(auth_method=oauth_plugin.name, name=user_profile['id']) \
         .one_or_none()
     if identity is None and oauth_plugin.name == 'skynet':
@@ -75,7 +72,7 @@ def oauth2_authorized(plugin_id: str) -> Response:
         # versions that used Skynet usernames instead of IDs; a potential
         # security issue is a Skynet user with a numeric username matching
         # some other user's Skynet user ID
-        identity = DbIdentity.query \
+        identity = users.DbIdentity.query \
             .filter_by(auth_method=oauth_plugin.name,
                        name=user_profile['username']) \
             .one_or_none()
@@ -92,16 +89,16 @@ def oauth2_authorized(plugin_id: str) -> Response:
                 identity.user.email = user_profile.get('email') or None
                 identity.user.birth_date = \
                     user_profile.get('birth_date') or None
-                db.session.commit()
+                users.db.session.commit()
             except Exception:
-                db.session.rollback()
+                users.db.session.rollback()
                 raise
     if identity is None:
         # Authenticated but not in the db; register a new Afterglow user if
         # allowed by plugin or the global config option
         register_users = oauth_plugin.register_users
         if register_users is None:
-            register_users = app.config.get(
+            register_users = current_app.config.get(
                 'REGISTER_AUTHENTICATED_USERS', True)
         if not register_users:
             raise NotAuthenticatedError(
@@ -122,30 +119,30 @@ def oauth2_authorized(plugin_id: str) -> Response:
                          if user_profile.get('last_name') else [])),
                     user_profile['id']):
                 if username_candidate and str(username_candidate).strip() and \
-                        not DbUser.query.filter(
-                            db.func.lower(DbUser.username) ==
+                        not users.DbUser.query.filter(
+                            users.db.func.lower(users.DbUser.username) ==
                             username_candidate.lower()).count():
                     username = username_candidate
                     break
-            user = DbUser(
+            user = users.DbUser(
                 username=username or None,
                 first_name=user_profile.get('first_name') or None,
                 last_name=user_profile.get('last_name') or None,
                 email=user_profile.get('email') or None,
-                roles=[DbRole.query.filter_by(name='user').one()],
+                roles=[users.DbRole.query.filter_by(name='user').one()],
             )
-            db.session.add(user)
-            db.session.flush()
-            identity = DbIdentity(
+            users.db.session.add(user)
+            users.db.session.flush()
+            identity = users.DbIdentity(
                 user_id=user.id,
                 name=user_profile['id'],
                 auth_method=oauth_plugin.name,
                 data=user_profile,
             )
-            db.session.add(identity)
-            db.session.commit()
+            users.db.session.add(identity)
+            users.db.session.commit()
         except Exception:
-            db.session.rollback()
+            users.db.session.rollback()
             raise
     else:
         user = identity.user
@@ -154,10 +151,10 @@ def oauth2_authorized(plugin_id: str) -> Response:
             # login, update it
             try:
                 identity.data = user_profile
-                db.session.commit()
+                users.db.session.commit()
             except Exception:
-                db.session.rollback()
+                users.db.session.rollback()
                 raise
 
-    _request_ctx_stack.top.user = request.user = user
+    g._login_user = request.user = user
     return set_access_cookies(json_response(), user.id)

@@ -7,17 +7,17 @@ import secrets
 from flask import Response, request
 from marshmallow.fields import Integer, String
 
-from ... import app, json_response
+from ... import json_response
 from ...auth import auth_required
-from ...resources.users import DbPersistentToken, db
+from ...resources import users
 from ...schemas import Resource
 from ...errors import ValidationError
 from ...errors.auth import UnknownTokenError
-from . import url_prefix
+from . import ajax_blp as blp
 
 
 class TokenSchema(Resource):
-    __get_view__ = 'tokens'
+    __get_view__ = 'ajax_api.tokens'
 
     id: int = Integer()
     user_id: int = Integer()
@@ -28,7 +28,7 @@ class TokenSchema(Resource):
     note: str = String()
 
 
-@app.route(url_prefix + 'tokens', methods=['GET', 'POST'])
+@blp.route('/tokens', methods=['GET', 'POST'])
 @auth_required
 def tokens() -> Response:
     """
@@ -49,18 +49,18 @@ def tokens() -> Response:
 
         access_token = secrets.token_hex(20)
 
-        personal_token = DbPersistentToken(
+        personal_token = users.DbPersistentToken(
             access_token=access_token,
             user_id=request.user.id,
             note=note,
         )
         try:
-            db.session.add(personal_token)
-            db.session.commit()
+            users.db.session.add(personal_token)
+            users.db.session.commit()
         except Exception:
             # noinspection PyBroadException
             try:
-                db.session.rollback()
+                users.db.session.rollback()
             except Exception:
                 pass
             raise
@@ -68,7 +68,7 @@ def tokens() -> Response:
         return json_response(TokenSchema(personal_token), 201)
 
 
-@app.route(url_prefix + 'tokens/<int:token_id>', methods=['DELETE'])
+@blp.route('/tokens/<int:token_id>', methods=['DELETE'])
 @auth_required
 def token(token_id: int) -> Response:
     """
@@ -78,7 +78,7 @@ def token(token_id: int) -> Response:
         DELETE /api/v1/tokens/[token id]: empty response
     """
     if request.method == 'DELETE':
-        personal_token = DbPersistentToken.query \
+        personal_token = users.DbPersistentToken.query \
             .filter_by(
                 token_type='personal',
                 user_id=request.user.id,
@@ -89,12 +89,12 @@ def token(token_id: int) -> Response:
             raise UnknownTokenError()
 
         try:
-            db.session.delete(personal_token)
-            db.session.commit()
+            users.db.session.delete(personal_token)
+            users.db.session.commit()
         except Exception:
             # noinspection PyBroadException
             try:
-                db.session.rollback()
+                users.db.session.rollback()
             except Exception:
                 pass
             raise

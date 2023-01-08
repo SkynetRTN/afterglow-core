@@ -2,12 +2,12 @@
 Afterglow Core: Skynet OAuth authentication plugin
 """
 
-import sys
 import requests
 from urllib.parse import urljoin
 from typing import Optional
 
-from .. import app
+from flask import current_app
+
 from ..errors.auth import NotAuthenticatedError
 from . import OAuthServerPluginBase, OAuthToken
 
@@ -73,7 +73,7 @@ class SkynetOAuthPlugin(OAuthServerPluginBase):
             urljoin(self.base_url, 'users'),
             headers={
                 'Authorization': 'Bearer {}'.format(token.access),
-            }, verify=False if app.config.get('DEBUG') else True)
+            }, verify=False if current_app.config.get('DEBUG') else True)
         try:
             user = resp.json()
         except Exception:

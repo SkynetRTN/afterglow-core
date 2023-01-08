@@ -50,7 +50,7 @@ class DataProviderSchema(Resource):
             applicable
     """
     __polymorphic_on__ = 'name'
-    __get_view__ = 'data_providers'
+    __get_view__ = 'data_providers.data_providers'
 
     id = Integer(dump_default=None)
     name = String(dump_default=None)

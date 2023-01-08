@@ -7,14 +7,16 @@ import time
 import errno
 import shutil
 import multiprocessing
-from typing import List as TList, Optional
+from typing import List as TList, Optional, Union
 
-from flask_sqlalchemy import SQLAlchemy
+from flask import Flask, current_app
+from flask_sqlalchemy import Model, SQLAlchemy
 from flask_security import (
     Security, UserMixin, RoleMixin, SQLAlchemyUserDatastore)
 from flask_security.utils import hash_password
+from authlib.integrations.sqla_oauth2 import (
+    OAuth2AuthorizationCodeMixin, OAuth2TokenMixin)
 
-from .. import app, cipher
 from ..models import User
 from ..errors import MissingFieldError, ValidationError
 from ..errors.auth import DuplicateUsernameError, UnknownUserError
@@ -22,48 +24,44 @@ from .base import DateTime, JSONType
 
 
 __all__ = [
-    'AnonymousUser', 'AnonymousUserRole', 'DbIdentity', 'DbPersistentToken',
-    'DbRole', 'DbUser', 'DbUserClient',
-    'db', 'user_datastore',
+    'AnonymousUser', 'AnonymousUserRole',
+    'DbIdentity', 'DbPersistentToken', 'DbRole', 'DbUser', 'DbUserClient',
+    'db', 'user_datastore', 'init_users',
     'query_users', 'get_user', 'create_user', 'update_user', 'delete_user',
 ]
 
 
-if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///{}'.format(os.path.join(
-        os.path.abspath(app.config['DATA_ROOT']), 'afterglow.db'))
-    app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {}).setdefault(
-        'connect_args', {})['timeout'] = app.config.get('DB_TIMEOUT', 30)
-else:
-    _db_pass = app.config.get('DB_PASS', '')
-    if _db_pass:
-        if not isinstance(_db_pass, bytes):
-            _db_pass = _db_pass.encode('ascii')
-        _db_pass = cipher.decrypt(_db_pass).decode('utf8')
-    app.config['SQLALCHEMY_DATABASE_URI'] = '{}://{}{}@{}:{}/{}'.format(
-        app.config.get('DB_BACKEND'),
-        app.config.get('DB_USER', 'admin'),
-        ':' + _db_pass if _db_pass else '',
-        app.config.get('DB_HOST', 'localhost'),
-        app.config.get('DB_PORT', 3306),  # default for MySQL
-        app.config.get('DB_SCHEMA', 'afterglow'))
-    app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})['pool_timeout'] = \
-        app.config.get('DB_TIMEOUT', 30)
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('pool_recycle', 3600)
-    if multiprocessing.current_process().name == 'JobServer':
-        # Separate db pool size setting for job server
-        app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault(
-            'pool_size', app.config.get('JOB_DB_POOL_SIZE', 10))
-    else:
-        app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault(
-            'pool_size', app.config.get('DB_POOL_SIZE', 10))
-    del _db_pass
-app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
-
-user_datastore = security = None
+class AnonymousUserRole(object):
+    id = None
+    name = 'user'
+    description = 'Anonymous Afterglow User'
 
 
-db = SQLAlchemy(app)
+class AnonymousUser(object):
+    id = None
+    username = display_name = '<Anonymous>'
+    first_name = None
+    last_name = None
+    full_name = ''
+    email = ''
+    password = ''
+    active = True
+    created_at = None
+    modified_at = None
+    roles: Union[Model, TList[AnonymousUserRole]] = None
+    identities = ()
+    settings = ''
+    is_admin = False
+
+    def __init__(self):
+        self.roles = [AnonymousUserRole()]
+
+    def get_user_id(self):
+        """Return user ID; required by authlib"""
+        return self.id
+
+
+db = SQLAlchemy()
 
 user_roles = db.Table(
     'user_roles',
@@ -105,7 +103,8 @@ class DbUser(db.Model, UserMixin):
             'first_name is null or length(first_name) <= 255'))
     last_name = db.Column(
         db.String,
-        db.CheckConstraint('last_name is null or length(last_name) <= 255'))
+        db.CheckConstraint(
+            'last_name is null or length(last_name) <= 255'))
     active = db.Column(db.Boolean, server_default='1')
     created_at = db.Column(DateTime, default=db.func.current_timestamp())
     modified_at = db.Column(
@@ -117,8 +116,7 @@ class DbUser(db.Model, UserMixin):
     settings = db.Column(
         db.Text,
         db.CheckConstraint(
-            'settings is null or length(settings) <= 1048576'),
-        default='')
+            'settings is null or length(settings) <= 1048576'), default='')
 
     @property
     def full_name(self):
@@ -153,8 +151,7 @@ class DbIdentity(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, nullable=False)
     name = db.Column(
-        db.String, db.CheckConstraint('length(name) <= 255'),
-        nullable=False)
+        db.String, db.CheckConstraint('length(name) <= 255'), nullable=False)
     user_id = db.Column(
         db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
         nullable=False)
@@ -214,40 +211,90 @@ class DbUserClient(db.Model):
         nullable=False, index=True)
 
 
-class AnonymousUserRole(object):
-    id = None
-    name = 'user'
-    description = 'Anonymous Afterglow User'
+class OAuth2AuthorizationCode(db.Model, OAuth2AuthorizationCodeMixin):
+    __tablename__ = 'oauth_codes'
+    __table_args__ = dict(sqlite_autoincrement=True)
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False)
+
+    user = db.relationship('DbUser', uselist=False, backref='oauth_codes')
 
 
-class AnonymousUser(object):
-    id = None
-    username = display_name = '<Anonymous>'
-    first_name = None
-    last_name = None
-    full_name = ''
-    email = ''
-    password = ''
-    active = True
-    created_at = None
-    modified_at = None
-    roles = None
-    identities = ()
-    settings = ''
-    is_admin = False
+class Token(db.Model, OAuth2TokenMixin):
+    """
+    Token object; stored in the memory database
+    """
+    __tablename__ = 'oauth_tokens'
+    __table_args__ = dict(sqlite_autoincrement=True)
 
-    def __init__(self):
-        self.roles = (AnonymousUserRole(),)
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False)
+    # override Mixin to set default=oauth2
+    token_type = db.Column(db.String(40), default='oauth2')
+    note = db.Column(db.Text, default='')
 
-    def get_user_id(self):
-        """Return user ID; required by authlib"""
-        return self.id
+    user = db.relationship('DbUser', uselist=False, backref='oauth_tokens')
+
+    @property
+    def active(self) -> bool:
+        return not self.is_revoked() and not self.is_expired()
+
+    def is_refresh_token_active(self):
+        if self.refresh_token_revoked_at:
+            return False
+        expires_at = self.issued_at + \
+            current_app.config.get('REFRESH_TOKEN_EXPIRES')
+        return expires_at >= time.time()
 
 
-def _init_users():
-    """Initialize Afterglow user datastore if AUTH_ENABLED = True"""
-    # noinspection PyUnresolvedReferences
-    from .. import oauth2  # register oauth token-related models
+user_datastore = SQLAlchemyUserDatastore(db, DbUser, DbRole)
+
+
+def init_users(app: Flask) -> None:
+    """
+    Initialize Afterglow user datastore if AUTH_ENABLED = True
+
+    :param app: Flask application
+    """
+    if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///{}'.format(
+            os.path.join(os.path.abspath(app.config['DATA_ROOT']),
+                         'afterglow.db'))
+        app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {}).setdefault(
+            'connect_args', {})['timeout'] = app.config.get('DB_TIMEOUT', 30)
+    else:
+        _db_pass = app.config.get('DB_PASS', '')
+        if _db_pass:
+            if not isinstance(_db_pass, bytes):
+                _db_pass = _db_pass.encode('ascii')
+            from .. import cipher
+            _db_pass = cipher.decrypt(_db_pass).decode('utf8')
+        app.config['SQLALCHEMY_DATABASE_URI'] = '{}://{}{}@{}:{}/{}'.format(
+            app.config.get('DB_BACKEND'),
+            app.config.get('DB_USER', 'admin'),
+            ':' + _db_pass if _db_pass else '',
+            app.config.get('DB_HOST', 'localhost'),
+            app.config.get('DB_PORT', 3306),  # default for MySQL
+            app.config.get('DB_SCHEMA', 'afterglow'))
+        app.config.setdefault(
+            'SQLALCHEMY_ENGINE_OPTIONS', {})['pool_timeout'] = \
+            app.config.get('DB_TIMEOUT', 30)
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault(
+            'pool_recycle', 3600)
+        if multiprocessing.current_process().name == 'JobServer':
+            # Separate db pool size setting for job server
+            app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault(
+                'pool_size', app.config.get('JOB_DB_POOL_SIZE', 10))
+        else:
+            app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault(
+                'pool_size', app.config.get('DB_POOL_SIZE', 10))
+        del _db_pass
+    app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
 
     # All imports put here to avoid unnecessary loading of packages on startup
     # if user auth is disabled
@@ -256,10 +303,8 @@ def _init_users():
     from alembic.script import ScriptDirectory
     from alembic.runtime.environment import EnvironmentContext
 
-    global user_datastore, security
-
-    user_datastore = SQLAlchemyUserDatastore(db, DbUser, DbRole)
-    security = Security(app, user_datastore, register_blueprint=False)
+    db.init_app(app)
+    Security(app, user_datastore, register_blueprint=False)
 
     # Make sure that the database directory exists
     try:
@@ -282,12 +327,14 @@ def _init_users():
             cfg, script,
             fn=lambda rev, _: script._upgrade_revs('head', rev),
             as_sql=False, starting_rev=None, destination_rev='head',
-            tag=None,
-    ), db.engine.connect() as connection:
+            tag=None), db.engine.connect() as connection:
         alembic_context.configure(connection=connection)
 
-        with alembic_context.begin_transaction():
+        if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
             alembic_context.run_migrations()
+        else:
+            with alembic_context.begin_transaction():
+                alembic_context.run_migrations()
 
     # Initialize user roles if missing
     try:
@@ -419,8 +466,8 @@ def update_user(user_id: int, user: User) -> User:
             continue
         if key == 'username' and val != db_user.username and \
                 DbUser.query.filter(
-                    db.func.lower(User.username) ==
-                    val.lower(), User.id != user_id).count():
+                    db.func.lower(User.username) == val.lower(),
+                    User.id != user_id).count():
             raise DuplicateUsernameError(username=val)
         setattr(db_user, key, val)
     try:
@@ -452,14 +499,10 @@ def delete_user(user_id: int) -> None:
         raise
     else:
         data_file_dir = os.path.join(
-            app.config['DATA_FILE_ROOT'], str(user_id))
+            current_app.config['DATA_FILE_ROOT'], str(user_id))
         try:
             shutil.rmtree(data_file_dir)
         except Exception as exc:
-            app.logger.warning(
+            current_app.logger.warning(
                 'Error removing user\'s data file directory "%s" '
                 '[%s]', data_file_dir, user_id, exc)
-
-
-if app.config.get('AUTH_ENABLED'):
-    _init_users()

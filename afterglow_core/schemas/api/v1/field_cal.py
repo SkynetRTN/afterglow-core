@@ -18,7 +18,7 @@ class FieldCalSchema(Resource):
     """
     Field calibration prescription
     """
-    __get_view__ = 'field_cals'
+    __get_view__ = 'field_cals.field_cals'
 
     id: int = Integer()
     name: str = String()

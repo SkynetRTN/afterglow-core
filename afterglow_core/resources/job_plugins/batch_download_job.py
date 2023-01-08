@@ -14,8 +14,9 @@ from ...errors.data_file import UnknownDataFileGroupError
 from ...errors.data_provider import (
     NonBrowseableDataProviderError, UnknownDataProviderError)
 from ..data_files import (
-    get_data_file, get_data_file_bytes, get_data_file_group, get_data_file_path)
-from ..data_providers import providers
+    get_data_file, get_data_file_bytes, get_data_file_group,
+    get_data_file_path)
+from .. import data_providers
 
 
 __all__ = ['BatchDownloadJob', 'BatchAssetDownloadJob']
@@ -38,7 +39,8 @@ class BatchDownloadJob(Job):
         if len(self.file_ids) == 1 and not self.group_names:
             # Single data file; don't create archive
             self.create_job_file(
-                'download', get_data_file_bytes(self.user_id, self.file_ids[0]),
+                'download',
+                get_data_file_bytes(self.user_id, self.file_ids[0]),
                 mimetype='image/fits')
             return
 
@@ -120,7 +122,7 @@ class BatchAssetDownloadJob(Job):
             raise ValidationError('paths', 'Empty job')
 
         try:
-            provider = providers[self.provider_id]
+            provider = data_providers.providers[self.provider_id]
         except KeyError:
             raise UnknownDataProviderError(id=self.provider_id)
         provider.check_auth()

@@ -123,3 +123,6 @@ MANIFEST
 # Locally generated data
 /*.db
 AFTERGLOW_CORE_KEY
+
+#Angular
+.angular

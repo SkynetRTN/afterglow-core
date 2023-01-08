@@ -12,6 +12,7 @@ from typing import Any, Dict as TDict, List as TList, Optional, Union
 from flask_cors import CORS
 from marshmallow import missing
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
+from werkzeug.exceptions import BadRequest
 from werkzeug.urls import url_encode
 from flask import Flask, Response, request
 from cryptography.fernet import Fernet
@@ -206,7 +207,7 @@ class PaginationInfo(object):
         return pagination
 
 
-def json_response(data: Optional[Union[dict, AfterglowSchema, TList[dict],
+def json_response(data: Optional[Union[str, dict, AfterglowSchema, TList[dict],
                                        TList[AfterglowSchema]]] = None,
                   status_code: Optional[int] = None,
                   headers: Optional[TDict[str, str]] = None,
@@ -239,81 +240,115 @@ def json_response(data: Optional[Union[dict, AfterglowSchema, TList[dict],
         status_code or 200, mimetype='application/json', headers=headers)
 
 
-app = Flask(__name__)
-cors = CORS(app, resources={'/api/*': {'origins': '*'}})
-app.config.from_object('afterglow_core.default_cfg')
-app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=True)
-
-proxy_count = app.config.get('APP_PROXY')
-if proxy_count:
-    from werkzeug.middleware.proxy_fix import ProxyFix
-    app.wsgi_app = ProxyFix(
-        app.wsgi_app, x_for=proxy_count, x_proto=proxy_count,
-        x_host=proxy_count, x_port=proxy_count, x_prefix=proxy_count)
-
-if app.config.get('APPLICATION_ROOT'):
-    from werkzeug.middleware.dispatcher import DispatcherMiddleware
-    app.wsgi_app = DispatcherMiddleware(
-        app.wsgi_app, {app.config['APPLICATION_ROOT']: app.wsgi_app})
-
-if app.config.get('PROFILE'):
-    # Enable profiling
-    from werkzeug.middleware.profiler import ProfilerMiddleware
-    app.config['DEBUG'] = True
-    app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[10])
-
-if app.config.get('OAUTH2_ALLOW_HTTP') or app.config.get('DEBUG'):
-    os.environ['AUTHLIB_INSECURE_TRANSPORT'] = '1'
+cipher = None
+cors = None
 
 
-@app.before_request
-def resolve_request_body() -> None:
+def create_app() -> Flask:
     """
-    Before every request, combine `request.form` and `request.get_json()` into
-    `request.args`
+    Flask app factory
+
+    :return: Flask application instance
     """
-    ds = [request.args, request.form]
+    global cipher, cors
 
-    body = request.get_json()
-    if body:
-        ds.append(MultiDict(body.items()))
+    # noinspection PyShadowingNames
+    app = Flask(__name__)
+    cors = CORS(app, resources={'/api/*': {'origins': '*'}})
+    app.config.from_object('afterglow_core.default_cfg')
+    app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=True)
 
-    # Replace immutable Request.args with the combined args dict
-    # noinspection PyPropertyAccess
-    request.args = CombinedMultiDict(ds)
+    proxy_count = app.config.get('APP_PROXY')
+    if proxy_count:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app, x_for=proxy_count, x_proto=proxy_count,
+            x_host=proxy_count, x_port=proxy_count, x_prefix=proxy_count)
 
+    if app.config.get('APPLICATION_ROOT'):
+        from werkzeug.middleware.dispatcher import DispatcherMiddleware
+        app.wsgi_app = DispatcherMiddleware(
+            app.wsgi_app, {app.config['APPLICATION_ROOT']: app.wsgi_app})
 
-# Read/create secret key
-keyfile = os.path.join(
-    os.path.abspath(app.config['DATA_ROOT']), 'AFTERGLOW_CORE_KEY')
-try:
-    with open(keyfile, 'rb') as f:
-        key = f.read()
-except IOError:
-    key = os.urandom(24)
-    d = os.path.dirname(keyfile)
-    if os.path.isfile(d):
-        os.remove(d)
+    if app.config.get('PROFILE'):
+        # Enable profiling
+        from werkzeug.middleware.profiler import ProfilerMiddleware
+        app.config['DEBUG'] = True
+        app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[10])
+
+    if app.config.get('OAUTH2_ALLOW_HTTP') or app.config.get('DEBUG'):
+        os.environ['AUTHLIB_INSECURE_TRANSPORT'] = '1'
+
+    @app.before_request
+    def resolve_request_body() -> None:
+        """
+        Before every request, combine `request.form` and `request.get_json()`
+        into `request.args`
+        """
+        ds = [request.args, request.form]
+
+        try:
+            body = request.get_json()
+        except BadRequest:
+            # No JSON
+            pass
+        else:
+            if body:
+                ds.append(MultiDict(body.items()))
+
+        # Replace immutable Request.args with the combined args dict
+        # noinspection PyPropertyAccess
+        request.args = CombinedMultiDict(ds)
+
+    # Read/create secret key
+    keyfile = os.path.join(
+        os.path.abspath(app.config['DATA_ROOT']), 'AFTERGLOW_CORE_KEY')
     try:
-        os.makedirs(d)
-    except OSError as _e:
-        if _e.errno != errno.EEXIST:
-            raise
-    del d
-    with open(keyfile, 'wb') as f:
-        f.write(key)
-app.config['SECRET_KEY'] = key
-# Fernet requires 32-byte key, while Afterglow has been historically using
-# 24-byte key
-cipher = Fernet(urlsafe_b64encode(key + b'Afterglo'))
-del f, key, keyfile
+        with open(keyfile, 'rb') as f:
+            key = f.read()
+    except IOError:
+        key = os.urandom(24)
+        d = os.path.dirname(keyfile)
+        if os.path.isfile(d):
+            os.remove(d)
+        try:
+            os.makedirs(d)
+        except OSError as _e:
+            if _e.errno != errno.EEXIST:
+                raise
+        del d
+        with open(keyfile, 'wb') as f:
+            f.write(key)
+    app.config['SECRET_KEY'] = key
+    # Fernet requires 32-byte key, while Afterglow has been historically using
+    # 24-byte key
+    cipher = Fernet(urlsafe_b64encode(key + b'Afterglo'))
+    del f, key, keyfile
+
+    with app.app_context():
+        if app.config.get('AUTH_ENABLED'):
+            # Initialize user authentication and enable non-versioned /users
+            # routes and Afterglow OAuth2 server at /oauth2
+            from .resources.users import init_users
+            init_users(app)
+            from .auth import init_auth
+            init_auth()
+            from .oauth2 import init_oauth
+            init_oauth()
+
+        # Register resource plugins
+        from .resources.data_providers import register
+        register(app)
+
+        # Register endpoints
+        from .views import register
+        register(app)
+
+        # Install Flask handlers for all Afterglow exceptions
+        from .errors import register
+        register(app)
+
+    return app
 
 
-if app.config.get('AUTH_ENABLED'):
-    # Initialize user authentication and enable non-versioned /users routes
-    # and Afterglow OAuth2 server at /oauth2
-    from . import auth
-
-
-# Define API resources and endpoints
-from . import resources, views
+app = create_app()

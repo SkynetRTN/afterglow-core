@@ -20,7 +20,7 @@ class RoleSchema(AfterglowSchema):
 
 
 class UserSchema(Resource):
-    __get_view__ = 'users'
+    __get_view__ = 'users.users'
 
     id: int = Integer()
     username: str = String()

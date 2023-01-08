@@ -13,9 +13,10 @@ try:
 except ImportError:
     PILImage = None
 from marshmallow.fields import Dict, Integer, List, String
-from flask import request
+from flask import current_app
+from flask_login import current_user
 
-from .. import PaginationInfo, app, errors
+from .. import PaginationInfo, errors
 from ..errors.auth import NotAuthenticatedError
 from ..errors.data_provider import (
     AssetNotFoundError, NonBrowseableDataProviderError, QuotaExceededError)
@@ -200,10 +201,11 @@ class DataProvider(AfterglowSchema):
 
         if self.auth_methods is None:
             # Use default data provider authentication
-            self.auth_methods = app.config.get('DEFAULT_DATA_PROVIDER_AUTH')
+            self.auth_methods = current_app.config.get(
+                'DEFAULT_DATA_PROVIDER_AUTH')
             if self.auth_methods is None:
                 # Inherit auth methods from data files
-                self.auth_methods = app.config.get('DATA_FILE_AUTH')
+                self.auth_methods = current_app.config.get('DATA_FILE_AUTH')
         if isinstance(self.auth_methods, str):
             self.auth_methods = self.auth_methods.split(',')
 
@@ -363,7 +365,7 @@ class DataProvider(AfterglowSchema):
         Check that the user is authenticated with any of the auth methods
         required for the data provider; raises NotAuthenticatedError if not
         """
-        if not app.config.get('USER_AUTH'):
+        if not current_app.config.get('AUTH_ENABLED'):
             # User auth disabled, always succeed
             return
 
@@ -375,18 +377,16 @@ class DataProvider(AfterglowSchema):
         # Check that any of the auth methods requested is present
         # in any of the user's identities
         for required_method in auth_methods:
-            from .. import auth
             if required_method == 'http':
                 # HTTP auth requires username and password being set
-                if auth.current_user is not None and \
-                        auth.current_user.username and \
-                        auth.current_user.password:
+                if getattr(current_user, 'username', None) and \
+                        getattr(current_user, 'password', None):
                     return
                 continue
 
             # For non-HTTP methods, check identities
             try:
-                for identity in auth.current_user.identities:
+                for identity in getattr(current_user, 'identities', []):
                     if identity.auth_method == required_method:
                         return
             except AttributeError:

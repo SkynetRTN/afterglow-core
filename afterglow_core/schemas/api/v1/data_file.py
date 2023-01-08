@@ -41,7 +41,7 @@ class DataFileSchema(Resource):
         group_name: name of the data file group
         group_order: 0-based order of the data file in the group
     """
-    __get_view__ = 'data_files'
+    __get_view__ = 'data_files.data_files'
 
     id: int = Integer(dump_default=None)
     type: str = String(dump_default=None)
@@ -81,7 +81,7 @@ class SessionSchema(Resource):
         data: arbitrary user data associated with the session
         data_file_ids: list of data file IDs associated with the session
     """
-    __get_view__ = 'sessions'
+    __get_view__ = 'sessions.sessions'
 
     id: int = Integer(dump_default=None)
     name: str = String(dump_default=None)
