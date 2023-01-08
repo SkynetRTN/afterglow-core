@@ -8,12 +8,13 @@ from typing import List as TList, Optional, Tuple
 from marshmallow.fields import Integer, List, Nested
 import numpy
 from numpy import (
-    arange, arcsin, argsort, array, asarray, clip, cos, deg2rad, degrees, inf,
-    isfinite, nan, ndarray, radians, sin, sqrt, transpose)
+    arange, argsort, array, asarray, clip, cos, deg2rad, degrees, inf,
+    isfinite, nan, ndarray, sin, sqrt, transpose)
 from scipy.spatial import cKDTree
 from scipy.optimize import brenth
 from astropy.wcs import WCS
 
+from skylib.util.angle import angdist
 from skylib.util.fits import get_fits_time
 from skylib.util.stats import chauvenet, weighted_median, weighted_quantile
 
@@ -191,8 +192,7 @@ class FieldCalJob(Job):
                     epoch = epochs.get(source.file_id, None)
                     wcs = wcss.get(source.file_id, None)
                 try:
-                    ra, dec = radians(get_source_radec(source, epoch, wcs))
-                    ra *= 15
+                    ra, dec = get_source_radec(source, epoch, wcs)
                 except Exception as e:
                     self.add_warning(
                         'Could not check variability for source {}: not '
@@ -203,13 +203,8 @@ class FieldCalJob(Job):
                 file_id = getattr(source, 'file_id', None)
                 for star in var_stars[file_id] if file_id is not None \
                         else unique_var_stars:
-                    star_ra, star_dec = radians(
-                        [star.ra_hours*15, star.dec_degs])
-                    if degrees(
-                            2*arcsin(sqrt(
-                                sin((star_dec - dec)/2)**2 +
-                                cos(star_dec)*cos(dec) *
-                                sin((star_ra - ra)/2)**2)))*3600 < \
+                    if degrees(angdist(
+                            ra, dec, star.ra_hours, star.dec_degs))*3600 < \
                             variable_check_tol:
                         catalog_sources.remove(source)
                         break
