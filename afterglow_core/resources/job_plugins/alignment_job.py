@@ -15,6 +15,7 @@ import cv2 as cv
 
 from skylib.combine.alignment import *
 from skylib.combine.pattern_matching import pattern_match
+from skylib.util.angle import angdist, average_radec
 from skylib.util.fits import get_fits_fov
 
 from ...models import Job, JobResult, SourceExtractionData
@@ -372,7 +373,7 @@ class AlignmentJob(Job):
         else:
             # Mosaicing mode
             # Find all possible pairwise transformations
-            rel_transforms, distances = {}, {}
+            rel_transforms, weights, fovs = {}, {}, {}
             n = len(file_ids)
             total_pairs = n*(n - 1)//2
             max_r = settings.mosaic_search_radius
@@ -380,15 +381,12 @@ class AlignmentJob(Job):
             for i, file_id in enumerate(file_ids[:-1]):
                 ra0, dec0, r0 = get_fits_fov(
                     get_data_file_fits(self.user_id, file_id)[0].header)
+                fovs[file_id] = ra0, dec0, r0
                 for other_file_id in file_ids[i + 1:]:
                     other_ra0, other_dec0, other_r0 = get_fits_fov(
                         get_data_file_fits(
                             self.user_id, other_file_id)[0].header)
-                    gcd = np.rad2deg(np.arcsin(np.sqrt(
-                        np.sin(np.deg2rad(dec0 - other_dec0)/2)**2 +
-                        np.sin(np.deg2rad(ra0 - other_ra0)/2)**2 *
-                        np.cos(np.deg2rad(dec0)) *
-                        np.cos(np.deg2rad(other_dec0)))))
+                    gcd = angdist(ra0, dec0, other_ra0, other_dec0)
                     if any(x is None for x in (ra0, dec0, r0, other_ra0,
                                                other_dec0, other_r0)) or \
                             gcd < (r0 + other_r0)*max_r:
@@ -401,7 +399,7 @@ class AlignmentJob(Job):
                         except Exception:
                             pass
                         else:
-                            distances[file_id, other_file_id] = gcd
+                            weights[file_id, other_file_id] = gcd
                     k += 1
                     self.update_progress(k/total_pairs*100, 0, total_stages)
 
@@ -417,7 +415,7 @@ class AlignmentJob(Job):
                     inv_offset = -np.dot(inv_mat, offset)
                 inverse_rel_transforms[other_file_id, file_id] = (
                     inv_mat, inv_offset)
-                distances[other_file_id, file_id] = distances[
+                weights[other_file_id, file_id] = weights[
                     file_id, other_file_id]
             rel_transforms.update(inverse_rel_transforms)
 
@@ -458,13 +456,22 @@ class AlignmentJob(Job):
 
             # Process each mosaic separately
             for mosaic in mosaics:
+                # Put the tile closest to the average mosaic RA/Dec first;
+                # this will be the reference tile
+                mosaic = list(mosaic)
+                ra0, dec0 = average_radec(
+                    [fovs[file_id][:2] for file_id in mosaic])
+                i = np.argmin([angdist(ra0, dec0, *fovs[file_id][:2])
+                               for file_id in mosaic])
+                if i:
+                    mosaic = [mosaic[i]] + mosaic[:i] + mosaic[i+1:]
+
                 # Based on the existing pairwise transformations, build
                 # an undirected weighted graph with vertices representing
                 # tile centers and edge weights equal to great circle distances
-                mosaic = list(mosaic)
                 n = len(mosaic)
                 graph = np.full((n, n), np.nan, np.float64)
-                for idx, d in distances.items():
+                for idx, d in weights.items():
                     try:
                         i, j = mosaic.index(idx[0]), mosaic.index(idx[1])
                     except ValueError:
