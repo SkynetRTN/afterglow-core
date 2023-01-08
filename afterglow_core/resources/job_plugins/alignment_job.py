@@ -399,6 +399,9 @@ class AlignmentJob(Job):
                         except Exception:
                             pass
                         else:
+                            # Assume that the tiles are aligned to XY, then
+                            # weight(i,j) = reciprocal of overlap area between
+                            # FOVxFOV square tiles i and j in Euclidean space
                             weights[file_id, other_file_id] = gcd
                     k += 1
                     self.update_progress(k/total_pairs*100, 0, total_stages)
