@@ -78,7 +78,7 @@ class AlignmentSettingsFeatures(AlignmentSettings):
 
     mode = 'features'
 
-    algorithm: str = String(dump_default='WCS', load_default='AKAZE')
+    algorithm: str = String(dump_default='AKAZE', load_default='AKAZE')
     ratio_threshold: float = Float(dump_default=0.5)
     detect_edges: bool = Boolean(dump_default=False)
 
@@ -352,8 +352,9 @@ class AlignmentJob(Job):
                     self.update_progress(
                         (i + 1)/len(file_ids)*100, 0, total_stages)
 
-            ref_height, ref_width = get_data_file_data(
-                self.user_id, ref_file_id)[0].shape
+            with get_data_file_fits(self.user_id, ref_file_id) as f:
+                hdr = f[0].header
+                ref_width, ref_height = hdr['NAXIS1'], hdr['NAXIS2']
             try:
                 ref_wcs = wcs_cache[ref_file_id]
             except KeyError:
@@ -379,15 +380,22 @@ class AlignmentJob(Job):
             max_r = settings.mosaic_search_radius
             k = 0
             for i, file_id in enumerate(file_ids[:-1]):
-                fovs[file_id] = ra0, dec0, r0 = get_fits_fov(
-                    get_data_file_fits(self.user_id, file_id)[0].header)
+                with get_data_file_fits(self.user_id, file_id) as f:
+                    fovs[file_id] = ra0, dec0, r0, _, w0, h0 = \
+                        get_fits_fov(f[0].header)
                 for other_file_id in file_ids[i + 1:]:
-                    other_ra0, other_dec0, other_r0 = get_fits_fov(
-                        get_data_file_fits(
-                            self.user_id, other_file_id)[0].header)
-                    gcd = angdist(ra0, dec0, other_ra0, other_dec0)
-                    if any(x is None for x in (ra0, dec0, r0, other_ra0,
-                                               other_dec0, other_r0)) or \
+                    with get_data_file_fits(self.user_id, other_file_id) as f:
+                        other_ra0, other_dec0, other_r0, _, w, h = \
+                            get_fits_fov(f[0].header)
+                    if all(x is not None for x in (ra0, dec0, other_ra0,
+                                                   other_dec0)):
+                        gcd = angdist(ra0, dec0, other_ra0, other_dec0)
+                    else:
+                        gcd = None
+                    # Ignore faraway tiles unless WCS mode or FOV unknown
+                    if isinstance(settings, AlignmentSettingsWCS) or \
+                            any(x is None for x in (ra0, dec0, r0, other_ra0,
+                                                    other_dec0, other_r0)) or \
                             gcd < (r0 + other_r0)*max_r:
                         # noinspection PyBroadException
                         try:
@@ -398,30 +406,59 @@ class AlignmentJob(Job):
                         except Exception:
                             pass
                         else:
-                            # Assume that the tiles are aligned to XY, then
-                            # weight(i,j) = reciprocal of overlap area between
-                            # FOVxFOV square tiles i and j in Euclidean space
-                            weights[file_id, other_file_id] = gcd
+                            # Add inverse transformations
+                            mat, offset = rel_transforms[
+                                file_id, other_file_id]
+                            if mat is None:
+                                inv_mat = None
+                                inv_offset = -offset
+                            else:
+                                inv_mat = inv(mat)
+                                inv_offset = -np.dot(inv_mat, offset)
+                            rel_transforms[other_file_id, file_id] = (
+                                inv_mat, inv_offset)
+                            # Calculate graph edge weights
+                            if isinstance(settings, AlignmentSettingsWCS):
+                                # For WCS-based alignment, tiles don't
+                                # necessarily overlap. Use GCD as the measure
+                                # of path length on the graph.
+                                if gcd is not None:
+                                    weights[file_id, other_file_id] = gcd
+                                else:
+                                    # No RA/Dec info in header, assume constant
+                                    # weight
+                                    weights[file_id, other_file_id] = 1
+                            else:
+                                # For other alignment modes, the distance is
+                                # the inverse square of the normalized tile
+                                # overlap area. Tile pairs with no overlap are
+                                # considered false matches.
+                                y, x = np.indices((h, w)).astype(float)
+                                y, x = y.ravel(), x.ravel()
+                                y += inv_offset[0]
+                                x += inv_offset[1]
+                                if inv_mat is not None:
+                                    y, x = np.dot(inv_mat, [y, x])
+                                overlap = ((x >= 0) & (x < w0) & (y >= 0) &
+                                           (y < h0)).sum()/max(w*h, w0*h0)
+                                if overlap:
+                                    weights[file_id, other_file_id] = \
+                                        1/overlap**2
+                                else:
+                                    del rel_transforms[file_id, other_file_id]
+                                    del rel_transforms[other_file_id, file_id]
+
+                            # Undirected graph
+                            try:
+                                weights[other_file_id, file_id] = weights[
+                                    file_id, other_file_id]
+                            except KeyError:
+                                # Match discarded because of no overlap
+                                pass
                     k += 1
                     self.update_progress(k/total_pairs*100, 0, total_stages)
-            fovs[file_ids[-1]] = get_fits_fov(
-                get_data_file_fits(self.user_id, file_ids[-1])[0].header)
-
-            # Add inverse transformations
-            inverse_rel_transforms = {}
-            for (file_id, other_file_id), (mat, offset) in \
-                    rel_transforms.items():
-                if mat is None:
-                    inv_mat = None
-                    inv_offset = -offset
-                else:
-                    inv_mat = inv(mat)
-                    inv_offset = -np.dot(inv_mat, offset)
-                inverse_rel_transforms[other_file_id, file_id] = (
-                    inv_mat, inv_offset)
-                weights[other_file_id, file_id] = weights[
-                    file_id, other_file_id]
-            rel_transforms.update(inverse_rel_transforms)
+            with get_data_file_fits(self.user_id, file_ids[-1]) as f:
+                fovs[file_ids[-1]] = get_fits_fov(f[0].header)
 
             # Include each image in one of the sets of connected images
             # ("mosaics") if it has at least one match
@@ -486,8 +523,9 @@ class AlignmentJob(Job):
                 pred = shortest_path(graph, return_predecessors=True)[1]
 
                 # Establish the global reference frame based on the first image
-                ref_height, ref_width = get_data_file_data(
-                    self.user_id, mosaic[0])[0].shape
+                with get_data_file_fits(self.user_id, mosaic[0]) as f:
+                    hdr = f[0].header
+                    ref_width, ref_height = hdr['NAXIS1'], hdr['NAXIS2']
                 transforms[mosaic[0]] = None, np.zeros(2)
 
                 # Update the mosaic image shape and transformations by adding
@@ -528,7 +566,9 @@ class AlignmentJob(Job):
                     # within the current global mosaic frame
                     transforms[file_id] = mat, offset
                     dy, dx = offset
-                    shape = get_data_file_data(self.user_id, file_id)[0].shape
+                    with get_data_file_fits(self.user_id, file_id) as f:
+                        hdr = f[0].header
+                        shape = hdr['NAXIS2'], hdr['NAXIS1']
                     y, x = np.indices(shape)
                     if mat is None:
                         x = x + dx  # adding float to int
@@ -898,6 +938,7 @@ def get_transform(job: AlignmentJob,
             enable_skew=settings.enable_skew,
             algorithm=settings.algorithm,
             ratio_threshold=settings.ratio_threshold,
+            detect_edges=settings.detect_edges,
             **alignment_kwargs), f'{settings.algorithm} feature detection'
 
     if isinstance(settings, AlignmentSettingsPixels):
