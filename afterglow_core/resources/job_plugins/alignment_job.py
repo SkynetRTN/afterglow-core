@@ -81,6 +81,8 @@ class AlignmentSettingsFeatures(AlignmentSettings):
     algorithm: str = String(dump_default='AKAZE', load_default='AKAZE')
     ratio_threshold: float = Float(dump_default=0.5)
     detect_edges: bool = Boolean(dump_default=False)
+    percentile_min: float = Float(dump_default=10)
+    percentile_max: float = Float(dump_default=99)
 
 
 class AlignmentSettingsFeaturesAKAZE(AlignmentSettingsFeatures):
@@ -939,6 +941,8 @@ def get_transform(job: AlignmentJob,
             algorithm=settings.algorithm,
             ratio_threshold=settings.ratio_threshold,
             detect_edges=settings.detect_edges,
+            percentile_min=settings.percentile_min,
+            percentile_max=settings.percentile_max,
             **alignment_kwargs), f'{settings.algorithm} feature detection'
 
     if isinstance(settings, AlignmentSettingsPixels):
