@@ -1520,6 +1520,18 @@ components:
               description: apply edge detection before feature extraction
               type: boolean
               default: false
+            percentile_min:
+              description: lower percentile for conversion to 8 bit
+              type: number
+              minimum: 0
+              maximum: 100
+              default: 10
+            percentile_max:
+              description: upper percentile for conversion to 8 bit
+              type: number
+              minimum: 0
+              maximum: 100
+              default: 99
 
     AlignmentSettingsFeaturesAKAZE:
       description: settings for AKAZE feature-based alignment
