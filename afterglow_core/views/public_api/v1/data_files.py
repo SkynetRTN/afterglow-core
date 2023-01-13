@@ -235,7 +235,7 @@ def data_files_header(id: int) -> Response:
         underlying FITS file header
     """
     if request.method == 'GET':
-        hdr = get_data_file_data(request.user.id, id)[1]
+        hdr = get_data_file_fits(request.user.id, id)[0].header
     else:
         with pyfits.open(get_data_file_path(request.user.id, id),
                          'update', memmap=False) as fits:
@@ -289,7 +289,7 @@ def data_files_wcs(id: int) -> Response:
         or updated FITS header has no valid WCS info
     """
     if request.method == 'GET':
-        hdr = get_data_file_data(request.user.id, id)[1]
+        hdr = get_data_file_fits(request.user.id, id)[0].header
     else:
         with pyfits.open(get_data_file_path(request.user.id, id),
                          'update', memmap=False) as fits:

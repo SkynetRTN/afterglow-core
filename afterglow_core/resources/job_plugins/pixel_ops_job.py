@@ -18,8 +18,8 @@ from skylib.color.radio import radio_nat
 from ...models import Job, JobResult
 from ...schemas import Boolean, Float
 from ..data_files import (
-    create_data_file, get_data_file_data, get_data_file_db, get_root,
-    save_data_file)
+    create_data_file, get_data_file_data, get_data_file_db, get_data_file_fits,
+    get_root, save_data_file)
 
 
 __all__ = ['PixelOpsJob']
@@ -211,7 +211,7 @@ class PixelOpsJob(Job):
                     '[{}] Created by Afterglow by evaluating '
                     'expression "{}"'.format(datetime.utcnow(), expr))
             else:
-                hdr = get_data_file_data(self.user_id, file_id)[1]
+                hdr = get_data_file_fits(self.user_id, file_id)[0].header
                 if self.inplace:
                     hdr.add_history(
                         '[{}] Updated by Afterglow by evaluating expression '
