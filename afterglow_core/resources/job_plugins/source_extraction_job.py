@@ -132,7 +132,8 @@ def run_source_extraction_job(job: Job,
                 job.user_id, id, settings.x, settings.y,
                 settings.width, settings.height)
 
-            hdr = get_data_file_fits(job.user_id, id)[0].header
+            with get_data_file_fits(job.user_id, id) as f:
+                hdr = f[0].header
 
             if settings.gain is None:
                 gain = get_fits_gain(hdr)

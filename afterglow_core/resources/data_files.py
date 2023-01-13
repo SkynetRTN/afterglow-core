@@ -979,9 +979,8 @@ def get_data_file_fits(user_id: Optional[int], file_id: int,
     :return: FITS file object
     """
     try:
-        with pyfits.open(get_data_file_path(user_id, file_id), mode,
-                         memmap=False) as fits:
-            return fits
+        return pyfits.open(get_data_file_path(user_id, file_id), mode,
+                           memmap=False)
     except Exception:
         raise UnknownDataFileError(file_id=file_id)
 

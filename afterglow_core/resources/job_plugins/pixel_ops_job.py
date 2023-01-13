@@ -211,7 +211,8 @@ class PixelOpsJob(Job):
                     '[{}] Created by Afterglow by evaluating '
                     'expression "{}"'.format(datetime.utcnow(), expr))
             else:
-                hdr = get_data_file_fits(self.user_id, file_id)[0].header
+                with get_data_file_fits(self.user_id, file_id) as f:
+                    hdr = f[0].header
                 if self.inplace:
                     hdr.add_history(
                         '[{}] Updated by Afterglow by evaluating expression '
