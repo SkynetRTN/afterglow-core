@@ -22,7 +22,10 @@ class StackingSettingsSchema(AfterglowSchema):
     percentile: int = Integer(dump_default=50)
     lo: float = Float(dump_default=0)
     hi: float = Float(dump_default=100)
-    equalize_order: int = Integer(dump_default=1)
+    equalize_additive: bool = Boolean(dump_default=False)
+    equalize_order: int = Integer(dump_default=0)
+    equalize_multiplicative: bool = Boolean(dump_default=False)
+    equalize_global: bool = Boolean(dump_default=False)
     smart_stacking: Optional[str] = String(dump_default=None)
 
 

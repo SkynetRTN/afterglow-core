@@ -26,7 +26,10 @@ class StackingSettings(AfterglowSchema):
     percentile: int = Integer(dump_default=50)
     lo: float = Float(dump_default=0)
     hi: float = Float(dump_default=100)
-    equalize_order: int = Integer(dump_default=1)
+    equalize_additive: bool = Boolean(dump_default=False)
+    equalize_order: int = Integer(dump_default=0)
+    equalize_multiplicative: bool = Boolean(dump_default=False)
+    equalize_global: bool = Boolean(dump_default=False)
     smart_stacking: Optional[str] = String(dump_default=None)
 
 
@@ -139,7 +142,10 @@ class StackingJob(Job):
                 propagate_mask=settings.propagate_mask,
                 percentile=settings.percentile,
                 lo=lo, hi=hi, smart_stacking=settings.smart_stacking,
+                equalize_additive=settings.equalize_additive,
                 equalize_order=settings.equalize_order,
+                equalize_multiplicative=settings.equalize_multiplicative,
+                equalize_global=settings.equalize_global,
                 max_mem_mb=current_app.config.get('JOB_MAX_RAM'),
                 callback=self.update_progress)[0]
         finally:
