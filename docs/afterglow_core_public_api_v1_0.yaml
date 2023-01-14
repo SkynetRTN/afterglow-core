@@ -1900,11 +1900,23 @@ components:
             `rejection` = "sigclip": reject values more than `hi` sigmas above the baseline; default: 3;
             `rejection` = "chauvenet" | "rcr": reject positive outliers; default: true'
           type: number
+        equalize_additive:
+          description: enable additive equalization for mosaicing using `equalize_order`
+          type: boolean
+          default: false
         equalize_order:
-          description: 'background equalization polynomial order; used with `scaling` = "equalize"'
+          description: 'background equalization polynomial order; used with `equalize_additive` and `equalize_global`'
           type: integer
           minimum: 0
-          default: 1
+          default: 0
+        equalize_multiplicative:
+          description: enable multiplicative mosaic equalization
+          type: boolean
+          default: false
+        equalize_global:
+          description: enable additive background flattening using `equalize_order` model
+          type: boolean
+          default: false
         smart_stacking:
           description: 'smart stacking mode for the automatic rejection of lower-quality images::
             null | "none" (default) -- regular stacking, don''t reject any images
