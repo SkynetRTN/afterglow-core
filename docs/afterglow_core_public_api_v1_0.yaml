@@ -1913,6 +1913,12 @@ components:
           description: enable multiplicative mosaic equalization
           type: boolean
           default: false
+        multiplicative_percentile:
+          description: calculate equalization scaling factors by comparing pixels at this percentile
+          type: number
+          minimum: 0
+          maximum: 100
+          default: 99.9
         equalize_global:
           description: enable additive background flattening using `equalize_order` model
           type: boolean

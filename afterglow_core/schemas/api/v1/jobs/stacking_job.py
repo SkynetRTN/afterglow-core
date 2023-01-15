@@ -25,6 +25,7 @@ class StackingSettingsSchema(AfterglowSchema):
     equalize_additive: bool = Boolean(dump_default=False)
     equalize_order: int = Integer(dump_default=0)
     equalize_multiplicative: bool = Boolean(dump_default=False)
+    multiplicative_percentile: float = Float(dump_default=99.9)
     equalize_global: bool = Boolean(dump_default=False)
     smart_stacking: Optional[str] = String(dump_default=None)
 
