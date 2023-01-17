@@ -14,7 +14,7 @@ from skylib.util.fits import (
 
 from ...models import Job, JobResult, SourceExtractionData
 from ...schemas import AfterglowSchema, Boolean, Float
-from ..data_files import get_data_file_data, get_subframe
+from ..data_files import get_data_file_fits, get_subframe
 from .source_merge_job import SourceMergeSettings, merge_sources
 
 
@@ -132,7 +132,8 @@ def run_source_extraction_job(job: Job,
                 job.user_id, id, settings.x, settings.y,
                 settings.width, settings.height)
 
-            hdr = get_data_file_data(job.user_id, id)[1]
+            with get_data_file_fits(job.user_id, id) as f:
+                hdr = f[0].header
 
             if settings.gain is None:
                 gain = get_fits_gain(hdr)

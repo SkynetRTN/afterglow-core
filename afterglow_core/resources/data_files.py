@@ -340,23 +340,10 @@ def save_data_file(adb, root: str, file_id: int,
     if data.dtype.fields is None:
         # Convert image data to float32
         data = data.astype(np.float32)
-        if isinstance(data, np.ma.MaskedArray) and not data.mask.any():
-            # Empty mask, save as normal array
-            data = data.data
         if isinstance(data, np.ma.MaskedArray):
-            # Store masked array in two HDUs
-            fits = pyfits.HDUList(
-                [pyfits.PrimaryHDU(data.data, hdr),
-                 pyfits.ImageHDU(data.mask.astype(np.uint8), name='MASK')])
-        else:
-            # Treat normal arrays with NaN's as masked arrays
-            mask = np.isnan(data).astype(np.uint8)
-            if mask.any():
-                fits = pyfits.HDUList(
-                    [pyfits.PrimaryHDU(data, hdr),
-                     pyfits.ImageHDU(mask, name='MASK')])
-            else:
-                fits = pyfits.PrimaryHDU(data, hdr)
+            # Store masked values as NaNs
+            data = data.filled(np.nan)
+        fits = pyfits.PrimaryHDU(data, hdr)
     else:
         fits = pyfits.BinTableHDU(data, hdr)
 
@@ -992,16 +979,8 @@ def get_data_file_fits(user_id: Optional[int], file_id: int,
     :return: FITS file object
     """
     try:
-        with pyfits.open(get_data_file_path(user_id, file_id), mode,
-                         memmap=False) as fits:
-            if mode == 'readonly' and fits[0].data is not None and \
-                    fits[0].data.dtype.fields is None and len(fits) > 1:
-                # Image in primary HDU, mask in extension HDU, create
-                # a temporary in-memory FITS with masked values replaced by NaN
-                fits[0].data[fits[1].data.nonzero()] = np.nan
-                return pyfits.HDUList(pyfits.PrimaryHDU(
-                    fits[0].data, fits[0].header))
-            return fits
+        return pyfits.open(get_data_file_path(user_id, file_id), mode,
+                           memmap=False)
     except Exception:
         raise UnknownDataFileError(file_id=file_id)
 
@@ -1025,16 +1004,14 @@ def get_data_file_data(user_id: Optional[int], file_id: int) \
             data = fits[1].data
         elif fits[0].data.dtype.fields is None:
             # Image stored in the primary HDU, with NaNs for masked values
-            if np.isnan(fits[0].data).any():
-                # Masked data
-                data = np.ma.masked_array(
-                    fits[0].data, np.isnan(fits[0].data), fill_value=np.nan)
-            else:
+            data = np.ma.masked_invalid(fits[0].data)
+            if not data.mask.any():
                 # Normal image data
-                data = fits[0].data
+                data = data.data
         else:
             # Table data in the primary HDU (?)
             data = fits[0].data
+        del fits[0].data  # recommended by Astropy
 
         return data, fits[0].header
 

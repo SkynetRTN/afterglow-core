@@ -1520,6 +1520,18 @@ components:
               description: apply edge detection before feature extraction
               type: boolean
               default: false
+            percentile_min:
+              description: lower percentile for conversion to 8 bit
+              type: number
+              minimum: 0
+              maximum: 100
+              default: 10
+            percentile_max:
+              description: upper percentile for conversion to 8 bit
+              type: number
+              minimum: 0
+              maximum: 100
+              default: 99
 
     AlignmentSettingsFeaturesAKAZE:
       description: settings for AKAZE feature-based alignment
@@ -1888,11 +1900,29 @@ components:
             `rejection` = "sigclip": reject values more than `hi` sigmas above the baseline; default: 3;
             `rejection` = "chauvenet" | "rcr": reject positive outliers; default: true'
           type: number
+        equalize_additive:
+          description: enable additive equalization for mosaicing using `equalize_order`
+          type: boolean
+          default: false
         equalize_order:
-          description: 'background equalization polynomial order; used with `scaling` = "equalize"'
+          description: 'background equalization polynomial order; used with `equalize_additive` and `equalize_global`'
           type: integer
           minimum: 0
-          default: 1
+          default: 0
+        equalize_multiplicative:
+          description: enable multiplicative mosaic equalization
+          type: boolean
+          default: false
+        multiplicative_percentile:
+          description: calculate equalization scaling factors by comparing pixels at this percentile
+          type: number
+          minimum: 0
+          maximum: 100
+          default: 99.9
+        equalize_global:
+          description: enable additive background flattening using `equalize_order` model
+          type: boolean
+          default: false
         smart_stacking:
           description: 'smart stacking mode for the automatic rejection of lower-quality images::
             null | "none" (default) -- regular stacking, don''t reject any images

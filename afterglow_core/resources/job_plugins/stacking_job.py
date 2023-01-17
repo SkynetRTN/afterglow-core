@@ -26,7 +26,11 @@ class StackingSettings(AfterglowSchema):
     percentile: int = Integer(dump_default=50)
     lo: float = Float(dump_default=0)
     hi: float = Float(dump_default=100)
-    equalize_order: int = Integer(dump_default=1)
+    equalize_additive: bool = Boolean(dump_default=False)
+    equalize_order: int = Integer(dump_default=0)
+    equalize_multiplicative: bool = Boolean(dump_default=False)
+    multiplicative_percentile: float = Float(dump_default=99.9)
+    equalize_global: bool = Boolean(dump_default=False)
     smart_stacking: Optional[str] = String(dump_default=None)
 
 
@@ -116,31 +120,39 @@ class StackingJob(Job):
         data_files = [get_data_file_fits(self.user_id, file_id)
                       for file_id in self.file_ids]
 
-        # Check data dimensions
-        shape = (
-            data_files[0][0].header['NAXIS1'],
-            data_files[0][0].header['NAXIS2']
-        )
-        for i, data_file in enumerate(list(data_files[1:])):
-            if (data_file[0].header['NAXIS1'],
-                    data_file[0].header['NAXIS2']) != shape:
-                self.add_error(
-                    ValueError(
-                        'Shape mismatch: expected {0[0]}x{0[1]}, got '
-                        '{1[0]}x{1[1]}'.format(shape, data_file[0].shape)),
-                    {'file_id': self.file_ids[i + 1]})
-                data_files.remove(data_file)
+        try:
+            # Check data dimensions
+            shape = (
+                data_files[0][0].header['NAXIS1'],
+                data_files[0][0].header['NAXIS2']
+            )
+            for i, data_file in enumerate(list(data_files[1:])):
+                if (data_file[0].header['NAXIS1'],
+                        data_file[0].header['NAXIS2']) != shape:
+                    self.add_error(
+                        ValueError(
+                            'Shape mismatch: expected {0[0]}x{0[1]}, got '
+                            '{1[0]}x{1[1]}'.format(shape, data_file[0].shape)),
+                        {'file_id': self.file_ids[i + 1]})
+                    data_files.remove(data_file)
 
-        # Combine using the given settings
-        data, header = combine(
-            data_files, mode=settings.mode, scaling=settings.scaling,
-            rejection=settings.rejection,
-            propagate_mask=settings.propagate_mask,
-            percentile=settings.percentile,
-            lo=lo, hi=hi, smart_stacking=settings.smart_stacking,
-            equalize_order=settings.equalize_order,
-            max_mem_mb=current_app.config.get('JOB_MAX_RAM'),
-            callback=self.update_progress)[0]
+            # Combine using the given settings
+            data, header = combine(
+                data_files, mode=settings.mode, scaling=settings.scaling,
+                rejection=settings.rejection,
+                propagate_mask=settings.propagate_mask,
+                percentile=settings.percentile,
+                lo=lo, hi=hi, smart_stacking=settings.smart_stacking,
+                equalize_additive=settings.equalize_additive,
+                equalize_order=settings.equalize_order,
+                equalize_multiplicative=settings.equalize_multiplicative,
+                multiplicative_percentile=settings.multiplicative_percentile,
+                equalize_global=settings.equalize_global,
+                max_mem_mb=current_app.config.get('JOB_MAX_RAM'),
+                callback=self.update_progress)[0]
+        finally:
+            for df in data_files:
+                df.close()
 
         # Create a new data file in the given session and return its ID
         with get_data_file_db(self.user_id) as adb:

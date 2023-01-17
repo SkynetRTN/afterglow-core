@@ -60,9 +60,11 @@ class AlignmentSettingsFeaturesSchema(AlignmentSettingsSchema):
 
     mode = 'features'
 
-    algorithm: str = String(dump_default='WCS', load_default='AKAZE')
+    algorithm: str = String(dump_default='AKAZE', load_default='AKAZE')
     ratio_threshold: float = Float(dump_default=0.5)
     detect_edges: bool = Boolean(dump_default=False)
+    percentile_min: float = Float(dump_default=10)
+    percentile_max: float = Float(dump_default=99)
 
 
 class AlignmentSettingsFeaturesAKAZESchema(AlignmentSettingsFeaturesSchema):
