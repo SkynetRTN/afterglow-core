@@ -170,7 +170,7 @@ JOB_MAX_RAM = 100.0
 # Job completion timeout in seconds: if job pool is exhausted, cancel jobs that
 # run longer than specified except those which progress is above
 # JOB_TIMEOUT_MAX_PROGRESS
-JOB_TIMEOUT = 900
+JOB_TIMEOUT = 1800
 
 # Don't time out jobs with progress above the given percentage
 JOB_TIMEOUT_MAX_PROGRESS = 90

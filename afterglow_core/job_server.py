@@ -543,16 +543,12 @@ class JobWorkerProcessWrapper(object):
         :return: None
         """
         if WINDOWS:
+            # On Windows, use cooperative abort
             self.process.abort_event.set()
         else:
-            s = signal.SIGINT
-            try:
-                # In Python 3, SIGINT is a Signals enum instance
-                s = s.value
-            except AttributeError:
-                pass
-            # noinspection PyTypeChecker
-            os.kill(self.ident, s)
+            # On other OSes, SIGINT will generate a KeyboardInterrupt
+            # in the main thread of the job worker process
+            os.kill(self.ident, signal.SIGINT)
 
     def join(self) -> None:
         """
@@ -667,15 +663,15 @@ class JobRequestHandler(BaseRequestHandler):
                                             DbJobState.started_on <
                                             datetime.utcnow() - timedelta(
                                                 seconds=current_app.config.get(
-                                                    'JOB_TIMEOUT', 900))):
+                                                    'JOB_TIMEOUT', 1800))):
                                 job_id = db_job_state.id
                                 with server.pool_lock.acquire_read():
                                     for p in server.pool:
                                         if p.job_id == job_id:
-                                            p.cancel_current_job()
                                             logger.warning(
-                                                'Job %s timed out, canceled',
+                                                'Job %s timed out, canceling',
                                                 job_id)
+                                            p.cancel_current_job()
                                             break
                         else:
                             logger.info(
