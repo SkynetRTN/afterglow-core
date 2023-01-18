@@ -174,3 +174,7 @@ JOB_TIMEOUT = 1800
 
 # Don't time out jobs with progress above the given percentage
 JOB_TIMEOUT_MAX_PROGRESS = 90
+
+# Forcibly kill and restart job worker if it does not respond to cancellation
+# request in a timely manner (seconds)
+JOB_CANCEL_TIMEOUT = 10

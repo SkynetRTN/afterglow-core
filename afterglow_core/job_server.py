@@ -14,12 +14,14 @@ import sqlite3
 import struct
 import sys
 import threading
+import time
 import traceback
 import tracemalloc
 from datetime import datetime, timedelta
 from glob import glob
 from socketserver import BaseRequestHandler, TCPServer
 from multiprocessing import Event, Process, Queue
+from threading import Thread
 
 from marshmallow import Schema, fields, missing
 from sqlalchemy import (
@@ -481,7 +483,7 @@ class JobWorkerProcess(Process):
 
             except KeyboardInterrupt:
                 # Ignore interrupt signals occasionally sent before the job has
-                # started
+                # started or after its completion
                 pass
             except Exception:
                 app.logger.warning(
@@ -512,6 +514,7 @@ class JobWorkerProcessWrapper(object):
     currently run by this process
     """
     process = None
+    server = None
     _job_id_lock = None
     _job_id = None
 
@@ -531,9 +534,49 @@ class JobWorkerProcessWrapper(object):
         """Worker process ID"""
         return self.process.ident
 
-    def __init__(self, job_queue, result_queue):
+    def __init__(self, server):
+        self.server = server
         self._job_id_lock = RWLock()
-        self.process = JobWorkerProcess(job_queue, result_queue)
+        self.process = JobWorkerProcess(server.job_queue, server.result_queue)
+
+    def _cancel_wait(self, ctx):
+        """
+        Wait until the job acknowledges cancellation; if not, kill and restart
+        the worker process
+        """
+        job_id = self.job_id
+        if job_id is None:
+            # Job already finished
+            return
+        with ctx:
+            timeout = time.time() + current_app.config.get(
+                'JOB_CANCEL_TIMEOUT', 10)
+            while True:
+                with self.server.session_factory() as session:
+                    db_job = session.query(DbJob).get(job_id)
+                    if db_job is None or db_job.state.status == 'canceled':
+                        # Job worker acknowledged cancellation
+                        break
+                    if time.time() > timeout:
+                        current_app.logger.warn(
+                            '[Job worker %s] No timely response to job '
+                            'cancellation request; restarting worker',
+                            self.ident)
+                        os.kill(self.ident, signal.SIGKILL)
+                        with self.server.pool_lock.acquire_write():
+                            self.server.pool.remove(self)
+                            self.server.pool.append(JobWorkerProcessWrapper(
+                                self.server))
+                        db_job.state.status = 'canceled'
+                        try:
+                            session.commit()
+                        except Exception as e:
+                            session.rollback()
+                            current_app.logger.warn(
+                                '[Job worker %s] Error setting job status to '
+                                'canceled [%s]', self.ident, e)
+                        break
+                    time.sleep(1)
 
     def cancel_current_job(self):
         """
@@ -543,12 +586,13 @@ class JobWorkerProcessWrapper(object):
         :return: None
         """
         if WINDOWS:
-            # On Windows, use cooperative abort
+            # On Windows, use cooperative aborting
             self.process.abort_event.set()
         else:
             # On other OSes, SIGINT will generate a KeyboardInterrupt
             # in the main thread of the job worker process
             os.kill(self.ident, signal.SIGINT)
+        Thread(target=self._cancel_wait, args=(copy_request_ctx(),)).start()
 
     def join(self) -> None:
         """
@@ -677,8 +721,9 @@ class JobRequestHandler(BaseRequestHandler):
                             logger.info(
                                 'Adding one more worker to job pool')
                             with server.pool_lock.acquire_write():
+                                # noinspection PyTypeChecker
                                 server.pool.append(JobWorkerProcessWrapper(
-                                    server.job_queue, server.result_queue))
+                                    server))
 
                     # Obtain a user database object proxy used in the job
                     # worker process for authentication purposes instead of
@@ -997,7 +1042,8 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
     min_pool_size = app.config.get('JOB_POOL_MIN', 1)
     max_pool_size = app.config.get('JOB_POOL_MAX', 16)
     if min_pool_size > 0:
-        pool = [JobWorkerProcessWrapper(job_queue, result_queue)
+        # noinspection PyTypeChecker
+        pool = [JobWorkerProcessWrapper(tcp_server)
                 for _ in range(min_pool_size)]
     else:
         pool = []
