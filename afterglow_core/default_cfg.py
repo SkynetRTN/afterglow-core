@@ -171,6 +171,9 @@ JOB_MAX_RAM = 100.0
 # percentage of available physical RAM
 JOB_MAX_TOTAL_RAM_PERCENT = 80.0
 
+# Cancel jobs that consume a larger percentage of total physical RAM
+JOB_MAX_RAM_PERCENT = 40.0
+
 # Job completion timeout in seconds: if job pool is exhausted, cancel jobs that
 # run longer than specified except those which progress is above
 # JOB_TIMEOUT_MAX_PROGRESS

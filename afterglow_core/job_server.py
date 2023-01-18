@@ -1034,7 +1034,7 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
     job_queue = Queue()
     result_queue = Queue()
     terminate_listener_event = threading.Event()
-    state_update_listener = None
+    state_update_listener = ram_monitor = None
 
     # Start TCP server, listen on the configured port
     try:
@@ -1121,8 +1121,6 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
             """
             Thread that listens for job state/result updates from worker
             processes and updates the corresponding database tables
-
-            :return: None
             """
             with state_update_flask_ctx:
                 while not terminate_listener_event.is_set():
@@ -1209,9 +1207,61 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
                     finally:
                         sess.close()
 
+        max_worker_ram_percent = app.config.get('JOB_MAX_RAM_PERCENT', 40)
+        ram_monitor_flask_ctx = copy_request_ctx()
+
+        def ram_monitor_body():
+            """
+            Thread that kills and restarts job workers that exceeded their RAM
+            quota
+            """
+            with ram_monitor_flask_ctx:
+                while not terminate_listener_event.wait(5):
+                    with pool_lock.acquire_write():
+                        for _p in pool:
+                            # noinspection PyBroadException
+                            try:
+                                mem = psutil.Process(_p.ident).memory_percent()
+                            except Exception:
+                                # Process possibly already terminated
+                                # on shutdown
+                                continue
+                            if mem > max_worker_ram_percent:
+                                app.logger.warn(
+                                    '[Job worker %s] RAM usage quota exceeded '
+                                    '(%.1f%% > %.1f%%); restarting worker',
+                                    _p.ident, mem, max_worker_ram_percent)
+                                os.kill(_p.ident, signal.SIGKILL)
+                                pool.remove(_p)
+                                # noinspection PyTypeChecker
+                                pool.append(JobWorkerProcessWrapper(
+                                    tcp_server))
+
+                                # If the killed worker was running a job, mark
+                                # it as canceled
+                                job_id = _p.job_id
+                                if job_id is not None:
+                                    sess = session_factory()
+                                    try:
+                                        db_job = sess.query(DbJob).get(job_id)
+                                        if db_job is not None and \
+                                                db_job.state.status != \
+                                                'canceled':
+                                            db_job.state.status = 'canceled'
+                                            # noinspection PyBroadException
+                                            try:
+                                                sess.commit()
+                                            except Exception:
+                                                sess.rollback()
+                                    finally:
+                                        sess.close()
+
         state_update_listener = threading.Thread(
             target=state_update_listener_body)
         state_update_listener.start()
+
+        ram_monitor = threading.Thread(target=ram_monitor_body)
+        ram_monitor.start()
 
         # Set TCP server attrs related to job database
         tcp_server.db_job_types = db_job_types
@@ -1245,6 +1295,8 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
         terminate_listener_event.set()
         if state_update_listener is not None:
             state_update_listener.join()
+        if ram_monitor is not None:
+            ram_monitor.join()
 
         app.logger.info('Job server terminated')
 
