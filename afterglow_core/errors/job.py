@@ -8,7 +8,8 @@ from . import AfterglowError
 __all__ = [
     'CannotCancelJobError', 'CannotCreateJobFileError', 'CannotDeleteJobError',
     'CannotSetJobStatusError', 'InvalidMethodError', 'JobServerError',
-    'UnknownJobError', 'UnknownJobFileError', 'UnknownJobTypeError',
+    'JobWorkerRAMExceeded', 'UnknownJobError', 'UnknownJobFileError',
+    'UnknownJobTypeError',
 ]
 
 
@@ -99,6 +100,17 @@ class CannotDeleteJobError(AfterglowError):
     """
     code = 403
     message = 'Cannot delete job in its current state'
+
+
+class JobWorkerRAMExceeded(AfterglowError):
+    """
+    Current jobs use too much RAM to start one more job
+
+    Extra attributes::
+        job_worker_ram_percent: current RAM usage by all job workers (%)
+    """
+    code = 403
+    message = 'Job worker RAM usage exceeded, try again later'
 
 
 class CannotCreateJobFileError(AfterglowError):

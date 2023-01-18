@@ -164,8 +164,12 @@ JOB_POOL_MIN = 1
 JOB_POOL_MAX = 16
 
 # Maximum RAM in megabytes allowed to be allocated by certain memory-intensive
-# jobs
+# operations
 JOB_MAX_RAM = 100.0
+
+# Refuse to start jobs if the total RAM usage by all job workers exceeds this
+# percentage of available physical RAM
+JOB_MAX_TOTAL_RAM_PERCENT = 80.0
 
 # Job completion timeout in seconds: if job pool is exhausted, cancel jobs that
 # run longer than specified except those which progress is above

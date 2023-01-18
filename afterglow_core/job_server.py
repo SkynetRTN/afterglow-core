@@ -7,6 +7,7 @@ import gc
 import multiprocessing
 import os
 import pickle
+import psutil
 import shutil
 import signal
 import socket
@@ -548,6 +549,7 @@ class JobWorkerProcessWrapper(object):
         if job_id is None:
             # Job already finished
             return
+
         with ctx:
             timeout = time.time() + current_app.config.get(
                 'JOB_CANCEL_TIMEOUT', 10)
@@ -689,6 +691,15 @@ class JobRequestHandler(BaseRequestHandler):
                         pool_size = len(server.pool)
                         busy_workers = len(
                             [p for p in server.pool if p.job_id is not None])
+                        total_worker_memory_percent = sum(
+                            [psutil.Process(p.ident).memory_percent()
+                             for p in server.pool])
+
+                    if total_worker_memory_percent > current_app.config.get(
+                            'JOB_MAX_TOTAL_RAM_PERCENT', 80):
+                        raise JobWorkerRAMExceeded(
+                            job_worker_ram_percent=total_worker_memory_percent)
+
                     if busy_workers == pool_size:
                         # All workers are currently busy
                         if server.max_pool_size and \
