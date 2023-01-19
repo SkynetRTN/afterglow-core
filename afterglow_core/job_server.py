@@ -7,6 +7,7 @@ import gc
 import multiprocessing
 import os
 import pickle
+import psutil
 import shutil
 import signal
 import socket
@@ -14,12 +15,14 @@ import sqlite3
 import struct
 import sys
 import threading
+import time
 import traceback
 import tracemalloc
 from datetime import datetime, timedelta
 from glob import glob
 from socketserver import BaseRequestHandler, TCPServer
 from multiprocessing import Event, Process, Queue
+from threading import Thread
 
 from marshmallow import Schema, fields, missing
 from sqlalchemy import (
@@ -481,7 +484,7 @@ class JobWorkerProcess(Process):
 
             except KeyboardInterrupt:
                 # Ignore interrupt signals occasionally sent before the job has
-                # started
+                # started or after its completion
                 pass
             except Exception:
                 app.logger.warning(
@@ -512,6 +515,7 @@ class JobWorkerProcessWrapper(object):
     currently run by this process
     """
     process = None
+    server = None
     _job_id_lock = None
     _job_id = None
 
@@ -531,9 +535,50 @@ class JobWorkerProcessWrapper(object):
         """Worker process ID"""
         return self.process.ident
 
-    def __init__(self, job_queue, result_queue):
+    def __init__(self, server):
+        self.server = server
         self._job_id_lock = RWLock()
-        self.process = JobWorkerProcess(job_queue, result_queue)
+        self.process = JobWorkerProcess(server.job_queue, server.result_queue)
+
+    def _cancel_wait(self, ctx):
+        """
+        Wait until the job acknowledges cancellation; if not, kill and restart
+        the worker process
+        """
+        job_id = self.job_id
+        if job_id is None:
+            # Job already finished
+            return
+
+        with ctx:
+            timeout = time.time() + current_app.config.get(
+                'JOB_CANCEL_TIMEOUT', 10)
+            while True:
+                with self.server.session_factory() as session:
+                    db_job = session.query(DbJob).get(job_id)
+                    if db_job is None or db_job.state.status == 'canceled':
+                        # Job worker acknowledged cancellation
+                        break
+                    if time.time() > timeout:
+                        current_app.logger.warn(
+                            '[Job worker %s] No timely response to job '
+                            'cancellation request; restarting worker',
+                            self.ident)
+                        os.kill(self.ident, signal.SIGKILL)
+                        with self.server.pool_lock.acquire_write():
+                            self.server.pool.remove(self)
+                            self.server.pool.append(JobWorkerProcessWrapper(
+                                self.server))
+                        db_job.state.status = 'canceled'
+                        try:
+                            session.commit()
+                        except Exception as e:
+                            session.rollback()
+                            current_app.logger.warn(
+                                '[Job worker %s] Error setting job status to '
+                                'canceled [%s]', self.ident, e)
+                        break
+                    time.sleep(1)
 
     def cancel_current_job(self):
         """
@@ -543,16 +588,13 @@ class JobWorkerProcessWrapper(object):
         :return: None
         """
         if WINDOWS:
+            # On Windows, use cooperative aborting
             self.process.abort_event.set()
         else:
-            s = signal.SIGINT
-            try:
-                # In Python 3, SIGINT is a Signals enum instance
-                s = s.value
-            except AttributeError:
-                pass
-            # noinspection PyTypeChecker
-            os.kill(self.ident, s)
+            # On other OSes, SIGINT will generate a KeyboardInterrupt
+            # in the main thread of the job worker process
+            os.kill(self.ident, signal.SIGINT)
+        Thread(target=self._cancel_wait, args=(copy_request_ctx(),)).start()
 
     def join(self) -> None:
         """
@@ -649,6 +691,15 @@ class JobRequestHandler(BaseRequestHandler):
                         pool_size = len(server.pool)
                         busy_workers = len(
                             [p for p in server.pool if p.job_id is not None])
+                        total_worker_memory_percent = sum(
+                            [psutil.Process(p.ident).memory_percent()
+                             for p in server.pool])
+
+                    if total_worker_memory_percent > current_app.config.get(
+                            'JOB_MAX_TOTAL_RAM_PERCENT', 80):
+                        raise JobWorkerRAMExceeded(
+                            job_worker_ram_percent=total_worker_memory_percent)
+
                     if busy_workers == pool_size:
                         # All workers are currently busy
                         if server.max_pool_size and \
@@ -667,22 +718,23 @@ class JobRequestHandler(BaseRequestHandler):
                                             DbJobState.started_on <
                                             datetime.utcnow() - timedelta(
                                                 seconds=current_app.config.get(
-                                                    'JOB_TIMEOUT', 900))):
+                                                    'JOB_TIMEOUT', 1800))):
                                 job_id = db_job_state.id
                                 with server.pool_lock.acquire_read():
                                     for p in server.pool:
                                         if p.job_id == job_id:
-                                            p.cancel_current_job()
                                             logger.warning(
-                                                'Job %s timed out, canceled',
+                                                'Job %s timed out, canceling',
                                                 job_id)
+                                            p.cancel_current_job()
                                             break
                         else:
                             logger.info(
                                 'Adding one more worker to job pool')
                             with server.pool_lock.acquire_write():
+                                # noinspection PyTypeChecker
                                 server.pool.append(JobWorkerProcessWrapper(
-                                    server.job_queue, server.result_queue))
+                                    server))
 
                     # Obtain a user database object proxy used in the job
                     # worker process for authentication purposes instead of
@@ -982,7 +1034,7 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
     job_queue = Queue()
     result_queue = Queue()
     terminate_listener_event = threading.Event()
-    state_update_listener = None
+    state_update_listener = ram_monitor = None
 
     # Start TCP server, listen on the configured port
     try:
@@ -1001,7 +1053,8 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
     min_pool_size = app.config.get('JOB_POOL_MIN', 1)
     max_pool_size = app.config.get('JOB_POOL_MAX', 16)
     if min_pool_size > 0:
-        pool = [JobWorkerProcessWrapper(job_queue, result_queue)
+        # noinspection PyTypeChecker
+        pool = [JobWorkerProcessWrapper(tcp_server)
                 for _ in range(min_pool_size)]
     else:
         pool = []
@@ -1068,8 +1121,6 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
             """
             Thread that listens for job state/result updates from worker
             processes and updates the corresponding database tables
-
-            :return: None
             """
             with state_update_flask_ctx:
                 while not terminate_listener_event.is_set():
@@ -1156,9 +1207,61 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
                     finally:
                         sess.close()
 
+        max_worker_ram_percent = app.config.get('JOB_MAX_RAM_PERCENT', 40)
+        ram_monitor_flask_ctx = copy_request_ctx()
+
+        def ram_monitor_body():
+            """
+            Thread that kills and restarts job workers that exceeded their RAM
+            quota
+            """
+            with ram_monitor_flask_ctx:
+                while not terminate_listener_event.wait(5):
+                    with pool_lock.acquire_write():
+                        for _p in pool:
+                            # noinspection PyBroadException
+                            try:
+                                mem = psutil.Process(_p.ident).memory_percent()
+                            except Exception:
+                                # Process possibly already terminated
+                                # on shutdown
+                                continue
+                            if mem > max_worker_ram_percent:
+                                app.logger.warn(
+                                    '[Job worker %s] RAM usage quota exceeded '
+                                    '(%.1f%% > %.1f%%); restarting worker',
+                                    _p.ident, mem, max_worker_ram_percent)
+                                os.kill(_p.ident, signal.SIGKILL)
+                                pool.remove(_p)
+                                # noinspection PyTypeChecker
+                                pool.append(JobWorkerProcessWrapper(
+                                    tcp_server))
+
+                                # If the killed worker was running a job, mark
+                                # it as canceled
+                                job_id = _p.job_id
+                                if job_id is not None:
+                                    sess = session_factory()
+                                    try:
+                                        db_job = sess.query(DbJob).get(job_id)
+                                        if db_job is not None and \
+                                                db_job.state.status != \
+                                                'canceled':
+                                            db_job.state.status = 'canceled'
+                                            # noinspection PyBroadException
+                                            try:
+                                                sess.commit()
+                                            except Exception:
+                                                sess.rollback()
+                                    finally:
+                                        sess.close()
+
         state_update_listener = threading.Thread(
             target=state_update_listener_body)
         state_update_listener.start()
+
+        ram_monitor = threading.Thread(target=ram_monitor_body)
+        ram_monitor.start()
 
         # Set TCP server attrs related to job database
         tcp_server.db_job_types = db_job_types
@@ -1192,6 +1295,8 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
         terminate_listener_event.set()
         if state_update_listener is not None:
             state_update_listener.join()
+        if ram_monitor is not None:
+            ram_monitor.join()
 
         app.logger.info('Job server terminated')
 

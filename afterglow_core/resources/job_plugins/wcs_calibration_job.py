@@ -108,6 +108,18 @@ class WcsCalibrationJob(Job):
         SourceExtractionSettings, dump_default=None)
     inplace: bool = Boolean(dump_default=True)
 
+    def _callback(self):
+        """
+        Callback periodically called by Astrometry.net C code while solving
+
+        :return: True if solution should continue, False if it should stop
+        """
+        try:
+            return self.state.status != 'canceled'
+        except KeyboardInterrupt:
+            self.state.status = 'canceled'
+            return False
+
     def run(self):
         global solver
 
@@ -215,7 +227,9 @@ class WcsCalibrationJob(Job):
                     crpix_center=settings.crpix_center,
                     max_sources=settings.max_sources,
                     retry_lost=False,
-                    callback=lambda: self.state.status != 'canceled')
+                    callback=self._callback)
+                if self.state.status == 'canceled':
+                    raise KeyboardInterrupt('Solving field aborted')
                 if solution.wcs is None:
                     raise RuntimeError('WCS solution not found')
 
