@@ -837,18 +837,36 @@ class JobRequestHandler(BaseRequestHandler):
                         raise CannotSetJobStatusError(status=msgstatus)
 
                     # Find worker process that is currently running the job
-                    if db_job.state.status != 'in_progress':
+                    if db_job.state.status not in ('pending', 'in_progress'):
                         raise CannotCancelJobError(status=db_job.state.status)
 
                     # Send abort signal to worker process running the given
-                    # job. If no such process found, this means that the job
-                    # either has not been dispatched yet or has been already
-                    # completed; do nothing in both cases.
+                    # job
+                    job_canceled = False
                     with server.pool_lock.acquire_read():
                         for p in server.pool:
                             if p.job_id == job_id:
                                 p.cancel_current_job()
+                                job_canceled = True
                                 break
+                    if not job_canceled:
+                        # None of the workers seem to have been running
+                        # the job; it's either not dispatched yet, already
+                        # completed, or killed by a worker crash; reread
+                        # the state from the database and set it to canceled
+                        # unless completed
+                        session.commit()
+                        db_job = session.query(DbJob).get(job_id)
+                        if db_job.state.status not in ('completed',
+                                                       'canceled'):
+                            db_job.state.status = 'canceled'
+                            try:
+                                session.commit()
+                            except Exception as e:
+                                logger.warn(
+                                    'Cannot set crashed job state to canceled '
+                                    '[%s]', e)
+                                session.rollback()
 
                     # Return the current job state
                     result = JobState(db_job.state).to_dict()
