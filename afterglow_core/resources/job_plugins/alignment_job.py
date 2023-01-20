@@ -934,18 +934,33 @@ def get_transform(job: AlignmentJob,
                 '/pattern matching' if len(img_sources) > 1 else '')
 
     if isinstance(settings, AlignmentSettingsFeatures):
+        try:
+            kp1, des1 = ref_star_cache[file_id]
+        except KeyError:
+            kp1, des1 = ref_star_cache[file_id] = get_image_features(
+                get_data_file_data(user_id, file_id)[0],
+                algorithm=settings.algorithm,
+                detect_edges=settings.detect_edges,
+                percentile_min=settings.percentile_min,
+                percentile_max=settings.percentile_max,
+                **alignment_kwargs)
+        try:
+            kp2, des2 = ref_star_cache[ref_file_id]
+        except KeyError:
+            kp2, des2 = ref_star_cache[ref_file_id] = get_image_features(
+                get_data_file_data(user_id, ref_file_id)[0],
+                algorithm=settings.algorithm,
+                detect_edges=settings.detect_edges,
+                percentile_min=settings.percentile_min,
+                percentile_max=settings.percentile_max,
+                **alignment_kwargs)
         return get_transform_features(
-            get_data_file_data(user_id, file_id)[0],
-            get_data_file_data(user_id, ref_file_id)[0],
+            kp1, des1, kp2, des2,
             enable_rot=settings.enable_rot,
             enable_scale=settings.enable_scale,
             enable_skew=settings.enable_skew,
             algorithm=settings.algorithm,
             ratio_threshold=settings.ratio_threshold,
-            detect_edges=settings.detect_edges,
-            percentile_min=settings.percentile_min,
-            percentile_max=settings.percentile_max,
-            feature_cache=ref_star_cache,
             **alignment_kwargs), f'{settings.algorithm} feature detection'
 
     if isinstance(settings, AlignmentSettingsPixels):
