@@ -2,6 +2,7 @@
 Afterglow Core: image alignment job plugin
 """
 
+import gc
 from datetime import datetime
 from typing import Any, Dict as TDict, List as TList, Tuple, Optional
 
@@ -343,14 +344,14 @@ class AlignmentJob(Job):
                 except Exception as e:
                     self.add_error(e, {'file_id': file_ids[i]})
                 finally:
-                    try:
-                        del wcs_cache[file_id]
-                    except KeyError:
-                        pass
-                    try:
-                        del ref_star_cache[file_id]
-                    except KeyError:
-                        pass
+                    # try:
+                    #     del wcs_cache[file_id]
+                    # except KeyError:
+                    #     pass
+                    # try:
+                    #     del ref_star_cache[file_id]
+                    # except KeyError:
+                    #     pass
                     self.update_progress(
                         (i + 1)/len(file_ids)*100, 0, total_stages)
 
@@ -628,6 +629,9 @@ class AlignmentJob(Job):
                             ref_wcss[other_file_id] = wcs
                         break
 
+        del wcs_cache, ref_star_cache
+        gc.collect()
+
         # Save and later temporarily clear the original masks if auto-cropping
         # is enabled; the masks will be restored by the cropping job
         masks = {}
@@ -778,10 +782,8 @@ def get_wcs(user_id: Optional[int], file_id: int, wcs_cache: TDict[int, WCS]) \
 def get_transform(job: AlignmentJob,
                   alignment_kwargs: TDict[str, Any], file_id: int,
                   ref_file_id: int, wcs_cache: TDict[int, WCS],
-                  ref_star_cache: TDict[
-                      int, Tuple[TDict[str, Tuple[float, float]],
-                                 TList[Tuple[float, float]]]],
-                  ) -> Tuple[Tuple[Optional[np.ndarray], np.ndarray], str]:
+                  ref_star_cache: TDict[int, Any]) \
+        -> Tuple[Tuple[Optional[np.ndarray], np.ndarray], str]:
     settings = job.settings
     user_id = job.user_id
 
@@ -932,17 +934,33 @@ def get_transform(job: AlignmentJob,
                 '/pattern matching' if len(img_sources) > 1 else '')
 
     if isinstance(settings, AlignmentSettingsFeatures):
+        try:
+            kp1, des1 = ref_star_cache[file_id]
+        except KeyError:
+            kp1, des1 = ref_star_cache[file_id] = get_image_features(
+                get_data_file_data(user_id, file_id)[0],
+                algorithm=settings.algorithm,
+                detect_edges=settings.detect_edges,
+                percentile_min=settings.percentile_min,
+                percentile_max=settings.percentile_max,
+                **alignment_kwargs)
+        try:
+            kp2, des2 = ref_star_cache[ref_file_id]
+        except KeyError:
+            kp2, des2 = ref_star_cache[ref_file_id] = get_image_features(
+                get_data_file_data(user_id, ref_file_id)[0],
+                algorithm=settings.algorithm,
+                detect_edges=settings.detect_edges,
+                percentile_min=settings.percentile_min,
+                percentile_max=settings.percentile_max,
+                **alignment_kwargs)
         return get_transform_features(
-            get_data_file_data(user_id, file_id)[0],
-            get_data_file_data(user_id, ref_file_id)[0],
+            kp1, des1, kp2, des2,
             enable_rot=settings.enable_rot,
             enable_scale=settings.enable_scale,
             enable_skew=settings.enable_skew,
             algorithm=settings.algorithm,
             ratio_threshold=settings.ratio_threshold,
-            detect_edges=settings.detect_edges,
-            percentile_min=settings.percentile_min,
-            percentile_max=settings.percentile_max,
             **alignment_kwargs), f'{settings.algorithm} feature detection'
 
     if isinstance(settings, AlignmentSettingsPixels):
