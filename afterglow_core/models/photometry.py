@@ -4,10 +4,10 @@ Afterglow Core: photometry data models
 
 from typing import Optional
 
-from marshmallow.fields import Float, String
+from marshmallow.fields import String
 import numpy
 
-from ..schemas import AfterglowSchema, Boolean
+from ..schemas import AfterglowSchema, Boolean, Float
 from .source_extraction import SourceExtractionData
 
 
