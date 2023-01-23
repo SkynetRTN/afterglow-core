@@ -84,8 +84,9 @@ def get_photometry(data, texp: float, gain: float, x: float, y: float, a: float,
         array([(x, y, 0, 0, 0)],
               dtype=[('x', float), ('y', float), ('flux', float),
                      ('saturated', int), ('flag', int)]),
-        background, background_rms, texp, gain, a, b, theta, a_in, a_out, b_out,
-        theta_out)[0]
+        background=background, background_rms=background_rms, texp=texp,
+        gain=gain, a=a, b=b, theta=theta, a_in=a_in, a_out=a_out, b_out=b_out,
+        theta_out=theta_out)[0]
 
     return Photometry(
         flux=source['flux'], flux_err=source['flux_err'],
