@@ -806,7 +806,8 @@ def data_file_photometry(id: Union[int, str]) -> Response:
         wcs = WCS(hdr)
         if not any(wcs.wcs.ctype):
             raise MissingWCSError()
-        x, y = wcs.all_world2pix(numpy.array(ra)*15, numpy.array(dec), 1)
+        x, y = wcs.all_world2pix(
+            numpy.array(ra)*15, numpy.array(dec), 1, quiet=True)
 
     res = [
         get_photometry(

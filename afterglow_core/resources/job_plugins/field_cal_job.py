@@ -311,7 +311,7 @@ class FieldCalJob(Job):
                                 dec[have_pm] = clip(
                                     dec[have_pm] + mu*cos(theta), -90, 90)
                         x[have_radec], y[have_radec] = wcs.all_world2pix(
-                            ra[have_radec], dec[have_radec], 1)
+                            ra[have_radec], dec[have_radec], 1, quiet=True)
                 if epoch is not None:
                     # Also apply proper motion in pixels, assuming that it does
                     # not conflict with RA/Dec PM
