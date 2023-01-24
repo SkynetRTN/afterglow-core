@@ -495,10 +495,7 @@ components:
           description: annulus area in pixels if local background subtraction was enabled; not set otherwise
           type: number
         background:
-          description: mean background within the aperture estimated from the annulus if enabled; not set otherwise
-          type: number
-        background_rms:
-          description: RMS of background within the annulus if local background subtraction was enabled; not set otherwise
+          description: mean background within the annulus if local background is enabled; mean global background within the aperture otherwise
           type: number
 
     ISourceMeta:

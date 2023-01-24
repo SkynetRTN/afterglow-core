@@ -188,11 +188,21 @@ def run_cropping_job(job: Job,
                 if left:
                     try:
                         hdr['CRPIX1'] -= left
+                    except TypeError:
+                        try:
+                            hdr['CRPIX1'] = float(hdr['CRPIX1']) - left
+                        except (TypeError, ValueError):
+                            pass
                     except (KeyError, ValueError):
                         pass
                 if bottom:
                     try:
                         hdr['CRPIX2'] -= bottom
+                    except TypeError:
+                        try:
+                            hdr['CRPIX2'] = float(hdr['CRPIX2']) - bottom
+                        except (TypeError, ValueError):
+                            pass
                     except (KeyError, ValueError):
                         pass
 

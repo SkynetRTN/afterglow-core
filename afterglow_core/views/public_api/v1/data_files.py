@@ -527,72 +527,9 @@ def data_files_pixels(id: int) -> Response:
         raise UnknownDataFileError(file_id=id)
 
 
-@blp.route('/<int:id>/fits')
+@blp.route('/<int:id>/photometry')
 @auth.auth_required('user')
-def data_files_fits(id: int) -> Response:
-    """
-    Return data file as FITS
-
-    GET /data-files/[id]/fits
-
-    Depending on the request headers (Accept and Accept-Encoding), the FITS
-    file is returned either as a gzipped or uncompressed (default) FITS.
-
-    [Accept-Encoding:]
-    [Accept-Encoding: identity]
-    -> (uncompressed FITS)
-    Content-Type: image/fits
-
-    Accept-Encoding: gzip
-    -> (compressed FITS)
-    Content-Type: image/fits
-    Content-Encoding: gzip
-
-    :param id: data file ID
-
-    :return: depending on the Accept and Accept-Encoding HTTP headers (see
-        above), either the gzipped or uncompressed FITS file data
-    """
-    return make_data_response(get_data_file_bytes(request.user.id, id))
-
-
-@blp.route('/<int:id>/<fmt>')
-@auth.auth_required('user')
-def data_files_image(id: int, fmt: str) -> Response:
-    """
-    Export data file in the given format
-
-    GET /data-files/[id]/[fmt]
-
-    Depending on the request headers (Accept and Accept-Encoding), the FITS
-    file is returned either as a gzipped or uncompressed (default) FITS.
-
-    [Accept-Encoding:]
-    [Accept-Encoding: identity]
-    -> (uncompressed FITS)
-    Content-Type: image/fits
-
-    Accept-Encoding: gzip
-    -> (compressed FITS)
-    Content-Type: image/fits
-    Content-Encoding: gzip
-
-    :param id: data file ID
-    :param fmt: image format supported by Pillow
-
-    :return: depending on the Accept and Accept-Encoding HTTP headers (see
-        above), either the gzipped or uncompressed image data
-    """
-    data = get_data_file_bytes(request.user.id, id, fmt=fmt)
-    from PIL import Image  # guaranteed to be available if export succeeded
-    return make_data_response(
-        data, mimetype=Image.MIME.get(fmt, Image.MIME.get(
-            fmt.upper(), 'image')))
-
-
-@blp.route('/<id>/photometry')
-@auth.auth_required('user')
-def data_file_photometry(id: Union[int, str]) -> Response:
+def data_file_photometry(id: int) -> Response:
     """
     Photometer the given aperture, with optional local background subtraction
 
@@ -806,7 +743,8 @@ def data_file_photometry(id: Union[int, str]) -> Response:
         wcs = WCS(hdr)
         if not any(wcs.wcs.ctype):
             raise MissingWCSError()
-        x, y = wcs.all_world2pix(numpy.array(ra)*15, numpy.array(dec), 1)
+        x, y = wcs.all_world2pix(
+            numpy.array(ra)*15, numpy.array(dec), 1, quiet=True)
 
     res = [
         get_photometry(
@@ -818,6 +756,69 @@ def data_file_photometry(id: Union[int, str]) -> Response:
     if multiple:
         return json_response([PhotometrySchema(phot) for phot in res])
     return json_response(PhotometrySchema(res[0]))
+
+
+@blp.route('/<int:id>/fits')
+@auth.auth_required('user')
+def data_files_fits(id: int) -> Response:
+    """
+    Return data file as FITS
+
+    GET /data-files/[id]/fits
+
+    Depending on the request headers (Accept and Accept-Encoding), the FITS
+    file is returned either as a gzipped or uncompressed (default) FITS.
+
+    [Accept-Encoding:]
+    [Accept-Encoding: identity]
+    -> (uncompressed FITS)
+    Content-Type: image/fits
+
+    Accept-Encoding: gzip
+    -> (compressed FITS)
+    Content-Type: image/fits
+    Content-Encoding: gzip
+
+    :param id: data file ID
+
+    :return: depending on the Accept and Accept-Encoding HTTP headers (see
+        above), either the gzipped or uncompressed FITS file data
+    """
+    return make_data_response(get_data_file_bytes(request.user.id, id))
+
+
+@blp.route('/<int:id>/<fmt>')
+@auth.auth_required('user')
+def data_files_image(id: int, fmt: str) -> Response:
+    """
+    Export data file in the given format
+
+    GET /data-files/[id]/[fmt]
+
+    Depending on the request headers (Accept and Accept-Encoding), the FITS
+    file is returned either as a gzipped or uncompressed (default) FITS.
+
+    [Accept-Encoding:]
+    [Accept-Encoding: identity]
+    -> (uncompressed FITS)
+    Content-Type: image/fits
+
+    Accept-Encoding: gzip
+    -> (compressed FITS)
+    Content-Type: image/fits
+    Content-Encoding: gzip
+
+    :param id: data file ID
+    :param fmt: image format supported by Pillow
+
+    :return: depending on the Accept and Accept-Encoding HTTP headers (see
+        above), either the gzipped or uncompressed image data
+    """
+    data = get_data_file_bytes(request.user.id, id, fmt=fmt)
+    from PIL import Image  # guaranteed to be available if export succeeded
+    return make_data_response(
+        data, mimetype=Image.MIME.get(fmt, Image.MIME.get(
+            fmt.upper(), 'image')))
 
 
 @sessions_blp.route('/', methods=['GET', 'POST'])

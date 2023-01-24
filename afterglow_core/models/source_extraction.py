@@ -129,8 +129,8 @@ def get_source_xy(source, epoch: datetime, wcs: Optional[WCS]) \
             cd = cos(deg2rad(dec))
             return wcs.all_world2pix(
                 ((ra + mu*sin(theta)/cd) if cd else ra) % 360,
-                clip(dec + mu*cos(theta), -90, 90), 1)
-        return wcs.all_world2pix(ra, dec, 1)
+                clip(dec + mu*cos(theta), -90, 90), 1, quiet=True)
+        return wcs.all_world2pix(ra, dec, 1, quiet=True)
 
     if epoch is not None and None not in [
             getattr(source, name, None)

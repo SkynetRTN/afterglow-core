@@ -4,10 +4,10 @@ Afterglow Core: photometry data models
 
 from typing import Optional
 
-from marshmallow.fields import Float, String
+from marshmallow.fields import String
 import numpy
 
-from ..schemas import AfterglowSchema, Boolean
+from ..schemas import AfterglowSchema, Boolean, Float
 from .source_extraction import SourceExtractionData
 
 
@@ -76,15 +76,9 @@ class PhotometryData(SourceExtractionData, IPhotometry, IAperture):
         :param kwargs: see :class:`SourceExtractionData`
         """
         # Defaults from SourceExtractionData
-        super().__init__(source, **kwargs)
+        super().__init__(source, row, **kwargs)
 
         if row is not None:
-            # Override certain SourceExtractionData fields
-            # with photometry-specific values
-            self.x = row['x']
-            self.y = row['y']
-            self.flux = row['flux']
-
             # IPhotometry
             self.flux = row['flux']
             self.flux_error = row['flux_err']
@@ -130,10 +124,8 @@ class Photometry(AfterglowSchema):
         area: area within the aperture in square pixels
         background_area: annulus area in pixels if local background subtraction
             was enabled; not set otherwise
-        background: mean background within the aperture estimated from the
-            annulus if enabled; not set otherwise
-        background_rms: RMS of background within the annulus if local background
-            subtraction was enabled; not set otherwise
+        background: mean background within the annulus if local background is
+            enabled; mean global background within the aperture otherwise
 
     """
     flux: float = Float()
@@ -152,4 +144,3 @@ class Photometry(AfterglowSchema):
     area: float = Float()
     background_area: float = Float()
     background: float = Float()
-    background_rms: float = Float()

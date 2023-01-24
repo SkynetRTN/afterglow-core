@@ -70,6 +70,9 @@ class Float(fields.Float):
     Floating-point :class:`marshmallow.Schema` field that serializes NaNs and
     Infs to None
     """
+    def __init__(self, *, allow_nan: bool = True, **kwargs):
+        super().__init__(allow_nan=allow_nan, **kwargs)
+
     def _serialize(self, value, attr, obj, **__):
         """
         Serializer for float fields
