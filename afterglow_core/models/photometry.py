@@ -76,15 +76,9 @@ class PhotometryData(SourceExtractionData, IPhotometry, IAperture):
         :param kwargs: see :class:`SourceExtractionData`
         """
         # Defaults from SourceExtractionData
-        super().__init__(source, **kwargs)
+        super().__init__(source, row, **kwargs)
 
         if row is not None:
-            # Override certain SourceExtractionData fields
-            # with photometry-specific values
-            self.x = row['x']
-            self.y = row['y']
-            self.flux = row['flux']
-
             # IPhotometry
             self.flux = row['flux']
             self.flux_error = row['flux_err']
