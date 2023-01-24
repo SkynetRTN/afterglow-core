@@ -98,5 +98,4 @@ def get_photometry(data, texp: float, gain: float, x: float, y: float, a: float,
         area=source['aper_area'],
         background_area=source['background_area'],
         background=source['background'],
-        background_rms=source['background_rms'],
     )
