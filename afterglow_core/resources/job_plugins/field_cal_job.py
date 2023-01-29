@@ -708,11 +708,12 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
         while True:
             if weights is None:
                 rejected = chauvenet(
-                    b, mean='median', sigma='absdev68', max_iter=1)
+                    b, mean_type=1, sigma_type=1, max_iter=1)
             else:
                 bmed = weighted_median(b, weights)
                 sigma68 = weighted_quantile(abs(b - bmed), weights, 0.683)
-                rejected = chauvenet(b, mean=bmed, sigma=sigma68, max_iter=1)
+                rejected = chauvenet(
+                    b, mean_override=bmed, sigma_override=sigma68, max_iter=1)
             if rejected.any():
                 good = ~rejected
                 b = b[good]
