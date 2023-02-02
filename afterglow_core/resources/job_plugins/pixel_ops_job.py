@@ -14,6 +14,7 @@ import astropy.io.fits as pyfits
 
 from skylib.enhancement.wavelet import wavelet_sharpen
 from skylib.color.radio import radio_nat
+from skylib.calibration import cosmetic
 
 from ...models import Job, JobResult
 from ...schemas import Boolean, Float
@@ -48,6 +49,7 @@ context['np'] = numpy
 # Add some useful SkyLib defs
 context['wavelet_sharpen'] = wavelet_sharpen
 context['radio_nat'] = radio_nat
+context['cosmetic'] = cosmetic
 
 
 class PixelOpsJobResult(JobResult):
