@@ -81,7 +81,7 @@ setup(
         'pyslalib',
         'jwt',
         'mysqlclient',
-        'cryptography == 36.0.1',
+        'cryptography == 39.0.1',
         'marshmallow_sqlalchemy == 0.27.0',
         'PyMySQL == 1.0.2',
         'redis == 4.1.4',
