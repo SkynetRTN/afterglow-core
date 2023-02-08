@@ -82,11 +82,14 @@ class PhotometryData(SourceExtractionData, IPhotometry, IAperture):
             # IPhotometry
             self.flux = row['flux']
             self.flux_error = row['flux_err']
-            if row['mag'] or row['mag_err']:
+            if row['mag']:
                 self.mag = row['mag'] + zero_point
+            else:
+                self.mag = None
+            if row['mag_err']:
                 self.mag_error = row['mag_err']
             else:
-                self.mag = self.mag_error = None
+                self.mag_error = None
 
             # IAperture
             if row['aper_a']:
