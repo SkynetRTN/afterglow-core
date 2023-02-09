@@ -6,6 +6,7 @@ from .alignment_job import *
 from .batch_download_job import *
 from .batch_import_job import *
 from .catalog_query_job import *
+from .cosmetic_correction_job import *
 from .cropping_job import *
 from .field_cal_job import *
 from .image_properties_job import *
