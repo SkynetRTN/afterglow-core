@@ -277,7 +277,7 @@ class RWLock(object):
         """
         self.monitor.acquire()
         self.rwlock = 1
-        self.readers_ok.notifyAll()
+        self.readers_ok.notify_all()
         self.monitor.release()
 
     def release(self):
@@ -298,7 +298,7 @@ class RWLock(object):
             self.writers_ok.release()
         elif wake_readers:
             self.readers_ok.acquire()
-            self.readers_ok.notifyAll()
+            self.readers_ok.notify_all()
             self.readers_ok.release()
 
     def __enter__(self) -> None:
@@ -691,14 +691,6 @@ class JobRequestHandler(BaseRequestHandler):
                         pool_size = len(server.pool)
                         busy_workers = len(
                             [p for p in server.pool if p.job_id is not None])
-                        total_worker_memory_percent = sum(
-                            [psutil.Process(p.ident).memory_percent()
-                             for p in server.pool])
-
-                    if total_worker_memory_percent > current_app.config.get(
-                            'JOB_MAX_TOTAL_RAM_PERCENT', 80):
-                        raise JobWorkerRAMExceeded(
-                            job_worker_ram_percent=total_worker_memory_percent)
 
                     if busy_workers == pool_size:
                         # All workers are currently busy
@@ -1038,6 +1030,22 @@ def copy_request_ctx() -> RequestContext:
     return RequestContext(ctx.app, environ=dict(ctx.request.environ))
 
 
+def get_worker_ram_percent(p: JobWorkerProcessWrapper) -> float:
+    """
+    Return resident memory used by worker as percentage of total RAM
+
+    :param p: worker process wrapper instance
+
+    :return: total RAM percent (0 to 100) or < 0 on error (e.g. process already
+        terminated
+    """
+    # noinspection PyBroadException
+    try:
+        return psutil.Process(p.ident).memory_percent()
+    except Exception:
+        return -1
+
+
 def job_server(notify_queue: multiprocessing.Queue) -> None:
     """
     Main job server process
@@ -1226,7 +1234,33 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
                         sess.close()
 
         max_worker_ram_percent = app.config.get('JOB_MAX_RAM_PERCENT', 40)
+        max_total_ram_percent = app.config.get('JOB_MAX_TOTAL_RAM_PERCENT', 80)
         ram_monitor_flask_ctx = copy_request_ctx()
+
+        def restart_worker(p):
+            os.kill(p.ident, signal.SIGKILL)
+            pool.remove(p)
+            # noinspection PyTypeChecker
+            pool.append(JobWorkerProcessWrapper(
+                tcp_server))
+
+            # If the killed worker was running a job, mark
+            # it as canceled
+            job_id = p.job_id
+            if job_id is not None:
+                sess = session_factory()
+                try:
+                    db_job = sess.query(DbJob).get(job_id)
+                    if db_job is not None and \
+                            db_job.state.status != 'canceled':
+                        db_job.state.status = 'canceled'
+                        # noinspection PyBroadException
+                        try:
+                            sess.commit()
+                        except Exception:
+                            sess.rollback()
+                finally:
+                    sess.close()
 
         def ram_monitor_body():
             """
@@ -1235,44 +1269,42 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
             """
             with ram_monitor_flask_ctx:
                 while not terminate_listener_event.wait(5):
+                    # Check total RAM usage
+                    mem = psutil.virtual_memory()
+                    if mem.used/mem.total*100 > max_total_ram_percent:
+                        # Restart idle worker using the largest amount of RAM
+                        with pool_lock.acquire_write():
+                            workers = [
+                                (get_worker_ram_percent(p), p)
+                                for p in pool if p.job_id is None]
+                            workers.sort()
+                            if workers and workers[-1][0] > \
+                                    max_total_ram_percent/len(pool):
+                                # Restart unless it's using too little RAM
+                                restart_worker(workers[-1][1])
+                            else:
+                                # All workers busy or use too little RAM,
+                                # restart the one that uses most memory unless
+                                # it uses too little RAM as well (e.g. other
+                                # apps using most memory)
+                                workers = [
+                                    (get_worker_ram_percent(p), p)
+                                    for p in pool]
+                                workers.sort()
+                                if workers and workers[-1][0] > \
+                                        max_total_ram_percent/len(pool):
+                                    restart_worker(workers[-1][1])
+
+                    # Check individual worker RAM usage
                     with pool_lock.acquire_write():
-                        for _p in pool:
-                            # noinspection PyBroadException
-                            try:
-                                mem = psutil.Process(_p.ident).memory_percent()
-                            except Exception:
-                                # Process possibly already terminated
-                                # on shutdown
-                                continue
-                            if mem > max_worker_ram_percent:
+                        for p in pool:
+                            if get_worker_ram_percent(p) > \
+                                    max_worker_ram_percent:
                                 app.logger.warn(
                                     '[Job worker %s] RAM usage quota exceeded '
                                     '(%.1f%% > %.1f%%); restarting worker',
-                                    _p.ident, mem, max_worker_ram_percent)
-                                os.kill(_p.ident, signal.SIGKILL)
-                                pool.remove(_p)
-                                # noinspection PyTypeChecker
-                                pool.append(JobWorkerProcessWrapper(
-                                    tcp_server))
-
-                                # If the killed worker was running a job, mark
-                                # it as canceled
-                                job_id = _p.job_id
-                                if job_id is not None:
-                                    sess = session_factory()
-                                    try:
-                                        db_job = sess.query(DbJob).get(job_id)
-                                        if db_job is not None and \
-                                                db_job.state.status != \
-                                                'canceled':
-                                            db_job.state.status = 'canceled'
-                                            # noinspection PyBroadException
-                                            try:
-                                                sess.commit()
-                                            except Exception:
-                                                sess.rollback()
-                                    finally:
-                                        sess.close()
+                                    p.ident, mem, max_worker_ram_percent)
+                                restart_worker(p)
 
         state_update_listener = threading.Thread(
             target=state_update_listener_body)
@@ -1305,8 +1337,8 @@ def job_server(notify_queue: multiprocessing.Queue) -> None:
         with pool_lock.acquire_write():
             for _ in range(len(pool)):
                 job_queue.put(None)
-            for p in pool:
-                p.join()
+            for _p_ in pool:
+                _p_.join()
 
         # Shut down state update listener
         result_queue.put(None)
