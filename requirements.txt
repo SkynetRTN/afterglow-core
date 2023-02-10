@@ -33,6 +33,7 @@ scipy==1.10.0
 sep == 1.2.1
 # 'SkyLib >= 0.2.0
 SQLAlchemy == 1.4.44
+tbb
 Werkzeug == 2.2.2
 
 # extra skynet dependencies
