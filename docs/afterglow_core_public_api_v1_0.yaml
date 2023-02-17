@@ -495,10 +495,7 @@ components:
           description: annulus area in pixels if local background subtraction was enabled; not set otherwise
           type: number
         background:
-          description: mean background within the aperture estimated from the annulus if enabled; not set otherwise
-          type: number
-        background_rms:
-          description: RMS of background within the annulus if local background subtraction was enabled; not set otherwise
+          description: mean background within the annulus if local background is enabled; mean global background within the aperture otherwise
           type: number
 
     ISourceMeta:
@@ -2548,6 +2545,108 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/ImageProperties'
+
+    CosmeticCorrectionSettings:
+      description: Cosmetic correction settings
+      type: object
+      properties:
+        m_col:
+          description: bad column rejection range
+          type: integer
+          minimum: 1
+          default: 10
+        nu_col:
+          description: "number of degrees of freedom in Student's distribution for bad column rejection:
+            0 = infinity = Gaussian distribution,
+            1 = Lorentzian distribution;
+            for values other than 0, 1, 2, and 4, CDF is not analytically invertible"""
+          type: integer
+          enum: [0, 1, 2, 4]
+          default: 0
+        m_pixel:
+          description: bad column proximity range for isolated bad pixel rejection
+          type: integer
+          minimum: 1
+          default: 2
+        nu_pixel:
+          description: number of degrees of freedom in Student's distribution for bad pixel rejection
+          type: integer
+          enum: [0, 1, 2, 4]
+          default: 4
+        m_corr_col:
+          description: bad column correction range
+          type: integer
+          minimum: 1
+          default: 2
+        m_corr_pixel:
+          description: bad pixel correction range
+          type: integer
+          minimum: 1
+          default: 1
+        group_by_instrument:
+          description: allow grouping by imager (ORIGIN + TELESCOP + INSTRUMENT FITS header fields)
+          type: boolean
+          default: true
+        group_by_filter:
+          description: allow grouping by filter name (FILTER FITS header field)
+          type: boolean
+          default: true
+        group_by_exp_length:
+          description: allow grouping by exposure length
+          type: boolean
+          default: false
+        max_group_len:
+          description: don't allow longer groups (0 = allow groups of any length)
+          type: integer
+          minimum: 0
+          default: 0
+        max_group_span_hours:
+          description: don't allow group spanning more hours (0 = no limit)
+          type: number
+          minimum: 0
+          default: 0
+        min_group_sep_hours:
+          description: minimum separation between adjacent groups in hours (0 = no limit)
+          type: number
+          minimum: 0
+          default: 0
+
+    CosmeticCorrectionJob:
+      description: Intra-image cosmetic correction job
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Job'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [cosmetic]
+            result:
+              $ref: '#/components/schemas/CosmeticCorrectionJobResult'
+            file_ids:
+              description: IDs of data files to process
+              type: array
+              items:
+                type: integer
+            settings:
+              $ref: '#/components/schemas/CosmeticCorrectionSettings'
+            inplace:
+              description: perform correction in place vs creating new data files
+              type: boolean
+              default: true
+
+    CosmeticCorrectionJobResult:
+      description: Result of cosmetic correction
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/JobResult'
+        - type: object
+          properties:
+            file_ids:
+              description: list of output file IDs; same as input if `inplace` = true; otherwise, new file IDs
+              type: array
+              items:
+                type: integer
 
 
   responses:

@@ -5,12 +5,13 @@ Afterglow Core: imaging survey data provider plugin
 from typing import List as TList, Optional, Tuple, Union
 from io import BytesIO
 
-from marshmallow.fields import Float, String
+from marshmallow.fields import String
 from marshmallow.validate import OneOf, Range
 import requests
 import astropy.io.fits as pyfits
 
 from ...models import DataProvider, DataProviderAsset
+from ...schemas import Float
 from ...errors import MissingFieldError, ValidationError
 from ...errors.data_provider import AssetNotFoundError
 

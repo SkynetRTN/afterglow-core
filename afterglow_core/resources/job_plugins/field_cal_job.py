@@ -311,7 +311,7 @@ class FieldCalJob(Job):
                                 dec[have_pm] = clip(
                                     dec[have_pm] + mu*cos(theta), -90, 90)
                         x[have_radec], y[have_radec] = wcs.all_world2pix(
-                            ra[have_radec], dec[have_radec], 1)
+                            ra[have_radec], dec[have_radec], 1, quiet=True)
                 if epoch is not None:
                     # Also apply proper motion in pixels, assuming that it does
                     # not conflict with RA/Dec PM
@@ -708,11 +708,13 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
         while True:
             if weights is None:
                 rejected = chauvenet(
-                    b, mean='median', sigma='absdev68', max_iter=1)
+                    b, mean_type=1, sigma_type=1, max_iter=1)[0]
             else:
                 bmed = weighted_median(b, weights)
                 sigma68 = weighted_quantile(abs(b - bmed), weights, 0.683)
-                rejected = chauvenet(b, mean=bmed, sigma=sigma68, max_iter=1)
+                rejected = chauvenet(
+                    b, mean_override=bmed, sigma_override=sigma68,
+                    max_iter=1)[0]
             if rejected.any():
                 good = ~rejected
                 b = b[good]

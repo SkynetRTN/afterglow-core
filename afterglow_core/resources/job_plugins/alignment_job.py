@@ -786,7 +786,8 @@ def get_source_xy(source: SourceExtractionData, user_id: Optional[int],
     if x is not None and y is not None:
         return x, y
     wcs = get_wcs(user_id, file_id, wcs_cache)
-    return tuple(wcs.all_world2pix(source.ra_hours*15, source.dec_degs, 1))
+    return tuple(wcs.all_world2pix(
+        source.ra_hours*15, source.dec_degs, 1, quiet=True))
 
 
 def get_transform(job: AlignmentJob,

@@ -295,7 +295,7 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
     for s in sources:
         good = False
         for wcs in wcs_list:
-            x, y = wcs.all_world2pix(s.ra_hours*15, s.dec_degs, 0)
+            x, y = wcs.all_world2pix(s.ra_hours*15, s.dec_degs, 0, quiet=True)
             try:
                 # noinspection PyProtectedMember
                 w, h = wcs._naxis1, wcs._naxis2

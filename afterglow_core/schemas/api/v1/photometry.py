@@ -88,10 +88,8 @@ class PhotometrySchema(AfterglowSchema):
         area: area within the aperture in square pixels
         background_area: annulus area in pixels if local background subtraction
             was enabled; not set otherwise
-        background: mean background within the aperture estimated from the
-            annulus if enabled; not set otherwise
-        background_rms: RMS of background within the annulus if local
-            background subtraction was enabled; not set otherwise
+        background: mean background within the annulus if local background is
+            enabled; mean global background within the aperture otherwise
 
     """
     flux: float = Float()
@@ -110,4 +108,3 @@ class PhotometrySchema(AfterglowSchema):
     area: float = Float()
     background_area: float = Float()
     background: float = Float()
-    background_rms: float = Float()

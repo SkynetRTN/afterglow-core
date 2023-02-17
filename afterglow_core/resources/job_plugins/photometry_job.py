@@ -199,6 +199,7 @@ def run_photometry_job(job: Job, settings: PhotSettings,
                     telescope=scope,
                     exp_length=texp,
                     zero_point=m0,
+                    wcs=wcs,
                 )
                 for row, source in zip(source_table, sources[file_id])
                 if row['flag'] & (0xF0 & ~sep.APER_HASMASKED) == 0 and
