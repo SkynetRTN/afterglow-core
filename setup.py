@@ -76,7 +76,7 @@ setup(
         'sep == 1.0.3',
         # 'SkyLib >= 0.2.0',
         'SQLAlchemy == 1.4.31',
-        'Werkzeug == 2.0.3',
+        'Werkzeug == 2.2.3',
         # extra skynet dependencies
         'pyslalib',
         'jwt',

@@ -34,7 +34,7 @@ sep == 1.2.1
 # 'SkyLib >= 0.2.0
 SQLAlchemy == 1.4.44
 tbb
-Werkzeug == 2.2.2
+Werkzeug == 2.2.3
 
 # extra skynet dependencies
 pyslalib == 1.0.4
