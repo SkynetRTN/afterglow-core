@@ -16,12 +16,13 @@ __all__ = ['StackingSettingsSchema', 'StackingJobResultSchema',
 
 class StackingSettingsSchema(AfterglowSchema):
     mode: str = String(dump_default='average')
+    percentile: float = Float(dump_default=50)
     scaling: str = String(dump_default=None)
+    prescaling: str = String(dump_default=None)
     rejection: str = String(dump_default=None)
+    lo: float = Float(dump_default=None)
+    hi: float = Float(dump_default=None)
     propagate_mask: bool = Boolean(dump_default=True)
-    percentile: int = Integer(dump_default=50)
-    lo: float = Float(dump_default=0)
-    hi: float = Float(dump_default=100)
     equalize_additive: bool = Boolean(dump_default=False)
     equalize_order: int = Integer(dump_default=0)
     equalize_multiplicative: bool = Boolean(dump_default=False)
