@@ -154,7 +154,7 @@ def run_cosmetic_correction_job(
             fits = [get_data_file_fits(job.user_id, file_id)
                     for file_id in group]
             try:
-                data = combine(fits)[0][0]
+                data = combine(fits, return_headers=False)[0]
             finally:
                 for f in fits:
                     del f[0].data
