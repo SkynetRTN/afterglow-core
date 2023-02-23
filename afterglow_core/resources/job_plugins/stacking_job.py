@@ -51,6 +51,9 @@ class StackingJob(Job):
     def run(self):
         settings = self.stacking_settings
 
+        # TODO: Separate prescaling and scaling once implemented in AgA
+        settings.prescaling = settings.scaling
+
         if settings.mode not in (
                 'average', 'sum', 'median', 'percentile', 'mode'):
             raise ValueError(
