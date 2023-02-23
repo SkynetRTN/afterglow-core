@@ -1847,16 +1847,24 @@ components:
         mode:
           description: stacking mode
           type: string
-          enum: [average, percentile, mode, sum]
+          enum: [average, sum, median, percentile, mode]
           default: average
+        percentile:
+          description: for `mode`="percentile"; 50 corresponds to `mode`="median"
+          type: number
+          minimum: 0
+          maximum: 100
+          default: 50
         scaling:
-          description: 'scaling mode::
-            null (default) -- do not scale data
-            "average" -- scale data to match average values
-            "percentile" -- match the given percentile (median for `percentile` = 50)
-            "mode" -- match modal values'
+          description: data scaling mode; applied before stacking, normalizes images to 1
           type: string
-          enum: [average, percentile, mode]
+          enum: [average, median, mode]
+          nullable: true
+          default: null
+        prescaling:
+          description: pre-rejection scaling mode; applied before rejection, does not normalize images, ignored if `rejection`=null
+          type: string
+          enum: [average, median, mode]
           nullable: true
           default: null
         rejection:
@@ -1871,18 +1879,6 @@ components:
           enum: [chauvenet, rcr, iraf, minmax, sigclip]
           nullable: true
           default: null
-        propagate_mask:
-          description: 'when combining masked images, mask the output pixel
-            if it is masked in at least one input image; set to false
-            if constructing a mosaic'
-          type: boolean
-          default: true
-        percentile:
-          description: for `mode`="percentile"; 50 = median
-          type: number
-          minimum: 0
-          maximum: 100
-          default: 50
         lo:
           description: '
             `rejection` = "iraf": number of lowest values to clip; default: 1;
@@ -1897,6 +1893,12 @@ components:
             `rejection` = "sigclip": reject values more than `hi` sigmas above the baseline; default: 3;
             `rejection` = "chauvenet" | "rcr": reject positive outliers; default: true'
           type: number
+        propagate_mask:
+          description: 'when combining masked images, mask the output pixel
+            if it is masked in at least one input image; set to false
+            if constructing a mosaic'
+          type: boolean
+          default: true
         equalize_additive:
           description: enable additive equalization for mosaicing using `equalize_order`
           type: boolean
@@ -1923,9 +1925,10 @@ components:
         smart_stacking:
           description: 'smart stacking mode for the automatic rejection of lower-quality images::
             null | "none" (default) -- regular stacking, don''t reject any images
-            "SNR" -- reject images that lower the global signal-to-noise ratio'
+            "SNR" -- reject images that lower the global signal-to-noise ratio
+            "sharpness" -- reject images that increase blurriness'
           type: string
-          enum: [none, SNR]
+          enum: [none, SNR, sharpness]
           nullable: true
           default: null
       nullable: true
