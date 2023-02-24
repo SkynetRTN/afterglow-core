@@ -1858,13 +1858,13 @@ components:
         scaling:
           description: data scaling mode; applied before stacking, normalizes images to 1
           type: string
-          enum: [average, median, mode]
+          enum: [average, median, mode, histogram]
           nullable: true
           default: null
         prescaling:
           description: pre-rejection scaling mode; applied before rejection, does not normalize images, ignored if `rejection`=null
           type: string
-          enum: [average, median, mode]
+          enum: [average, median, mode, histogram]
           nullable: true
           default: null
         rejection:
