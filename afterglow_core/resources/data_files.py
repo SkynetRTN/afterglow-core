@@ -116,6 +116,7 @@ class DbDataFile(DataFileBase):
 class DbSession(DataFileBase):
     __tablename__ = 'sessions'
     __table_args__ = dict(sqlite_autoincrement=True)
+    __allow_unmapped__ = True
 
     id = Column(Integer, primary_key=True, nullable=False)
     name = Column(

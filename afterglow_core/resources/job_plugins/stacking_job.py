@@ -66,22 +66,29 @@ class StackingJob(Job):
 
         if settings.scaling is not None:
             settings.scaling = settings.scaling.lower()
-            if settings.scaling not in ('none', 'average', 'median', 'mode'):
+            if settings.scaling not in (
+                    'none', 'average', 'median', 'mode', 'histogram'):
                 raise ValueError(
-                    'Scaling mode must be "none", "average", "median", or '
-                    '"mode"')
+                    'Scaling mode must be "none", "average", "median", '
+                    '"mode", or "histogram"')
             if settings.scaling == 'none':
                 settings.scaling = None
 
         if settings.prescaling is not None:
             settings.prescaling = settings.prescaling.lower()
             if settings.prescaling not in (
-                    'none', 'average', 'median', 'mode'):
+                    'none', 'average', 'median', 'mode', 'histogram'):
                 raise ValueError(
-                    'Prescaling mode must be "none", "average", "median", or '
-                    '"mode"')
+                    'Prescaling mode must be "none", "average", "median", '
+                    '"mode", or "histogram"')
             if settings.prescaling == 'none':
                 settings.prescaling = None
+
+        # TODO: Don't map histogram to mode scaling once supported by UI
+        if settings.scaling == 'mode':
+            settings.scaling = 'histogram'
+        if settings.prescaling == 'mode':
+            settings.prescaling = 'histogram'
 
         if settings.rejection is not None:
             settings.rejection = settings.rejection.lower()

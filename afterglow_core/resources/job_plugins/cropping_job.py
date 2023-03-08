@@ -7,7 +7,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict as TDict, List as TList, Optional, Tuple
 
-import numpy
 from marshmallow.fields import Integer, List, Nested
 from numpy import ndarray
 from numpy.ma import MaskedArray, masked_array
@@ -178,7 +177,7 @@ def run_cropping_job(job: Job,
         try:
             data, hdr = get_data_file_data(job.user_id, file_id)
             if any([left, right, top, bottom]):
-                data = data[bottom:-(top + 1), left:-(right + 1)]
+                data = data[bottom:data.shape[0]-top, left:data.shape[1]-right]
                 hdr.add_history(
                     '[{}] Cropped by Afterglow with margins: left={}, '
                     'right={}, top={}, bottom={}'
@@ -208,7 +207,8 @@ def run_cropping_job(job: Job,
 
                 # Apply the original mask if any
                 try:
-                    mask = masks[file_id][bottom:-(top + 1), left:-(right + 1)]
+                    mask = masks[file_id][bottom:bottom+data.shape[0],
+                                          left:left+data.shape[1]]
                     if isinstance(data, MaskedArray):
                         if data.mask.shape and data.mask.any():
                             data.mask |= mask

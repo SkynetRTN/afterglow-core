@@ -655,14 +655,15 @@ class AlignmentJob(Job):
 
                 overwrite_ref = self.crop and \
                     isinstance(data, MaskedArray) and data.mask.any()
-                if overwrite_ref:
-                    # Clear the original mask that would affect cropping
-                    masks[file_id] = data.mask
-                    data = data.filled(data.mean())
 
                 data = apply_transform(
                     data, mat, offset, ref_widths[file_id],
                     ref_heights[file_id], settings.prefilter)
+
+                if overwrite_ref:
+                    # Save and clear the mask before auto-cropping
+                    masks[file_id] = data.mask
+                    data = data.filled(data.mean())
 
                 try:
                     hdr.add_history(
