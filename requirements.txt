@@ -41,7 +41,7 @@ pyslalib == 1.0.4
 jwt
 mysqlclient
 cryptography==39.0.1
-marshmallow_sqlalchemy==0.28.2
+marshmallow_sqlalchemy==0.29.0
 PyMySQL == 1.0.2
 redis==4.5.1
 SQLAlchemy-Utils==0.40.0
