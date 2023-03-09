@@ -142,6 +142,7 @@ def internal_server_error_handler(e: Exception) -> Response:
 
     :return: JSON response object
     """
+    et, ev, etb = sys.exc_info()
     return Response(
         json.dumps({
             'error': {
@@ -149,7 +150,9 @@ def internal_server_error_handler(e: Exception) -> Response:
                 'id': e.__class__.__name__,
                 'detail': str(e),
                 'meta': {
-                    'traceback': traceback.format_tb(sys.exc_info()[-1]),
+                    'type': et.__name__,
+                    'value': str(ev),
+                    'traceback': traceback.format_tb(etb),
                 },
             },
             'links': {'self': request.url},
