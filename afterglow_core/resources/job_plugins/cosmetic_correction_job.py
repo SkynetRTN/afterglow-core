@@ -72,15 +72,15 @@ def group_key(user_id: int, file_id: int,
     :param file_id: data file ID
     :param settings: cosmetic correction settings
 
-    :return: group key and exposure start time; None if data file does not
-        exist
+    :return: group key and exposure start time; (None, None) if data file
+        does not exist
     """
     # noinspection PyBroadException
     try:
         with get_data_file_fits(user_id, file_id) as f:
             hdr = f[0].header
     except Exception:
-        return
+        return None, None
 
     # Always include image dimensions
     key = hdr.get('NAXIS1', None), hdr.get('NAXIS2', None)
@@ -131,11 +131,11 @@ def run_cosmetic_correction_job(
             if 0 < settings.max_group_len < len(final_groups[-1]) or \
                     settings.max_group_span_hours and t is not None and \
                     final_groups[-1][0][0] is not None and \
-                    (t - final_groups[-1][0][0]).total_seconds > \
+                    (t - final_groups[-1][0][0]).total_seconds() > \
                     settings.max_group_span_hours*3600 or \
                     settings.min_group_sep_hours and t is not None and \
                     final_groups[-1][-1][0] is not None and \
-                    (t - final_groups[-1][-1][0]).total_seconds > \
+                    (t - final_groups[-1][-1][0]).total_seconds() > \
                     settings.min_group_sep_hours*3600:
                 # Start a new group
                 final_groups.append([(t, file_id)])
