@@ -43,7 +43,7 @@ mysqlclient
 cryptography==39.0.2
 marshmallow_sqlalchemy==0.29.0
 PyMySQL == 1.0.2
-redis==4.5.1
+redis==4.5.4
 SQLAlchemy-Utils==0.40.0
 WTForms == 3.0.1
 
