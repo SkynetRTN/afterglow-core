@@ -122,8 +122,8 @@ def run_photometry_job(job: Job, settings: PhotSettings,
             if gain:
                 phot_kw['gain'] = gain
 
-            epoch = get_fits_time(hdr)[0]
             texp = get_fits_exp_length(hdr)
+            epoch = get_fits_time(hdr, texp)[1]
             flt = hdr.get('FILTER')
             scope = hdr.get('TELESCOP')
 
