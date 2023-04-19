@@ -84,12 +84,6 @@ class StackingJob(Job):
             if settings.prescaling == 'none':
                 settings.prescaling = None
 
-        # TODO: Don't map histogram to mode scaling once supported by UI
-        if settings.scaling == 'mode':
-            settings.scaling = 'histogram'
-        if settings.prescaling == 'mode':
-            settings.prescaling = 'histogram'
-
         if settings.rejection is not None:
             settings.rejection = settings.rejection.lower()
             if settings.rejection not in (
