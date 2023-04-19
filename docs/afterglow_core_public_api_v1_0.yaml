@@ -1318,6 +1318,9 @@ components:
         zero_point_error:
           description: error of `zero_point`
           type: number
+        limmag5:
+          description: 5-sigma limiting magnitude
+          type: number
 
     FieldCalJob:
       description: Photometric calibration job
@@ -2559,10 +2562,10 @@ components:
           minimum: 1
           default: 10
         nu_col:
-          description: "number of degrees of freedom in Student's distribution for bad column rejection:
+          description: 'number of degrees of freedom in Student''s distribution for bad column rejection:
             0 = infinity = Gaussian distribution,
             1 = Lorentzian distribution;
-            for values other than 0, 1, 2, and 4, CDF is not analytically invertible"""
+            for values other than 0, 1, 2, and 4, CDF is not analytically invertible'
           type: integer
           enum: [0, 1, 2, 4]
           default: 0
