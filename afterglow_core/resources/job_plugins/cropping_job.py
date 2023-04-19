@@ -15,8 +15,8 @@ from ...models import Job, JobResult
 from ...schemas import AfterglowSchema, Boolean
 from ...errors import ValidationError
 from ..data_files import (
-    create_data_file, get_data_file_data, get_data_file_db, get_root,
-    save_data_file)
+    create_data_file, get_data_file, get_data_file_data, get_data_file_db,
+    get_root, save_data_file)
 
 
 __all__ = ['CroppingJob', 'run_cropping_job']
@@ -230,10 +230,13 @@ def run_cropping_job(job: Job,
                             adb.rollback()
                             raise
                 else:
-                    hdr.add_history(
-                        'Original data file ID: {:d}'.format(file_id))
                     with get_data_file_db(job.user_id) as adb:
                         try:
+                            hdr.add_history(
+                                'Original data file: {}'.format(
+                                    get_data_file(
+                                        job.user_id, file_id).name or
+                                    file_id))
                             file_id = create_data_file(
                                 adb, None, get_root(job.user_id), data, hdr,
                                 duplicates='append',
@@ -247,7 +250,9 @@ def run_cropping_job(job: Job,
                 with get_data_file_db(job.user_id) as adb:
                     try:
                         hdr.add_history(
-                            'Original data file ID: {:d}'.format(file_id))
+                            'Original data file: {}'.format(
+                                get_data_file(job.user_id, file_id).name or
+                                file_id))
                         file_id = create_data_file(
                             adb, None, get_root(job.user_id), data, hdr,
                             duplicates='append', session_id=job.session_id).id
