@@ -321,9 +321,9 @@ def save_data_file(adb, root: str, file_id: int,
                    modified: bool = True) \
         -> None:
     """
-    Save data file to the user's data file directory as a single (image) or
-    double (image + mask) HDU FITS or a primary + table HDU FITS, depending on
-    whether the input HDU contains an image or a table
+    Save data file to the user's data file directory as a single-HDU FITS or
+    a primary + table HDU FITS, depending on whether the input HDU contains
+    an image or a table
 
     :param adb: SQLA database session
     :param root: user's data file storage root directory
@@ -333,10 +333,13 @@ def save_data_file(adb, root: str, file_id: int,
     :param modified: if True, set the file modification flag; not set
         on initial creation
     """
+    db_data_file = adb.query(DbDataFile).get(file_id)
+
     # Initialize header
     if hdr is None:
         hdr = pyfits.Header()
-    hdr['FILE_ID'] = (file_id, 'Afterglow data file ID')
+    hdr['AGFILEID'] = (file_id, 'ID in Afterglow Workbench')
+    hdr['AGFILNAM'] = (db_data_file.name, 'Name in Afterglow Workbench')
 
     if data.dtype.fields is None:
         # Convert image data to float32
@@ -354,7 +357,6 @@ def save_data_file(adb, root: str, file_id: int,
         'silentfix+ignore', overwrite=True)
 
     # Update image dimensions and file modification timestamp
-    db_data_file = adb.query(DbDataFile).get(file_id)
     if data.dtype.fields is None:
         # Image: get image dimensions from array shape
         db_data_file.height, db_data_file.width = data.shape
