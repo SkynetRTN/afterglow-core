@@ -115,7 +115,8 @@ def run_photometry_job(job: Job, settings: PhotSettings,
         try:
             data, hdr = get_data_file_data(job.user_id, file_id)
 
-            if settings.gain is None:
+            # TODO: Don't override PhotSettings.gain = 1 once fixed in AgA
+            if settings.gain is None or settings.gain == 1:
                 gain = get_fits_gain(hdr)
             else:
                 gain = settings.gain
