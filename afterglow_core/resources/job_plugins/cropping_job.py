@@ -79,7 +79,6 @@ def run_cropping_job(job: Job,
     auto_crop = not any([left, right, top, bottom])
     if auto_crop:
         # Automatic cropping by masked pixels
-        left, right, bottom, top = get_auto_crop(job.user_id, job_file_ids)
         width = height = mask = None
 
         # Obtain the combined mask
