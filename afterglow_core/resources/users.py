@@ -304,7 +304,7 @@ def init_users(app: Flask) -> None:
     from alembic.runtime.environment import EnvironmentContext
 
     db.init_app(app)
-    Security(app, user_datastore, register_blueprint=False)
+    app.security = Security(app, user_datastore, register_blueprint=False)
 
     # Make sure that the database directory exists
     try:
