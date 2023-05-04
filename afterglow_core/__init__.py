@@ -7,13 +7,13 @@ import json
 import os
 import errno
 from base64 import urlsafe_b64encode
+from urllib.parse import urlencode
 from typing import Any, Dict as TDict, List as TList, Optional, Union
 
 from flask_cors import CORS
 from marshmallow import missing
 from werkzeug.datastructures import CombinedMultiDict, MultiDict
-from werkzeug.exceptions import BadRequest
-from werkzeug.urls import url_encode
+from werkzeug.exceptions import BadRequest, UnsupportedMediaType
 from flask import Flask, Response, request
 from cryptography.fernet import Fernet
 import astropy.io.fits as pyfits
@@ -124,7 +124,7 @@ class PaginationInfo(object):
                 pass
             args['page[number]'] = 'first'
             pagination['first'] = '{}?{}'.format(
-                request.base_url, url_encode(args))
+                request.base_url, urlencode(args))
 
         if self.current_page is None or self.total_pages is None or \
                 self.current_page < self.total_pages - 1:
@@ -139,7 +139,7 @@ class PaginationInfo(object):
                 pass
             args['page[number]'] = 'last'
             pagination['last'] = '{}?{}'.format(
-                request.base_url, url_encode(args))
+                request.base_url, urlencode(args))
 
         for attr in ('sort', 'page_size', 'total_pages', 'current_page'):
             if getattr(self, attr, None) is not None:
@@ -159,7 +159,7 @@ class PaginationInfo(object):
                     pass
                 args['page[number]'] = str(self.current_page - 1)
                 pagination['prev'] = '{}?{}'.format(
-                    request.base_url, url_encode(args))
+                    request.base_url, urlencode(args))
             if self.total_pages is None or \
                     self.current_page < self.total_pages - 1:
                 args = request.args.copy()
@@ -173,7 +173,7 @@ class PaginationInfo(object):
                     pass
                 args['page[number]'] = str(self.current_page + 1)
                 pagination['next'] = '{}?{}'.format(
-                    request.base_url, url_encode(args))
+                    request.base_url, urlencode(args))
         else:
             # Keyset-based pagination; first and last are keys for previous
             # and next pages
@@ -189,7 +189,7 @@ class PaginationInfo(object):
                     pass
                 args['page[before]'] = str(self.first_item)
                 pagination['prev'] = '{}?{}'.format(
-                    request.base_url, url_encode(args))
+                    request.base_url, urlencode(args))
             if self.last_item is not None:
                 args = request.args.copy()
                 try:
@@ -202,7 +202,7 @@ class PaginationInfo(object):
                     pass
                 args['page[after]'] = str(self.last_item)
                 pagination['next'] = '{}?{}'.format(
-                    request.base_url, url_encode(args))
+                    request.base_url, urlencode(args))
 
         return pagination
 
@@ -289,7 +289,7 @@ def create_app() -> Flask:
 
         try:
             body = request.get_json()
-        except BadRequest:
+        except (BadRequest, UnsupportedMediaType):
             # No JSON
             pass
         else:
