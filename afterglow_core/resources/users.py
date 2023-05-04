@@ -38,7 +38,7 @@ class AnonymousUserRole(object):
 
 
 class AnonymousUser(object):
-    id = None
+    id = fs_uniquifier = None
     username = display_name = '<Anonymous>'
     first_name = None
     last_name = None
@@ -140,7 +140,8 @@ class DbUser(db.Model, UserMixin):
         """Does the user have admin role?"""
         return DbRole.query.filter_by(name='admin').one() in self.roles
 
-    def get_user_id(self):
+    @property
+    def fs_uniquifier(self):
         """Return user ID; required by authlib"""
         return self.id
 
