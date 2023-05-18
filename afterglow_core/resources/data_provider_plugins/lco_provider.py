@@ -475,9 +475,10 @@ class LCODataProvider(DataProvider):
                 group_requests = [params for params in group_requests
                                   if name in str(params['id'])]
             if page_size:
-                offset = (page or 0)*page_size
+                page_size = int(page_size)
+                offset = int(page or 0)*page_size
                 count = len(group_requests)
-                group_requests = group_requests[offset:offset+int(page_size)]
+                group_requests = group_requests[offset:offset+page_size]
                 total_pages = count//page_size
             else:
                 total_pages = None
