@@ -264,12 +264,13 @@ def pagination(res: TDict, page_size: Optional[int] = None,
     elif not res.get('count'):
         total_pages = 0
     else:
+        page_size = int(page_size)
         total_pages = (res['count'] - 1)//page_size + 1
 
     return PaginationInfo(
         page_size=page_size,
         total_pages=total_pages,
-        current_page=page or 0)
+        current_page=int(page or 0))
 
 
 class LCODataProvider(DataProvider):
@@ -402,7 +403,7 @@ class LCODataProvider(DataProvider):
         matching search criteria
 
         :param path: asset path; must identify a collection asset
-        :param sort_by: optional sorting key; ignored
+        :param sort_by: optional sorting key
         :param page_size: optional number of assets per page
         :param page: optional 0-based page number
         :param name: get assets with names containing the given substring
@@ -564,7 +565,7 @@ class LCODataProvider(DataProvider):
         Return child assets of a collection asset at the given path
 
         :param path: asset path; must identify a collection asset
-        :param sort_by: optional sorting key; unused
+        :param sort_by: optional sorting key
         :param page_size: optional number of assets per page
         :param page: optional 0-based page number, "first", "last", ">value",
             or "<value"
