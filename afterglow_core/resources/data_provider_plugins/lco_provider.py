@@ -477,7 +477,7 @@ class LCODataProvider(DataProvider):
             if page_size:
                 offset = (page or 0)*page_size
                 count = len(group_requests)
-                group_requests = group_requests[offset:offset+page_size]
+                group_requests = group_requests[offset:offset+int(page_size)]
                 total_pages = count//page_size
             else:
                 total_pages = None
