@@ -9,6 +9,7 @@ Asset paths have the following structure: proposal/request group
 
 from typing import Dict as TDict, List as TList, Optional, Tuple, Union
 from urllib.parse import parse_qs, urlparse
+import json
 
 from flask_login import current_user
 import requests
@@ -77,7 +78,11 @@ def get_token() -> str:
         raise LCONotAuthenticatedError(
             error_msg='LCO authentication required')
 
-    return identity.data['api_token']
+    identity_data = identity.data
+    if not isinstance(identity_data, dict):
+        # Needed in job workers
+        identity_data = json.loads(identity_data.replace("'", '"'))
+    return identity_data['api_token']
 
 
 def get_username() -> str:
@@ -96,7 +101,11 @@ def get_username() -> str:
         raise LCONotAuthenticatedError(
             error_msg='LCO authentication required')
 
-    return identity.data['username']
+    identity_data = identity.data
+    if not isinstance(identity_data, dict):
+        # Needed in job workers
+        identity_data = json.loads(identity_data.replace("'", '"'))
+    return identity_data['username']
 
 
 def api_query(root: str, endpoint: str, params: Optional[TDict] = None) \

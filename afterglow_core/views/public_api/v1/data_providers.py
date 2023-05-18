@@ -334,7 +334,7 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
         data = provider.get_asset_data(path)
 
         return Response(
-            data, 200 if data else 204, [('Content-Length', str(len(data)))],
+            data, 200 if data else 204, {'Content-Length': str(len(data))},
             asset.mimetype)
 
     if request.method in ('POST', 'PUT'):
