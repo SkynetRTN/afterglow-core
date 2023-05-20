@@ -607,8 +607,9 @@ class LCODataProvider(DataProvider):
 
         # Modify header to match Afterglow/Skynet standard
         with pyfits.open(buf, 'update') as f:
-            hdr = f[0].header
-            if 'FILTER' in hdr:
-                hdr['FILTER'] = LCO_FILTER_MAP.get(
-                    hdr['FILTER'].strip('*'), hdr['FILTER'].strip('*'))
-            return buf.getvalue()
+            for hdu in f:
+                hdr = hdu.header
+                if 'FILTER' in hdr:
+                    hdr['FILTER'] = LCO_FILTER_MAP.get(
+                        hdr['FILTER'].strip('*'), hdr['FILTER'].strip('*'))
+                return buf.getvalue()
