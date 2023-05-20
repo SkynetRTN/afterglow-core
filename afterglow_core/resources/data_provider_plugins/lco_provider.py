@@ -535,8 +535,8 @@ class LCODataProvider(DataProvider):
                     continue
                 cal_frame_ids.update([i for i in frame['related_frames']
                                       if i not in all_frame_ids])
-            all_frames = [frame for frame in all_frames
-                          if frame['id'] in cal_frame_ids]
+            all_frames = [archive_api_query(f'frames/{i}')
+                          for i in cal_frame_ids]
         else:
             # Retrieve all frames belonging to the request having
             # the corresponding reduction level
