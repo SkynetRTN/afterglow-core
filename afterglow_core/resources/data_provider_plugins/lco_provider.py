@@ -123,7 +123,8 @@ def api_query(root: str, endpoint: str, params: Optional[TDict] = None) \
         f'{root}/{endpoint}/', params=params,
         headers={'Authorization': f'Token {get_token()}'})
     if not res.ok:
-        e = AfterglowError()
+        e = AfterglowError(error_msg=res.reason)
+        e.message = res.reason
         e.code = res.status_code
         raise e
     try:
