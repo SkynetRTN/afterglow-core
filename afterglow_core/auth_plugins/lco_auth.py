@@ -27,7 +27,7 @@ class LCOAuthPlugin(HttpAuthPluginBase):
             'https://observe.lco.global/api/profile/',
             {'username': username, 'password': password}).json()
         pf = dict(
-            username=username,
+            id=username,
             api_token=user['tokens']['api_token'],
         )
         if user.get('first_name'):

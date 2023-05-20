@@ -105,7 +105,7 @@ def get_username() -> str:
     if not isinstance(identity_data, dict):
         # Needed in job workers
         identity_data = json.loads(identity_data.replace("'", '"'))
-    return identity_data['username']
+    return identity_data['id']
 
 
 def api_query(root: str, endpoint: str, params: Optional[TDict] = None) \

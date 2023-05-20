@@ -93,9 +93,31 @@ def oauth2_authorized(plugin_id: str) -> Response:
             except Exception:
                 users.db.session.rollback()
                 raise
+
     if identity is None:
-        # Authenticated but not in the db; register a new Afterglow user if
-        # allowed by plugin or the global config option
+        # Authenticated but not in the db; look for identities with the same
+        # email and link accounts if found
+        email = user_profile.get('email')
+        if email:
+            identity = users.DbIdentity.query.filter_by(email=email).first()
+            if identity is not None:
+                # Add another identity to the existing user account
+                try:
+                    identity = users.DbIdentity(
+                        user_id=identity.user_id,
+                        name=user_profile['id'],
+                        auth_method=oauth_plugin.name,
+                        data=user_profile,
+                    )
+                    users.db.session.add(identity)
+                    users.db.session.commit()
+                except Exception:
+                    users.db.session.rollback()
+                    raise
+
+    if identity is None:
+        # Register a new Afterglow user if allowed by plugin or the global
+        # config option
         register_users = oauth_plugin.register_users
         if register_users is None:
             register_users = current_app.config.get(
