@@ -20,5 +20,5 @@ def register(app: Flask) -> None:
     """
     from . import (
         app_authorizations, tokens, sessions, initialize, oauth2_providers,
-        oauth2_clients, server_status)
+        oauth2_clients, http_auth_providers, server_status)
     app.register_blueprint(ajax_blp)
