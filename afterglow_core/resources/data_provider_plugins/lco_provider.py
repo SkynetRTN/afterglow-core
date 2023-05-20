@@ -614,5 +614,5 @@ class LCODataProvider(DataProvider):
                 if 'FILTER' in hdr:
                     hdr['FILTER'] = LCO_FILTER_MAP.get(
                         hdr['FILTER'].strip('*'), hdr['FILTER'].strip('*'))
-
-        return buf.getvalue()
+            f.flush()
+            return buf.getvalue()
