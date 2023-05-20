@@ -288,7 +288,8 @@ class LCODataProvider(DataProvider):
     LCO data provider plugin class
     """
     name = 'lco'
-    description = 'Las Cumbres Observatory'
+    display_name = 'Las Cumbres Observatory'
+    description = 'Import images from the Las Cumbres Observatory.  This provider grants you access to your LCO observations.'
     columns = []
     browseable = True
     searchable = True
