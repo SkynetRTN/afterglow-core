@@ -229,23 +229,24 @@ def user_login(user_profile: dict, auth_plugin: AuthnPluginBase) -> Response:
     if identity is None:
         # Authenticated but not in the db; look for identities with the same
         # email and link accounts if found
-        email = user_profile.get('email')
+        email = user_profile.get('email').lower()
         if email:
-            identity = users.DbIdentity.query.filter_by(email=email).first()
-            if identity is not None:
-                # Add another identity to the existing user account
-                try:
-                    identity = users.DbIdentity(
-                        user_id=identity.user_id,
-                        name=user_profile['id'],
-                        auth_method=auth_plugin.name,
-                        data=user_profile,
-                    )
-                    users.db.session.add(identity)
-                    users.db.session.commit()
-                except Exception:
-                    users.db.session.rollback()
-                    raise
+            for user in users.DbUser.query:
+                if user.email.lower() == email:
+                    # Add another identity to the existing user account
+                    try:
+                        identity = users.DbIdentity(
+                            user_id=user.id,
+                            name=user_profile['id'],
+                            auth_method=auth_plugin.name,
+                            data=user_profile,
+                        )
+                        users.db.session.add(identity)
+                        users.db.session.commit()
+                    except Exception:
+                        users.db.session.rollback()
+                        raise
+                    break
 
     if identity is None:
         # Register a new Afterglow user if allowed by plugin or the global
