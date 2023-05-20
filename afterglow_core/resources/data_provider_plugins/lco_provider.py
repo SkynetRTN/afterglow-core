@@ -9,10 +9,12 @@ Asset paths have the following structure: proposal/request group
 
 from typing import Dict as TDict, List as TList, Optional, Tuple, Union
 from urllib.parse import parse_qs, urlparse
+from io import BytesIO
 import json
 
 from flask_login import current_user
 import requests
+import astropy.io.fits as pyfits
 
 from ... import PaginationInfo
 from ...models import DataProvider, DataProviderAsset
@@ -600,5 +602,13 @@ class LCODataProvider(DataProvider):
         frame = split_asset_path(path)[-1]
         if frame is None:
             raise ValidationError('path', 'Missing frame ID')
-        return requests.get(
-            archive_api_query(f'frames/{frame}')['url']).content
+        buf = BytesIO(requests.get(
+            archive_api_query(f'frames/{frame}')['url']).content)
+
+        # Modify header to match Afterglow/Skynet standard
+        with pyfits.open(buf, 'update') as f:
+            hdr = f[0].header
+            if 'FILTER' in hdr:
+                hdr['FILTER'] = LCO_FILTER_MAP.get(
+                    hdr['FILTER'].strip('*'), hdr['FILTER'].strip('*'))
+            return buf.getvalue()
