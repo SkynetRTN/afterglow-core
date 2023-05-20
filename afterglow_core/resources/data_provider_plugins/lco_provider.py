@@ -602,6 +602,8 @@ class LCODataProvider(DataProvider):
         frame = split_asset_path(path)[-1]
         if frame is None:
             raise ValidationError('path', 'Missing frame ID')
+
+        # Obtain frame download URL and retrieve frame data
         buf = BytesIO(requests.get(
             archive_api_query(f'frames/{frame}')['url']).content)
 
@@ -612,4 +614,5 @@ class LCODataProvider(DataProvider):
                 if 'FILTER' in hdr:
                     hdr['FILTER'] = LCO_FILTER_MAP.get(
                         hdr['FILTER'].strip('*'), hdr['FILTER'].strip('*'))
-                return buf.getvalue()
+
+        return buf.getvalue()
