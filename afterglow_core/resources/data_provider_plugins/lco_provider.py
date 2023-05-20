@@ -289,7 +289,7 @@ class LCODataProvider(DataProvider):
     """
     name = 'lco'
     display_name = 'Las Cumbres Observatory'
-    description = 'Import images from the Las Cumbres Observatory.  This provider grants you access to your LCO observations.'
+    description = 'Import images from Las Cumbres Observatory Global Telescope.  This provider grants you access to your LCO observations.'
     columns = []
     browseable = True
     searchable = True
