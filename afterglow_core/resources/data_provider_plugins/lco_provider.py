@@ -38,6 +38,10 @@ LCO_FILTER_MAP = {
     'air': 'Open', 'clear': 'Clear', 'Astrodon-Exo': 'Exop',
 }
 
+USER_OBS = 'User Observations'
+GROUP_OBS = 'Group Observations'
+OBS_CATEGORIES = (USER_OBS, GROUP_OBS)
+
 RAW_IMAGES = 'raw'
 REDUCED_IMAGES = 'reduced'
 MASTER_CALS = 'master_cals'
@@ -163,14 +167,15 @@ def archive_api_query(endpoint: str = 'frames',
     return api_query('https://archive-api.lco.global', endpoint, params)
 
 
-def split_asset_path(path: str) \
-        -> Tuple[Optional[str], Optional[int], Optional[int], Optional[str],
-                 Optional[int]]:
+def split_asset_path(path: str, allow_group_obs: bool) \
+        -> Tuple[Optional[str], Optional[str], Optional[str], Optional[int],
+                 Optional[int], Optional[str], Optional[int]]:
     """
-    Return the five parts of the full asset path
-    [proposal]/[request group]/[request]/[type]/[frame]
+    Return the seven parts of the full asset path
+    [proposal]/[category]/[user]/[request group]/[request]/[type]/[frame]
 
     :param path: full or partial asset path
+    :param allow_group_obs: allow group observations
 
     :return: a tuple (proposal, category, user, request group, request, type,
         frame)
@@ -179,23 +184,53 @@ def split_asset_path(path: str) \
         path = str(path).strip(' /')
     if not path:
         # Root path
-        return (None,)*5
+        return (None,)*7
     components = [s.strip() for s in path.split('/')]
-    if len(components) > 5:
+    if len(components) > 7:
         raise ValidationError(
             'path',
             'Expected asset path in the form [/][proposal][/request group id]'
             '[/request id][/frame type][/frame id]')
     if not components:
         # Root path
-        return (None,)*5
+        return (None,)*7
 
     proposal = components[0]
     components = components[1:]
-    request_group = request = frame_type = frame = None
+    category = user = request_group = request = frame_type = frame = None
     if not components:
         # Proposal only
-        return proposal, request_group, request, frame_type, frame
+        return (
+            proposal, category, user, request_group, request, frame_type,
+            frame)
+
+    if allow_group_obs:
+        category = components[0]
+        components = components[1:]
+        if category.lower() not in [cat.lower() for cat in OBS_CATEGORIES]:
+            raise ValidationError(
+                'path',
+                f'Observation category must be either of {", ".join(OBS_CATEGORIES)}; got "{request_group}"')
+        if not components:
+            # Proposal/category
+            return (
+                proposal, category, user, request_group, request, frame_type,
+                frame)
+
+        if category.lower() == GROUP_OBS.lower():
+            user = components[0]
+            components = components[1:]
+            if not user:
+                # Proposal/Group Observations
+                return (
+                    proposal, category, user, request_group, request, frame_type,
+                    frame)
+
+            if not components:
+                # Proposal/Group Observations/user
+                return (
+                    proposal, category, user, request_group, request,
+                    frame_type, frame)
 
     request_group = components[0]
     components = components[1:]
@@ -207,7 +242,9 @@ def split_asset_path(path: str) \
             f'Request group ID must be integer; got "{request_group}"')
     if not components:
         # Proposal/request_group
-        return proposal, request_group, request, frame_type, frame
+        return (
+            proposal, category, user, request_group, request, frame_type,
+            frame)
 
     request = components[0]
     components = components[1:]
@@ -219,7 +256,9 @@ def split_asset_path(path: str) \
             f'Request ID must be integer; got "{request}"')
     if not components:
         # Proposal/request_group/request
-        return proposal, request_group, request, frame_type, frame
+        return (
+            proposal, category, user, request_group, request, frame_type,
+            frame)
 
     frame_type = components[0]
     components = components[1:]
@@ -230,7 +269,9 @@ def split_asset_path(path: str) \
             f'"{frame_type}"')
     if not components:
         # Proposal/request_group/request/type
-        return proposal, request_group, request, frame_type, frame
+        return (
+            proposal, category, user, request_group, request, frame_type,
+            frame)
 
     frame = components[0]
     try:
@@ -241,7 +282,7 @@ def split_asset_path(path: str) \
             f'Frame ID must be integer; got "{frame}"')
 
     # All components present
-    return proposal, request_group, request, frame_type, frame
+    return proposal, category, user, request_group, request, frame_type, frame
 
 
 def pagination(res: TDict, page_size: Optional[int] = None,
@@ -304,11 +345,13 @@ class LCODataProvider(DataProvider):
     quota = usage = None
     auth_methods = ('lco',)
 
+    allow_group_obs = True
     allow_multiple_instances = False
 
     def __init__(self, id: Optional[Union[str, int]] = None,
                  display_name: str = 'Las Cumbres Observatory',
-                 icon: Optional[str] = 'lco_btn_icon.png', **kwargs):
+                 icon: Optional[str] = 'lco_btn_icon.png',
+                 allow_group_obs: bool = True, **kwargs):
         """
         Create an LCODataProvider instance
 
@@ -316,8 +359,10 @@ class LCODataProvider(DataProvider):
         :param display_name: optional data provider plugin visible in the
             Afterglow UI; default: "Las Cumbres Observatory"
         :param icon: optional UI icon name; default: "lco_btn_icon.png"
+        :param allow_group_obs: allow listing group observations
         """
         super().__init__(id=id, display_name=display_name, icon=icon, **kwargs)
+        self.allow_group_obs = allow_group_obs
 
     def get_asset(self, path: str) -> DataProviderAsset:
         """
@@ -327,8 +372,8 @@ class LCODataProvider(DataProvider):
 
         :return: asset object
         """
-        proposal, request_group, request, frame_type, frame = \
-            split_asset_path(path)
+        proposal, category, user, request_group, request, frame_type, frame = \
+            split_asset_path(path, self.allow_group_obs)
 
         if proposal is None:
             # Root asset
@@ -340,8 +385,44 @@ class LCODataProvider(DataProvider):
             )
 
         norm_path = proposal
-        if (request_group, request, frame_type, frame) == (None,)*4:
+        if (category, user, request_group, request, frame_type, frame) == \
+                (None,)*6:
             # First-level collection asset "proposal"
+            return DataProviderAsset(
+                name=observe_api_query(f'proposals/{proposal}')['title'],
+                collection=True,
+                path=norm_path,
+                metadata={},
+            )
+
+        if self.allow_group_obs:
+            category = ' '.join(s.capitalize() for s in category.split())
+            norm_path += '/' + category
+            if category == GROUP_OBS and (user, request_group, request,
+                                          frame_type, frame) == (None,)*5 or \
+                    category == USER_OBS and (request_group, request,
+                                              frame_type, frame) == (None,)*4:
+                # Collection asset "proposal/category
+                return DataProviderAsset(
+                    name=category,
+                    collection=True,
+                    path=norm_path,
+                    metadata={},
+                )
+
+            if category == GROUP_OBS:
+                norm_path += '/' + user
+                if (request_group, request, frame_type, frame) == (None,)*4:
+                    # Collection asset "proposal/Group Observations/user"
+                    return DataProviderAsset(
+                        name=user,
+                        collection=True,
+                        path=norm_path,
+                        metadata={},
+                    )
+
+        if (request_group, request, frame_type, frame) == (None,)*4:
+            # Collection asset "proposal/category[/user]"
             return DataProviderAsset(
                 name=observe_api_query(f'proposals/{proposal}')['title'],
                 collection=True,
@@ -351,7 +432,7 @@ class LCODataProvider(DataProvider):
 
         norm_path += '/' + str(request_group)
         if (request, frame_type, frame) == (None,)*3:
-            # Collection asset "proposal/request_group"
+            # Collection asset "proposal/category[/user]/request_group"
             return DataProviderAsset(
                 name=observe_api_query(
                     f'requestgroups/{request_group}')['name'],
@@ -362,7 +443,7 @@ class LCODataProvider(DataProvider):
 
         norm_path += '/' + str(request)
         if (frame_type, frame) == (None,)*2:
-            # Collection asset "proposal/request_group/request"
+            # Collection asset "proposal/category[/user]/request_group/request"
             params = observe_api_query(f'requests/{request}')
             return DataProviderAsset(
                 name=f'{params["id"]} - {", ".join([conf["target"]["name"] for conf in params["configurations"]])}',
@@ -373,7 +454,8 @@ class LCODataProvider(DataProvider):
 
         norm_path += '/' + frame_type
         if frame is None:
-            # Collection asset "proposal/request_group/request/frame_type"
+            # Collection asset "proposal/category[/user]/request_group/request/
+            # frame_type"
             return DataProviderAsset(
                 name=IMAGE_TYPE_NAME[frame_type],
                 collection=True,
@@ -429,8 +511,8 @@ class LCODataProvider(DataProvider):
             optional total number of pages, and key values for the first and
             last assets on the current page
         """
-        proposal, request_group, request, frame_type, frame = \
-            split_asset_path(path)
+        proposal, category, user, request_group, request, frame_type, frame = \
+            split_asset_path(path, self.allow_group_obs)
         if frame is not None:
             # Path to non-collection asset
             raise AssetNotFoundError(path=path)
@@ -462,11 +544,62 @@ class LCODataProvider(DataProvider):
                 pagination(res, page_size, page))
 
         norm_path = proposal
+        if self.allow_group_obs:
+            if category is None:
+                return (
+                    [DataProviderAsset(
+                        name=s,
+                        collection=True,
+                        path=norm_path + '/' + s,
+                        metadata={},
+                    ) for s in OBS_CATEGORIES], None)
+
+            norm_path += '/' + category
+            if category == GROUP_OBS and user is None:
+                # Return all users involved in the proposal
+                num_requests = observe_api_query(
+                    'requestgroups',
+                    {'proposal': proposal, 'limit': 1})['count']
+                all_requests = observe_api_query(
+                    'requestgroups',
+                    {'proposal': proposal, 'limit': num_requests})['results']
+                users = list(
+                    {request['submitter'] for request in all_requests})
+                if sort_by:
+                    if sort_by.lower() in ('name', '+name'):
+                        users.sort()
+                    elif sort_by.lower() == '-name':
+                        users.sort(reverse=True)
+                if page_size:
+                    page_size = int(page_size)
+                    offset = int(page or 0)*page_size
+                    count = len(users)
+                    users = users[offset:offset+page_size]
+                    total_pages = count//page_size
+                else:
+                    total_pages = None
+                return (
+                    [DataProviderAsset(
+                        name=user,
+                        collection=True,
+                        path=norm_path + '/' + user,
+                        metadata={},
+                    ) for user in users],
+                    PaginationInfo(
+                        page_size=page_size,
+                        total_pages=total_pages,
+                        current_page=page))
+
         if request_group is None:
-            # Return all request groups
-            request_params['user'] = get_username()
+            # Return all user's request groups
+            if category == GROUP_OBS and user:
+                request_params['user'] = user
+            else:
+                request_params['user'] = get_username()
             if name is not None:
                 request_params['name'] = name
+            if sort_by is not None:
+                request_params['ordering'] = sort_by
             res = observe_api_query('requestgroups', request_params)
             request_groups = res['results']
             return (
@@ -599,7 +732,7 @@ class LCODataProvider(DataProvider):
 
         :return: asset data
         """
-        frame = split_asset_path(path)[-1]
+        frame = split_asset_path(path, self.allow_group_obs)[-1]
         if frame is None:
             raise ValidationError('path', 'Missing frame ID')
 
