@@ -446,7 +446,7 @@ class LCODataProvider(DataProvider):
             # Collection asset "proposal/category[/user]/request_group/request"
             params = observe_api_query(f'requests/{request}')
             return DataProviderAsset(
-                name=f'{params["id"]} - {", ".join([conf["target"]["name"] for conf in params["configurations"]])}',
+                name=f'{params["id"]} - {", ".join(set([conf["target"]["name"] for conf in params["configurations"]]))}',
                 collection=True,
                 path=norm_path,
                 metadata={},
@@ -640,7 +640,7 @@ class LCODataProvider(DataProvider):
             return (
                 [DataProviderAsset(
                      name=f'{params["id"]} - '
-                     f'{", ".join([conf["target"]["name"] for conf in params["configurations"]])}',
+                     f'{", ".join(set([conf["target"]["name"] for conf in params["configurations"]]))}',
                      collection=True,
                      path=norm_path + '/' + str(params['id']),
                      metadata={},
