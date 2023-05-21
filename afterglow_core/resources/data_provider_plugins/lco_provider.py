@@ -567,6 +567,10 @@ class LCODataProvider(DataProvider):
                          'limit': num_requests})['results']
                     users = list(
                         {request['submitter'] for request in all_requests})
+                    if name:
+                        name = name.lower()
+                        users = [user for user in users
+                                 if name in user.lower()]
                     if sort_by:
                         if sort_by.lower() in ('name', '+name'):
                             users.sort()
