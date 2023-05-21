@@ -555,40 +555,45 @@ class LCODataProvider(DataProvider):
                     ) for s in OBS_CATEGORIES], None)
 
             norm_path += '/' + category
-            if category == GROUP_OBS and user is None:
-                # Return all users involved in the proposal
-                num_requests = observe_api_query(
-                    'requestgroups',
-                    {'proposal': proposal, 'limit': 1})['count']
-                all_requests = observe_api_query(
-                    'requestgroups',
-                    {'proposal': proposal, 'limit': num_requests})['results']
-                users = list(
-                    {request['submitter'] for request in all_requests})
-                if sort_by:
-                    if sort_by.lower() in ('name', '+name'):
-                        users.sort()
-                    elif sort_by.lower() == '-name':
-                        users.sort(reverse=True)
-                if page_size:
-                    page_size = int(page_size)
-                    offset = int(page or 0)*page_size
-                    count = len(users)
-                    users = users[offset:offset+page_size]
-                    total_pages = count//page_size
-                else:
-                    total_pages = None
-                return (
-                    [DataProviderAsset(
-                        name=user,
-                        collection=True,
-                        path=norm_path + '/' + user,
-                        metadata={},
-                    ) for user in users],
-                    PaginationInfo(
-                        page_size=page_size,
-                        total_pages=total_pages,
-                        current_page=page))
+            if category == GROUP_OBS:
+                if user is None:
+                    # Return all users involved in the proposal
+                    num_requests = observe_api_query(
+                        'requestgroups',
+                        {'proposal': proposal, 'limit': 1})['count']
+                    all_requests = observe_api_query(
+                        'requestgroups',
+                        {'proposal': proposal,
+                         'limit': num_requests})['results']
+                    users = list(
+                        {request['submitter'] for request in all_requests})
+                    if sort_by:
+                        if sort_by.lower() in ('name', '+name'):
+                            users.sort()
+                        elif sort_by.lower() == '-name':
+                            users.sort(reverse=True)
+                    if page_size:
+                        page_size = int(page_size)
+                        offset = int(page or 0)*page_size
+                        count = len(users)
+                        users = users[offset:offset+page_size]
+                        total_pages = count//page_size
+                    else:
+                        total_pages = None
+                    return (
+                        [DataProviderAsset(
+                            name=user,
+                            collection=True,
+                            path=norm_path + '/' + user,
+                            metadata={},
+                        ) for user in users],
+                        PaginationInfo(
+                            page_size=page_size,
+                            total_pages=total_pages,
+                            current_page=page))
+
+                # Return all user's request groups
+                norm_path += '/' + user
 
         if request_group is None:
             # Return all user's request groups
