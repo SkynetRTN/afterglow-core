@@ -756,5 +756,9 @@ class LCODataProvider(DataProvider):
                 if 'FILTER' in hdr:
                     hdr['FILTER'] = LCO_FILTER_MAP.get(
                         hdr['FILTER'].strip('*'), hdr['FILTER'].strip('*'))
+            if len(f) == 5:
+                # Keep only the primary HDU for reduced images
+                for _ in range(3):
+                    del f[-1]
             f.flush()
             return buf.getvalue()
