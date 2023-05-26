@@ -786,6 +786,11 @@ components:
           description: optional sub-region size (0 = full height)
           type: integer
           default: 0
+        downsample:
+          description: downsample image before source extraction by the given factor (1 = no downsampling)
+          type: integer
+          minimum: 1
+          default: 2
         threshold:
           description: extraction threshold in units of RMS
           type: number
