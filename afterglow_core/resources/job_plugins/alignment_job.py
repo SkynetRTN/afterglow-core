@@ -23,8 +23,8 @@ from ...models import Job, JobResult, SourceExtractionData
 from ...schemas import AfterglowSchema, Boolean, Float, NestedPoly
 from ...errors import AfterglowError, ValidationError
 from ..data_files import (
-    create_data_file, get_data_file_data, get_data_file_db, get_data_file_fits,
-    get_root, save_data_file)
+    create_data_file, get_data_file, get_data_file_data, get_data_file_db,
+    get_data_file_fits, get_root, save_data_file)
 from .source_extraction_job import (
     SourceExtractionSettings, run_source_extraction_job)
 from .cropping_job import run_cropping_job
@@ -711,10 +711,13 @@ class AlignmentJob(Job):
                     # settings.ref_image
                     if i != ref_image or overwrite_ref or \
                             ref_file_id in self.file_ids:
-                        hdr.add_history(
-                            'Original data file ID: {:d}'.format(file_id))
                         with get_data_file_db(self.user_id) as adb:
                             try:
+                                hdr.add_history(
+                                    'Original data file: {}'.format(
+                                        get_data_file(
+                                            self.user_id, file_id).name or
+                                        file_id))
                                 new_file_id = create_data_file(
                                     adb, None, get_root(self.user_id), data,
                                     hdr, duplicates='append',

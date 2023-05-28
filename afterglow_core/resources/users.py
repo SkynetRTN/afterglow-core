@@ -7,6 +7,7 @@ import time
 import errno
 import shutil
 import multiprocessing
+from datetime import datetime
 from typing import List as TList, Optional, Union
 
 from flask import Flask, current_app
@@ -16,6 +17,7 @@ from flask_security import (
 from flask_security.utils import hash_password
 from authlib.integrations.sqla_oauth2 import (
     OAuth2AuthorizationCodeMixin, OAuth2TokenMixin)
+from sqlalchemy.orm import Mapped
 
 from ..models import User
 from ..errors import MissingFieldError, ValidationError
@@ -38,7 +40,7 @@ class AnonymousUserRole(object):
 
 
 class AnonymousUser(object):
-    id = None
+    id = fs_uniquifier = None
     username = display_name = '<Anonymous>'
     first_name = None
     last_name = None
@@ -72,11 +74,11 @@ user_roles = db.Table(
 class DbRole(db.Model, RoleMixin):
     __tablename__ = 'roles'
 
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(
+    id: Mapped[int] = db.Column(db.Integer, primary_key=True)
+    name: Mapped[str] = db.Column(
         db.String, db.CheckConstraint('length(name) <= 80'), nullable=False,
         unique=True)
-    description = db.Column(
+    description: Mapped[str] = db.Column(
         db.String,
         db.CheckConstraint(
             'description is null or length(description) <= 255'))
@@ -86,61 +88,74 @@ class DbUser(db.Model, UserMixin):
     __tablename__ = 'users'
     __table_args__ = dict(sqlite_autoincrement=True)
 
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(
+    id: Mapped[int] = db.Column(db.Integer, primary_key=True)
+    username: Mapped[str] = db.Column(
         db.String,
         db.CheckConstraint('username is null or length(username) <= 255'),
         nullable=True, unique=True)
-    password = db.Column(
+    password: Mapped[str] = db.Column(
         db.String,
         db.CheckConstraint('password is null or length(password) <= 255'))
-    email = db.Column(
+    email: Mapped[str] = db.Column(
         db.String,
         db.CheckConstraint('email is null or length(email) <= 255'))
-    first_name = db.Column(
+    first_name: Mapped[str] = db.Column(
         db.String,
         db.CheckConstraint(
             'first_name is null or length(first_name) <= 255'))
-    last_name = db.Column(
+    last_name: Mapped[str] = db.Column(
         db.String,
         db.CheckConstraint(
             'last_name is null or length(last_name) <= 255'))
-    active = db.Column(db.Boolean, server_default='1')
-    created_at = db.Column(DateTime, default=db.func.current_timestamp())
-    modified_at = db.Column(
+    active: Mapped[bool] = db.Column(db.Boolean, server_default='1')
+    created_at: Mapped[datetime] = db.Column(
+        DateTime, default=db.func.current_timestamp())
+    modified_at: Mapped[datetime] = db.Column(
         DateTime, default=db.func.current_timestamp(),
         onupdate=db.func.current_timestamp())
-    roles = db.relationship(
-        'DbRole', secondary=user_roles,
+    roles: Mapped[TList['DbRole']] = db.relationship(
+        secondary=user_roles,
         backref=db.backref('users', lazy='dynamic'))
-    settings = db.Column(
+    settings: Mapped[str] = db.Column(
         db.Text,
         db.CheckConstraint(
             'settings is null or length(settings) <= 1048576'), default='')
 
+    identities: Mapped[TList['DbIdentity']] = db.relationship(
+        back_populates='user')
+    tokens: Mapped[TList['DbPersistentToken']] = db.relationship(
+        back_populates='user')
+    oauth_codes: Mapped[TList['OAuth2AuthorizationCode']] = db.relationship(
+        back_populates='user')
+    oauth_tokens: Mapped[TList['Token']] = db.relationship(
+        back_populates='user')
+
     @property
-    def full_name(self):
+    def full_name(self) -> str:
         full_name = []
         if self.first_name:
             full_name.append(self.first_name)
         if self.last_name:
             full_name.append(self.last_name)
+        # noinspection PyTypeChecker
         return ' '.join(full_name)
 
     @property
-    def display_name(self):
+    def display_name(self) -> str:
         if self.full_name:
             return self.full_name
         if self.email:
+            # noinspection PyTypeChecker
             return self.email
         return 'Anonymous'
 
     @property
-    def is_admin(self):
+    def is_admin(self) -> bool:
         """Does the user have admin role?"""
         return DbRole.query.filter_by(name='admin').one() in self.roles
 
-    def get_user_id(self):
+    @property
+    def fs_uniquifier(self) -> int:
         """Return user ID; required by authlib"""
         return self.id
 
@@ -149,45 +164,46 @@ class DbIdentity(db.Model):
     __tablename__ = 'identities'
     __table_args__ = dict(sqlite_autoincrement=True)
 
-    id = db.Column(db.Integer, primary_key=True, nullable=False)
-    name = db.Column(
+    id: Mapped[int] = db.Column(db.Integer, primary_key=True, nullable=False)
+    name: Mapped[str] = db.Column(
         db.String, db.CheckConstraint('length(name) <= 255'), nullable=False)
-    user_id = db.Column(
+    user_id: Mapped[int] = db.Column(
         db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
         nullable=False)
-    auth_method = db.Column(
+    auth_method: Mapped[str] = db.Column(
         db.String,
         db.CheckConstraint('length(auth_method) <= 40'), nullable=False)
-    data = db.Column(JSONType, default={})
+    data: Mapped[dict] = db.Column(JSONType, default={})
 
-    user = db.relationship(DbUser, uselist=False, backref='identities')
+    user: Mapped['DbUser'] = db.relationship(back_populates='identities')
 
 
 class DbPersistentToken(db.Model):
     __tablename__ = 'tokens'
     __table_args__ = dict(sqlite_autoincrement=True)
 
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(
+    id: Mapped[int] = db.Column(db.Integer, primary_key=True)
+    user_id: Mapped[int] = db.Column(
         db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
         nullable=False)
-    token_type = db.Column(db.String(40), default='personal')
-    access_token = db.Column(db.String(255), unique=True, nullable=False)
-    issued_at = db.Column(
+    token_type: Mapped[str] = db.Column(db.String(40), default='personal')
+    access_token: Mapped[str] = db.Column(
+        db.String(255), unique=True, nullable=False)
+    issued_at: Mapped[int] = db.Column(
         db.Integer, nullable=False, default=lambda: int(time.time())
     )
-    expires_in = db.Column(db.Integer, nullable=False, default=0)
-    note = db.Column(db.Text, default='')
+    expires_in: Mapped[int] = db.Column(db.Integer, nullable=False, default=0)
+    note: Mapped[str] = db.Column(db.Text, default='')
 
-    user = db.relationship(DbUser, uselist=False, backref='tokens')
+    user: Mapped['DbUser'] = db.relationship(back_populates='tokens')
 
     @property
-    def active(self):
+    def active(self) -> bool:
         if not self.expires_in:
             return True
         return self.issued_at + self.expires_in >= time.time()
 
-    def get_expires_at(self):
+    def get_expires_at(self) -> int:
         return self.issued_at + self.expires_in
 
 
@@ -201,12 +217,12 @@ class DbUserClient(db.Model):
     """
     __tablename__ = 'user_oauth_clients'
 
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(
+    id: Mapped[int] = db.Column(db.Integer, primary_key=True)
+    user_id: Mapped[int] = db.Column(
         db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
         nullable=False, index=True)
-    user = db.relationship('DbUser', uselist=False)
-    client_id = db.Column(
+    user: Mapped['DbUser'] = db.relationship()
+    client_id: Mapped[str] = db.Column(
         db.String, db.CheckConstraint('length(client_id) <= 40'),
         nullable=False, index=True)
 
@@ -215,12 +231,12 @@ class OAuth2AuthorizationCode(db.Model, OAuth2AuthorizationCodeMixin):
     __tablename__ = 'oauth_codes'
     __table_args__ = dict(sqlite_autoincrement=True)
 
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(
+    id: Mapped[int] = db.Column(db.Integer, primary_key=True)
+    user_id: Mapped[int] = db.Column(
         db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
         nullable=False)
 
-    user = db.relationship('DbUser', uselist=False, backref='oauth_codes')
+    user: Mapped['DbUser'] = db.relationship(back_populates='oauth_codes')
 
 
 class Token(db.Model, OAuth2TokenMixin):
@@ -230,15 +246,15 @@ class Token(db.Model, OAuth2TokenMixin):
     __tablename__ = 'oauth_tokens'
     __table_args__ = dict(sqlite_autoincrement=True)
 
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(
+    id: Mapped[int] = db.Column(db.Integer, primary_key=True)
+    user_id: Mapped[int] = db.Column(
         db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'),
         nullable=False)
     # override Mixin to set default=oauth2
-    token_type = db.Column(db.String(40), default='oauth2')
-    note = db.Column(db.Text, default='')
+    token_type: Mapped[str] = db.Column(db.String(40), default='oauth2')
+    note: Mapped[str] = db.Column(db.Text, default='')
 
-    user = db.relationship('DbUser', uselist=False, backref='oauth_tokens')
+    user: Mapped['DbUser'] = db.relationship(back_populates='oauth_tokens')
 
     @property
     def active(self) -> bool:
@@ -304,7 +320,7 @@ def init_users(app: Flask) -> None:
     from alembic.runtime.environment import EnvironmentContext
 
     db.init_app(app)
-    Security(app, user_datastore, register_blueprint=False)
+    app.security = Security(app, user_datastore, register_blueprint=False)
 
     # Make sure that the database directory exists
     try:

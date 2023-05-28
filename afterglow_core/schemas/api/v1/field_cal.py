@@ -45,3 +45,4 @@ class FieldCalResultSchema(AfterglowSchema):
         Nested(PhotometryDataSchema), dump_default=[])
     zero_point_corr: float = Float()
     zero_point_error: float = Float()
+    limmag5: float = Float()

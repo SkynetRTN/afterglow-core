@@ -9,7 +9,7 @@ from marshmallow.fields import Integer, List, Nested
 import numpy
 from numpy import (
     arange, argsort, array, asarray, clip, cos, deg2rad, degrees, inf,
-    isfinite, nan, ndarray, sin, sqrt, transpose)
+    isfinite, log10, nan, ndarray, polyfit, sin, sqrt, transpose, where)
 from scipy.spatial import cKDTree
 from scipy.optimize import brenth
 from astropy.wcs import WCS
@@ -542,8 +542,8 @@ class FieldCalJob(Job):
                 self.add_error(
                     ValueError('No calibration sources'), {'file_id': file_id})
                 continue
-            m0, m0_error = calc_solution(sources)
-            cal_results[file_id] = (m0, m0_error, sources)
+            m0, m0_error, limmag = calc_solution(sources)
+            cal_results[file_id] = (m0, m0_error, limmag, sources)
             all_sources += sources
 
         source_inclusion_percent = getattr(
@@ -571,8 +571,9 @@ class FieldCalJob(Job):
                                    for source in cal_results[file_id][-1]
                                    if source.id in source_ids_to_keep]
                         if sources:
-                            m0, m0_error = calc_solution(sources)
-                            cal_results[file_id] = (m0, m0_error, sources)
+                            m0, m0_error, limmag = calc_solution(sources)
+                            cal_results[file_id] = (m0, m0_error, limmag,
+                                                    sources)
                         else:
                             del cal_results[file_id]
                             self.add_error(ValueError(
@@ -621,8 +622,8 @@ class FieldCalJob(Job):
                     sources = [source for source in cal_results[file_id][-1]
                                if source.id in source_ids]
                     if sources:
-                        m0, m0_error = calc_solution(sources)
-                        cal_results[file_id] = (m0, m0_error, sources)
+                        m0, m0_error, limmag = calc_solution(sources)
+                        cal_results[file_id] = (m0, m0_error, limmag, sources)
                     else:
                         del cal_results[file_id]
                         self.add_error(ValueError(
@@ -630,12 +631,13 @@ class FieldCalJob(Job):
                             {'file_id': file_id})
 
         result_data = []
-        for file_id, (m0, m0_error, sources) in cal_results.items():
+        for file_id, (m0, m0_error, limmag, sources) in cal_results.items():
             result_data.append(FieldCalResult(
                 file_id=file_id,
                 phot_results=sources,
                 zero_point_corr=m0,
                 zero_point_error=m0_error,
+                limmag5=limmag,
             ))
 
             # Update photometric calibration info in data file header; use the
@@ -677,7 +679,8 @@ def sigma_eq(sigma2, sigmas2, b, m0):
     return (((b - m0)**2*w - 1)*w).sum()
 
 
-def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
+def calc_solution(sources: TList[PhotometryData]) \
+        -> Tuple[float, float, Optional[float]]:
     """
     Calculate photometric solution (zero point and error) given a list of
     sources with instrumental and catalog magnitudes
@@ -687,7 +690,7 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
         and optionally `mag_error` and `ref_mag_error` for the corresponding
         errors
 
-    :return: zero point and its error
+    :return: zero point, its error, and 5-sigma limiting magnitude if available
     """
     # noinspection PyUnresolvedReferences
     mags, mag_errors, ref_mags, ref_mag_errors = transpose([
@@ -695,6 +698,7 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
          source.ref_mag, getattr(source, 'ref_mag_error', None) or 0)
         for source in sources
     ])
+    snr = where(mag_errors > 0, 1/(10**(mag_errors/2.5) - 1), 0)
 
     b = ref_mags - mags
     good_stars = arange(len(b))
@@ -703,6 +707,7 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
     if no_errors:
         sigmas2 = 0
     m0 = sigma2 = 0
+    limmag = None
     weights = None
     for _ in range(1000):
         while True:
@@ -717,6 +722,8 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
                     max_iter=1)[0]
             if rejected.any():
                 good = ~rejected
+                mags = mags[good]
+                snr = snr[good]
                 b = b[good]
                 if weights is not None:
                     weights = weights[good]
@@ -730,6 +737,14 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
             m0 = (b/(sigmas2 + sigma2)).sum()/(1/(sigmas2 + sigma2)).sum()
         else:
             m0 = b.mean()
+
+        # Limiting magnitude
+        good = snr > 0
+        if good.any():
+            limmag_a, limmag_b = polyfit(mags[good] + m0, log10(snr[good]), 1)
+            if limmag_a:
+                limmag = (log10(5) - limmag_b)/limmag_a
+
         prev_sigma2 = sigma2
         sigma2 = ((b - m0)**2).sum()/len(b)
         if not no_errors:
@@ -752,4 +767,4 @@ def calc_solution(sources: TList[PhotometryData]) -> Tuple[float, float]:
         if not no_errors:
             weights: Optional[ndarray] = 1/(sigmas2 + sigma2)
 
-    return m0, 1/sqrt((1/(sigmas2 + sigma2)).sum())
+    return m0, 1/sqrt((1/(sigmas2 + sigma2)).sum()), limmag

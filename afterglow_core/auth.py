@@ -21,20 +21,21 @@ import os
 from datetime import timedelta
 from functools import wraps
 import time
+from urllib.parse import urlencode
 from typing import Callable, Optional, Sequence, Union
 
-from werkzeug.urls import url_encode
-from flask import Response, request, make_response, redirect
-# noinspection PyProtectedMember
-from flask import current_app, g
+from flask import Response, current_app, g, request, make_response, redirect
 from flask_wtf.csrf import generate_csrf
 
+from .auth_plugins import AuthnPluginBase
+from .resources import users
 from .errors.auth import NotAuthenticatedError
+from . import json_response
 
 
 __all__ = [
     'init_auth', 'oauth_plugins', 'auth_required', 'authenticate',
-    'jwt_manager', 'set_access_cookies', 'clear_access_cookies',
+    'jwt_manager', 'set_access_cookies', 'clear_access_cookies', 'user_login',
 ]
 
 
@@ -119,7 +120,7 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
         except NotAuthenticatedError:
             if kwargs.get('allow_redirect'):
                 dashboard_prefix = current_app.config.get("DASHBOARD_PREFIX")
-                args = url_encode(dict(next=request.url))
+                args = urlencode(dict(next=request.url))
                 return redirect(
                     '{dashboard_prefix}/login?{args}'
                     .format(dashboard_prefix=dashboard_prefix, args=args))
@@ -181,6 +182,137 @@ def clear_access_cookies(response: Response, **__) -> Response:
     :return: modified Flask response
     """
     return response
+
+
+def user_login(user_profile: dict, auth_plugin: AuthnPluginBase) -> Response:
+    """
+    Called by auth plugins after the user has been authenticated
+
+    :param user_profile: user profile dict as returned by the plugin's
+        :method:`get_user`
+    :param auth_plugin: auth plugin instance
+    """
+    if not user_profile:
+        raise NotAuthenticatedError(error_msg='No user profile data returned')
+
+    # Get the user from db
+    identity = users.DbIdentity.query \
+        .filter_by(auth_method=auth_plugin.name, name=user_profile['id']) \
+        .one_or_none()
+    if identity is None and auth_plugin.name == 'skynet':
+        # A workaround for migrating the accounts of users registered in early
+        # versions that used Skynet usernames instead of IDs; a potential
+        # security issue is a Skynet user with a numeric username matching
+        # some other user's Skynet user ID
+        identity = users.DbIdentity.query \
+            .filter_by(auth_method=auth_plugin.name,
+                       name=user_profile['username']) \
+            .one_or_none()
+        if identity is not None:
+            # First login via Skynet after migration: replace Identity.name =
+            # username with user ID to prevent a possible future account
+            # seizure
+            try:
+                identity.name = user_profile['id']
+                identity.data = user_profile
+                identity.user.first_name = \
+                    user_profile.get('first_name') or None
+                identity.user.last_name = user_profile.get('last_name') or None
+                identity.user.email = user_profile.get('email') or None
+                identity.user.birth_date = \
+                    user_profile.get('birth_date') or None
+                users.db.session.commit()
+            except Exception:
+                users.db.session.rollback()
+                raise
+
+    if identity is None:
+        # Authenticated but not in the db; look for identities with the same
+        # email and link accounts if found
+        email = user_profile.get('email').lower()
+        if email:
+            for user in users.DbUser.query:
+                if user.email.lower() == email:
+                    # Add another identity to the existing user account
+                    try:
+                        identity = users.DbIdentity(
+                            user_id=user.id,
+                            name=user_profile['id'],
+                            auth_method=auth_plugin.name,
+                            data=user_profile,
+                        )
+                        users.db.session.add(identity)
+                        users.db.session.commit()
+                    except Exception:
+                        users.db.session.rollback()
+                        raise
+                    break
+
+    if identity is None:
+        # Register a new Afterglow user if allowed by plugin or the global
+        # config option
+        register_users = auth_plugin.register_users
+        if register_users is None:
+            register_users = current_app.config.get(
+                'REGISTER_AUTHENTICATED_USERS', True)
+        if not register_users:
+            raise NotAuthenticatedError(
+                error_msg='Automatic user registration disabled')
+
+        try:
+            # By default, Afterglow username becomes the same as the OAuth
+            # provider username; if empty or such user already exists, also try
+            # email, full name, and id
+            username = None
+            for username_candidate in (
+                    user_profile.get('username'),
+                    user_profile.get('email'),
+                    ' '.join(
+                        ([user_profile['first_name']]
+                         if user_profile.get('first_name') else []) +
+                        ([user_profile['last_name']]
+                         if user_profile.get('last_name') else [])),
+                    user_profile['id']):
+                if username_candidate and str(username_candidate).strip() and \
+                        not users.DbUser.query.filter(
+                            users.db.func.lower(users.DbUser.username) ==
+                            username_candidate.lower()).count():
+                    username = username_candidate
+                    break
+            user = users.DbUser(
+                username=username or None,
+                first_name=user_profile.get('first_name') or None,
+                last_name=user_profile.get('last_name') or None,
+                email=user_profile.get('email') or None,
+                roles=[users.DbRole.query.filter_by(name='user').one()],
+            )
+            users.db.session.add(user)
+            users.db.session.flush()
+            identity = users.DbIdentity(
+                user_id=user.id,
+                name=user_profile['id'],
+                auth_method=auth_plugin.name,
+                data=user_profile,
+            )
+            users.db.session.add(identity)
+            users.db.session.commit()
+        except Exception:
+            users.db.session.rollback()
+            raise
+    else:
+        user = identity.user
+        if identity.data != user_profile:
+            # Account data (e.g. API access token) has changed since the last
+            # login, update it
+            try:
+                identity.data = user_profile
+                users.db.session.commit()
+            except Exception:
+                users.db.session.rollback()
+                raise
+
+    g._login_user = request.user = user
+    return set_access_cookies(json_response(), user.id)
 
 
 def init_auth() -> None:

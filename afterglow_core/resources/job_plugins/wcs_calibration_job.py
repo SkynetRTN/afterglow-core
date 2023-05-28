@@ -16,8 +16,8 @@ from ...models import Job, JobResult
 from ...schemas import AfterglowSchema, Boolean, Float
 from ...errors import ValidationError
 from ..data_files import (
-    create_data_file, get_data_file_data, get_data_file_db, get_root,
-    save_data_file)
+    create_data_file, get_data_file, get_data_file_data, get_data_file_db,
+    get_root, save_data_file)
 from .source_extraction_job import (
     SourceExtractionSettings, run_source_extraction_job)
 
@@ -268,7 +268,10 @@ class WcsCalibrationJob(Job):
                             save_data_file(adb, root, file_id, data, hdr)
                         else:
                             hdr.add_history(
-                                'Original data file ID: {:d}'.format(file_id))
+                                'Original data file: {}'.format(
+                                    get_data_file(
+                                        self.user_id, file_id).name or
+                                    file_id))
                             file_id = create_data_file(
                                 adb, None, root, data, hdr,
                                 duplicates='append',

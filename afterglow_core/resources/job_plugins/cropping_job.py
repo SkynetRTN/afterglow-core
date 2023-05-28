@@ -8,111 +8,26 @@ from datetime import datetime
 from typing import Dict as TDict, List as TList, Optional, Tuple
 
 from marshmallow.fields import Integer, List, Nested
-from numpy import ndarray
-from numpy.ma import MaskedArray, masked_array
+import numpy as np
+
+from skylib.combine.cropping import get_auto_crop
 
 from ...models import Job, JobResult
 from ...schemas import AfterglowSchema, Boolean
 from ...errors import ValidationError
 from ..data_files import (
-    create_data_file, get_data_file_data, get_data_file_db, get_root,
-    save_data_file)
+    create_data_file, get_data_file, get_data_file_data, get_data_file_db,
+    get_root, save_data_file)
 
 
 __all__ = ['CroppingJob', 'run_cropping_job']
-
-
-def max_rectangle(histogram: ndarray) -> Tuple[int, int, int]:
-    """
-    Find left/right boundaries and height of the largest rectangle that fits
-    entirely under the histogram; see https://gist.github.com/zed/776423
-
-    :param histogram: 1D non-negative integer array
-
-    :return: left X coordinate, right X coordinate, and height of rectangle
-    """
-    stack = []
-    left = right = height = pos = 0
-    for pos, h in enumerate(histogram):
-        start = pos
-        while True:
-            if not stack or h > stack[-1][1]:
-                stack.append((start, h))
-            elif stack and h < stack[-1][1]:
-                top_start, top_height = stack[-1]
-                if (pos - top_start + 1)*top_height > \
-                        (right - left + 1)*height:
-                    left, right, height = top_start, pos, top_height
-                start = stack.pop()[0]
-                continue
-            break
-
-    for start, h in stack:
-        if (pos - start + 1)*h > (right - left + 1)*height:
-            left, right, height = start, pos, h
-
-    return left, right, height
-
-
-def get_auto_crop(user_id: int, file_ids: TList[int]) \
-        -> Tuple[float, float, float, float]:
-    """
-    Calculate optimal cropping margins for a set of masked images, e.g. after
-    alignment
-
-    :param int user_id: Afterglow user ID
-    :param list file_ids: list of data file IDs
-
-    :return: cropping margins (left, right, top, bottom)
-    """
-    left = right = top = bottom = 0
-    width = height = mask = None
-
-    # Obtain the combined mask
-    for file_id in file_ids:
-        data = get_data_file_data(user_id, file_id)[0]
-        if width is None:
-            height, width = data.shape
-        elif data.shape != (height, width):
-            raise ValueError('All images must be of equal shapes')
-
-        # Merge masks for all images
-        if isinstance(data, MaskedArray):
-            if mask is None:
-                mask = data.mask.copy()
-            else:
-                mask |= data.mask
-
-    if mask is not None and mask.any():
-        # Obtain the largest-area axis-aligned rectangle enclosed
-        # in the non-masked area of the combined mask; the algorithm
-        # is based on https://gist.github.com/zed/776423
-        hist = (~(mask[0])).astype(int)
-        left, right, rect_height = max_rectangle(hist)
-        bottom = top = 0
-        for i, row in enumerate(mask[1:]):
-            hist[~row] += 1
-            hist[row] = 0
-            j1, j2, h = max_rectangle(hist)
-            if (j2 - j1 + 1)*h > (right - left + 1)*rect_height:
-                left, right, rect_height = j1, j2, h
-                bottom, top = i + 2 - h, i + 1
-        right = width - 1 - right
-        top = height - 1 - top
-
-    if left + right >= width or bottom + top >= height:
-        raise ValueError(
-            'Empty crop for a {}x{} image: left={}, right={}, top={}, '
-            'bottom={}'.format(width, height, left, right, top, bottom))
-
-    return left, right, top, bottom
 
 
 def run_cropping_job(job: Job,
                      settings: Optional[CroppingSettings],
                      job_file_ids: TList[int],
                      inplace: bool = False,
-                     masks: Optional[TDict[int, ndarray]] = None,
+                     masks: Optional[TDict[int, np.ndarray]] = None,
                      stage: int = 0, total_stages: int = 1) \
         -> TList[int]:
     """
@@ -164,9 +79,32 @@ def run_cropping_job(job: Job,
     auto_crop = not any([left, right, top, bottom])
     if auto_crop:
         # Automatic cropping by masked pixels
-        left, right, top, bottom = get_auto_crop(job.user_id, job_file_ids)
+        width = height = mask = None
 
-    if not any([left, right, top, bottom]) and inplace:
+        # Obtain the combined mask
+        for file_id in job_file_ids:
+            data = get_data_file_data(job.user_id, file_id)[0]
+            if width is None:
+                height, width = data.shape
+            elif data.shape != (height, width):
+                raise ValueError('All images must be of equal shapes')
+
+            # Merge all masks
+            if isinstance(data, np.ma.MaskedArray):
+                if mask is None:
+                    mask = data.mask.copy()
+                else:
+                    mask |= data.mask
+
+        if mask is not None and mask.any():
+            left, right, bottom, top = get_auto_crop(mask)
+
+        if left + right >= width or bottom + top >= height:
+            raise ValueError(
+                'Empty crop for a {}x{} image: left={}, right={}, bottom={}, '
+                'top={}'.format(width, height, left, right, bottom, top))
+
+    if not any([left, right, bottom, top]) and inplace:
         # Nothing to do; if inplace=False, will simply duplicate all input
         # data files
         return job_file_ids
@@ -176,12 +114,12 @@ def run_cropping_job(job: Job,
     for i, file_id in enumerate(job_file_ids):
         try:
             data, hdr = get_data_file_data(job.user_id, file_id)
-            if any([left, right, top, bottom]):
+            if any([left, right, bottom, top]):
                 data = data[bottom:data.shape[0]-top, left:data.shape[1]-right]
                 hdr.add_history(
                     '[{}] Cropped by Afterglow with margins: left={}, '
-                    'right={}, top={}, bottom={}'
-                    .format(datetime.utcnow(), left, right, top, bottom))
+                    'right={}, bottom={}, top={}'
+                    .format(datetime.utcnow(), left, right, bottom, top))
 
                 # Move CRPIXn if present
                 if left:
@@ -209,13 +147,13 @@ def run_cropping_job(job: Job,
                 try:
                     mask = masks[file_id][bottom:bottom+data.shape[0],
                                           left:left+data.shape[1]]
-                    if isinstance(data, MaskedArray):
+                    if isinstance(data, np.ma.MaskedArray):
                         if data.mask.shape and data.mask.any():
                             data.mask |= mask
                         else:
                             data.mask = mask
                     else:
-                        data = masked_array(data, mask)
+                        data = np.ma.masked_array(data, mask)
                 except KeyError:
                     pass
 
@@ -230,10 +168,13 @@ def run_cropping_job(job: Job,
                             adb.rollback()
                             raise
                 else:
-                    hdr.add_history(
-                        'Original data file ID: {:d}'.format(file_id))
                     with get_data_file_db(job.user_id) as adb:
                         try:
+                            hdr.add_history(
+                                'Original data file: {}'.format(
+                                    get_data_file(
+                                        job.user_id, file_id).name or
+                                    file_id))
                             file_id = create_data_file(
                                 adb, None, get_root(job.user_id), data, hdr,
                                 duplicates='append',
@@ -247,7 +188,9 @@ def run_cropping_job(job: Job,
                 with get_data_file_db(job.user_id) as adb:
                     try:
                         hdr.add_history(
-                            'Original data file ID: {:d}'.format(file_id))
+                            'Original data file: {}'.format(
+                                get_data_file(job.user_id, file_id).name or
+                                file_id))
                         file_id = create_data_file(
                             adb, None, get_root(job.user_id), data, hdr,
                             duplicates='append', session_id=job.session_id).id

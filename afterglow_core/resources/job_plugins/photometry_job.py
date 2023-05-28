@@ -115,15 +115,16 @@ def run_photometry_job(job: Job, settings: PhotSettings,
         try:
             data, hdr = get_data_file_data(job.user_id, file_id)
 
-            if settings.gain is None:
+            # TODO: Don't override PhotSettings.gain = 1 once fixed in AgA
+            if settings.gain is None or settings.gain == 1:
                 gain = get_fits_gain(hdr)
             else:
                 gain = settings.gain
             if gain:
                 phot_kw['gain'] = gain
 
-            epoch = get_fits_time(hdr)[0]
             texp = get_fits_exp_length(hdr)
+            epoch = get_fits_time(hdr, texp)[1]
             flt = hdr.get('FILTER')
             scope = hdr.get('TELESCOP')
 

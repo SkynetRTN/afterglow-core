@@ -29,6 +29,7 @@ class SourceExtractionSettings(AfterglowSchema):
     y: int = Integer(dump_default=1)
     width: int = Integer(dump_default=0)
     height: int = Integer(dump_default=0)
+    downsample: int = Integer(dump_default=2)
     threshold: float = Float(dump_default=2.5)
     bk_size: float = Float(dump_default=1/64)
     bk_filter_size: int = Integer(dump_default=3)
@@ -102,6 +103,7 @@ def run_source_extraction_job(job: Job,
         pairs indexed by file IDs
     """
     extraction_kw = dict(
+        downsample=settings.downsample,
         threshold=settings.threshold,
         bkg_kw=dict(
             size=settings.bk_size,
