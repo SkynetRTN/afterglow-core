@@ -37,7 +37,7 @@ tbb==2021.9.0
 Werkzeug==2.3.4
 
 # extra skynet dependencies
-pyslalib==1.0.7
+# pyslalib==1.0.7
 jwt
 mysqlclient
 cryptography==40.0.2
