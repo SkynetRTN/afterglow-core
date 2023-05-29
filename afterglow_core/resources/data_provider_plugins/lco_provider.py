@@ -3,8 +3,6 @@ Afterglow Core: Las Cumbres Observatory data provider
 
 Accessing LCO data requires the user to authenticate via LCO HTTP auth service.
 The user's LCO username becomes their Afterglow username.
-
-Asset paths have the following structure: proposal/request group
 """
 
 from typing import Dict as TDict, List as TList, Optional, Tuple, Union
@@ -39,8 +37,8 @@ LCO_FILTER_MAP = {
 }
 
 USER_OBS = 'User Observations'
-GROUP_OBS = 'Group Observations'
-OBS_CATEGORIES = (USER_OBS, GROUP_OBS)
+COLLAB_OBS = 'Collaboration Observations'
+OBS_CATEGORIES = (USER_OBS, COLLAB_OBS)
 
 RAW_IMAGES = 'raw'
 REDUCED_IMAGES = 'reduced'
@@ -167,7 +165,7 @@ def archive_api_query(endpoint: str = 'frames',
     return api_query('https://archive-api.lco.global', endpoint, params)
 
 
-def split_asset_path(path: str, allow_group_obs: bool) \
+def split_asset_path(path: str, allow_collab_obs: bool) \
         -> Tuple[Optional[str], Optional[str], Optional[str], Optional[int],
                  Optional[int], Optional[str], Optional[int]]:
     """
@@ -175,7 +173,7 @@ def split_asset_path(path: str, allow_group_obs: bool) \
     [proposal]/[category]/[user]/[request group]/[request]/[type]/[frame]
 
     :param path: full or partial asset path
-    :param allow_group_obs: allow group observations
+    :param allow_collab_obs: allow collaborators' observations
 
     :return: a tuple (proposal, category, user, request group, request, type,
         frame)
@@ -204,7 +202,7 @@ def split_asset_path(path: str, allow_group_obs: bool) \
             proposal, category, user, request_group, request, frame_type,
             frame)
 
-    if allow_group_obs:
+    if allow_collab_obs:
         category = components[0]
         components = components[1:]
         if category.lower() not in [cat.lower() for cat in OBS_CATEGORIES]:
@@ -217,17 +215,17 @@ def split_asset_path(path: str, allow_group_obs: bool) \
                 proposal, category, user, request_group, request, frame_type,
                 frame)
 
-        if category.lower() == GROUP_OBS.lower():
+        if category.lower() == COLLAB_OBS.lower():
             user = components[0]
             components = components[1:]
             if not user:
-                # Proposal/Group Observations
+                # Proposal/Collaboration Observations
                 return (
                     proposal, category, user, request_group, request, frame_type,
                     frame)
 
             if not components:
-                # Proposal/Group Observations/user
+                # Proposal/Collaboration Observations/user
                 return (
                     proposal, category, user, request_group, request,
                     frame_type, frame)
@@ -255,7 +253,7 @@ def split_asset_path(path: str, allow_group_obs: bool) \
             'path',
             f'Request ID must be integer; got "{request}"')
     if not components:
-        # Proposal/request_group/request
+        # Proposal/category[/user]/request_group/request
         return (
             proposal, category, user, request_group, request, frame_type,
             frame)
@@ -268,7 +266,7 @@ def split_asset_path(path: str, allow_group_obs: bool) \
             f'Frame type must be either of {", ".join(IMAGE_TYPES)}; got '
             f'"{frame_type}"')
     if not components:
-        # Proposal/request_group/request/type
+        # Proposal/category[/user]/request_group/request/type
         return (
             proposal, category, user, request_group, request, frame_type,
             frame)
@@ -332,7 +330,9 @@ class LCODataProvider(DataProvider):
     """
     name = 'lco'
     display_name = 'Las Cumbres Observatory'
-    description = 'Import images from Las Cumbres Observatory Global Telescope.  This provider grants you access to your LCO observations.'
+    description = 'Import images from Las Cumbres Observatory Global ' \
+        'Telescope. This provider grants you access to your and your ' \
+        'collaborators\' LCO observations.'
     columns = []
     browseable = True
     searchable = True
@@ -345,13 +345,13 @@ class LCODataProvider(DataProvider):
     quota = usage = None
     auth_methods = ('lco',)
 
-    allow_group_obs = True
+    allow_collab_obs = True
     allow_multiple_instances = False
 
     def __init__(self, id: Optional[Union[str, int]] = None,
                  display_name: str = 'Las Cumbres Observatory',
                  icon: Optional[str] = 'lco_btn_icon.png',
-                 allow_group_obs: bool = True, **kwargs):
+                 allow_collab_obs: bool = True, **kwargs):
         """
         Create an LCODataProvider instance
 
@@ -359,10 +359,10 @@ class LCODataProvider(DataProvider):
         :param display_name: optional data provider plugin visible in the
             Afterglow UI; default: "Las Cumbres Observatory"
         :param icon: optional UI icon name; default: "lco_btn_icon.png"
-        :param allow_group_obs: allow listing group observations
+        :param allow_collab_obs: allow listing collaborators' observations
         """
         super().__init__(id=id, display_name=display_name, icon=icon, **kwargs)
-        self.allow_group_obs = allow_group_obs
+        self.allow_collab_obs = allow_collab_obs
 
     def get_asset(self, path: str) -> DataProviderAsset:
         """
@@ -373,7 +373,7 @@ class LCODataProvider(DataProvider):
         :return: asset object
         """
         proposal, category, user, request_group, request, frame_type, frame = \
-            split_asset_path(path, self.allow_group_obs)
+            split_asset_path(path, self.allow_collab_obs)
 
         if proposal is None:
             # Root asset
@@ -395,11 +395,11 @@ class LCODataProvider(DataProvider):
                 metadata={},
             )
 
-        if self.allow_group_obs:
+        if self.allow_collab_obs:
             category = ' '.join(s.capitalize() for s in category.split())
             norm_path += '/' + category
-            if category == GROUP_OBS and (user, request_group, request,
-                                          frame_type, frame) == (None,)*5 or \
+            if category == COLLAB_OBS and (user, request_group, request,
+                                           frame_type, frame) == (None,)*5 or \
                     category == USER_OBS and (request_group, request,
                                               frame_type, frame) == (None,)*4:
                 # Collection asset "proposal/category
@@ -410,10 +410,10 @@ class LCODataProvider(DataProvider):
                     metadata={},
                 )
 
-            if category == GROUP_OBS:
+            if category == COLLAB_OBS:
                 norm_path += '/' + user
                 if (request_group, request, frame_type, frame) == (None,)*4:
-                    # Collection asset "proposal/Group Observations/user"
+                    # Collection asset "proposal/Collaboration Observations/user"
                     return DataProviderAsset(
                         name=user,
                         collection=True,
@@ -512,7 +512,7 @@ class LCODataProvider(DataProvider):
             last assets on the current page
         """
         proposal, category, user, request_group, request, frame_type, frame = \
-            split_asset_path(path, self.allow_group_obs)
+            split_asset_path(path, self.allow_collab_obs)
         if frame is not None:
             # Path to non-collection asset
             raise AssetNotFoundError(path=path)
@@ -544,7 +544,7 @@ class LCODataProvider(DataProvider):
                 pagination(res, page_size, page))
 
         norm_path = proposal
-        if self.allow_group_obs:
+        if self.allow_collab_obs:
             if category is None:
                 return (
                     [DataProviderAsset(
@@ -555,7 +555,7 @@ class LCODataProvider(DataProvider):
                     ) for s in OBS_CATEGORIES], None)
 
             norm_path += '/' + category
-            if category == GROUP_OBS:
+            if category == COLLAB_OBS:
                 if user is None:
                     # Return all users involved in the proposal
                     num_requests = observe_api_query(
@@ -601,7 +601,7 @@ class LCODataProvider(DataProvider):
 
         if request_group is None:
             # Return all user's request groups
-            if category == GROUP_OBS and user:
+            if category == COLLAB_OBS and user:
                 request_params['user'] = user
             else:
                 request_params['user'] = get_username()
@@ -741,7 +741,7 @@ class LCODataProvider(DataProvider):
 
         :return: asset data
         """
-        frame = split_asset_path(path, self.allow_group_obs)[-1]
+        frame = split_asset_path(path, self.allow_collab_obs)[-1]
         if frame is None:
             raise ValidationError('path', 'Missing frame ID')
 

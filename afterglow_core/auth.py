@@ -232,7 +232,7 @@ def user_login(user_profile: dict, auth_plugin: AuthnPluginBase) -> Response:
         email = user_profile.get('email').lower()
         if email:
             for user in users.DbUser.query:
-                if user.email.lower() == email:
+                if user.email and user.email.lower() == email:
                     # Add another identity to the existing user account
                     try:
                         identity = users.DbIdentity(
