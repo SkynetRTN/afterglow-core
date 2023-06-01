@@ -177,10 +177,15 @@ class FieldCalJob(Job):
         if variable_check_tol:
             # To exclude known variable stars from the list of catalog sources,
             # get all variable stars in all fields
-            var_stars = {
-                file_id: run_catalog_query_job(
-                    self, ['VSX'], file_ids=[file_id])
-                for file_id in file_ids}
+            var_stars = {}
+            for file_id in file_ids:
+                # noinspection PyBroadException
+                try:
+                    var_stars[file_id] = run_catalog_query_job(
+                        self, ['VSX'], file_ids=[file_id])
+                except Exception:
+                    # No WCS?
+                    var_stars[file_id] = []
             unique_var_stars = list(
                 {star.id: star for star in sum(var_stars.values(), [])}
                 .values())

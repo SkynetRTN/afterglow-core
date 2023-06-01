@@ -140,21 +140,17 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
     # Calculate bounding box centers and RA/Dec sizes for each of the FOVs
     boxes = []
     for wcs in wcs_list:
-        try:
-            # noinspection PyProtectedMember
-            width, height = wcs._naxis1, wcs._naxis2
-        except AttributeError:
-            height, width = wcs.array_shape
+        height, width = wcs.array_shape
         center = wcs.all_pix2world((width - 1)/2, (height - 1)/2, 0)
 
         # Move center to RA = Dec = 0 so that we get a proper box size in terms
         # of catalog query, i.e. RA size multiplied by cos(dec); the box is
-        # guaranteed to intersect RA = 0, so the left boundary is the minimum RA
-        # of all four corners above 180, and the right boundary is the maximum
-        # RA below 180 (this method formally may not work for highly skewed FOVs
-        # close to 360, but this situation is very unlikely); for Decs, the box
-        # size is simply the maximum minus the minimum Dec, even if the original
-        # field crosses the pole
+        # guaranteed to intersect RA = 0, so the left boundary is the minimum
+        # RA of all four corners above 180, and the right boundary is
+        # the maximum RA below 180 (this method formally may not work for
+        # highly skewed FOVs close to 360, but this situation is very
+        # unlikely); for Decs, the box size is simply the maximum minus
+        # the minimum Dec, even if the original field crosses the pole
         wcs0 = wcs.deepcopy()
         wcs0.wcs.crval = [0, 0]
         ras, decs = wcs0.all_pix2world(
@@ -296,11 +292,7 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
         good = False
         for wcs in wcs_list:
             x, y = wcs.all_world2pix(s.ra_hours*15, s.dec_degs, 0, quiet=True)
-            try:
-                # noinspection PyProtectedMember
-                w, h = wcs._naxis1, wcs._naxis2
-            except AttributeError:
-                h, w = wcs.array_shape
+            h, w = wcs.array_shape
             if 0 <= x < w and 0 <= y < h:
                 good = True
                 break

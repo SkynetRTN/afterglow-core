@@ -147,7 +147,8 @@ def run_photometry_job(job: Job, settings: PhotSettings,
             i = 0
             while i < len(sources[file_id]):
                 x, y = get_source_xy(sources[file_id][i], epoch, wcs)
-                if 0 <= x < data.shape[1] and 0 <= y < data.shape[0]:
+                if x is not None and y is not None and \
+                        0 <= x < data.shape[1] and 0 <= y < data.shape[0]:
                     source_table[i]['x'], source_table[i]['y'] = x, y
                     i += 1
                 else:
@@ -162,6 +163,8 @@ def run_photometry_job(job: Job, settings: PhotSettings,
                     else:
                         source_table = source_table[1:]
             if not sources[file_id]:
+                if wcs is None:
+                    raise ValueError('Missing WCS and no source XYs given')
                 raise ValueError('All sources are outside image boundaries')
 
             r_cent = settings.centroid_radius
