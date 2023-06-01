@@ -130,13 +130,12 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
             try:
                 wcs = WCS(fits[0].header)
             except Exception:
-                continue
+                raise ValueError('Data file ID {} has no WCS'.format(file_id))
             else:
                 if not wcs.has_celestial:
-                    continue
+                    raise ValueError(
+                        'Invalid WCS for data file ID {}'.format(file_id))
         wcs_list.append(wcs)
-    if not wcs_list:
-        raise ValueError('None of the data files has a valid WCS')
 
     # Calculate bounding box centers and RA/Dec sizes for each of the FOVs
     boxes = []
