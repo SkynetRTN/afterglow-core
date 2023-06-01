@@ -275,7 +275,6 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
                         if [getattr(s1, name, None) for name in (
                                 'id', 'ra_hours', 'dec_degs')] == id:
                             del catalog_sources[j]
-                            break
                         else:
                             j += 1
                     i += 1
