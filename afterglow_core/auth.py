@@ -229,7 +229,7 @@ def user_login(user_profile: dict, auth_plugin: AuthnPluginBase) -> Response:
     if identity is None:
         # Authenticated but not in the db; look for identities with the same
         # email and link accounts if found
-        email = user_profile.get('email').lower()
+        email = user_profile.get('email', '').lower()
         if email:
             for user in users.DbUser.query:
                 if user.email and user.email.lower() == email:
