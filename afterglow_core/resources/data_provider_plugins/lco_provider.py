@@ -495,8 +495,8 @@ class LCODataProvider(DataProvider):
                     metadata={},
                 ) for target_name in all_targets],
                 PaginationInfo(
-                    sort=sort_by, page_size=page_size or 100,
-                    total_pages=len(all_targets)//(page_size or 100),
+                    sort=sort_by, page_size=int(page_size or 100),
+                    total_pages=len(all_targets)//int(page_size or 100),
                     current_page=page))
 
         # Return all frames for the given target
@@ -589,8 +589,8 @@ class LCODataProvider(DataProvider):
                     key=lambda item: item.name,
                     reverse=sort_by.startswith('-'))
         return frames, PaginationInfo(
-            sort=sort_by, page_size=page_size or 100,
-            total_pages=len(frames)//(page_size or 100),
+            sort=sort_by, page_size=int(page_size or 100),
+            total_pages=len(frames)//int(page_size or 100),
             current_page=page)
 
     def get_child_assets(self, path: str,
