@@ -40,6 +40,7 @@ class DateTime(types.TypeDecorator):
     DateTime column that can be assigned an ISO-formatted string
     """
     impl = types.DateTime
+    cache_ok = True
 
     def process_bind_param(self, value, dialect):
         if value is not None and not isinstance(value, datetime):
@@ -53,11 +54,12 @@ class Date(types.TypeDecorator):
     Date column that can be assigned an ISO-formatted string
     """
     impl = types.Date
+    cache_ok = True
 
     def process_bind_param(self, value, dialect):
         if isinstance(value, datetime):
             value = value.date()
-        elif value is not None and not isinstance(value, datetime):
+        elif value is not None:
             value = datetime.strptime(value, '%Y-%m-%d')
         return value
 
@@ -68,10 +70,11 @@ class Time(types.TypeDecorator):
     Time column that can be assigned an ISO-formatted string
     """
     impl = types.Time
+    cache_ok = True
 
     def process_bind_param(self, value, dialect):
         if isinstance(value, datetime):
             value = value.time()
-        elif value is not None and not isinstance(value, datetime):
+        elif value is not None:
             value = datetime.strptime(value, '%H:%M:%S.%f')
         return value
