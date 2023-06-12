@@ -100,7 +100,10 @@ class FieldCalJob(Job):
             for i, catalog in enumerate(field_cal.catalogs):
                 try:
                     catalog_sources = run_catalog_query_job(
-                        self, [catalog], file_ids=self.file_ids)
+                        self, [catalog], file_ids=self.file_ids,
+                        skip_failed=True)
+                    if not catalog_sources:
+                        raise ValueError('No catalog sources found')
                     self.run_for_sources(catalog_sources, detected_sources)
                 except Exception as e:
                     if i < len(field_cal.catalogs) - 1:
