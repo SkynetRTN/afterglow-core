@@ -238,7 +238,7 @@ class FieldCalJob(Job):
                             getattr(catalog_source, 'dec_degs', None) is None \
                             or catalog_source_file_id is not None and \
                             wcss.get(catalog_source_file_id, None) is None or \
-                            catalog_source_file_id is None and any(
+                            catalog_source_file_id is None and all(
                                 wcss.get(file_id, None) is None
                                 for file_id in file_ids):
                         continue
