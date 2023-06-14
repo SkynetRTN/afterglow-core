@@ -1055,7 +1055,8 @@ def get_data_file_bytes(user_id: Optional[int], file_id: Union[int, str],
     """
     if not fmt:
         # If omitted, use the original file format from asset_type
-        fmt = get_data_file(user_id, file_id).asset_type or 'FITS'
+        with get_data_file_db(user_id) as adb:
+            fmt = get_data_file(adb, file_id).asset_type or 'FITS'
 
     if fmt == 'FITS':
         try:
@@ -1173,26 +1174,24 @@ def get_data_file_group_bytes(user_id: Optional[int], group_name: str,
     return buf.getvalue()
 
 
-def get_data_file(user_id: Optional[int], file_id: Union[int, str]) \
-        -> DataFile:
+def get_data_file(adb, file_id: Union[int, str]) -> DataFile:
     """
     Return data file object for the given ID
 
-    :param user_id: current user ID (None if user auth is disabled)
+    :param adb: SQLA database session
     :param file_id: data file ID
 
     :return: data file object
     """
-    with get_data_file_db(user_id) as adb:
-        try:
-            db_data_file = adb.query(DbDataFile).get(int(file_id))
-        except ValueError:
-            db_data_file = None
-        if db_data_file is None:
-            raise UnknownDataFileError(file_id=file_id)
+    try:
+        db_data_file = adb.query(DbDataFile).get(int(file_id))
+    except ValueError:
+        db_data_file = None
+    if db_data_file is None:
+        raise UnknownDataFileError(file_id=file_id)
 
-        # Convert to data model object
-        return DataFile(db_data_file)
+    # Convert to data model object
+    return DataFile(db_data_file)
 
 
 def get_data_file_group(user_id: Optional[int], group_name: str) \

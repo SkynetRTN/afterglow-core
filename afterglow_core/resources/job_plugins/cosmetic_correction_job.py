@@ -165,10 +165,10 @@ def run_cosmetic_correction_job(
 
         # Extract cosmetic correction data
         try:
-            if data.dtype.name == 'float32':
-                # Numba is slower for 32-bit floating point
+            if data.dtype.name != 'float64':
+                # Numba is faster for 64-bit floating point
                 data = data.astype(np.float64)
-            elif not data.dtype.isnative:
+            if not data.dtype.isnative:
                 # Non-native byte order is not supported by Numba
                 data = data.byteswap().newbyteorder()
             initial_mask = flag_horiz(
@@ -185,9 +185,9 @@ def run_cosmetic_correction_job(
         for file_id in group:
             try:
                 data, hdr = get_data_file_data(job.user_id, file_id)
-                if data.dtype.name == 'float32':
+                if data.dtype.name != 'float64':
                     data = data.astype(np.float64)
-                elif not data.dtype.isnative:
+                if not data.dtype.isnative:
                     data = data.byteswap().newbyteorder()
                 data = correct_cols_and_pixels(
                     data, col_mask, pixel_mask, m_col=settings.m_corr_col,
@@ -208,8 +208,7 @@ def run_cosmetic_correction_job(
                         try:
                             hdr.add_history(
                                 'Original data file: {}'.format(
-                                    get_data_file(
-                                        job.user_id, file_id).name or
+                                    get_data_file(adb, file_id).name or
                                     file_id))
                             file_id = create_data_file(
                                 adb, None, get_root(job.user_id), data, hdr,
