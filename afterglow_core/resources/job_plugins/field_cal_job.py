@@ -100,7 +100,10 @@ class FieldCalJob(Job):
             for i, catalog in enumerate(field_cal.catalogs):
                 try:
                     catalog_sources = run_catalog_query_job(
-                        self, [catalog], file_ids=self.file_ids)
+                        self, [catalog], file_ids=self.file_ids,
+                        skip_failed=True)
+                    if not catalog_sources:
+                        raise ValueError('No catalog sources found')
                     self.run_for_sources(catalog_sources, detected_sources)
                 except Exception as e:
                     if i < len(field_cal.catalogs) - 1:
@@ -235,7 +238,7 @@ class FieldCalJob(Job):
                             getattr(catalog_source, 'dec_degs', None) is None \
                             or catalog_source_file_id is not None and \
                             wcss.get(catalog_source_file_id, None) is None or \
-                            catalog_source_file_id is None and any(
+                            catalog_source_file_id is None and all(
                                 wcss.get(file_id, None) is None
                                 for file_id in file_ids):
                         continue
@@ -563,7 +566,8 @@ class FieldCalJob(Job):
                 id = source.id
                 if id in source_ids_to_keep or id in source_ids_to_remove:
                     continue
-                if len([s for s in all_sources if s.id == id]) < nmin:
+                if len([s for s in all_sources
+                        if s.id == id and s.file_id in cal_results]) < nmin:
                     source_ids_to_remove.append(id)
                 else:
                     source_ids_to_keep.append(id)
@@ -587,7 +591,7 @@ class FieldCalJob(Job):
                 else:
                     raise ValueError(
                         'No sources found that are present in ' +
-                        'all images' if nmin == len(file_ids) else
+                        'all images' if source_inclusion_percent >= 100 else
                         'at least one image' if nmin == 1 else
                         'at least {:d} images'.format(nmin))
 

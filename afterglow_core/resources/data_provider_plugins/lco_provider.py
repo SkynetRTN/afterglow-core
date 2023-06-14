@@ -5,7 +5,7 @@ Accessing LCO data requires the user to authenticate via LCO HTTP auth service.
 The user's LCO username becomes their Afterglow username.
 """
 
-from typing import Dict as TDict, List as TList, Optional, Tuple, Union
+from typing import Any, Dict as TDict, List as TList, Optional, Tuple, Union
 from urllib.parse import parse_qs, urlparse
 from io import BytesIO
 import json
@@ -39,16 +39,6 @@ LCO_FILTER_MAP = {
 USER_OBS = 'User Observations'
 COLLAB_OBS = 'Collaboration Observations'
 OBS_CATEGORIES = (USER_OBS, COLLAB_OBS)
-
-RAW_IMAGES = 'raw'
-REDUCED_IMAGES = 'reduced'
-MASTER_CALS = 'master_cals'
-IMAGE_TYPES = (RAW_IMAGES, REDUCED_IMAGES, MASTER_CALS)
-IMAGE_TYPE_NAME = {
-    RAW_IMAGES: 'Raw Images',
-    REDUCED_IMAGES: 'Reduced Images',
-    MASTER_CALS: 'Master Calibration Images',
-}
 
 
 class LCONotAuthenticatedError(AfterglowError):
@@ -166,41 +156,37 @@ def archive_api_query(endpoint: str = 'frames',
 
 
 def split_asset_path(path: str, allow_collab_obs: bool) \
-        -> Tuple[Optional[str], Optional[str], Optional[str], Optional[int],
-                 Optional[int], Optional[str], Optional[int]]:
+        -> Tuple[Optional[str], Optional[str], Optional[str], Optional[int]]:
     """
-    Return the seven parts of the full asset path
-    [proposal]/[category]/[user]/[request group]/[request]/[type]/[frame]
+    Return the four parts of the full asset path
+    [proposal]/[category]/[target]/[frame]
 
     :param path: full or partial asset path
     :param allow_collab_obs: allow collaborators' observations
 
-    :return: a tuple (proposal, category, user, request group, request, type,
-        frame)
+    :return: a tuple (proposal, category, target, frame)
     """
     if path is not None:
         path = str(path).strip(' /')
     if not path:
         # Root path
-        return (None,)*7
+        return (None,)*4
     components = [s.strip() for s in path.split('/')]
-    if len(components) > 7:
+    if len(components) > 4:
         raise ValidationError(
             'path',
-            'Expected asset path in the form [/][proposal][/request group id]'
-            '[/request id][/frame type][/frame id]')
+            'Expected asset path in the form [/][proposal][/category][/target]'
+            '[/frame id]')
     if not components:
         # Root path
-        return (None,)*7
+        return (None,)*4
 
     proposal = components[0]
     components = components[1:]
-    category = user = request_group = request = frame_type = frame = None
+    category = target = frame = None
     if not components:
         # Proposal only
-        return (
-            proposal, category, user, request_group, request, frame_type,
-            frame)
+        return proposal, category, target, frame
 
     if allow_collab_obs:
         category = components[0]
@@ -208,68 +194,19 @@ def split_asset_path(path: str, allow_collab_obs: bool) \
         if category.lower() not in [cat.lower() for cat in OBS_CATEGORIES]:
             raise ValidationError(
                 'path',
-                f'Observation category must be either of {", ".join(OBS_CATEGORIES)}; got "{request_group}"')
+                f'Observation category must be either of {", ".join(OBS_CATEGORIES)}; got "{category}"')
+        category = ' '.join(s.capitalize() for s in category.split())
         if not components:
             # Proposal/category
-            return (
-                proposal, category, user, request_group, request, frame_type,
-                frame)
+            return proposal, category, target, frame
+    else:
+        category = USER_OBS
 
-        if category.lower() == COLLAB_OBS.lower():
-            user = components[0]
-            components = components[1:]
-            if not user:
-                # Proposal/Collaboration Observations
-                return (
-                    proposal, category, user, request_group, request, frame_type,
-                    frame)
-
-            if not components:
-                # Proposal/Collaboration Observations/user
-                return (
-                    proposal, category, user, request_group, request,
-                    frame_type, frame)
-
-    request_group = components[0]
+    target = components[0]
     components = components[1:]
-    try:
-        request_group = int(request_group)
-    except (TypeError, ValueError):
-        raise ValidationError(
-            'path',
-            f'Request group ID must be integer; got "{request_group}"')
     if not components:
-        # Proposal/request_group
-        return (
-            proposal, category, user, request_group, request, frame_type,
-            frame)
-
-    request = components[0]
-    components = components[1:]
-    try:
-        request = int(request)
-    except (TypeError, ValueError):
-        raise ValidationError(
-            'path',
-            f'Request ID must be integer; got "{request}"')
-    if not components:
-        # Proposal/category[/user]/request_group/request
-        return (
-            proposal, category, user, request_group, request, frame_type,
-            frame)
-
-    frame_type = components[0]
-    components = components[1:]
-    if not frame_type.lower() in IMAGE_TYPES:
-        raise ValidationError(
-            'path',
-            f'Frame type must be either of {", ".join(IMAGE_TYPES)}; got '
-            f'"{frame_type}"')
-    if not components:
-        # Proposal/category[/user]/request_group/request/type
-        return (
-            proposal, category, user, request_group, request, frame_type,
-            frame)
+        # Proposal/category/target
+        return proposal, category, target, frame
 
     frame = components[0]
     try:
@@ -280,7 +217,21 @@ def split_asset_path(path: str, allow_collab_obs: bool) \
             f'Frame ID must be integer; got "{frame}"')
 
     # All components present
-    return proposal, category, user, request_group, request, frame_type, frame
+    return proposal, category, target, frame
+
+
+def get_image_name(p: TDict[str, Any]) -> str:
+    """
+    Return display name for a non-collection image asset
+
+    :param p: frame params as returned by the GET /frames/[id] query
+
+    :return: human-readable image name
+    """
+    flt = LCO_FILTER_MAP.get(
+        p['primary_optical_element'].strip('*'),
+        p['primary_optical_element'].strip('*'))
+    return f'{p["target_name"]}_{flt}_{p["exposure_time"]}s_{p["observation_date"].rstrip("Z")}.fits'
 
 
 def pagination(res: TDict, page_size: Optional[int] = None,
@@ -372,7 +323,7 @@ class LCODataProvider(DataProvider):
 
         :return: asset object
         """
-        proposal, category, user, request_group, request, frame_type, frame = \
+        proposal, category, target, frame = \
             split_asset_path(path, self.allow_collab_obs)
 
         if proposal is None:
@@ -385,8 +336,7 @@ class LCODataProvider(DataProvider):
             )
 
         norm_path = proposal
-        if (category, user, request_group, request, frame_type, frame) == \
-                (None,)*6:
+        if (category, target, frame) == (None,)*3:
             # First-level collection asset "proposal"
             return DataProviderAsset(
                 name=observe_api_query(f'proposals/{proposal}')['title'],
@@ -395,69 +345,21 @@ class LCODataProvider(DataProvider):
                 metadata={},
             )
 
-        if self.allow_collab_obs:
-            category = ' '.join(s.capitalize() for s in category.split())
-            norm_path += '/' + category
-            if category == COLLAB_OBS and (user, request_group, request,
-                                           frame_type, frame) == (None,)*5 or \
-                    category == USER_OBS and (request_group, request,
-                                              frame_type, frame) == (None,)*4:
-                # Collection asset "proposal/category
-                return DataProviderAsset(
-                    name=category,
-                    collection=True,
-                    path=norm_path,
-                    metadata={},
-                )
-
-            if category == COLLAB_OBS:
-                norm_path += '/' + user
-                if (request_group, request, frame_type, frame) == (None,)*4:
-                    # Collection asset "proposal/Collaboration Observations/user"
-                    return DataProviderAsset(
-                        name=user,
-                        collection=True,
-                        path=norm_path,
-                        metadata={},
-                    )
-
-        if (request_group, request, frame_type, frame) == (None,)*4:
-            # Collection asset "proposal/category[/user]"
+        norm_path += '/' + category
+        if (target, frame) == (None,)*2:
+            # Collection asset "proposal/category
             return DataProviderAsset(
-                name=observe_api_query(f'proposals/{proposal}')['title'],
+                name=category,
                 collection=True,
                 path=norm_path,
                 metadata={},
             )
 
-        norm_path += '/' + str(request_group)
-        if (request, frame_type, frame) == (None,)*3:
-            # Collection asset "proposal/category[/user]/request_group"
-            return DataProviderAsset(
-                name=observe_api_query(
-                    f'requestgroups/{request_group}')['name'],
-                collection=True,
-                path=norm_path,
-                metadata={},
-            )
-
-        norm_path += '/' + str(request)
-        if (frame_type, frame) == (None,)*2:
-            # Collection asset "proposal/category[/user]/request_group/request"
-            params = observe_api_query(f'requests/{request}')
-            return DataProviderAsset(
-                name=f'{params["id"]} - {", ".join(set([conf["target"]["name"] for conf in params["configurations"]]))}',
-                collection=True,
-                path=norm_path,
-                metadata={},
-            )
-
-        norm_path += '/' + frame_type
+        norm_path += '/' + target.lower()
         if frame is None:
-            # Collection asset "proposal/category[/user]/request_group/request/
-            # frame_type"
+            # Collection asset "proposal/category
             return DataProviderAsset(
-                name=IMAGE_TYPE_NAME[frame_type],
+                name=target,
                 collection=True,
                 path=norm_path,
                 metadata={},
@@ -467,7 +369,7 @@ class LCODataProvider(DataProvider):
         norm_path += '/' + str(frame)
         params = archive_api_query(f'frames/{frame}')
         return DataProviderAsset(
-            name=params['basename'],
+            name=get_image_name(params),
             collection=False,
             path=norm_path,
             metadata=dict(
@@ -511,7 +413,7 @@ class LCODataProvider(DataProvider):
             optional total number of pages, and key values for the first and
             last assets on the current page
         """
-        proposal, category, user, request_group, request, frame_type, frame = \
+        proposal, category, target, frame = \
             split_asset_path(path, self.allow_collab_obs)
         if frame is not None:
             # Path to non-collection asset
@@ -546,6 +448,7 @@ class LCODataProvider(DataProvider):
         norm_path = proposal
         if self.allow_collab_obs:
             if category is None:
+                # List all categories
                 return (
                     [DataProviderAsset(
                         name=s,
@@ -554,163 +457,141 @@ class LCODataProvider(DataProvider):
                         metadata={},
                     ) for s in OBS_CATEGORIES], None)
 
-            norm_path += '/' + category
-            if category == COLLAB_OBS:
-                if user is None:
-                    # Return all users involved in the proposal
-                    num_requests = observe_api_query(
-                        'requestgroups',
-                        {'proposal': proposal, 'limit': 1})['count']
-                    all_requests = observe_api_query(
-                        'requestgroups',
-                        {'proposal': proposal,
-                         'limit': num_requests})['results']
-                    users = list(
-                        {request['submitter'] for request in all_requests})
-                    if name:
-                        name = name.lower()
-                        users = [user for user in users
-                                 if name in user.lower()]
-                    if sort_by:
-                        if sort_by.lower() in ('name', '+name'):
-                            users.sort()
-                        elif sort_by.lower() == '-name':
-                            users.sort(reverse=True)
-                    if page_size:
-                        page_size = int(page_size)
-                        offset = int(page or 0)*page_size
-                        count = len(users)
-                        users = users[offset:offset+page_size]
-                        total_pages = count//page_size
-                    else:
-                        total_pages = None
-                    return (
-                        [DataProviderAsset(
-                            name=user,
-                            collection=True,
-                            path=norm_path + '/' + user,
-                            metadata={},
-                        ) for user in users],
-                        PaginationInfo(
-                            page_size=page_size,
-                            total_pages=total_pages,
-                            current_page=page))
-
-                # Return all user's request groups
-                norm_path += '/' + user
-
-        if request_group is None:
-            # Return all user's request groups
-            if category == COLLAB_OBS and user:
-                request_params['user'] = user
+        norm_path += '/' + category
+        if target is None:
+            # List all targets
+            if category == USER_OBS:
+                username = get_username()
+                rg_params = {'user': username}
             else:
-                request_params['user'] = get_username()
-            if name is not None:
-                request_params['name'] = name
-            if sort_by is not None:
-                request_params['ordering'] = sort_by
-            res = observe_api_query('requestgroups', request_params)
+                rg_params = {}
+            res = observe_api_query('requestgroups', rg_params)
+            n_request_groups = res['count']
+            if len(res['results']) < n_request_groups:
+                rg_params['limit'] = n_request_groups
+                res = observe_api_query('requestgroups', rg_params)
             request_groups = res['results']
-            return (
-                [DataProviderAsset(
-                     name=params['name'],
-                     collection=True,
-                     path=norm_path + '/' + str(params['id']),
-                     metadata={},
-                 ) for params in request_groups],
-                pagination(res, page_size, page))
-
-        norm_path += '/' + str(request_group)
-        if request is None:
-            # Return all requests for the given request group
-            group_params = observe_api_query(f'requestgroups/{request_group}')
-            group_requests = group_params['requests']
-            if name is not None:
-                name = name.lower()
-                group_requests = [params for params in group_requests
-                                  if name in str(params['id'])]
-            if page_size:
-                page_size = int(page_size)
-                offset = int(page or 0)*page_size
-                count = len(group_requests)
-                group_requests = group_requests[offset:offset+page_size]
-                total_pages = count//page_size
+            all_targets = set()
+            for rg in request_groups:
+                for r in rg['requests']:
+                    for c in r['configurations']:
+                        all_targets.add(c['target']['name'])
+            if name is None:
+                all_targets = list(all_targets)
             else:
-                total_pages = None
+                name = name.lower()
+                all_targets = [target for target in all_targets
+                               if name in target.lower()]
+            if sort_by:
+                if sort_by.lstrip('+-').lower() == 'name':
+                    all_targets.sort(
+                        key=lambda item: item.lower(),
+                        reverse=sort_by.startswith('-'))
             return (
                 [DataProviderAsset(
-                     name=f'{params["id"]} - '
-                     f'{", ".join(set([conf["target"]["name"] for conf in params["configurations"]]))}',
-                     collection=True,
-                     path=norm_path + '/' + str(params['id']),
-                     metadata={},
-                 ) for params in group_requests],
+                    name=target_name,
+                    collection=True,
+                    path=norm_path + '/' + target_name.lower(),
+                    metadata={},
+                ) for target_name in all_targets],
                 PaginationInfo(
-                    page_size=page_size,
-                    total_pages=total_pages,
+                    sort=sort_by, page_size=int(page_size or 100),
+                    total_pages=len(all_targets)//int(page_size or 100),
                     current_page=page))
 
-        norm_path += '/' + str(request)
-        if frame_type is None:
-            # Return all image types for request
-            return [DataProviderAsset(
-                        name=IMAGE_TYPE_NAME[frame_type],
-                        collection=True,
-                        path=norm_path + '/' + frame_type,
-                        metadata={},
-                    ) for frame_type in IMAGE_TYPES], None
-
-        # Return all frames for the given request and image type
-        norm_path += '/' + frame_type
-        request_params['request_id'] = request
+        # Return all frames for the given target
+        norm_path += '/' + target.lower()
+        request_params['proposal_id'] = proposal
+        request_params['target_name'] = target
         if name is not None:
             request_params['basename'] = name
         if after is not None:
             request_params['start'] = after
         if before is not None:
             request_params['end'] = before
-        if frame_type == MASTER_CALS:
-            # Retrieve IDs of all related frames excluding those directly
-            # belonging to the request (i.e. raw images)
+        request_params['reduction_level'] = 91  # only return reduced images
+        if category == COLLAB_OBS:
+            # Return all frames for the given target name
             res = archive_api_query('frames', request_params)
-            all_frames = res['results']
-            all_frame_ids = [frame['id'] for frame in all_frames]
-            cal_frame_ids = set()
-            for frame in all_frames:
-                if frame['reduction_level'] != 91:
-                    continue
-                cal_frame_ids.update([i for i in frame['related_frames']
-                                      if i not in all_frame_ids])
-            all_frames = [archive_api_query(f'frames/{i}')
-                          for i in cal_frame_ids]
-        else:
-            # Retrieve all frames belonging to the request having
-            # the corresponding reduction level
-            request_params['reduction_level'] = 0 if frame_type == RAW_IMAGES \
-                else 91
+            return (
+                [DataProviderAsset(
+                     name=get_image_name(params),
+                     collection=False,
+                     path=norm_path + '/' + str(params['id']),
+                     metadata=dict(
+                         id=params['id'],
+                         type='FITS',
+                         time=params['observation_date'].rstrip('Z'),
+                         layers=1,
+                         telescope=f'{params["site_id"]} - '
+                         f'{params["telescope_id"]} - '
+                         f'{params["instrument_id"]}',
+                         obs_id=params['observation_id'],
+                         filter=LCO_FILTER_MAP.get(
+                             params['primary_optical_element'].strip('*'),
+                             params['primary_optical_element'].strip('*')),
+                         exposure=params['exposure_time'],
+                     ),
+                 ) for params in res['results']],
+                pagination(res, page_size, page))
+
+        # For user's observations, get all request groups, then all
+        # requests for this target, then all frames for these requests
+        target = target.lower()
+        username = get_username()
+        res = observe_api_query('requestgroups', {'user': username})
+        n_request_groups = res['count']
+        if len(res['results']) < n_request_groups:
+            res = observe_api_query(
+                'requestgroups', {'user': username, 'limit': n_request_groups})
+        request_groups = res['results']
+        all_requests = []
+        for rg in request_groups:
+            for r in rg['requests']:
+                for c in r['configurations']:
+                    if target in c['target']['name'].lower():
+                        all_requests.append(r['id'])
+                        break
+        frames = []
+        for request in all_requests:
+            request_params['request_id'] = request
             res = archive_api_query('frames', request_params)
-            all_frames = res['results']
-        return (
-            [DataProviderAsset(
-                 name=params['basename'],
-                 collection=False,
-                 path=norm_path + '/' + str(params['id']),
-                 metadata=dict(
-                     id=params['id'],
-                     type='FITS',
-                     time=params['observation_date'].rstrip('Z'),
-                     layers=1,
-                     telescope=f'{params["site_id"]} - '
-                     f'{params["telescope_id"]} - '
-                     f'{params["instrument_id"]}',
-                     obs_id=params['observation_id'],
-                     filter=LCO_FILTER_MAP.get(
-                         params['primary_optical_element'].strip('*'),
-                         params['primary_optical_element'].strip('*')),
-                     exposure=params['exposure_time'],
-                 ),
-             ) for params in all_frames],
-            pagination(res, page_size, page))
+            n_frames = res['count']
+            if len(res['results']) < n_frames:
+                request_params['limit'] = n_frames
+                res = archive_api_query('frames', request_params)
+            frames += [DataProviderAsset(
+                name=get_image_name(params),
+                collection=False,
+                path=norm_path + '/' + str(params['id']),
+                metadata=dict(
+                    id=params['id'],
+                    type='FITS',
+                    time=params['observation_date'].rstrip('Z'),
+                    layers=1,
+                    telescope=f'{params["site_id"]} - '
+                              f'{params["telescope_id"]} - '
+                              f'{params["instrument_id"]}',
+                    obs_id=params['observation_id'],
+                    filter=LCO_FILTER_MAP.get(
+                        params['primary_optical_element'].strip('*'),
+                        params['primary_optical_element'].strip('*')),
+                    exposure=params['exposure_time'],
+                ),
+                ) for params in res['results']
+            ]
+        if name is not None:
+            name = name.lower()
+            frames = [frame for frame in frames if name in frame.name.lower()]
+        if sort_by:
+            if sort_by.lstrip('+-').lower() == 'name':
+                frames.sort(
+                    key=lambda item: item.name,
+                    reverse=sort_by.startswith('-'))
+        return frames, PaginationInfo(
+            sort=sort_by, page_size=int(page_size or 100),
+            total_pages=len(frames)//int(page_size or 100),
+            current_page=page)
 
     def get_child_assets(self, path: str,
                          sort_by: Optional[str] = None,

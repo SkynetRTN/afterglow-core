@@ -26,7 +26,8 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
                           height_arcmins: Optional[float] = None,
                           file_ids: Optional[TList[int]] = None,
                           constraints: Optional[TDict[str, str]] = None,
-                          source_ids: Optional[TList[str]] = None) \
+                          source_ids: Optional[TList[str]] = None,
+                          skip_failed: bool = False) \
         -> TList[CatalogSource]:
     """
     Catalog query job body; also used during photometric calibration
@@ -51,6 +52,7 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
         {"column": "constraint expression", ...}
     :param source_ids: return specific sources; mutually exclusive with all
         other query parameters
+    :param skip_failed: ignore data files with no WCS in `file_ids` mode
 
     :return: list of catalog sources
     """
@@ -125,14 +127,20 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
     # which may be more efficient than querying each FOV separately if they
     # overlap
     wcs_list = []
+    if not file_ids:
+        file_ids = []
     for file_id in file_ids:
         with get_data_file_fits(job.user_id, file_id) as fits:
             try:
                 wcs = WCS(fits[0].header)
             except Exception:
+                if skip_failed:
+                    continue
                 raise ValueError('Data file ID {} has no WCS'.format(file_id))
             else:
                 if not wcs.has_celestial:
+                    if skip_failed:
+                        continue
                     raise ValueError(
                         'Invalid WCS for data file ID {}'.format(file_id))
         wcs_list.append(wcs)
