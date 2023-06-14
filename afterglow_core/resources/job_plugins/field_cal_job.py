@@ -566,7 +566,8 @@ class FieldCalJob(Job):
                 id = source.id
                 if id in source_ids_to_keep or id in source_ids_to_remove:
                     continue
-                if len([s for s in all_sources if s.id == id]) < nmin:
+                if len([s for s in all_sources
+                        if s.id == id and s.file_id in cal_results]) < nmin:
                     source_ids_to_remove.append(id)
                 else:
                     source_ids_to_keep.append(id)
@@ -590,7 +591,7 @@ class FieldCalJob(Job):
                 else:
                     raise ValueError(
                         'No sources found that are present in ' +
-                        'all images' if nmin == len(file_ids) else
+                        'all images' if source_inclusion_percent >= 100 else
                         'at least one image' if nmin == 1 else
                         'at least {:d} images'.format(nmin))
 
