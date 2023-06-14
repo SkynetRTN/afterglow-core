@@ -172,8 +172,7 @@ def run_cropping_job(job: Job,
                         try:
                             hdr.add_history(
                                 'Original data file: {}'.format(
-                                    get_data_file(
-                                        job.user_id, file_id).name or
+                                    get_data_file(adb, file_id).name or
                                     file_id))
                             file_id = create_data_file(
                                 adb, None, get_root(job.user_id), data, hdr,
@@ -189,8 +188,7 @@ def run_cropping_job(job: Job,
                     try:
                         hdr.add_history(
                             'Original data file: {}'.format(
-                                get_data_file(job.user_id, file_id).name or
-                                file_id))
+                                get_data_file(adb, file_id).name or file_id))
                         file_id = create_data_file(
                             adb, None, get_root(job.user_id), data, hdr,
                             duplicates='append', session_id=job.session_id).id

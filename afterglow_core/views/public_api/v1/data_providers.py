@@ -10,7 +10,7 @@ from .... import errors, json_response
 from ....auth import auth_required
 from ....resources import data_providers as dp
 from ....resources.data_files import (
-    get_data_file, get_data_file_bytes, get_data_file_group,
+    get_data_file, get_data_file_bytes, get_data_file_db, get_data_file_group,
     get_data_file_group_bytes, update_data_file_asset,
     update_data_file_group_asset)
 from ....schemas.api.v1 import DataProviderAssetSchema, DataProviderSchema
@@ -317,7 +317,8 @@ def data_providers_assets_data(id: Union[int, str]) -> Response:
                     if getattr(df, 'asset_path', None))) == 1:
                 path = group[0].asset_path
         elif params.get('data_file_id'):
-            df = get_data_file(request.user.id, params['data_file_id'])
+            with get_data_file_db(request.user.id) as adb:
+                df = get_data_file(adb, params['data_file_id'])
             if getattr(df, 'data_provider', None) == str(id):
                 path = getattr(df, 'asset_path', None)
         if not path:

@@ -715,8 +715,7 @@ class AlignmentJob(Job):
                             try:
                                 hdr.add_history(
                                     'Original data file: {}'.format(
-                                        get_data_file(
-                                            self.user_id, file_id).name or
+                                        get_data_file(adb, file_id).name or
                                         file_id))
                                 new_file_id = create_data_file(
                                     adb, None, get_root(self.user_id), data,
