@@ -40,7 +40,7 @@ Werkzeug==2.3.4
 # pyslalib==1.0.7
 jwt
 mysqlclient
-cryptography==41.0.1
+cryptography==41.0.2
 marshmallow_sqlalchemy==0.29.0
 PyMySQL==1.0.3
 redis==4.5.5
