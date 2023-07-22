@@ -459,12 +459,10 @@ class LCODataProvider(DataProvider):
 
         norm_path += '/' + category
         if target is None:
-            # List all targets
+            # List all targets within the given proposal
+            rg_params = {'proposal': proposal}
             if category == USER_OBS:
-                username = get_username()
-                rg_params = {'user': username}
-            else:
-                rg_params = {}
+                rg_params['user'] = get_username()
             res = observe_api_query('requestgroups', rg_params)
             n_request_groups = res['count']
             if len(res['results']) < n_request_groups:
