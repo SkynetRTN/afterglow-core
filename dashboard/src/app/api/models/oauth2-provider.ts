@@ -3,6 +3,6 @@ export interface Oauth2Provider {
     icon: string;
     client_id: string;
     authorize_url: string;
-    request_token_params: any;
+    request_token_params: { [key: string]: string };
     description: string;
 }

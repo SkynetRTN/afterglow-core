@@ -190,10 +190,12 @@ export class AuthSignInComponent implements OnInit {
         let redirectUri = window.location.origin + this._location.prepareExternalUrl('/oauth2/authorized');
 
         let params = new URLSearchParams();
-        params.append("response_type", "code");
         params.append("state", JSON.stringify(state));
         params.append("client_id", plugin.client_id);
         params.append("redirect_uri", redirectUri);
+        for (let [key, value] of Object.entries(plugin.request_token_params)) {
+            params.append(key, value);
+        }
 
         return `${plugin.authorize_url}?${params.toString()}`;
     }
