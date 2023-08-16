@@ -434,15 +434,12 @@ def data_files_hist(id: int) -> Response:
     # noinspection PyBroadException
     try:
         # First try using the cached histogram
-        with pyfits.open(
-                os.path.join(root, '{}.fits.hist'.format(id)), 'readonly',
-                memmap=False) as hist:
+        with pyfits.open(os.path.join(root, '{}.fits.hist'.format(id)), 'readonly', memmap=False) as hist:
             hdr = hist[0].header
             min_bin, max_bin = hdr['MINBIN'], hdr['MAXBIN']
             data = hist[0].data
             with get_data_file_db(request.user.id) as adb:
-                if get_data_file(adb, id).modified_on > \
-                        datetime.strptime('%Y-%m-%dT%H:%M:%S.%f', hdr['DATE']):
+                if get_data_file(adb, id).modified_on > datetime.strptime(hdr['DATE'],'%Y-%m-%dT%H:%M:%S.%f'):
                     raise Exception('Histogram outdated')
     except Exception:
         # Cached histogram not found or outdated, (re)calculate and return
