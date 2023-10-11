@@ -6,12 +6,12 @@ import os
 import time
 import errno
 import shutil
-import multiprocessing
 from datetime import datetime
 from typing import List as TList, Optional, Union
 
 from flask import Flask, current_app
-from flask_sqlalchemy import Model, SQLAlchemy
+from flask_sqlalchemy import SQLAlchemy
+from flask_sqlalchemy.model import Model
 from flask_security import (
     Security, UserMixin, RoleMixin, SQLAlchemyUserDatastore)
 from flask_security.utils import hash_password
@@ -277,41 +277,6 @@ def init_users(app: Flask) -> None:
 
     :param app: Flask application
     """
-    if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
-        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///{}'.format(
-            os.path.join(os.path.abspath(app.config['DATA_ROOT']),
-                         'afterglow.db'))
-        app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {}).setdefault(
-            'connect_args', {})['timeout'] = app.config.get('DB_TIMEOUT', 30)
-    else:
-        _db_pass = app.config.get('DB_PASS', '')
-        if _db_pass:
-            if not isinstance(_db_pass, bytes):
-                _db_pass = _db_pass.encode('ascii')
-            from .. import cipher
-            _db_pass = cipher.decrypt(_db_pass).decode('utf8')
-        app.config['SQLALCHEMY_DATABASE_URI'] = '{}://{}{}@{}:{}/{}'.format(
-            app.config.get('DB_BACKEND'),
-            app.config.get('DB_USER', 'admin'),
-            ':' + _db_pass if _db_pass else '',
-            app.config.get('DB_HOST', 'localhost'),
-            app.config.get('DB_PORT', 3306),  # default for MySQL
-            app.config.get('DB_SCHEMA', 'afterglow'))
-        app.config.setdefault(
-            'SQLALCHEMY_ENGINE_OPTIONS', {})['pool_timeout'] = \
-            app.config.get('DB_TIMEOUT', 30)
-        app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault(
-            'pool_recycle', 3600)
-        if multiprocessing.current_process().name == 'JobServer':
-            # Separate db pool size setting for job server
-            app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault(
-                'pool_size', app.config.get('JOB_DB_POOL_SIZE', 10))
-        else:
-            app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault(
-                'pool_size', app.config.get('DB_POOL_SIZE', 10))
-        del _db_pass
-    app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
-
     # All imports put here to avoid unnecessary loading of packages on startup
     # if user auth is disabled
     from alembic import (

@@ -50,8 +50,7 @@ class SonificationJob(Job):
     description = 'Image Sonification'
 
     file_id: int = Integer()
-    settings: SonificationSettings = Nested(
-        SonificationSettings, dump_default={})
+    settings: SonificationSettings = Nested(SonificationSettings, dump_default={})
     format: str = String(dump_default='wav')
 
     def run(self):

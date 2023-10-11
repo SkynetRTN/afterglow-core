@@ -325,6 +325,27 @@ def create_app() -> Flask:
     cipher = Fernet(urlsafe_b64encode(key + b'Afterglo'))
     del f, key, keyfile
 
+    # Set up SQLAlchemy options
+    if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + \
+            os.path.join(os.path.abspath(app.config['DATA_ROOT']), 'afterglow.db')
+        app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {}).setdefault(
+            'connect_args', {})['timeout'] = app.config['DB_TIMEOUT']
+    else:
+        _db_pass = app.config.get('DB_PASS', '')
+        if _db_pass:
+            if not isinstance(_db_pass, bytes):
+                _db_pass = _db_pass.encode('ascii')
+            _db_pass = cipher.decrypt(_db_pass).decode('utf8')
+        app.config['SQLALCHEMY_DATABASE_URI'] = \
+            f'{app.config["DB_BACKEND"]}://{app.config["DB_USER"]}{":" + _db_pass if _db_pass else ""}@' \
+            f'{app.config["DB_HOST"]}:{app.config["DB_PORT"]}/{app.config["DB_SCHEMA"]}'
+        app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})['pool_timeout'] = app.config['DB_TIMEOUT']
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('pool_recycle', 3600)
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('pool_size', app.config['DB_POOL_SIZE'])
+        del _db_pass
+    app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
+
     with app.app_context():
         if app.config.get('AUTH_ENABLED'):
             # Initialize user authentication and enable non-versioned /users
@@ -347,6 +368,15 @@ def create_app() -> Flask:
         # Install Flask handlers for all Afterglow exceptions
         from .errors import register
         register(app)
+
+        # Initialize job subsystem
+        from .job_server import init_jobs
+        init_jobs(app, cipher)
+
+    # shell context for flask cli
+    @app.shell_context_processor
+    def ctx():
+        return {"app": app}
 
     return app
 

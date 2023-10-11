@@ -6,9 +6,9 @@ from flask import Flask
 
 __all__ = ['register', 'url_prefix']
 
-__version__ = 1, 0, 1
+__version__ = '1.1.0'
 
-url_prefix = '/api/v{0}/'.format(__version__[0])
+url_prefix = '/api/v{0}/'.format(__version__.split('.')[0])
 
 
 def register(app: Flask) -> None:

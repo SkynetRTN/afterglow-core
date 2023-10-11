@@ -19,5 +19,5 @@ def server_status() -> Response:
     """
     return json_response({
         'initialized': users.DbUser.query.count() != 0,
-        'version': '.'.join(str(i) for i in __version__)
+        'version': __version__,
     })

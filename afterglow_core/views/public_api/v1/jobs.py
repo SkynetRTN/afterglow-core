@@ -2,12 +2,12 @@
 Afterglow Core: API v1 job views
 """
 
-from typing import Any, Dict as TDict, Union
+from typing import Any, Dict as TDict
 
 from flask import Blueprint, Flask, Response, request, send_file
 
 from .... import auth, json_response
-from ....resources.jobs import job_server_request
+from ....job_server import job_server_request
 from ....schemas.api.v1 import JobSchema, JobStateSchema
 from . import url_prefix
 
@@ -69,8 +69,7 @@ def jobs() -> Response:
         msg = job_server_request('jobs', method, **args)
         if msg['status'] != 200:
             return error_response(msg)
-        return json_response([JobSchema(exclude=['result'], **j)
-                              for j in msg['json']])
+        return json_response([JobSchema(exclude=['state', 'result'], **j) for j in msg['json']])
 
     if method == 'POST':
         # Submit a job
@@ -78,12 +77,12 @@ def jobs() -> Response:
             'jobs', method, **JobSchema(**request.args.to_dict()).to_dict())
         if msg['status'] != 201:
             return error_response(msg)
-        return json_response(JobSchema(exclude=['result'], **msg['json']))
+        return json_response(JobSchema(exclude=['state', 'result'], **msg['json']))
 
 
-@blp.route('/<int:id>', methods=('GET', 'DELETE'))
+@blp.route('/<id>', methods=('GET', 'DELETE'))
 @auth.auth_required('user')
-def job(id: Union[int, str]) -> Response:
+def job(id: str) -> Response:
     """
     Return or delete user's job
 
@@ -106,14 +105,14 @@ def job(id: Union[int, str]) -> Response:
             method == 'DELETE' and msg['status'] != 204:
         return error_response(msg)
     if method == 'GET':
-        return json_response(JobSchema(exclude=['result'], **msg['json']))
+        return json_response(JobSchema(exclude=['state', 'result'], **msg['json']))
     if method == 'DELETE':
         return json_response()
 
 
-@blp.route('/<int:id>/state', methods=['GET', 'PUT'])
+@blp.route('/<id>/state', methods=['GET', 'PUT'])
 @auth.auth_required('user')
-def jobs_state(id: Union[int, str]) -> Response:
+def jobs_state(id: str) -> Response:
     """
     Return or modify job state
 
@@ -143,9 +142,9 @@ def jobs_state(id: Union[int, str]) -> Response:
     return json_response(JobStateSchema(**msg['json']))
 
 
-@blp.route('/<int:id>/result')
+@blp.route('/<id>/result')
 @auth.auth_required('user')
-def jobs_result(id: Union[int, str]) -> Response:
+def jobs_result(id: str) -> Response:
     """
     Return job result
 
@@ -170,16 +169,16 @@ def jobs_result(id: Union[int, str]) -> Response:
         job_schema().fields['result'].nested(**msg['json']))
 
 
-@blp.route('/<int:id>/result/files/<file_id>')
+@blp.route('/<id>/result/files/<file_id>')
 @auth.auth_required('user')
-def jobs_result_files(id: Union[int, str], file_id: str) -> Response:
+def jobs_result_files(id: str, file_id: str) -> Response:
     """
     Return extra job result file
 
     GET /jobs/[id]/result/files/[file_id] -> [binary data]
 
-    :param int id: job ID
-    :param str file_id: extra job result file ID
+    :param id: job ID
+    :param file_id: extra job result file ID
 
     :return: binary data in the response body with the appropriate MIME type
     """

@@ -6,7 +6,7 @@ from io import BytesIO
 from zipfile import ZIP_DEFLATED, ZipFile
 from typing import List as TList
 
-from marshmallow.fields import Integer, List, String
+from marshmallow.fields import Integer, List, Nested, String
 
 from ...models import Job
 from ...errors import MissingFieldError, ValidationError
@@ -39,9 +39,7 @@ class BatchDownloadJob(Job):
         if len(self.file_ids) == 1 and not self.group_names:
             # Single data file; don't create archive
             self.create_job_file(
-                'download',
-                get_data_file_bytes(self.user_id, self.file_ids[0]),
-                mimetype='image/fits')
+                'download', get_data_file_bytes(self.user_id, self.file_ids[0]), mimetype='image/fits')
             return
 
         # Collect data files in groups
@@ -150,9 +148,7 @@ class BatchAssetDownloadJob(Job):
         if len(assets) == 1:
             # Single non-collection asset; don't create archive
             asset = assets[0][0]
-            self.create_job_file(
-                'download', provider.get_asset_data(asset.path),
-                mimetype=asset.mimetype)
+            self.create_job_file('download', provider.get_asset_data(asset.path), mimetype=asset.mimetype)
             return
 
         # Add asset to archive
