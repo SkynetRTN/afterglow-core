@@ -292,12 +292,10 @@ class Job(AfterglowSchema):
         self._task = _task
 
         # Initialize to default state and result
-        if not hasattr(self, 'state'):
-            # noinspection PyTypeChecker
-            self.state = {}
-        if not hasattr(self, 'result'):
-            # noinspection PyTypeChecker
-            self.result = {}
+        if getattr(self, 'state', None) is None:
+            self.state = JobState()
+        if getattr(self, 'result', None) is None:
+            self.result = JobResult()
 
     def run(self) -> None:
         """

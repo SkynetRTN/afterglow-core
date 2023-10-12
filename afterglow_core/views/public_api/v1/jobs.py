@@ -74,7 +74,7 @@ def jobs() -> Response:
     if method == 'POST':
         # Submit a job
         msg = job_server_request(
-            'jobs', method, **JobSchema(**request.args.to_dict()).to_dict())
+            'jobs', method, **JobSchema(exclude=['state', 'result'], **request.args.to_dict()).to_dict())
         if msg['status'] != 201:
             return error_response(msg)
         return json_response(JobSchema(exclude=['state', 'result'], **msg['json']))
