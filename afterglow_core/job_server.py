@@ -19,7 +19,7 @@ from urllib.parse import quote
 from sqlalchemy import Column, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, relationship
 from werkzeug.http import HTTP_STATUS_CODES
-from flask import Flask, current_app
+from flask import Flask, current_app, g
 from flask_login import current_user
 from cryptography.fernet import Fernet
 
@@ -47,7 +47,7 @@ from .plugins import load_plugins
 from .errors import AfterglowError, MissingFieldError
 from .errors.job import *
 from .resources import data_files
-from .resources.users import db
+from .resources.users import DbUser, db
 from .models import Job, job_file_path
 
 
@@ -139,12 +139,17 @@ def run_job(task: Task, *args, **kwargs) -> dict:
         current_app.logger.warning('%s Could not create job', prefix, exc_info=True)
         raise
 
+    user_id = getattr(job, 'user_id', None)
+
     # Run the job in a background thread; copy Flask app context from the main thread with a fake request context
     ctx = current_app.request_context({'wsgi.url_scheme': 'http', 'wsgi.errors': {}, 'REQUEST_METHOD': 'GET'})
 
     def job_thread_body():
         with ctx:
             try:
+                # flask_login.current_user support
+                if user_id is not None:
+                    g._login_user = DbUser.query.get_or_404(user_id, 'Unknown user')
                 job.run()
             except TaskAbortedError as e:
                 # Notify watchdog thread as soon as possible that a cancellation exception was caught

@@ -100,8 +100,3 @@ class BatchImportJob(Job):
             except Exception:
                 adb.rollback()
                 raise
-        self.update_progress(99)
-        import time
-        time.sleep(40)
-        # for _ in range(400):
-        #     time.sleep(0.1)
