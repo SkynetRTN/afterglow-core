@@ -549,8 +549,8 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
                             raise UnknownJobFileError(id=file_id)
                         result = {
                             'filename': job_file_path(user_id, job_id, file_id),
-                            'mimetype': job_file['mimetype'],
-                            'headers': job_file['headers'] or {},
+                            'mimetype': job_file.get('mimetype') or 'application/octet-stream',
+                            'headers': job_file.get('headers'),
                         }
 
                     case _:
