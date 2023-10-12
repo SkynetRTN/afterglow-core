@@ -150,7 +150,11 @@ def run_job(task: Task, *args, **kwargs) -> dict:
                 # flask_login.current_user support
                 if user_id is not None:
                     g._login_user = DbUser.query.get_or_404(user_id, 'Unknown user')
+
                 job.run()
+
+                # Upon successful completion, always set progress to 100%
+                job.update_progress(100)
             except TaskAbortedError as e:
                 # Notify watchdog thread as soon as possible that a cancellation exception was caught
                 job_cancel_ack_event.set()
@@ -345,7 +349,8 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
 
 def get_job_state(db_job: DbJob) -> TDict[str, object]:
     """
-    Return serialized job state for a given database job object; used by GET /jobs/#/state and PUT /jobs/#/state
+    Return serialized job state for a given database job object; used by GET /jobs, GET /jobs/#, GET /jobs/#/state, and
+    PUT /jobs/#/state
 
     :param db_job: database job object
 
@@ -372,6 +377,38 @@ def get_job_state(db_job: DbJob) -> TDict[str, object]:
                 result['progress'] = res['state']['progress']
             except Exception:
                 pass
+
+    return result
+
+
+def get_job_result(db_job: DbJob) -> TDict[str, object]:
+    """
+    Return serialized job result for a given database job object; used by GET /jobs, GET /jobs/#, and GET /jobs/#/result
+
+    :param db_job: database job object
+
+    :return: serialized DbJobResult or subclass
+    """
+    res = AsyncResult(db_job.id)
+    res_schema = job_types[db_job.type].fields['result'].nested
+    if res.state == 'SUCCESS':
+        result = res_schema(**res.result).to_dict()
+    else:
+        result = res_schema().to_dict()
+    result['type'] = db_job.type
+
+    if res.state in ('REVOKED', 'FAILURE'):
+        exc = res.result
+        if isinstance(exc, TaskRevokedError):
+            # Translate TaskRevokedError returned if the worker was killed on cancellation into
+            # the same exception (TaskAbortedError) as returned on normal cancellation, although
+            # without traceback
+            exc = TaskAbortedError()
+        result.setdefault('errors', []).append({
+            'id': exc.__class__.__name__,
+            'detail': str(exc) or exc.__class__.__name__,
+            'meta': {'traceback': res.traceback} if res.traceback else {},
+        })
 
     return result
 
@@ -424,8 +461,9 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
                 try:
                     result = Job(**args).to_dict()
                     result['id'] = job_id
-                    del result['state'], result['result']
+                    result['state']['created_on'] = created_on
                     job_args = dict(result)
+                    del job_args['state'], job_args['result']
                     # Delete the common indexable fields
                     for name in ('id', 'type', 'user_id', 'session_id'):
                         del job_args[name]
@@ -456,6 +494,8 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
                         type=db_job.type,
                         user_id=db_job.user_id,
                         session_id=db_job.session_id,
+                        state=get_job_state(db_job),
+                        result=get_job_result(db_job),
                     ))
                     result[-1].update(db_job.args)
 
@@ -481,6 +521,8 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
                             type=db_job.type,
                             user_id=db_job.user_id,
                             session_id=db_job.session_id,
+                            state=get_job_state(db_job),
+                            result=get_job_result(db_job),
                         )
                         result.update(db_job.args)
 
@@ -488,25 +530,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
                         result = get_job_state(db_job)
 
                     case 'jobs/result':
-                        res = AsyncResult(job_id)
-                        res_schema = job_types[db_job.type].fields['result'].nested
-                        if res.state == 'SUCCESS':
-                            result = res_schema(**res.result).to_dict()
-                        else:
-                            result = res_schema().to_dict()
-                        result['type'] = db_job.type
-                        if res.state in ('REVOKED', 'FAILURE'):
-                            exc = res.result
-                            if isinstance(exc, TaskRevokedError):
-                                # Translate TaskRevokedError returned if the worker was killed on cancellation into
-                                # the same exception (TaskAbortedError) as returned on normal cancellation, although
-                                # without traceback
-                                exc = TaskAbortedError()
-                            result.setdefault('errors', []).append({
-                                'id': exc.__class__.__name__,
-                                'detail': str(exc) or exc.__class__.__name__,
-                                'meta': {'traceback': res.traceback} if res.traceback else {},
-                            })
+                        result = get_job_result(db_job)
 
                     case 'jobs/result/files':
                         try:
@@ -519,7 +543,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
                             raise res.result.with_traceback(res.traceback)
                         try:
                             job_file = res.result['files'][file_id]
-                        except KeyError:
+                        except (KeyError, TypeError):
                             raise UnknownJobFileError(id=file_id)
                         result = {
                             'filename': job_file_path(user_id, job_id, file_id),

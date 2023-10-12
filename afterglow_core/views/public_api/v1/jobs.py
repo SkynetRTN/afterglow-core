@@ -69,7 +69,7 @@ def jobs() -> Response:
         msg = job_server_request('jobs', method, **args)
         if msg['status'] != 200:
             return error_response(msg)
-        return json_response([JobSchema(exclude=['state', 'result'], **j) for j in msg['json']])
+        return json_response([JobSchema(**j) for j in msg['json']])
 
     if method == 'POST':
         # Submit a job
@@ -77,7 +77,7 @@ def jobs() -> Response:
             'jobs', method, **JobSchema(exclude=['state', 'result'], **request.args.to_dict()).to_dict())
         if msg['status'] != 201:
             return error_response(msg)
-        return json_response(JobSchema(exclude=['state', 'result'], **msg['json']))
+        return json_response(JobSchema(**msg['json']))
 
 
 @blp.route('/<id>', methods=('GET', 'DELETE'))
@@ -101,11 +101,10 @@ def job(id: str) -> Response:
     # Return/delete job with the given ID
     method = request.method
     msg = job_server_request('jobs', method, id=id)
-    if method == 'GET' and msg['status'] != 200 or \
-            method == 'DELETE' and msg['status'] != 204:
+    if method == 'GET' and msg['status'] != 200 or method == 'DELETE' and msg['status'] != 204:
         return error_response(msg)
     if method == 'GET':
-        return json_response(JobSchema(exclude=['state', 'result'], **msg['json']))
+        return json_response(JobSchema(**msg['json']))
     if method == 'DELETE':
         return json_response()
 
