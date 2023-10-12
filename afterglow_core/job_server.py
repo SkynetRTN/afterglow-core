@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from threading import Event, Thread
 from typing import Dict as TDict
 from types import SimpleNamespace
+from urllib.parse import quote
 
 from sqlalchemy import Column, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, relationship
@@ -292,7 +293,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
     if broker_pass:
         if not isinstance(broker_pass, bytes):
             broker_pass = broker_pass.encode('ascii')
-        broker_pass = ':' + cipher.decrypt(broker_pass).decode('utf8')
+        broker_pass = ':' + quote(cipher.decrypt(broker_pass).decode('utf8'))
 
     # Set up job database
     if not app.config.get('AUTH_ENABLED'):
@@ -317,7 +318,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
     # Create Celery app
     celery_app = Celery('afterglow_core.job_server', task_cls=AfterglowTask)
     celery_app.config_from_object(dict(
-        broker_url=f'amqp://{app.config["JOB_SERVER_USER"]}{broker_pass}@{app.config["JOB_SERVER_HOST"]}:'
+        broker_url=f'amqp://{quote(app.config["JOB_SERVER_USER"])}{broker_pass}@{app.config["JOB_SERVER_HOST"]}:'
         f'{app.config["JOB_SERVER_PORT"]}/{app.config["JOB_SERVER_VHOST"]}',
         broker_connection_retry_on_startup=True,
         result_backend='db+' + result_backend,
