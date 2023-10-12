@@ -63,7 +63,7 @@ def afterglow_error_handler(e: Exception) -> Response:
     if meta:
         error['meta'] = dict(meta)
 
-    error.setdefault('meta', {})['traceback'] = traceback.format_tb(sys.exc_info()[-1]),
+    error.setdefault('meta', {})['traceback'] = traceback.format_tb(sys.exc_info()[-1])
 
     return Response(
         json.dumps({

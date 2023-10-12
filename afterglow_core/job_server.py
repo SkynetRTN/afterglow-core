@@ -377,6 +377,8 @@ def get_job_state(db_job: DbJob) -> TDict[str, object]:
                 result['progress'] = res['state']['progress']
             except Exception:
                 pass
+    elif status == js.COMPLETED:
+        result['progress'] = 100
 
     return result
 
