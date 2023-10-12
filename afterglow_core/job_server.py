@@ -303,8 +303,6 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
-    DbJobState.__table__.drop(db.engine, checkfirst=True)
-    DbJob.__table__.drop(db.engine, checkfirst=True)
     db.create_all()
 
     # Set up result backend
