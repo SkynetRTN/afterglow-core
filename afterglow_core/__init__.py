@@ -257,6 +257,7 @@ def create_app() -> Flask:
     cors = CORS(app, resources={'/api/*': {'origins': '*'}})
     app.config.from_object('afterglow_core.default_cfg')
     app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=True)
+    app.config.from_envvar('AFTERGLOW_CORE_SECRETS', silent=True)
 
     proxy_count = app.config.get('APP_PROXY')
     if proxy_count:

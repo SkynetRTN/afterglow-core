@@ -1,3 +1,4 @@
 include MANIFEST.in
 exclude afterglow_core/resources/data_provider_plugins/skynet_local_provider.py
 include scripts/*.service
+include *.j2
