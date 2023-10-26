@@ -38,10 +38,9 @@ tbb==2021.10.0
 Werkzeug==2.3.7
 
 # extra skynet dependencies
-# pyslalib==1.0.7
 jwt
 mysqlclient==2.2.0
-cryptography==41.0.4
+cryptography==41.0.5
 marshmallow_sqlalchemy==0.29.0
 PyMySQL==1.1.0
 redis==5.0.1
