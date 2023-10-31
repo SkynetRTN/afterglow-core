@@ -330,6 +330,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         broker_connection_retry_on_startup=True,
         result_backend='db+' + result_backend,
         database_engine_options=app.config['SQLALCHEMY_ENGINE_OPTIONS'],
+        task_default_queue='afterglow',
         task_track_started=True,
         task_soft_time_limit=app.config['JOB_TIMEOUT'],
         task_time_limit=app.config['JOB_TIMEOUT'] + app.config['JOB_CANCEL_TIMEOUT']
