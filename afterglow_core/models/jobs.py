@@ -19,7 +19,11 @@ from ..schemas import AfterglowSchema, DateTime, Float
 from .errors import AfterglowError as AfterglowErrorSchema
 
 
-__all__ = ['Job', 'JobFile', 'JobResult', 'JobState', 'job_file_dir', 'job_file_path']
+__all__ = [
+    'Job', 'JobFile', 'JobResult', 'JobState',
+    'job_result_dir', 'job_result_path',
+    'job_file_dir', 'job_file_path',
+]
 
 
 class JobState(AfterglowSchema):
@@ -403,16 +407,28 @@ class Job(AfterglowSchema):
         self.update()
 
 
+def job_result_dir() -> str:
+    """
+    Return job result directory
+    """
+    return os.path.join(os.path.abspath(current_app.config['DATA_ROOT']), 'job_results')
+
+
+def job_result_path(job_id: str) -> str:
+    """
+    Return path to job result file
+    """
+    return os.path.join(job_result_dir(), job_id)
+
+
 def job_file_dir() -> str:
     """
     Return job file directory
     """
-    return os.path.join(
-        os.path.abspath(current_app.config['DATA_ROOT']), 'job_files')
+    return os.path.join(os.path.abspath(current_app.config['DATA_ROOT']), 'job_files')
 
 
-def job_file_path(user_id: Union[int, str], job_id: Union[int, str],
-                  file_id: str) -> str:
+def job_file_path(user_id: Union[int, str, None], job_id: str, file_id: str) -> str:
     """
     Return path to extra job file
 
@@ -426,4 +442,4 @@ def job_file_path(user_id: Union[int, str], job_id: Union[int, str],
         p = os.path.join(job_file_dir(), str(user_id))
     else:
         p = job_file_dir()
-    return os.path.join(p, '{}_{}'.format(job_id, file_id))
+    return os.path.join(p, f'{job_id}_{file_id}')

@@ -3,7 +3,7 @@ Afterglow Core: job server
 
 Celery application that automatically converts Afterglow jobs into Celery tasks.
 """
-
+import json
 import os
 import errno
 import sys
@@ -12,7 +12,7 @@ import ctypes
 import signal
 from datetime import datetime, timedelta
 from threading import Event, Thread
-from typing import Dict as TDict
+from typing import Dict as TDict, Union
 from types import SimpleNamespace
 from urllib.parse import quote
 
@@ -48,7 +48,7 @@ from .errors import AfterglowError, MissingFieldError
 from .errors.job import *
 from .resources import data_files
 from .resources.users import DbUser, db
-from .models import Job, job_file_path
+from .models import Job, job_file_path, job_result_dir, job_result_path
 
 
 __all__ = ['init_jobs']
@@ -115,18 +115,16 @@ def cancel_watchdog() -> None:
 
 
 @shared_task(name='run_job', bind=True)
-def run_job(task: Task, *args, **kwargs) -> dict:
+def run_job(task: Task, *args, **kwargs):
     """
     The one and only Celery task wrapping all Afterglow jobs
 
     :param task: Celery task instance
     :param args: extra positional arguments to Job()
     :param kwargs: job initialization parameters; must include at least "type" and other job-dependent parameters
-
-    :return: job result
     """
     pid = os.getpid()
-    kwargs['id'] = task.request.id  # use task ID as job ID
+    job_id = kwargs['id'] = task.request.id  # use task ID as job ID
     prefix = f'[Job worker {pid}@{task.request.hostname}]'
     current_app.logger.debug('%s Got job request: %s', prefix, kwargs)
 
@@ -197,7 +195,15 @@ def run_job(task: Task, *args, **kwargs) -> dict:
         # Restore the normal SIGINT handling
         signal.signal(signal.SIGINT, default_abort_handler)
 
-    return job.result.dump(job.result)
+    # Save serialized result to job result file
+    d = job_result_dir()
+    try:
+        os.makedirs(d)
+    except OSError as _e_:
+        if _e_.errno != errno.EEXIST:
+            raise
+    with open(os.path.join(d, job_id), 'wt', encoding='utf8') as f:
+        print(job.result.dumps(job.result), file=f)
 
 
 # noinspection PyBroadException
@@ -207,31 +213,19 @@ def cleanup_jobs() -> None:
     Periodic task that erases jobs and job files older than 1 day
     """
     expiration = datetime.utcnow() - timedelta(days=1)
-    # noinspection PyUnresolvedReferences
-    for job_state in db.session.query(DbJobState) \
-            .filter(DbJobState.status.in_((js.COMPLETED, js.CANCELED)), DbJobState.created_on < expiration):
-        job_id, user_id = job_state.id, job_state.job.user_id
+    try:
+        for job_state in db.session.query(DbJobState) \
+                .filter(DbJobState.status.in_((js.COMPLETED, js.CANCELED)), DbJobState.created_on < expiration):
+            job_id, user_id = job_state.id, job_state.job.user_id
 
-        # Delete job files
-        res = AsyncResult(job_id)
-        try:
-            for file_id in res.result['files']:
-                try:
-                    os.unlink(job_file_path(user_id, job_id, file_id))
-                except Exception:
-                    current_app.logger.warning(
-                        'Error deleting file "%s" for expired job %s, user %s', file_id, job_id, user_id,
-                        exc_info=True)
-        except Exception:
-            pass
-
-        # Delete job from database
-        try:
+            delete_job_data(user_id, job_id)
             db.session.query(DbJob).filter_by(id=job_id).delete()
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            current_app.logger.warning('Error deleting expired job %s', job_id, exc_info=True)
+
+        db.session.commit()
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.warning('Error deleting expired jobs', exc_info=True)
 
 
 celery_app: Celery
@@ -396,7 +390,9 @@ def get_job_result(db_job: DbJob) -> TDict[str, object]:
     res = AsyncResult(db_job.id)
     res_schema = job_types[db_job.type].fields['result'].nested
     if res.state == 'SUCCESS':
-        result = res_schema(**res.result).to_dict()
+        with open(job_result_path(db_job.id), 'rt', encoding='utf8') as f:
+            result = json.load(f)
+        result = res_schema(**result).to_dict()
     else:
         result = res_schema().to_dict()
     result['type'] = db_job.type
@@ -415,6 +411,38 @@ def get_job_result(db_job: DbJob) -> TDict[str, object]:
         })
 
     return result
+
+
+# noinspection PyBroadException
+def delete_job_data(user_id: Union[int, str], job_id: str) -> None:
+    """
+    Delete the given job data: job result file and the optional job files
+
+    :param user_id: user ID
+    :param job_id: job ID
+    """
+    # Get job result from file
+    res_path = job_result_path(job_id)
+    try:
+        with open(res_path, 'rt', encoding='utf8') as f:
+            res = json.load(f)
+
+        # Delete job files
+        try:
+            for file_id in res['files']:
+                try:
+                    os.unlink(job_file_path(user_id, job_id, file_id))
+                except Exception:
+                    current_app.logger.warning(
+                        'Error deleting file "%s" for expired job %s, user %s',
+                        file_id, job_id, user_id, exc_info=True)
+        except Exception:
+            pass
+
+        # Delete job result file
+        os.unlink(res_path)
+    except Exception:
+        pass
 
 
 def job_server_request(resource: str, method: str, **args) -> TDict[str, object]:
@@ -581,13 +609,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
                 if db_job.state.status not in (js.COMPLETED, js.CANCELED):
                     raise CannotDeleteJobError(status=db_job.state.status)
 
-                # Delete job files
-                res = AsyncResult(job_id)
-                for file_id in res.result['files']:
-                    try:
-                        os.unlink(job_file_path(user_id, job_id, file_id))
-                    except OSError:
-                        pass
+                delete_job_data(user_id, job_id)
 
                 try:
                     db.session.query(DbJob).filter_by(id=job_id).delete()
