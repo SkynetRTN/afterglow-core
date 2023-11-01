@@ -38,7 +38,7 @@ class SoftTimeLimitExceeded(BaseException):
 billiard.exceptions.SoftTimeLimitExceeded = SoftTimeLimitExceeded
 
 from celery import Celery, Task, shared_task
-from celery.exceptions import TaskRevokedError
+from celery.exceptions import TaskRevokedError, WorkerLostError
 from celery.result import AsyncResult
 from celery.schedules import crontab
 
@@ -369,8 +369,9 @@ def get_job_state(db_job: DbJob) -> TDict[str, object]:
     if status == js.IN_PROGRESS:
         # Extract progress info from broker
         res = AsyncResult(db_job.id).result
-        if isinstance(res, TaskRevokedError):
-            # This happens when the task did not respond to cancellation request and was killed
+        if isinstance(res, (TaskRevokedError, WorkerLostError)):
+            # This happens when the task did not respond to cancellation request and was killed or the worker process
+            # was lost due to SIGSEGV, OOM, etc.
             result['status'] = js.CANCELED
         else:
             # noinspection PyBroadException
