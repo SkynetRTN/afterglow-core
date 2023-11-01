@@ -332,11 +332,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         beat_schedule={
             'cleanup-jobs': dict(  # wipe expired jobs daily at 4am
                 task='cleanup_jobs',
-                schedule=crontab(hour='4'),
-            ),
-            'cleanup-job-results': dict(  # wipe result backend daily at 4am
-                task='celery.backend_cleanup',
-                schedule=crontab(hour='4'),
+                schedule=crontab(hour='4', minute='0'),
             ),
         },
     ))
