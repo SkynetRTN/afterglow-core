@@ -213,6 +213,7 @@ def cleanup_jobs() -> None:
     Periodic task that erases jobs and job files older than 1 day
     """
     expiration = datetime.utcnow() - timedelta(days=1)
+    count = 0
     try:
         for job_state in db.session.query(DbJobState) \
                 .filter(DbJobState.status.in_((js.COMPLETED, js.CANCELED)), DbJobState.created_on < expiration):
@@ -221,7 +222,12 @@ def cleanup_jobs() -> None:
             delete_job_data(user_id, job_id)
             db.session.query(DbJob).filter_by(id=job_id).delete()
 
+            count += 1
+
         db.session.commit()
+
+        if count:
+            current_app.logger.info('Deleted %s expired job%s', count, 's' if count > 1 else '')
 
     except Exception:
         db.session.rollback()
