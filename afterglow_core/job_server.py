@@ -330,8 +330,12 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         task_time_limit=app.config['JOB_TIMEOUT'] + app.config['JOB_CANCEL_TIMEOUT']
         if app.config['JOB_TIMEOUT'] else None,
         beat_schedule={
-            'cleanup-jobs': dict(  # wipe expired jobs daily at 4am, same time as task results
+            'cleanup-jobs': dict(  # wipe expired jobs daily at 4am
                 task='cleanup_jobs',
+                schedule=crontab(hour='4'),
+            ),
+            'cleanup-job-results': dict(  # wipe result backend daily at 4am
+                task='celery.backend_cleanup',
                 schedule=crontab(hour='4'),
             ),
         },
