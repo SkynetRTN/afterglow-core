@@ -15,6 +15,7 @@ from threading import Event, Thread
 from typing import Dict as TDict, Union
 from types import SimpleNamespace
 from urllib.parse import quote
+from logging import Formatter
 
 from sqlalchemy import Column, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, relationship
@@ -41,6 +42,7 @@ from celery import Celery, Task, shared_task
 from celery.exceptions import TaskRevokedError, WorkerLostError
 from celery.result import AsyncResult
 from celery.schedules import crontab
+from celery.signals import after_setup_logger, after_setup_task_logger
 
 from .resources.base import DateTime, JSONType
 from .plugins import load_plugins
@@ -240,6 +242,16 @@ def cleanup_jobs() -> None:
 celery_app: Celery
 
 
+# Set up logging
+# noinspection PyUnusedLocal
+@after_setup_logger.connect
+@after_setup_task_logger.connect
+def setup_logger(logger, *args, **kwargs):
+    from . import MaxLengthFormatter
+    for handler in logger.handlers:
+        handler.setFormatter(MaxLengthFormatter('%(asctime)s %(levelname)-8s %(message)s'))
+
+
 def init_jobs(app: Flask, cipher: Fernet) -> Celery:
     """
     Initialize the job subsystem
@@ -333,8 +345,6 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         broker_connection_retry_on_startup=True,
         result_backend='db+' + result_backend,
         database_engine_options=app.config['SQLALCHEMY_ENGINE_OPTIONS'],
-        worker_log_format='%(asctime)s %(levelname)-8s %(message)s',
-        worker_task_log_format='%(asctime)s %(levelname)-8s %(message)s',
         task_default_queue='afterglow',
         task_track_started=True,
         task_soft_time_limit=app.config['JOB_TIMEOUT'],
