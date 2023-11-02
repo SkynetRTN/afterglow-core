@@ -126,7 +126,7 @@ def run_job(task: Task, *args, **kwargs):
     pid = os.getpid()
     job_id = kwargs['id'] = task.request.id  # use task ID as job ID
     prefix = f'[Job worker {pid}@{task.request.hostname}]'
-    current_app.logger.debug('%s Got job request: %s', prefix, kwargs)
+    current_app.logger.info('%s Got job request: %s', prefix, kwargs)
 
     # Create job object from description; kwargs is guaranteed to contain at least type, ID, and user ID, and
     # the corresponding job plugin is guaranteed to exist
@@ -202,8 +202,11 @@ def run_job(task: Task, *args, **kwargs):
     except OSError as _e_:
         if _e_.errno != errno.EEXIST:
             raise
+    serialized = job.result.dumps(job.result)
     with open(os.path.join(d, job_id), 'wt', encoding='utf8') as f:
-        print(job.result.dumps(job.result), file=f)
+        print(serialized, file=f)
+
+    current_app.logger.info('%s Job %s -> %s', prefix, job_id, serialized)
 
 
 # noinspection PyBroadException

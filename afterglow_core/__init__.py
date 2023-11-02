@@ -248,6 +248,30 @@ cipher = None
 cors = None
 
 
+class MaxLengthFormatter(Formatter):
+    """
+    Log formatter that ensures that the message does not exceed maximum length and truncates it in the middle otherwise
+    """
+    def __init__(self, *args, **kwargs):
+        self.max_length = max_length = kwargs.pop('max_length', 1000)
+        self.filler = filler = kwargs.pop('filler', ' [...] ')
+        min_partial = max(kwargs.pop('min_partial', 20), 1)
+
+        super().__init__(*args, **kwargs)
+
+        l = len(filler)
+        if l > max_length - min_partial:
+            self.max_length = max_length = l + min_partial
+        self._left = (max_length - l)//2
+        self._right = max_length - self._left - l
+
+    def format(self, record):
+        msg = super().format(record)
+        if len(msg) <= self.max_length:
+            return msg
+        return msg[:self._left] + self.filler + msg[-self._right:]
+
+
 class AfterglowLogHandler(TimedRotatingFileHandler):
     """
     Extended TimedRotatingFileHandler that does not roll over until the log file reaches maximum size and compresses
@@ -255,8 +279,10 @@ class AfterglowLogHandler(TimedRotatingFileHandler):
     """
     def __init__(self, *args, **kwargs):
         self.max_bytes = kwargs.pop('max_bytes', 1 << 20)
+
         super().__init__(*args, **kwargs)
-        self.formatter = Formatter('%(asctime)s %(levelname)-8s %(message)s')
+
+        self.formatter = MaxLengthFormatter('%(asctime)s %(levelname)-8s %(message)s')
 
     def shouldRollover(self, record):
         """
@@ -265,6 +291,7 @@ class AfterglowLogHandler(TimedRotatingFileHandler):
         In addition to TimedRotatingFileHandler, don't roll over if the file size is less than 1 megabyte
         """
         res = super().shouldRollover(record)
+
         if res:
             if self.stream is None:
                 self.stream = self._open()
@@ -272,6 +299,7 @@ class AfterglowLogHandler(TimedRotatingFileHandler):
             self.stream.seek(0, 2)
             if self.stream.tell() + len(msg) < self.max_bytes:
                 res = False
+
         return res
 
     @staticmethod
