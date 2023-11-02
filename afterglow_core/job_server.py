@@ -330,6 +330,8 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         broker_connection_retry_on_startup=True,
         result_backend='db+' + result_backend,
         database_engine_options=app.config['SQLALCHEMY_ENGINE_OPTIONS'],
+        worker_log_format='%(asctime)s %(levelname)-8s %(message)s',
+        worker_task_log_format='%(asctime)s %(levelname)-8s %(message)s',
         task_default_queue='afterglow',
         task_track_started=True,
         task_soft_time_limit=app.config['JOB_TIMEOUT'],

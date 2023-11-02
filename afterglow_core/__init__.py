@@ -6,6 +6,10 @@ import datetime
 import json
 import os
 import errno
+import gzip
+import shutil
+from logging import Formatter, getLogger
+from logging.handlers import TimedRotatingFileHandler
 from base64 import urlsafe_b64encode
 from urllib.parse import urlencode
 from typing import Any, Dict as TDict, List as TList, Optional, Union
@@ -244,6 +248,45 @@ cipher = None
 cors = None
 
 
+class AfterglowLogHandler(TimedRotatingFileHandler):
+    """
+    Extended TimedRotatingFileHandler that does not roll over until the log file reaches maximum size and compresses
+    files after rollover
+    """
+    def __init__(self, *args, **kwargs):
+        self.max_bytes = kwargs.pop('max_bytes', 1 << 20)
+        super().__init__(*args, **kwargs)
+        self.formatter = Formatter('%(asctime)s %(levelname)-8s %(message)s')
+
+    def shouldRollover(self, record):
+        """
+        Determine if rollover should occur.
+
+        In addition to TimedRotatingFileHandler, don't roll over if the file size is less than 1 megabyte
+        """
+        res = super().shouldRollover(record)
+        if res:
+            if self.stream is None:
+                self.stream = self._open()
+            msg = "%s\n" % self.format(record)
+            self.stream.seek(0, 2)
+            if self.stream.tell() + len(msg) < self.max_bytes:
+                res = False
+        return res
+
+    @staticmethod
+    def namer(name):
+        """Appends .gz suffix to backup logs"""
+        return name + '.gz'
+
+    @staticmethod
+    def rotator(source, dest):
+        """Compresses backup logs"""
+        with open(source, 'rb') as f_in, gzip.open(dest, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+        os.remove(source)
+
+
 def create_app() -> Flask:
     """
     Flask app factory
@@ -251,6 +294,16 @@ def create_app() -> Flask:
     :return: Flask application instance
     """
     global cipher, cors
+
+    # Set up logging
+    logger = getLogger()
+    logger.setLevel('INFO')
+    logger.addHandler(AfterglowLogHandler(
+        os.path.join(os.environ.get('AFTERGLOW_LOGGING_ROOT', '/skynet/logs'), 'afterglow.log'),
+        when='D',
+        backupCount=10,
+        max_bytes=1 << 20,
+        encoding='utf8'))
 
     # noinspection PyShadowingNames
     app = Flask(__name__)
