@@ -324,9 +324,15 @@ class AlignmentJob(Job):
                     'upright': settings.upright,
                 }
 
-        # Handle progress: 2 stages (calculating and applying transforms) plus
-        # optional cropping
-        total_stages = 2 + int(self.crop)
+        # Handle progress: at least 2 stages (calculating and applying transforms)
+        total_stages = 2
+        if self.crop:
+            # Post-cropping
+            total_stages += 1
+        if ref_file_id is None and isinstance(settings, (AlignmentSettingsFeatures, AlignmentSettingsPixels)):
+            # Pre-cropping
+            total_stages += 1
+        stage = 0
 
         wcs_cache, ref_star_cache = {}, {}
         transforms, history = {}, {}
@@ -353,7 +359,9 @@ class AlignmentJob(Job):
                     # except KeyError:
                     #     pass
                     self.update_progress(
-                        (i + 1)/len(file_ids)*100, 0, total_stages)
+                        (i + 1)/len(file_ids)*100, stage, total_stages)
+
+            stage += 1
 
             with get_data_file_fits(self.user_id, ref_file_id) as f:
                 hdr = f[0].header
@@ -376,6 +384,11 @@ class AlignmentJob(Job):
 
         else:
             # Mosaicing mode
+            if isinstance(settings, (AlignmentSettingsFeatures, AlignmentSettingsPixels)):
+                # Crop images before feature extraction to prevent memory overflow  if realigning
+                run_cropping_job(self, None, file_ids, inplace=True, stage=stage, total_stages=total_stages)
+                stage += 1
+
             # Find all possible pairwise transformations
             rel_transforms, weights, fovs = {}, {}, {}
             n = len(file_ids)
@@ -459,7 +472,10 @@ class AlignmentJob(Job):
                                 # Match discarded because of no overlap
                                 pass
                     k += 1
-                    self.update_progress(k/total_pairs*100, 0, total_stages)
+                    self.update_progress(k/total_pairs*100, stage, total_stages)
+
+            stage += 1
+
             with get_data_file_fits(self.user_id, file_ids[-1]) as f:
                 fovs[file_ids[-1]] = get_fits_fov(f[0].header)
 
@@ -752,14 +768,16 @@ class AlignmentJob(Job):
                 self.add_error(e, {'file_id': file_id})
             finally:
                 self.update_progress(
-                    (i + 1)/len(file_ids)*100, 1, total_stages)
+                    (i + 1)/len(file_ids)*100, stage, total_stages)
+
+        stage += 1
 
         # Optionally crop aligned files in place
         if self.crop:
             for file_ids in cropping_jobs:
                 run_cropping_job(
                     self, None, file_ids, inplace=True, masks=masks,
-                    stage=2, total_stages=total_stages)
+                    stage=stage, total_stages=total_stages)
 
 
 def get_wcs(user_id: Optional[int], file_id: int, wcs_cache: TDict[int, WCS]) \
