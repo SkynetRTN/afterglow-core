@@ -17,6 +17,7 @@ import cv2 as cv
 
 from skylib.combine.alignment import *
 from skylib.combine.pattern_matching import pattern_match
+from skylib.combine.cropping import get_auto_crop
 from skylib.util.angle import angdist, average_radec
 from skylib.util.fits import get_fits_fov
 
@@ -350,8 +351,43 @@ class AlignmentJob(Job):
         else:
             # Mosaicing mode
             if isinstance(settings, (AlignmentSettingsFeatures, AlignmentSettingsPixels)):
-                # Crop images before feature extraction to prevent memory overflow  if realigning
-                run_cropping_job(self, None, file_ids, inplace=True, stage=stage, total_stages=total_stages)
+                # Crop images before feature extraction to prevent memory overflow if realigning
+                for i, file_id in enumerate(file_ids):
+                    data, hdr = get_data_file_data(self.user_id, file_id)
+                    if isinstance(data, np.ma.MaskedArray):
+                        left, right, bottom, top = get_auto_crop(data.mask)
+                        if any([left, right, bottom, top]) and left + right < data.shape[1] and \
+                                bottom + top < data.shape[0]:
+                            data = data[bottom:data.shape[0]-top, left:data.shape[1]-right]
+                            if left:
+                                try:
+                                    hdr['CRPIX1'] -= left
+                                except TypeError:
+                                    try:
+                                        hdr['CRPIX1'] = float(hdr['CRPIX1']) - left
+                                    except (TypeError, ValueError):
+                                        pass
+                                except (KeyError, ValueError):
+                                    pass
+                            if bottom:
+                                try:
+                                    hdr['CRPIX2'] -= bottom
+                                except TypeError:
+                                    try:
+                                        hdr['CRPIX2'] = float(hdr['CRPIX2']) - bottom
+                                    except (TypeError, ValueError):
+                                        pass
+                                except (KeyError, ValueError):
+                                    pass
+                            with get_data_file_db(self.user_id) as adb:
+                                try:
+                                    # Overwrite the original data file
+                                    save_data_file(adb, get_root(self.user_id), file_id, data, hdr)
+                                    adb.commit()
+                                except Exception:
+                                    adb.rollback()
+                                    raise
+                    self.update_progress((i + 1)/len(file_ids)*100, stage, total_stages)
                 stage += 1
 
             # Find all possible pairwise transformations
