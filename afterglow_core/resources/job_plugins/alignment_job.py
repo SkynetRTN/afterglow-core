@@ -10,6 +10,7 @@ import numpy as np
 from numpy.ma import MaskedArray
 from numpy.linalg import inv
 from scipy.sparse.csgraph import shortest_path
+import scipy.ndimage as nd
 from marshmallow.fields import String, Integer, List, Nested
 from astropy.wcs import WCS
 import cv2 as cv
@@ -851,26 +852,51 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
             .format(nref, 's' if nref > 1 else '', '/pattern matching' if len(img_sources) > 1 else ''))
 
     if isinstance(settings, AlignmentSettingsFeatures):
-        try:
-            kp1, des1 = ref_star_cache[file_id]
-        except KeyError:
-            kp1, des1 = ref_star_cache[file_id] = get_image_features(
-                get_data_file_data(user_id, file_id)[0],
-                algorithm=settings.algorithm,
-                detect_edges=settings.detect_edges,
-                percentile_min=settings.percentile_min,
-                percentile_max=settings.percentile_max,
-                **alignment_kwargs)
-        try:
-            kp2, des2 = ref_star_cache[ref_file_id]
-        except KeyError:
-            kp2, des2 = ref_star_cache[ref_file_id] = get_image_features(
-                get_data_file_data(user_id, ref_file_id)[0],
-                algorithm=settings.algorithm,
-                detect_edges=settings.detect_edges,
-                percentile_min=settings.percentile_min,
-                percentile_max=settings.percentile_max,
-                **alignment_kwargs)
+        # Make sure that both images are on the same contrast scale
+        data = np.ma.masked_array(
+            [get_data_file_data(user_id, file_id)[0],
+             get_data_file_data(user_id, ref_file_id)[0]])
+        if data.mask is False:
+            data = data.data
+        if settings.detect_edges:
+            data[0] = np.hypot(nd.sobel(data[0], 0, mode='nearest'), nd.sobel(data[0], 1, mode='nearest'))
+            data[1] = np.hypot(nd.sobel(data[1], 0, mode='nearest'), nd.sobel(data[1], 1, mode='nearest'))
+            settings.detect_edges = False
+        if settings.percentile_min <= 0 and settings.percentile_max >= 100:
+            clip_min = data.min()
+            clip_max = data.max()
+        elif settings.percentile_min <= 0:
+            clip_min = data.min()
+            if isinstance(data, np.ma.MaskedArray):
+                clip_max = np.nanpercentile(data.filled(np.nan), settings.percentile_max)
+            else:
+                clip_max = np.nanpercentile(data, settings.percentile_max)
+        elif settings.percentile_max >= 100:
+            if isinstance(data, np.ma.MaskedArray):
+                clip_min = np.nanpercentile(data.filled(np.nan), settings.percentile_min)
+            else:
+                clip_min = np.nanpercentile(data, settings.percentile_min)
+            clip_max = data.max()
+        else:
+            if isinstance(data, np.ma.MaskedArray):
+                clip_min, clip_max = np.nanpercentile(
+                    data.filled(np.nan), [settings.percentile_min, settings.percentile_max])
+            else:
+                clip_min, clip_max = np.nanpercentile(data, [settings.percentile_min, settings.percentile_max])
+        kp1, des1 = ref_star_cache[file_id] = get_image_features(
+            data[0],
+            algorithm=settings.algorithm,
+            detect_edges=settings.detect_edges,
+            clip_min=clip_min,
+            clip_max=clip_max,
+            **alignment_kwargs)
+        kp2, des2 = ref_star_cache[ref_file_id] = get_image_features(
+            data[1],
+            algorithm=settings.algorithm,
+            detect_edges=settings.detect_edges,
+            clip_min=clip_min,
+            clip_max=clip_max,
+            **alignment_kwargs)
         return get_transform_features(
             kp1, des1, kp2, des2,
             enable_rot=settings.enable_rot,
