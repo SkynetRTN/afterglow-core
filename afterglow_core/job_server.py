@@ -591,11 +591,9 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
                         except KeyError:
                             raise MissingFieldError(field='file_id')
 
-                        res = AsyncResult(job_id)
-                        if res.state == 'FAILURE':
-                            raise res.result.with_traceback(res.traceback)
+                        result = get_job_result(db_job)
                         try:
-                            job_file = res.result['files'][file_id]
+                            job_file = result['files'][file_id]
                         except (KeyError, TypeError):
                             raise UnknownJobFileError(id=file_id)
                         result = {
