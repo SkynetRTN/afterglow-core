@@ -196,9 +196,13 @@ def user_login(user_profile: dict, auth_plugin: AuthnPluginBase) -> Response:
         raise NotAuthenticatedError(error_msg='No user profile data returned')
 
     # Get the user from db
-    identity = users.DbIdentity.query \
-        .filter_by(auth_method=auth_plugin.name, name=user_profile['id']) \
-        .one_or_none()
+    try:
+        identity = users.DbIdentity.query \
+            .filter_by(auth_method=auth_plugin.name, name=user_profile['id']) \
+            .one_or_none()
+    except Exception:
+        users.db.session.rollback()
+        raise
     if identity is None and auth_plugin.name == 'skynet':
         # A workaround for migrating the accounts of users registered in early
         # versions that used Skynet usernames instead of IDs; a potential

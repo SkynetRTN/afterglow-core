@@ -63,7 +63,8 @@ class AnonymousUser(object):
         return self.id
 
 
-db = SQLAlchemy()
+# TODO: Don't use pool pre-ping to avoid "Server has gone away" errors
+db = SQLAlchemy(engine_options={'pool_pre_ping': True})
 
 user_roles = db.Table(
     'user_roles',
@@ -467,11 +468,11 @@ def delete_user(user_id: int) -> None:
 
     :param user_id: user ID
     """
-    db_user = DbUser.query(user_id)
-    if db_user is None:
-        raise UnknownUserError(id=user_id)
-
     try:
+        db_user = DbUser.query(user_id)
+        if db_user is None:
+            raise UnknownUserError(id=user_id)
+
         db_user.roles = []
         db.session.delete(db_user)
         db.session.commit()

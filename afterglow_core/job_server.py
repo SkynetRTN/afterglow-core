@@ -541,16 +541,21 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
                 if session_id is not None:
                     data_files.get_session(user_id, session_id)
                 result = []
-                for db_job in db.session.query(DbJob).filter(DbJob.user_id == user_id, DbJob.session_id == session_id):
-                    result.append(dict(
-                        id=db_job.id,
-                        type=db_job.type,
-                        user_id=db_job.user_id,
-                        session_id=db_job.session_id,
-                        state=get_job_state(db_job),
-                        result=get_job_result(db_job),
-                    ))
-                    result[-1].update(db_job.args)
+                try:
+                    for db_job in db.session.query(DbJob) \
+                            .filter(DbJob.user_id == user_id, DbJob.session_id == session_id):
+                        result.append(dict(
+                            id=db_job.id,
+                            type=db_job.type,
+                            user_id=db_job.user_id,
+                            session_id=db_job.session_id,
+                            state=get_job_state(db_job),
+                            result=get_job_result(db_job),
+                        ))
+                        result[-1].update(db_job.args)
+                except Exception:
+                    db.session.rollback()
+                    raise
 
             else:
                 # PUT/DELETE are only applicable when a job ID is present
@@ -560,88 +565,90 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
             # Request for an individual job or its state/result
             # Since Celery provides no way to check for the existence of a task, we need to hit the db even to get state
             # or result, both of which are stored in Celery
-            db_job = db.session.query(DbJob).get(job_id)
-            if db_job is None or db_job.user_id != user_id:
-                raise UnknownJobError(id=job_id)
+            try:
+                db_job = db.session.query(DbJob).get(job_id)
+                if db_job is None or db_job.user_id != user_id:
+                    raise UnknownJobError(id=job_id)
 
-            if method == 'get':
-                # Return an individual job or its elements
-                match resource:
-                    case 'jobs':
-                        # Return only the common Job fields plus job-specific fields, without state and result
-                        result = dict(
-                            id=db_job.id,
-                            type=db_job.type,
-                            user_id=db_job.user_id,
-                            session_id=db_job.session_id,
-                            state=get_job_state(db_job),
-                            result=get_job_result(db_job),
-                        )
-                        result.update(db_job.args)
+                if method == 'get':
+                    # Return an individual job or its elements
+                    match resource:
+                        case 'jobs':
+                            # Return only the common Job fields plus job-specific fields, without state and result
+                            result = dict(
+                                id=db_job.id,
+                                type=db_job.type,
+                                user_id=db_job.user_id,
+                                session_id=db_job.session_id,
+                                state=get_job_state(db_job),
+                                result=get_job_result(db_job),
+                            )
+                            result.update(db_job.args)
 
-                    case 'jobs/state':
-                        result = get_job_state(db_job)
+                        case 'jobs/state':
+                            result = get_job_state(db_job)
 
-                    case 'jobs/result':
-                        result = get_job_result(db_job)
+                        case 'jobs/result':
+                            result = get_job_result(db_job)
 
-                    case 'jobs/result/files':
-                        try:
-                            file_id = args['file_id']
-                        except KeyError:
-                            raise MissingFieldError(field='file_id')
+                        case 'jobs/result/files':
+                            try:
+                                file_id = args['file_id']
+                            except KeyError:
+                                raise MissingFieldError(field='file_id')
 
-                        result = get_job_result(db_job)
-                        try:
-                            job_file = result['files'][file_id]
-                        except (KeyError, TypeError):
-                            raise UnknownJobFileError(id=file_id)
-                        result = {
-                            'filename': job_file_path(user_id, job_id, file_id),
-                            'mimetype': job_file.get('mimetype') or 'application/octet-stream',
-                            'headers': job_file.get('headers'),
-                        }
+                            result = get_job_result(db_job)
+                            try:
+                                job_file = result['files'][file_id]
+                            except (KeyError, TypeError):
+                                raise UnknownJobFileError(id=file_id)
+                            result = {
+                                'filename': job_file_path(user_id, job_id, file_id),
+                                'mimetype': job_file.get('mimetype') or 'application/octet-stream',
+                                'headers': job_file.get('headers'),
+                            }
 
-                    case _:
+                        case _:
+                            raise ValueError(f'Invalid resource ID: "{resource}"')
+
+
+                elif method == 'put':
+                    # Cancel running job
+                    if resource != 'jobs/state':
                         raise ValueError(f'Invalid resource ID: "{resource}"')
+                    try:
+                        status = args['status']
+                    except KeyError:
+                        raise MissingFieldError(field='status')
+                    if status != js.CANCELED:
+                        raise CannotSetJobStatusError(status=status)
+                    if db_job.state.status != js.IN_PROGRESS:
+                        raise CannotCancelJobError(status=db_job.state.status)
 
-            elif method == 'put':
-                # Cancel running job
-                if resource != 'jobs/state':
-                    raise ValueError(f'Invalid resource ID: "{resource}"')
-                try:
-                    status = args['status']
-                except KeyError:
-                    raise MissingFieldError(field='status')
-                if status != js.CANCELED:
-                    raise CannotSetJobStatusError(status=status)
-                if db_job.state.status != js.IN_PROGRESS:
-                    raise CannotCancelJobError(status=db_job.state.status)
+                    AsyncResult(job_id).revoke(terminate=True, signal='INT')
 
-                AsyncResult(job_id).revoke(terminate=True, signal='INT')
+                    result = get_job_state(db_job)
 
-                result = get_job_state(db_job)
+                elif method == 'delete':
+                    if resource != 'jobs':
+                        raise ValueError(f'Invalid resource ID: "{resource}"')
+                    if db_job.state.status not in (js.COMPLETED, js.CANCELED):
+                        raise CannotDeleteJobError(status=db_job.state.status)
 
-            elif method == 'delete':
-                if resource != 'jobs':
-                    raise ValueError(f'Invalid resource ID: "{resource}"')
-                if db_job.state.status not in (js.COMPLETED, js.CANCELED):
-                    raise CannotDeleteJobError(status=db_job.state.status)
+                    delete_job_data(user_id, job_id)
 
-                delete_job_data(user_id, job_id)
-
-                try:
                     db.session.query(DbJob).filter_by(id=job_id).delete()
                     db.session.commit()
-                except Exception:
-                    db.session.rollback()
-                    raise
 
-                result = ''
-                http_status = 204
+                    result = ''
+                    http_status = 204
 
-            else:
-                raise InvalidMethodError(resource=resource, method=method)
+                else:
+                    raise InvalidMethodError(resource=resource, method=method)
+
+            except Exception:
+                db.session.rollback()
+                raise
 
     except AfterglowError as e:
         # Construct JSON error response in the same way as errors.afterglow_error_handler()
