@@ -889,45 +889,54 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
 
     if isinstance(settings, AlignmentSettingsFeatures):
         # Make sure that both images are on the same contrast scale
-        data = np.ma.masked_array(
-            [get_data_file_data(user_id, file_id)[0],
-             get_data_file_data(user_id, ref_file_id)[0]])
-        if data.mask is False:
-            data = data.data
+        data1 = get_data_file_data(user_id, file_id)[0]
+        data2 = get_data_file_data(user_id, ref_file_id)[0]
         if settings.detect_edges:
-            data[0] = np.hypot(nd.sobel(data[0], 0, mode='nearest'), nd.sobel(data[0], 1, mode='nearest'))
-            data[1] = np.hypot(nd.sobel(data[1], 0, mode='nearest'), nd.sobel(data[1], 1, mode='nearest'))
+            data1 = np.hypot(nd.sobel(data1, 0, mode='nearest'), nd.sobel(data1, 1, mode='nearest'))
+            data2 = np.hypot(nd.sobel(data2, 0, mode='nearest'), nd.sobel(data2, 1, mode='nearest'))
             settings.detect_edges = False
-        if settings.percentile_min <= 0 and settings.percentile_max >= 100:
-            clip_min = data.min()
-            clip_max = data.max()
-        elif settings.percentile_min <= 0:
-            clip_min = data.min()
-            if isinstance(data, np.ma.MaskedArray):
-                clip_max = np.nanpercentile(data.filled(np.nan), settings.percentile_max)
-            else:
-                clip_max = np.nanpercentile(data, settings.percentile_max)
-        elif settings.percentile_max >= 100:
-            if isinstance(data, np.ma.MaskedArray):
-                clip_min = np.nanpercentile(data.filled(np.nan), settings.percentile_min)
-            else:
-                clip_min = np.nanpercentile(data, settings.percentile_min)
-            clip_max = data.max()
+        data = np.ma.concatenate([data1.ravel(), data2.ravel()])
+        have_nans = data.mask is not False
+        if have_nans:
+            data = data.filled(np.nan)
         else:
-            if isinstance(data, np.ma.MaskedArray):
-                clip_min, clip_max = np.nanpercentile(
-                    data.filled(np.nan), [settings.percentile_min, settings.percentile_max])
+            data = data.data
+        if settings.percentile_min <= 0:
+            if have_nans:
+                clip_min = np.nanmin(data)
             else:
-                clip_min, clip_max = np.nanpercentile(data, [settings.percentile_min, settings.percentile_max])
-        kp1, des1 = ref_star_cache[file_id] = get_image_features(
-            data[0],
+                clip_min = data.min()
+            if settings.percentile_max >= 100:
+                if have_nans:
+                    clip_max = np.nanmax(data)
+                else:
+                    clip_max = data.max()
+            elif have_nans:
+                clip_max = np.nanpercentile(data, settings.percentile_max)
+            else:
+                clip_max = np.percentile(data, settings.percentile_max)
+        elif settings.percentile_max >= 100:
+            if have_nans:
+                clip_min = np.nanpercentile(data, settings.percentile_min)
+                clip_max = np.nanmax(data)
+            else:
+                clip_min = np.percentile(data, settings.percentile_min)
+                clip_max = data.max()
+        elif have_nans:
+            clip_min, clip_max = np.nanpercentile(data, [settings.percentile_min, settings.percentile_max])
+        else:
+            clip_min, clip_max = np.percentile(data, [settings.percentile_min, settings.percentile_max])
+
+        # Extract features from both images and compute transform based on matching features
+        kp1, des1 = get_image_features(
+            data1,
             algorithm=settings.algorithm,
             detect_edges=settings.detect_edges,
             clip_min=clip_min,
             clip_max=clip_max,
             **alignment_kwargs)
-        kp2, des2 = ref_star_cache[ref_file_id] = get_image_features(
-            data[1],
+        kp2, des2 = get_image_features(
+            data2,
             algorithm=settings.algorithm,
             detect_edges=settings.detect_edges,
             clip_min=clip_min,
