@@ -15,10 +15,12 @@ from threading import Event, Thread
 from typing import Dict as TDict, Union
 from types import SimpleNamespace
 from urllib.parse import quote
-from logging import Formatter
 
 from sqlalchemy import Column, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, relationship
+from alembic import config as alembic_config, context as alembic_context
+from alembic.script import ScriptDirectory
+from alembic.runtime.environment import EnvironmentContext
 from werkzeug.http import HTTP_STATUS_CODES
 from flask import Flask, current_app, g
 from flask_login import current_user
@@ -44,12 +46,13 @@ from celery.result import AsyncResult
 from celery.schedules import crontab
 from celery.signals import after_setup_logger, after_setup_task_logger
 
+from .database import db
 from .resources.base import DateTime, JSONType
 from .plugins import load_plugins
 from .errors import AfterglowError, MissingFieldError
 from .errors.job import *
 from .resources import data_files
-from .resources.users import DbUser, db
+from .resources.users import DbUser
 from .models import Job, job_file_path, job_result_dir, job_result_path
 
 
@@ -67,7 +70,7 @@ js.CANCELED = 'canceled'
 class DbJobState(db.Model):
     __tablename__ = 'job_states'
 
-    id = Column(ForeignKey('jobs.id', ondelete='CASCADE'), index=True, primary_key=True)
+    id = Column(String(36), ForeignKey('jobs.id', ondelete='CASCADE'), index=True, primary_key=True)
     status = Column(String(16), nullable=False, index=True, default=js.PENDING)
     created_on = Column(DateTime, nullable=False)
     started_on = Column(DateTime, index=True)
@@ -166,15 +169,6 @@ def run_job(task: Task, *args, **kwargs):
                 # Unexpected job exception; Celery task still succeeds
                 job.add_error(e)
 
-            finally:
-                # Close the possible data file db session
-                # noinspection PyBroadException
-                try:
-                    with data_files.data_file_thread_lock:
-                        data_files.data_file_engine[data_files.get_root(job.user_id), pid][1].remove()
-                except BaseException:
-                    pass
-
     job_thread = Thread(target=job_thread_body)
     job_thread.start()
     job_tid = job_thread.ident
@@ -220,12 +214,12 @@ def cleanup_jobs() -> None:
     expiration = datetime.utcnow() - timedelta(days=1)
     count = 0
     try:
-        for job_state in db.session.query(DbJobState) \
+        for job_state in DbJobState.query \
                 .filter(DbJobState.status.in_((js.COMPLETED, js.CANCELED)), DbJobState.created_on < expiration):
             job_id, user_id = job_state.id, job_state.job.user_id
 
             delete_job_data(user_id, job_id)
-            db.session.query(DbJob).filter_by(id=job_id).delete()
+            DbJob.query.filter_by(id=job_id).delete()
 
             count += 1
 
@@ -255,6 +249,9 @@ def setup_logger(logger, *args, **kwargs):
 def init_jobs(app: Flask, cipher: Fernet) -> Celery:
     """
     Initialize the job subsystem
+
+    :param app: Flask app instance
+    :param cipher: :class:`cryptography.fernet.Fernet` instance used for encryption throughout Afterglow Core
     """
     global celery_app, job_cancel_timeout
 
@@ -272,7 +269,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
             """Track the task start time"""
             with app.app_context():
                 try:
-                    db_job = db.session.query(DbJob).get(task_id)
+                    db_job = DbJob.query.get(task_id)
                     if db_job is None:
                         return
                     db_job.state.status = js.IN_PROGRESS
@@ -295,7 +292,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
 
             with app.app_context():
                 try:
-                    db_job = db.session.query(DbJob).get(task_id)
+                    db_job = DbJob.query.get(task_id)
                     if db_job is None:
                         return
                     db_job.state.status = js.COMPLETED if status != 'ABORTED' else js.CANCELED
@@ -312,6 +309,20 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
                     except Exception:
                         pass
 
+    # Create/upgrade job tables via Alembic
+    cfg = alembic_config.Config()
+    cfg.set_main_option(
+        'script_location', os.path.abspath(os.path.join(__file__, '..', 'db_migration', 'jobs'))
+    )
+    script = ScriptDirectory.from_config(cfg)
+    with EnvironmentContext(
+            cfg, script, fn=lambda rev, _: script._upgrade_revs('head', rev), as_sql=False,
+            starting_rev=None, destination_rev='head', tag=None), db.engine.connect() as connection:
+        alembic_context.configure(connection=connection, version_table='alembic_version_jobs')
+
+        with alembic_context.begin_transaction():
+            alembic_context.run_migrations()
+
     # Decrypt RabbitMQ password
     broker_pass = app.config["JOB_SERVER_PASS"]
     if broker_pass:
@@ -319,31 +330,13 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
             broker_pass = broker_pass.encode('ascii')
         broker_pass = ':' + quote(cipher.decrypt(broker_pass).decode('utf8'))
 
-    # Set up job database
-    if not app.config.get('AUTH_ENABLED'):
-        db.init_app(app)
-        try:
-            os.makedirs(os.path.abspath(app.config['DATA_ROOT']))
-        except OSError as e:
-            if e.errno != errno.EEXIST:
-                raise
-    db.create_all()
-
-    # Set up result backend
-    if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
-        # For sqlite, use a separate db file
-        result_backend = 'sqlite:///' + os.path.join(os.path.abspath(app.config['DATA_ROOT']), 'jobs.db')
-    else:
-        # Otherwise, use the common db settings
-        result_backend = app.config['SQLALCHEMY_DATABASE_URI']
-
     # Create Celery app
     celery_app = Celery('afterglow_core.job_server', task_cls=AfterglowTask)
     celery_app.config_from_object(dict(
         broker_url=f'amqp://{quote(app.config["JOB_SERVER_USER"])}{broker_pass}@{app.config["JOB_SERVER_HOST"]}:'
         f'{app.config["JOB_SERVER_PORT"]}/{app.config["JOB_SERVER_VHOST"]}',
         broker_connection_retry_on_startup=True,
-        result_backend='db+' + result_backend,
+        result_backend='db+' + app.config['SQLALCHEMY_DATABASE_URI'],
         database_engine_options=app.config['SQLALCHEMY_ENGINE_OPTIONS'],
         task_default_queue='afterglow',
         task_track_started=True,
@@ -542,8 +535,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
                     data_files.get_session(user_id, session_id)
                 result = []
                 try:
-                    for db_job in db.session.query(DbJob) \
-                            .filter(DbJob.user_id == user_id, DbJob.session_id == session_id):
+                    for db_job in DbJob.query.filter(DbJob.user_id == user_id, DbJob.session_id == session_id):
                         result.append(dict(
                             id=db_job.id,
                             type=db_job.type,
@@ -566,7 +558,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
             # Since Celery provides no way to check for the existence of a task, we need to hit the db even to get state
             # or result, both of which are stored in Celery
             try:
-                db_job = db.session.query(DbJob).get(job_id)
+                db_job = DbJob.query.get(job_id)
                 if db_job is None or db_job.user_id != user_id:
                     raise UnknownJobError(id=job_id)
 
@@ -611,7 +603,6 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
                         case _:
                             raise ValueError(f'Invalid resource ID: "{resource}"')
 
-
                 elif method == 'put':
                     # Cancel running job
                     if resource != 'jobs/state':
@@ -637,7 +628,7 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
 
                     delete_job_data(user_id, job_id)
 
-                    db.session.query(DbJob).filter_by(id=job_id).delete()
+                    DbJob.query.filter_by(id=job_id).delete()
                     db.session.commit()
 
                     result = ''

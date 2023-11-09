@@ -17,7 +17,6 @@ retrieved via :func:`auth_plugins` associated with the "auth" endpoint.
 """
 
 import secrets
-import os
 from datetime import timedelta
 from functools import wraps
 import time
@@ -126,33 +125,20 @@ def auth_required(fn, *roles, **kwargs) -> Callable:
                     .format(dashboard_prefix=dashboard_prefix, args=args))
             raise
 
-        try:
-            result = fn(*args, **kw)
+        result = fn(*args, **kw)
 
-            # handle rendered responses which are strings
-            if isinstance(result, str):
-                result = make_response(result)
+        # handle rendered responses which are strings
+        if isinstance(result, str):
+            result = make_response(result)
 
-            # Update access cookie if present in request
-            access_token = request.cookies.get('afterglow_core_access_token')
+        # Update access cookie if present in request
+        access_token = request.cookies.get('afterglow_core_access_token')
 
-            if access_token:
-                result = set_access_cookies(
-                    result, user_id, access_token=access_token)
+        if access_token:
+            result = set_access_cookies(
+                result, user_id, access_token=access_token)
 
-            return result
-        finally:
-            # Close the possible data file db session; don't import at module
-            # level because of a circular dependency
-            from .resources import data_files
-            # noinspection PyBroadException
-            try:
-                with data_files.data_file_thread_lock:
-                    data_files.data_file_engine[
-                        data_files.get_root(user_id), os.getpid()
-                    ][1].remove()
-            except Exception:
-                pass
+        return result
 
     return wrapper
 

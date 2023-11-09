@@ -12,12 +12,11 @@ from flask import current_app
 
 from skylib.astrometry import Solver, solve_field_glob
 
+from ...database import db
 from ...models import Job, JobResult
 from ...schemas import AfterglowSchema, Boolean, Float
 from ...errors import ValidationError
-from ..data_files import (
-    create_data_file, get_data_file, get_data_file_data, get_data_file_db,
-    get_root, save_data_file)
+from ..data_files import create_data_file, get_data_file, get_data_file_data, get_root, save_data_file
 from .source_extraction_job import (
     SourceExtractionSettings, run_source_extraction_job)
 
@@ -261,24 +260,20 @@ class WcsCalibrationJob(Job):
                 for name, val in orig_kw.items():
                     hdr[name] = val
 
-                with get_data_file_db(self.user_id) as adb:
-                    try:
-                        if self.inplace:
-                            # Overwrite the original data file
-                            save_data_file(adb, root, file_id, data, hdr)
-                        else:
-                            hdr.add_history(
-                                'Original data file: {}'.format(
-                                    get_data_file(adb, file_id).name or
-                                    file_id))
-                            file_id = create_data_file(
-                                adb, None, root, data, hdr,
-                                duplicates='append',
-                                session_id=self.session_id).id
-                        adb.commit()
-                    except Exception:
-                        adb.rollback()
-                        raise
+                try:
+                    if self.inplace:
+                        # Overwrite the original data file
+                        save_data_file(root, file_id, data, hdr)
+                    else:
+                        hdr.add_history(
+                            'Original data file: {}'.format(get_data_file(self.user_id, file_id).name or file_id))
+                        file_id = create_data_file(
+                            self.user_id, None, root, data, hdr, duplicates='append',
+                            session_id=self.session_id).id
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                    raise
 
                 self.result.file_ids.append(file_id)
             except Exception as e:

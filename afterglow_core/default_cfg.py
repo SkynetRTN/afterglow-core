@@ -15,12 +15,12 @@ DATA_ROOT = '.'
 # Database engine options
 ###############################################################################
 
-# Database backend: "sqlite", "Mysql", "mysql+mysqldb", etc.; see
+# Database backend: "Mysql", "mysql+mysqldb", etc.; see
 # https://docs.sqlalchemy.org/en/14/core/engines.html
-# Default is 'sqlite', which requires no further configuration
-DB_BACKEND = 'sqlite'
+# Note: sqlite not supported
+DB_BACKEND = ''
 
-# For non-sqlite backends, this is the database server address
+# Database server address
 DB_HOST = 'localhost'
 DB_PORT = 3306
 

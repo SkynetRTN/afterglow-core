@@ -201,15 +201,12 @@ def data_file(id: int) -> Response:
     """
     if request.method == 'GET':
         # Return specific data file resource
-        with get_data_file_db(request.user.id) as adb:
-            return json_response(DataFileSchema(get_data_file(adb, id)))
+        return json_response(DataFileSchema(get_data_file(request.user.id, id)))
 
     if request.method == 'PUT':
         # Update data file
         return json_response(DataFileSchema(update_data_file(
-            request.user.id, id,
-            DataFile(DataFileSchema(**request.args.to_dict()),
-                     only=list(request.args.keys())))))
+            request.user.id, id, DataFile(DataFileSchema(**request.args.to_dict()), only=list(request.args.keys())))))
 
     if request.method == 'DELETE':
         # Delete data file
@@ -438,9 +435,8 @@ def data_files_hist(id: int) -> Response:
             hdr = hist[0].header
             min_bin, max_bin = hdr['MINBIN'], hdr['MAXBIN']
             data = hist[0].data
-            with get_data_file_db(request.user.id) as adb:
-                if get_data_file(adb, id).modified_on > datetime.strptime(hdr['DATE'],'%Y-%m-%dT%H:%M:%S.%f'):
-                    raise Exception('Histogram outdated')
+            if get_data_file(request.user.id, id).modified_on > datetime.strptime(hdr['DATE'], '%Y-%m-%dT%H:%M:%S.%f'):
+                raise Exception('Histogram outdated')
     except Exception:
         # Cached histogram not found or outdated, (re)calculate and return
         try:

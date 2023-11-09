@@ -328,10 +328,7 @@ def create_app() -> Flask:
     logger.setLevel('INFO')
     logger.addHandler(AfterglowLogHandler(
         os.path.join(os.environ.get('AFTERGLOW_LOGGING_ROOT', '/skynet/logs'), 'afterglow.log'),
-        when='D',
-        backupCount=10,
-        max_bytes=1 << 20,
-        encoding='utf8'))
+        when='D', backupCount=10, max_bytes=1 << 20, encoding='utf8'))
 
     # noinspection PyShadowingNames
     app = Flask(__name__)
@@ -382,9 +379,15 @@ def create_app() -> Flask:
         # noinspection PyPropertyAccess
         request.args = CombinedMultiDict(ds)
 
+    # Create data directory if not exists
+    try:
+        os.makedirs(os.path.abspath(app.config['DATA_ROOT']))
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+
     # Read/create secret key
-    keyfile = os.path.join(
-        os.path.abspath(app.config['DATA_ROOT']), 'AFTERGLOW_CORE_KEY')
+    keyfile = os.path.join(os.path.abspath(app.config['DATA_ROOT']), 'AFTERGLOW_CORE_KEY')
     try:
         with open(keyfile, 'rb') as f:
             key = f.read()
@@ -407,28 +410,11 @@ def create_app() -> Flask:
     cipher = Fernet(urlsafe_b64encode(key + b'Afterglo'))
     del f, key, keyfile
 
-    # Set up SQLAlchemy options
-    if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
-        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + \
-            os.path.join(os.path.abspath(app.config['DATA_ROOT']), 'afterglow.db')
-        app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {}).setdefault(
-            'connect_args', {})['timeout'] = app.config['DB_TIMEOUT']
-    else:
-        _db_pass = app.config.get('DB_PASS', '')
-        if _db_pass:
-            if not isinstance(_db_pass, bytes):
-                _db_pass = _db_pass.encode('ascii')
-            _db_pass = cipher.decrypt(_db_pass).decode('utf8')
-        app.config['SQLALCHEMY_DATABASE_URI'] = \
-            f'{app.config["DB_BACKEND"]}://{app.config["DB_USER"]}{":" + _db_pass if _db_pass else ""}@' \
-            f'{app.config["DB_HOST"]}:{app.config["DB_PORT"]}/{app.config["DB_SCHEMA"]}'
-        app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})['pool_timeout'] = app.config['DB_TIMEOUT']
-        app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('pool_recycle', 3600)
-        app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('pool_size', app.config['DB_POOL_SIZE'])
-        del _db_pass
-    app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
-
     with app.app_context():
+        # Initialize database subsystem
+        from .database import init_db, db
+        init_db(app, cipher)
+
         if app.config.get('AUTH_ENABLED'):
             # Initialize user authentication and enable non-versioned /users
             # routes and Afterglow OAuth2 server at /oauth2
@@ -438,6 +424,12 @@ def create_app() -> Flask:
             init_auth()
             from .oauth2 import init_oauth
             init_oauth()
+
+        # Initialize data file and field cal tables
+        from .resources.data_files import init_data_files
+        from .resources.field_cals import init_field_cals
+        init_data_files()
+        init_field_cals()
 
         # Register resource plugins
         from .resources.data_providers import register
@@ -454,6 +446,9 @@ def create_app() -> Flask:
         # Initialize job subsystem
         from .job_server import init_jobs
         init_jobs(app, cipher)
+
+        # Create all remaining db tables
+        db.create_all()
 
     # shell context for flask cli
     @app.shell_context_processor

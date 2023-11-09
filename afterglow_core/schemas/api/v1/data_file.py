@@ -19,21 +19,17 @@ class DataFileSchema(Resource):
     JSON-serializable data file class
 
     Fields:
-        id: unique integer data file ID; assigned automatically when creating
-            or importing data file into session
+        id: unique integer data file ID; assigned automatically when creating or importing data file into session
         type: "image" or "table"
         name: data file name; on import, set to the data provider asset name
         width: image width or number of table columns
         height: image height or number of table rows
-        data_provider: for imported data files, name of the originating data
-            provider; not defined for data files created from scratch or
-            uploaded
+        data_provider: for imported data files, name of the originating data provider; not defined for data files
+            created from scratch or uploaded
         asset_path: for imported data files, the original asset path
         asset_type: original asset file type ("FITS", "JPEG", etc.)
-        asset_metadata: dictionary of the originating data provider asset
-            metadata
-        layer: layer ID for data files imported from multi-layer data provider
-            assets
+        asset_metadata: dictionary of the originating data provider asset metadata
+        layer: layer ID for data files imported from multi-layer data provider assets
         created_on: datetime.datetime of data file creation
         modified: True if the file was modified after creation
         modified_on: datetime.datetime of data file modification
@@ -44,6 +40,7 @@ class DataFileSchema(Resource):
     __get_view__ = 'data_files.data_files'
 
     id: int = Integer(dump_default=None)
+    user_id: int = Integer(dump_default=None)
     type: str = String(dump_default=None)
     name: str = String(dump_default=None)
     width: int = Integer(dump_default=None)
@@ -53,11 +50,9 @@ class DataFileSchema(Resource):
     asset_type: str = String(dump_default=None)
     asset_metadata: TDict[str, Any] = Dict(dump_default={})
     layer: str = String(dump_default=None)
-    created_on: datetime = DateTime(
-        dump_default=None, format='%Y-%m-%d %H:%M:%S.%f')
+    created_on: datetime = DateTime(dump_default=None, format='%Y-%m-%d %H:%M:%S.%f')
     modified: bool = Boolean(dump_default=False)
-    modified_on: datetime = DateTime(
-        dump_default=None, format='%Y-%m-%d %H:%M:%S.%f')
+    modified_on: datetime = DateTime(dump_default=None, format='%Y-%m-%d %H:%M:%S.%f')
     session_id: Optional[int] = Integer(dump_default=None)
     group_name: str = String(dump_default=None)
     group_order: int = Integer(dump_default=0)
@@ -67,16 +62,13 @@ class SessionSchema(Resource):
     """
     JSON-serializable Afterglow session class
 
-    A session is a collection of user's data files. When creating or importing
-    a data file, it is associated with a certain session (by default, if no
-    session ID provided, with the anonymous session that always exists).
-    Sessions are created by the user via the /sessions endpoint. Their main
-    purpose is to provide independent Afterglow UI workspaces; in addition,
-    they may serve as a means to group data files by the client API scripts.
+    A session is a collection of user's data files. When creating or importing a data file, it is associated with
+    a certain session (by default, if no session ID provided, with the anonymous session that always exists). Sessions
+    are created by the user via the /sessions endpoint. Their main purpose is to provide independent Afterglow UI
+    workspaces; in addition, they may serve as a means to group data files by the client API scripts.
 
     Fields:
-        id: unique integer session ID; assigned automatically when creating
-            the session
+        id: unique integer session ID; assigned automatically when creating the session
         name: unique session name
         data: arbitrary user data associated with the session
         data_file_ids: list of data file IDs associated with the session
@@ -84,10 +76,10 @@ class SessionSchema(Resource):
     __get_view__ = 'sessions.sessions'
 
     id: int = Integer(dump_default=None)
+    user_id: int = Integer(dump_default=None)
     name: str = String(dump_default=None)
     data: str = String()
-    data_file_ids: TList[int] = List(
-        Integer(), dump_default=[], dump_only=True)
+    data_file_ids: TList[int] = List(Integer(), dump_default=[], dump_only=True)
 
     def __init__(self, _obj: Optional[Session] = None, **kwargs):
         """
@@ -99,7 +91,6 @@ class SessionSchema(Resource):
         """
         if _obj is not None:
             # Extract data file IDs if creating from a model
-            kwargs['data_file_ids'] = [data_file.id
-                                       for data_file in _obj.data_files]
+            kwargs['data_file_ids'] = [data_file.id for data_file in _obj.data_files]
 
         super().__init__(_obj, **kwargs)

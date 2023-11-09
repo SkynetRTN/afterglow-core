@@ -14,11 +14,11 @@ from skylib.calibration.cosmetic import (
     correct_cols_and_pixels, flag_columns, flag_horiz, flag_pixels)
 from skylib.util.fits import get_fits_exp_length, get_fits_time
 
+from ...database import db
 from ...models import Job, JobResult
 from ...schemas import AfterglowSchema, Boolean, Float
 from ..data_files import (
-    create_data_file, get_data_file, get_data_file_data, get_data_file_fits,
-    get_data_file_db, get_root, save_data_file)
+    create_data_file, get_data_file, get_data_file_data, get_data_file_fits, get_root, save_data_file)
 
 
 __all__ = ['CosmeticCorrectionJob', 'run_cosmetic_correction_job']
@@ -194,30 +194,25 @@ def run_cosmetic_correction_job(
                     m_pixel=settings.m_corr_pixel)
 
                 if inplace:
-                    with get_data_file_db(job.user_id) as adb:
-                        try:
-                            # Overwrite the original data file
-                            save_data_file(
-                                adb, get_root(job.user_id), file_id, data, hdr)
-                            adb.commit()
-                        except Exception:
-                            adb.rollback()
-                            raise
+                    try:
+                        # Overwrite the original data file
+                        save_data_file(get_root(job.user_id), file_id, data, hdr)
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+                        raise
                 else:
-                    with get_data_file_db(job.user_id) as adb:
-                        try:
-                            hdr.add_history(
-                                'Original data file: {}'.format(
-                                    get_data_file(adb, file_id).name or
-                                    file_id))
-                            file_id = create_data_file(
-                                adb, None, get_root(job.user_id), data, hdr,
-                                duplicates='append',
-                                session_id=job.session_id).id
-                            adb.commit()
-                        except Exception:
-                            adb.rollback()
-                            raise
+                    try:
+                        hdr.add_history(
+                            'Original data file: {}'.format(get_data_file(job.user_id, file_id).name or file_id))
+                        file_id = create_data_file(
+                            job.user_id, None, get_root(job.user_id), data, hdr,
+                            duplicates='append',
+                            session_id=job.session_id).id
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+                        raise
 
                 new_file_ids.append(file_id)
                 files_processed += 1

@@ -2,28 +2,35 @@
 Afterglow Core: photometric field calibration prescriptions resource
 """
 
+import os
 from typing import List as TList, Optional, Union
 
-from sqlalchemy import Column, Float, Integer, String
+from sqlalchemy import Column, Float, Integer, String, UniqueConstraint
+from alembic import config as alembic_config, context as alembic_context
+from alembic.script import ScriptDirectory
+from alembic.runtime.environment import EnvironmentContext
 
+from ..database import db
 from ..models import FieldCal
 from ..errors.field_cal import DuplicateFieldCalError, UnknownFieldCalError
 from .base import JSONType
-from .data_files import DataFileBase, get_data_file_db
 
 
 __all__ = [
-    'query_field_cals', 'get_field_cal', 'create_field_cal',
-    'update_field_cal', 'delete_field_cal',
+    'init_field_cals',
+    'query_field_cals', 'get_field_cal', 'create_field_cal', 'update_field_cal', 'delete_field_cal',
 ]
 
 
-class DbFieldCal(DataFileBase):
+class DbFieldCal(db.Model):
     __tablename__ = 'field_cals'
-    __table_args__ = dict(sqlite_autoincrement=True)
+    __table_args__ = (
+        UniqueConstraint('user_id', 'name', name='_user_id_name_uc'),
+    )
 
     id = Column(Integer, primary_key=True, nullable=False)
-    name = Column(String(1024), unique=True, nullable=False, index=True)
+    user_id = Column(Integer, index=True)
+    name = Column(String(1023), nullable=False, index=True)
     catalog_sources = Column(JSONType)
     catalogs = Column(JSONType)
     custom_filter_lookup = Column(JSONType)
@@ -36,6 +43,25 @@ class DbFieldCal(DataFileBase):
     max_stars = Column(Integer, server_default='0')
 
 
+def init_field_cals() -> None:
+    """
+    Initialize data file database tables
+    """
+    # Create/upgrade field cal tables via Alembic
+    cfg = alembic_config.Config()
+    cfg.set_main_option(
+        'script_location', os.path.abspath(os.path.join(__file__, '..', '..', 'db_migration', 'field_cals'))
+    )
+    script = ScriptDirectory.from_config(cfg)
+    with EnvironmentContext(
+            cfg, script, fn=lambda rev, _: script._upgrade_revs('head', rev), as_sql=False,
+            starting_rev=None, destination_rev='head', tag=None), db.engine.connect() as connection:
+        alembic_context.configure(connection=connection, version_table='alembic_version_field_cals')
+
+        with alembic_context.begin_transaction():
+            alembic_context.run_migrations()
+
+
 def query_field_cals(user_id: Optional[int]) -> TList[FieldCal]:
     """
     Return all user's field cals
@@ -44,9 +70,11 @@ def query_field_cals(user_id: Optional[int]) -> TList[FieldCal]:
 
     :return: list of field cal objects
     """
-    with get_data_file_db(user_id) as adb:
-        return [FieldCal(db_field_cal)
-                for db_field_cal in adb.query(DbFieldCal)]
+    try:
+        return [FieldCal(db_field_cal) for db_field_cal in DbFieldCal.query.filter_by(user_id=user_id)]
+    except Exception:
+        db.session.rollback()
+        raise
 
 
 def get_field_cal(user_id: Optional[int],
@@ -59,20 +87,25 @@ def get_field_cal(user_id: Optional[int],
 
     :return: field cal object
     """
-    with get_data_file_db(user_id) as adb:
+    try:
         try:
-            db_field_cal = adb.query(DbFieldCal).get(int(id_or_name))
+            db_field_cal = DbFieldCal.query.get(int(id_or_name))
         except ValueError:
             db_field_cal = None
+        else:
+            if db_field_cal.user_id != user_id:
+                db_field_cal = None
         if db_field_cal is None:
             # Try getting by name
-            db_field_cal = adb.query(DbFieldCal).filter(
-                DbFieldCal.name == id_or_name).one_or_none()
-        if db_field_cal is None:
+            db_field_cal = DbFieldCal.query.filter(DbFieldCal.name == id_or_name).one_or_none()
+        if db_field_cal is None or db_field_cal.user_id != user_id:
             raise UnknownFieldCalError(id=id_or_name)
 
         # Convert to data model object
         return FieldCal(db_field_cal)
+    except Exception:
+        db.session.rollback()
+        raise
 
 
 def create_field_cal(user_id: Optional[int], field_cal: FieldCal) -> FieldCal:
@@ -84,9 +117,8 @@ def create_field_cal(user_id: Optional[int], field_cal: FieldCal) -> FieldCal:
 
     :return: new field cal object
     """
-    with get_data_file_db(user_id) as adb:
-        if adb.query(DbFieldCal).filter(DbFieldCal.name == field_cal.name) \
-                .count():
+    try:
+        if DbFieldCal.query.filter_by(name=field_cal.name).count():
             raise DuplicateFieldCalError(name=field_cal.name)
 
         # Ignore field cal ID if provided
@@ -97,23 +129,22 @@ def create_field_cal(user_id: Optional[int], field_cal: FieldCal) -> FieldCal:
             pass
 
         # Create new db field cal object
-        try:
-            db_field_cal = DbFieldCal(**kw)
-            adb.add(db_field_cal)
-            adb.flush()
-            field_cal = FieldCal(db_field_cal)
-            adb.commit()
-        except Exception:
-            adb.rollback()
-            raise
+        db_field_cal = DbFieldCal(**kw)
+        db_field_cal.user_id = user_id
+        db.session.add(db_field_cal)
+        db.session.flush()
+        field_cal = FieldCal(db_field_cal)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
 
-        return field_cal
+    return field_cal
 
 
-def update_field_cal(user_id: Optional[int], field_cal_id: int,
-                     field_cal: FieldCal) -> FieldCal:
+def update_field_cal(user_id: Optional[int], field_cal_id: int, field_cal: FieldCal) -> FieldCal:
     """
-    Update the existing field cal
+    Update an existing field cal
 
     :param user_id: current user ID (None if user auth is disabled)
     :param field_cal_id: field cal ID to update
@@ -121,27 +152,26 @@ def update_field_cal(user_id: Optional[int], field_cal_id: int,
 
     :return: updated field cal object
     """
-    with get_data_file_db(user_id) as adb:
-        db_field_cal = adb.query(DbFieldCal).get(field_cal_id)
-        if db_field_cal is None:
+    try:
+        db_field_cal = DbFieldCal.query.get(field_cal_id)
+        if db_field_cal is None or db_field_cal.user_id != user_id:
             raise UnknownFieldCalError(id=field_cal_id)
 
         for key, val in field_cal.to_dict().items():
-            if key == 'id':
-                # Don't allow changing field cal ID
+            if key in ('id', 'user_id'):
+                # Don't allow changing field cal ID and user
                 continue
-            if key == 'name' and val != db_field_cal.name and adb.query(
-                    DbFieldCal).filter(DbFieldCal.name == val).count():
+            if key == 'name' and val != db_field_cal.name and DbFieldCal.query.filter_by(name=val).count():
                 raise DuplicateFieldCalError(name=val)
             setattr(db_field_cal, key, val)
-        try:
-            field_cal = FieldCal(db_field_cal)
-            adb.commit()
-        except Exception:
-            adb.rollback()
-            raise
 
-        return field_cal
+        field_cal = FieldCal(db_field_cal)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+
+    return field_cal
 
 
 def delete_field_cal(user_id: Optional[int], field_cal_id: int) -> None:
@@ -151,14 +181,13 @@ def delete_field_cal(user_id: Optional[int], field_cal_id: int) -> None:
     :param user_id: current user ID (None if user auth is disabled)
     :param field_cal_id: field cal ID to delete
     """
-    with get_data_file_db(user_id) as adb:
-        db_field_cal = adb.query(DbFieldCal).get(field_cal_id)
-        if db_field_cal is None:
+    try:
+        db_field_cal = DbFieldCal.query.get(field_cal_id)
+        if db_field_cal is None or db_field_cal.user_id != user_id:
             raise UnknownFieldCalError(id=field_cal_id)
 
-        try:
-            adb.delete(db_field_cal)
-            adb.commit()
-        except Exception:
-            adb.rollback()
-            raise
+        db.session.delete(db_field_cal)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise

@@ -21,11 +21,12 @@ from skylib.combine.cropping import get_auto_crop
 from skylib.util.angle import angdist, average_radec
 from skylib.util.fits import get_fits_fov
 
+from ...database import db
 from ...models import Job, JobResult, SourceExtractionData
 from ...schemas import AfterglowSchema, Boolean, Float, NestedPoly
 from ...errors import AfterglowError, ValidationError
 from ..data_files import (
-    create_data_file, get_data_file, get_data_file_data, get_data_file_db, get_data_file_fits, get_root, save_data_file)
+    create_data_file, get_data_file, get_data_file_data, get_data_file_fits, get_root, save_data_file)
 from .source_extraction_job import SourceExtractionSettings, run_source_extraction_job
 from .cropping_job import run_cropping_job
 
@@ -379,14 +380,13 @@ class AlignmentJob(Job):
                                         pass
                                 except (KeyError, ValueError):
                                     pass
-                            with get_data_file_db(self.user_id) as adb:
-                                try:
-                                    # Overwrite the original data file
-                                    save_data_file(adb, get_root(self.user_id), file_id, data, hdr)
-                                    adb.commit()
-                                except Exception:
-                                    adb.rollback()
-                                    raise
+                            try:
+                                # Overwrite the original data file
+                                save_data_file(get_root(self.user_id), file_id, data, hdr)
+                                db.session.commit()
+                            except Exception:
+                                db.session.rollback()
+                                raise
                     self.update_progress((i + 1)/len(file_ids)*100, stage, total_stages)
                 stage += 1
 
@@ -684,25 +684,23 @@ class AlignmentJob(Job):
                     # Don't create a new data file for reference image that was not listed in file_ids but was instead
                     # passed in settings.ref_image
                     if i != ref_image or overwrite_ref or ref_file_id in self.file_ids:
-                        with get_data_file_db(self.user_id) as adb:
-                            try:
-                                hdr.add_history(
-                                    'Original data file: {}'.format(get_data_file(adb, file_id).name or file_id))
-                                new_file_id = create_data_file(
-                                    adb, None, get_root(self.user_id), data, hdr, duplicates='append',
-                                    session_id=self.session_id).id
-                                adb.commit()
-                            except Exception:
-                                adb.rollback()
-                                raise
-                elif i != ref_image or overwrite_ref:
-                    with get_data_file_db(self.user_id) as adb:
                         try:
-                            save_data_file(adb, get_root(self.user_id), file_id, data, hdr)
-                            adb.commit()
+                            hdr.add_history(
+                                'Original data file: {}'.format(get_data_file(self.user_id, file_id).name or file_id))
+                            new_file_id = create_data_file(
+                                self.user_id, None, get_root(self.user_id), data, hdr, duplicates='append',
+                                session_id=self.session_id).id
+                            db.session.commit()
                         except Exception:
-                            adb.rollback()
+                            db.session.rollback()
                             raise
+                elif i != ref_image or overwrite_ref:
+                    try:
+                        save_data_file(get_root(self.user_id), file_id, data, hdr)
+                        db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+                        raise
 
                 if i != ref_image or overwrite_ref or ref_file_id in self.file_ids:
                     self.result.file_ids.append(new_file_id)

@@ -196,8 +196,8 @@ class Job(AfterglowSchema):
     self.user_id as the current user ID (works also for installations with no
     user authentication enabled):
 
-    from ..data_files import (
-        create_data_file, get_data_file_data, get_data_file_db, get_root)
+    from ...database import db
+    from ..data_files import create_data_file, get_data_file_data, get_root
 
     class MyJobResult(JobResult):
         file_id = fields.Integer()  # output data file ID
@@ -210,16 +210,15 @@ class Job(AfterglowSchema):
             data, hdr = get_data_file_data(self.user_id, self.file_id)
             ...  # do some processing
             # create a new data file and return its ID
-            with get_data_file_db(self.user_id) as adb:
-                try:
-                    self.result.file_id = create_data_file(
-                        adb, None, get_root(self.user_id), data, hdr,
-                        duplicates='append', session_id=self.session_id,
-                    ).id
-                    adb.commit()
-                except Exception:
-                    adb.rollback()
-                    raise
+            try:
+                self.result.file_id = create_data_file(
+                    self.user_id, None, get_root(self.user_id), data, hdr,
+                    duplicates='append', session_id=self.session_id,
+                ).id
+                db.session..commit()
+            except Exception:
+                db.session..rollback()
+                raise
 
     In addition to the regular data files, a job may create extra "job files"
     containing any data that does not fit in the database and should be
