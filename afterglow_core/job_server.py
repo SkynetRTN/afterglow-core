@@ -351,7 +351,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         },
     ))
     celery_app.set_default()
-    app.extensions["celery"] = celery_app
+    app.extensions['celery'] = celery_app
     app.logger.info('Afterglow job server initialized')
     return celery_app
 

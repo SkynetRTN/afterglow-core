@@ -314,6 +314,7 @@ class Job(AfterglowSchema):
         is still in progress; also called automatically upon job completion
         """
         self._task.update_state(
+            task_id=self.id,
             state={
                 'pending': 'PENDING',
                 'in_progress': 'STARTED',
