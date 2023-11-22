@@ -169,6 +169,10 @@ def run_job(task: Task, *args, **kwargs):
                 # Unexpected job exception; Celery task still succeeds
                 job.add_error(e)
 
+            finally:
+                # Avoid "Server has gone away" errors
+                db.session.remove()
+
     job_thread = Thread(target=job_thread_body)
     job_thread.start()
     job_tid = job_thread.ident
