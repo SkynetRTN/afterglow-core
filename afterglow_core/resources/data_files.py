@@ -626,6 +626,14 @@ def import_data_file(user_id: Optional[int], root: str, provider_id: Optional[Un
         for i, (layer, data) in enumerate(channels):
             if layer:
                 hdr['FILTER'] = (layer, 'Filter name')
+                if len(channels) > 1:
+                    match layer:
+                        case 'R':
+                            hdr['AGCMAP'] = 'Red'
+                        case 'G':
+                            hdr['AGCMAP'] = 'Green'
+                        case 'B':
+                            hdr['AGCMAP'] = 'Blue'
 
             if len(channels) > 1 and layer:
                 name = append_suffix(group_name, '.' + layer)
