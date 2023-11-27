@@ -873,10 +873,15 @@ def get_data_file_group_bytes(user_id: Optional[int], group_name: str, fmt: Opti
         raise UnknownDataFileGroupError(group_name=group_name)
 
     if not fmt:
-        if not all(data_file_formats) or len(set(data_file_formats)) != 1:
-            raise DataFileExportError(
-                reason='Undefined or inconsistent file types in the group; please specify the output format explicitly')
-        fmt = data_file_formats[0]
+        if os.path.splitext(group_name)[1].lower() in ('.fits', '.fit', '.fts'):
+            # Force exporting as FITS based on suffix
+            fmt = 'FITS'
+        else:
+            if not all(data_file_formats) or len(set(data_file_formats)) != 1:
+                raise DataFileExportError(
+                    reason='Undefined or inconsistent file types in the group; please specify the output format '
+                    'explicitly')
+            fmt = data_file_formats[0]
 
     buf = BytesIO()
     if fmt == 'FITS':
