@@ -218,8 +218,7 @@ def cleanup_jobs() -> None:
     expiration = datetime.utcnow() - timedelta(days=1)
     count = 0
     try:
-        for job_state in DbJobState.query \
-                .filter(DbJobState.status.in_((js.COMPLETED, js.CANCELED)), DbJobState.created_on < expiration):
+        for job_state in DbJobState.query.filter(DbJobState.created_on < expiration):
             job_id, user_id = job_state.id, job_state.job.user_id
 
             delete_job_data(user_id, job_id)
