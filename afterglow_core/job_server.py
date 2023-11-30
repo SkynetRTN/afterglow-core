@@ -171,7 +171,11 @@ def run_job(task: Task, *args, **kwargs):
 
             finally:
                 # Avoid "Server has gone away" errors
-                db.session.remove()
+                # noinspection PyBroadException
+                try:
+                    db.session.remove()
+                except Exception:
+                    pass
 
     job_thread = Thread(target=job_thread_body)
     job_thread.start()
