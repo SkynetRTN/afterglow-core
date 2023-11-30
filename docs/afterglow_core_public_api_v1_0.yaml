@@ -939,6 +939,25 @@ components:
           type: integer
           minimum: 0
           default: 1
+        max_sources:
+          description: maximum allowed number of detected sources
+          type: integer
+          minimum: 0
+          default: 10000
+        clip_lo:
+          description: lower percentile for pre-extraction clipping; null = no clipping
+          type: number
+          minimum: 0
+          maximum: 100
+          nullable: true
+          default: null
+        clip_hi:
+          description: upper percentile for pre-extraction clipping; null = no clipping
+          type: number
+          minimum: 0
+          maximum: 100
+          nullable: true
+          default: null
       nullable: true
       default: null
 

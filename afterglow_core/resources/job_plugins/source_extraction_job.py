@@ -50,6 +50,8 @@ class SourceExtractionSettings(AfterglowSchema):
     auto_sat_level: bool = Boolean(dump_default=False)
     discard_saturated: int = Integer(dump_default=1)
     max_sources: int = Integer(dump_default=10000)
+    clip_lo: float = Float(dump_default=None)
+    clip_hi: float = Float(dump_default=None)
 
 
 class SourceExtractionJobResult(JobResult):
@@ -146,9 +148,14 @@ def run_source_extraction_job(job: Job,
             else:
                 sat_img = None
 
-            # TODO: Parameters for pre-extraction percentile clipping
-            lo, hi = np.percentile(pixels, (10, 99))
-            pixels = np.clip(pixels, lo, hi)
+            if settings.clip_lo is not None or settings.clip_hi is not None:
+                if settings.clip_lo is not None and settings.clip_hi is not None:
+                    lo, hi = np.percentile(pixels, (settings.clip_lo, settings.clip_hi))
+                elif settings.clip_lo is not None:
+                    lo, hi = np.percentile(pixels, settings.clip_lo), None
+                else:
+                    lo, hi = None, np.percentile(pixels, settings.clip_hi)
+                pixels = np.clip(pixels, lo, hi)
 
             # Extract sources
             source_table, background, background_rms = extract_sources(
