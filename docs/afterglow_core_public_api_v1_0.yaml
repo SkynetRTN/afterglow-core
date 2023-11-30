@@ -2469,7 +2469,7 @@ components:
           description: order of SIP distortion terms; 0 = disable SIP tweaking
           type: integer
           minimum: 0
-          default: 3
+          default: 0
         crpix_center:
           description: set reference pixel to image center
           type: boolean
