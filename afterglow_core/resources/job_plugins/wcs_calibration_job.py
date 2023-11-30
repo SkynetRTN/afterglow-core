@@ -138,6 +138,11 @@ class WcsCalibrationJob(Job):
         source_extraction_settings = self.source_extraction_settings or SourceExtractionSettings()
         # Don't discard saturated stars because we need max_sources brightest sources
         source_extraction_settings.discard_saturated = 0
+        # TODO: Use a separate set of source extraction settings for WCS calibration instead of overwriting clip_{lo,hi}
+        if source_extraction_settings.clip_lo is None:
+            source_extraction_settings.clip_lo = 10
+        if source_extraction_settings.clip_hi is None:
+            source_extraction_settings.clip_hi = 99
 
         root = get_root(self.user_id)
 
