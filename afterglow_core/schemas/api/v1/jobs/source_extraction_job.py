@@ -44,8 +44,8 @@ class SourceExtractionSettingsSchema(AfterglowSchema):
     auto_sat_level: bool = Boolean(dump_default=False)
     discard_saturated: int = Integer(dump_default=1)
     max_sources: int = Integer(dump_default=10000)
-    clip_lo: float = Float(dump_default=None)
-    clip_hi: float = Float(dump_default=None)
+    clip_lo: float = Float(dump_default=0)
+    clip_hi: float = Float(dump_default=100)
 
 
 class SourceExtractionJobResultSchema(JobResultSchema):

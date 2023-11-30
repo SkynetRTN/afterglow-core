@@ -50,8 +50,8 @@ class SourceExtractionSettings(AfterglowSchema):
     auto_sat_level: bool = Boolean(dump_default=False)
     discard_saturated: int = Integer(dump_default=1)
     max_sources: int = Integer(dump_default=10000)
-    clip_lo: float = Float(dump_default=None)
-    clip_hi: float = Float(dump_default=None)
+    clip_lo: float = Float(dump_default=0)
+    clip_hi: float = Float(dump_default=100)
 
 
 class SourceExtractionJobResult(JobResult):
@@ -148,10 +148,10 @@ def run_source_extraction_job(job: Job,
             else:
                 sat_img = None
 
-            if settings.clip_lo is not None or settings.clip_hi is not None:
-                if settings.clip_lo is not None and settings.clip_hi is not None:
+            if settings.clip_lo > 0 or settings.clip_hi < 100:
+                if settings.clip_lo > 0 and settings.clip_hi < 100:
                     lo, hi = np.percentile(pixels, (settings.clip_lo, settings.clip_hi))
-                elif settings.clip_lo is not None:
+                elif settings.clip_lo > 0:
                     lo, hi = np.percentile(pixels, settings.clip_lo), None
                 else:
                     lo, hi = None, np.percentile(pixels, settings.clip_hi)
