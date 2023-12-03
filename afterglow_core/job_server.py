@@ -249,14 +249,11 @@ def stephen() -> None:
     import subprocess
     logger = current_app.logger
     logger.info('CHECK')
-    s = subprocess.check_output('/usr/bin/klist')
-    logger.info(s.decode('utf8'))
-    s = subprocess.check_output('/usr/bin/tokens')
-    logger.info(s.decode('utf8'))
-    s = subprocess.check_output('/usr/bin/id')
-    logger.info(s.decode('utf8'))
-    s = subprocess.check_output('/usr/bin/keyctl show')
-    logger.info(s.decode('utf8'))
+    for cmd in ('/usr/bin/klist', '/usr/bin/tokens', '/usr/bin/id', ['/usr/bin/keyctl', 'show']):
+        s = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf8').stdout
+        logger.info(str(cmd))
+        for l in s.splitlines():
+            logger.info(l)
 
 
 celery_app: Celery
@@ -376,7 +373,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
             ),
             'stephen': dict(
                 task='stephen',
-                schedule=crontab(minute='0'),
+                schedule=crontab(minute='*/5'),
             ),
         },
     ))
