@@ -240,22 +240,6 @@ def cleanup_jobs() -> None:
         current_app.logger.warning('Error deleting expired jobs', exc_info=True)
 
 
-# noinspection PyBroadException
-@shared_task(name='stephen')
-def stephen() -> None:
-    """
-    Hourly periodic task that reports some system stats
-    """
-    import subprocess
-    logger = current_app.logger
-    logger.info('CHECK')
-    for cmd in ('/usr/bin/klist', '/usr/bin/tokens', '/usr/bin/id', ['/usr/bin/keyctl', 'show']):
-        s = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf8').stdout
-        logger.info(str(cmd))
-        for l in s.splitlines():
-            logger.info(l)
-
-
 celery_app: Celery
 
 
@@ -370,10 +354,6 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
             'cleanup-jobs': dict(  # wipe expired jobs daily at 4am
                 task='cleanup_jobs',
                 schedule=crontab(hour='4', minute='0'),
-            ),
-            'stephen': dict(
-                task='stephen',
-                schedule=crontab(minute='*/5'),
             ),
         },
     ))
