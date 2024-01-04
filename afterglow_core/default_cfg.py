@@ -170,7 +170,7 @@ JOB_SERVER_VHOST = 'afterglow'
 JOB_MAX_RAM = 100.0
 
 # Maximum allowed job run time in seconds; None = no limit
-JOB_TIMEOUT = 1800
+JOB_TIMEOUT = 3600
 
 # Job cancellation timeout in seconds
 JOB_CANCEL_TIMEOUT = 10
