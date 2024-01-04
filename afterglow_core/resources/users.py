@@ -3,7 +3,7 @@ Afterglow Core: user management
 """
 
 import os
-import time, threading
+import time
 import shutil
 from datetime import datetime
 from typing import List as TList, Optional, Union
@@ -17,13 +17,11 @@ from authlib.integrations.sqla_oauth2 import (
     OAuth2AuthorizationCodeMixin, OAuth2TokenMixin)
 from sqlalchemy.orm import Mapped
 
-t0 = time.time()
 from ..database import db
 from ..models import User
 from ..errors import MissingFieldError, ValidationError
 from ..errors.auth import DuplicateUsernameError, UnknownUserError
 from .base import DateTime, JSONType
-print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [imports] {time.time() - t0}')
 
 
 __all__ = [
@@ -34,7 +32,6 @@ __all__ = [
 ]
 
 
-t0 = time.time()
 class AnonymousUserRole(object):
     id = None
     name = 'user'
@@ -261,12 +258,9 @@ class Token(db.Model, OAuth2TokenMixin):
         expires_at = self.issued_at + \
             current_app.config.get('REFRESH_TOKEN_EXPIRES')
         return expires_at >= time.time()
-print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [db defs] {time.time() - t0}')
 
 
-t0 = time.time()
 user_datastore = SQLAlchemyUserDatastore(db, DbUser, DbRole)
-print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [datastore] {time.time() - t0}')
 
 
 def init_users(app: Flask) -> None:
