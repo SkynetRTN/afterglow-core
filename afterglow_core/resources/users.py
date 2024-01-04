@@ -3,7 +3,7 @@ Afterglow Core: user management
 """
 
 import os
-import time
+import time, threading
 import shutil
 from datetime import datetime
 from typing import List as TList, Optional, Union
@@ -17,11 +17,13 @@ from authlib.integrations.sqla_oauth2 import (
     OAuth2AuthorizationCodeMixin, OAuth2TokenMixin)
 from sqlalchemy.orm import Mapped
 
+t0 = time.time()
 from ..database import db
 from ..models import User
 from ..errors import MissingFieldError, ValidationError
 from ..errors.auth import DuplicateUsernameError, UnknownUserError
 from .base import DateTime, JSONType
+print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [imports] {time.time() - t0}')
 
 
 __all__ = [
@@ -32,6 +34,7 @@ __all__ = [
 ]
 
 
+t0 = time.time()
 class AnonymousUserRole(object):
     id = None
     name = 'user'
@@ -258,9 +261,12 @@ class Token(db.Model, OAuth2TokenMixin):
         expires_at = self.issued_at + \
             current_app.config.get('REFRESH_TOKEN_EXPIRES')
         return expires_at >= time.time()
+print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [db defs] {time.time() - t0}')
 
 
+t0 = time.time()
 user_datastore = SQLAlchemyUserDatastore(db, DbUser, DbRole)
+print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [datastore] {time.time() - t0}')
 
 
 def init_users(app: Flask) -> None:
@@ -271,19 +277,13 @@ def init_users(app: Flask) -> None:
     """
     # All imports put here to avoid unnecessary loading of packages on startup
     # if user auth is disabled
-    import time, threading
-    t0 = t00 = time.time()
     from alembic import config as alembic_config, context as alembic_context
     from alembic.script import ScriptDirectory
     from alembic.runtime.environment import EnvironmentContext
-    print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [import] {time.time() - t0}')
 
-    t0 = time.time()
     app.security = Security(app, user_datastore, register_blueprint=False)
-    print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [init security] {time.time() - t0}')
 
     # Create/upgrade tables via Alembic
-    t0 = time.time()
     cfg = alembic_config.Config()
     cfg.set_main_option('script_location', os.path.abspath(os.path.join(__file__, '../..', 'db_migration', 'users')))
     script = ScriptDirectory.from_config(cfg)
@@ -296,10 +296,8 @@ def init_users(app: Flask) -> None:
 
         with alembic_context.begin_transaction():
             alembic_context.run_migrations()
-    print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [run migrations] {time.time() - t0}')
 
     # Initialize user roles if missing
-    t0 = time.time()
     try:
         roles_created = False
         for name, descr in [
@@ -313,8 +311,6 @@ def init_users(app: Flask) -> None:
     except Exception:
         db.session.rollback()
         raise
-    print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [init roles] {time.time() - t0}')
-    print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [total] {time.time() - t00}')
 
 
 def query_users(username: Optional[str] = None, active: Optional[str] = None,
