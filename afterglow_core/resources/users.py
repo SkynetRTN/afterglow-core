@@ -271,11 +271,13 @@ def init_users(app: Flask) -> None:
     """
     # All imports put here to avoid unnecessary loading of packages on startup
     # if user auth is disabled
+    import time, threading
+    t0 = t00 = time.time()
     from alembic import config as alembic_config, context as alembic_context
     from alembic.script import ScriptDirectory
     from alembic.runtime.environment import EnvironmentContext
+    print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [import] {time.time() - t0}')
 
-    import time, threading
     t0 = time.time()
     app.security = Security(app, user_datastore, register_blueprint=False)
     print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [init security] {time.time() - t0}')
@@ -312,6 +314,7 @@ def init_users(app: Flask) -> None:
         db.session.rollback()
         raise
     print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [init roles] {time.time() - t0}')
+    print(f'PROFILE {os.getpid()} {threading.get_native_id()}: [total] {time.time() - t00}')
 
 
 def query_users(username: Optional[str] = None, active: Optional[str] = None,
