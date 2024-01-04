@@ -411,44 +411,65 @@ def create_app() -> Flask:
     del f, key, keyfile
 
     with app.app_context():
+        import time, threading
         # Initialize database subsystem
+        t0 = time.time()
         from .database import init_db, db
         init_db(app, cipher)
+        print(f'PROFILE {os.getpid()} {threading.current_thread().ident}: [init_db] {time.time() - t0}')
 
         if app.config.get('AUTH_ENABLED'):
             # Initialize user authentication and enable non-versioned /users
             # routes and Afterglow OAuth2 server at /oauth2
+            t0 = time.time()
             from .resources.users import init_users
             init_users(app)
+            print(f'PROFILE {os.getpid()} {threading.current_thread().ident}: [init_users] {time.time() - t0}')
+            t0 = time.time()
             from .auth import init_auth
             init_auth()
+            print(f'PROFILE {os.getpid()} {threading.current_thread().ident}: [init_auth] {time.time() - t0}')
+            t0 = time.time()
             from .oauth2 import init_oauth
             init_oauth()
+            print(f'PROFILE {os.getpid()} {threading.current_thread().ident}: [init_oauth] {time.time() - t0}')
 
         # Initialize data file and field cal tables
+        t0 = time.time()
         from .resources.data_files import init_data_files
         from .resources.field_cals import init_field_cals
         init_data_files()
         init_field_cals()
+        print(f'PROFILE {os.getpid()} {threading.current_thread().ident}: [init_data_files] {time.time() - t0}')
 
         # Register resource plugins
+        t0 = time.time()
         from .resources.data_providers import register
         register(app)
+        print(f'PROFILE {os.getpid()} {threading.current_thread().ident}: [init_data_providers] {time.time() - t0}')
 
         # Register endpoints
+        t0 = time.time()
         from .views import register
         register(app)
+        print(f'PROFILE {os.getpid()} {threading.current_thread().ident}: [init_views] {time.time() - t0}')
 
         # Install Flask handlers for all Afterglow exceptions
+        t0 = time.time()
         from .errors import register
         register(app)
+        print(f'PROFILE {os.getpid()} {threading.current_thread().ident}: [init_errors] {time.time() - t0}')
 
         # Initialize job subsystem
+        t0 = time.time()
         from .job_server import init_jobs
         init_jobs(app, cipher)
+        print(f'PROFILE {os.getpid()} {threading.current_thread().ident}: [init_jobs] {time.time() - t0}')
 
         # Create all remaining db tables
+        t0 = time.time()
         db.create_all()
+        print(f'PROFILE {os.getpid()} {threading.current_thread().ident}: [db.create_all] {time.time() - t0}')
 
     # shell context for flask cli
     @app.shell_context_processor

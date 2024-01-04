@@ -321,6 +321,8 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
     cfg.set_main_option(
         'script_location', os.path.abspath(os.path.join(__file__, '..', 'db_migration', 'jobs'))
     )
+    import time, threading
+    t0 = time.time()
     script = ScriptDirectory.from_config(cfg)
     with EnvironmentContext(
             cfg, script, fn=lambda rev, _: script._upgrade_revs('head', rev), as_sql=False,
@@ -329,6 +331,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
 
         with alembic_context.begin_transaction():
             alembic_context.run_migrations()
+    print(f'PROFILE {os.getpid()} {threading.current_thread().ident}: [job migrations] {time.time() - t0}')
 
     # Decrypt RabbitMQ password
     broker_pass = app.config["JOB_SERVER_PASS"]
@@ -338,6 +341,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         broker_pass = ':' + quote(cipher.decrypt(broker_pass).decode('utf8'))
 
     # Create Celery app
+    t0 = time.time()
     celery_app = Celery('afterglow_core.job_server', task_cls=AfterglowTask)
     celery_app.config_from_object(dict(
         broker_url=f'amqp://{quote(app.config["JOB_SERVER_USER"])}{broker_pass}@{app.config["JOB_SERVER_HOST"]}:'
@@ -359,6 +363,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
     ))
     celery_app.set_default()
     app.extensions['celery'] = celery_app
+    print(f'PROFILE {os.getpid()} {threading.current_thread().ident}: [init celery] {time.time() - t0}')
     app.logger.info('Afterglow job server initialized')
     return celery_app
 
