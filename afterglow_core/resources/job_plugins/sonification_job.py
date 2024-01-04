@@ -15,8 +15,7 @@ from skylib.sonification import sonify_image
 
 from ...models import Job
 from ...schemas import AfterglowSchema, Boolean, Float
-from ..data_files import (
-    get_data_file, get_data_file_db, get_data_file_data, get_subframe)
+from ..data_files import get_data_file, get_data_file_data, get_subframe
 
 
 __all__ = ['SonificationJob']
@@ -50,8 +49,7 @@ class SonificationJob(Job):
     description = 'Image Sonification'
 
     file_id: int = Integer()
-    settings: SonificationSettings = Nested(
-        SonificationSettings, dump_default={})
+    settings: SonificationSettings = Nested(SonificationSettings, dump_default={})
     format: str = String(dump_default='wav')
 
     def run(self):
@@ -63,8 +61,7 @@ class SonificationJob(Job):
         x0 = settings.x - 1
         y0 = settings.y - 1
 
-        with get_data_file_db(self.user_id) as adb:
-            df = get_data_file(adb, self.file_id)
+        df = get_data_file(self.user_id, self.file_id)
         height, width = pixels.shape
         if width != df.width or height != df.height:
             # Sonifying a subimage; estimate background from the whole image

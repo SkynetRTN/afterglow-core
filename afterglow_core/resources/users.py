@@ -4,14 +4,12 @@ Afterglow Core: user management
 
 import os
 import time
-import errno
 import shutil
-import multiprocessing
 from datetime import datetime
 from typing import List as TList, Optional, Union
 
 from flask import Flask, current_app
-from flask_sqlalchemy import Model, SQLAlchemy
+from flask_sqlalchemy.model import Model
 from flask_security import (
     Security, UserMixin, RoleMixin, SQLAlchemyUserDatastore)
 from flask_security.utils import hash_password
@@ -19,6 +17,7 @@ from authlib.integrations.sqla_oauth2 import (
     OAuth2AuthorizationCodeMixin, OAuth2TokenMixin)
 from sqlalchemy.orm import Mapped
 
+from ..database import db
 from ..models import User
 from ..errors import MissingFieldError, ValidationError
 from ..errors.auth import DuplicateUsernameError, UnknownUserError
@@ -63,8 +62,6 @@ class AnonymousUser(object):
         return self.id
 
 
-db = SQLAlchemy()
-
 user_roles = db.Table(
     'user_roles',
     db.Column('user_id', db.Integer, db.ForeignKey('users.id')),
@@ -86,7 +83,6 @@ class DbRole(db.Model, RoleMixin):
 
 class DbUser(db.Model, UserMixin):
     __tablename__ = 'users'
-    __table_args__ = dict(sqlite_autoincrement=True)
 
     id: Mapped[int] = db.Column(db.Integer, primary_key=True)
     username: Mapped[str] = db.Column(
@@ -162,7 +158,6 @@ class DbUser(db.Model, UserMixin):
 
 class DbIdentity(db.Model):
     __tablename__ = 'identities'
-    __table_args__ = dict(sqlite_autoincrement=True)
 
     id: Mapped[int] = db.Column(db.Integer, primary_key=True, nullable=False)
     name: Mapped[str] = db.Column(
@@ -180,7 +175,6 @@ class DbIdentity(db.Model):
 
 class DbPersistentToken(db.Model):
     __tablename__ = 'tokens'
-    __table_args__ = dict(sqlite_autoincrement=True)
 
     id: Mapped[int] = db.Column(db.Integer, primary_key=True)
     user_id: Mapped[int] = db.Column(
@@ -229,7 +223,6 @@ class DbUserClient(db.Model):
 
 class OAuth2AuthorizationCode(db.Model, OAuth2AuthorizationCodeMixin):
     __tablename__ = 'oauth_codes'
-    __table_args__ = dict(sqlite_autoincrement=True)
 
     id: Mapped[int] = db.Column(db.Integer, primary_key=True)
     user_id: Mapped[int] = db.Column(
@@ -244,7 +237,6 @@ class Token(db.Model, OAuth2TokenMixin):
     Token object; stored in the memory database
     """
     __tablename__ = 'oauth_tokens'
-    __table_args__ = dict(sqlite_autoincrement=True)
 
     id: Mapped[int] = db.Column(db.Integer, primary_key=True)
     user_id: Mapped[int] = db.Column(
@@ -277,80 +269,27 @@ def init_users(app: Flask) -> None:
 
     :param app: Flask application
     """
-    if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
-        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///{}'.format(
-            os.path.join(os.path.abspath(app.config['DATA_ROOT']),
-                         'afterglow.db'))
-        app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {}).setdefault(
-            'connect_args', {})['timeout'] = app.config.get('DB_TIMEOUT', 30)
-    else:
-        _db_pass = app.config.get('DB_PASS', '')
-        if _db_pass:
-            if not isinstance(_db_pass, bytes):
-                _db_pass = _db_pass.encode('ascii')
-            from .. import cipher
-            _db_pass = cipher.decrypt(_db_pass).decode('utf8')
-        app.config['SQLALCHEMY_DATABASE_URI'] = '{}://{}{}@{}:{}/{}'.format(
-            app.config.get('DB_BACKEND'),
-            app.config.get('DB_USER', 'admin'),
-            ':' + _db_pass if _db_pass else '',
-            app.config.get('DB_HOST', 'localhost'),
-            app.config.get('DB_PORT', 3306),  # default for MySQL
-            app.config.get('DB_SCHEMA', 'afterglow'))
-        app.config.setdefault(
-            'SQLALCHEMY_ENGINE_OPTIONS', {})['pool_timeout'] = \
-            app.config.get('DB_TIMEOUT', 30)
-        app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault(
-            'pool_recycle', 3600)
-        if multiprocessing.current_process().name == 'JobServer':
-            # Separate db pool size setting for job server
-            app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault(
-                'pool_size', app.config.get('JOB_DB_POOL_SIZE', 10))
-        else:
-            app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault(
-                'pool_size', app.config.get('DB_POOL_SIZE', 10))
-        del _db_pass
-    app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
-
     # All imports put here to avoid unnecessary loading of packages on startup
     # if user auth is disabled
-    from alembic import (
-        config as alembic_config, context as alembic_context)
+    from alembic import config as alembic_config, context as alembic_context
     from alembic.script import ScriptDirectory
     from alembic.runtime.environment import EnvironmentContext
 
-    db.init_app(app)
     app.security = Security(app, user_datastore, register_blueprint=False)
-
-    # Make sure that the database directory exists
-    try:
-        os.makedirs(os.path.abspath(app.config['DATA_ROOT']))
-    except OSError as e:
-        if e.errno != errno.EEXIST:
-            raise
 
     # Create/upgrade tables via Alembic
     cfg = alembic_config.Config()
-    cfg.set_main_option(
-        'script_location',
-        os.path.abspath(os.path.join(
-            __file__, '../..', 'db_migration', 'users'))
-    )
+    cfg.set_main_option('script_location', os.path.abspath(os.path.join(__file__, '../..', 'db_migration', 'users')))
     script = ScriptDirectory.from_config(cfg)
 
     # noinspection PyProtectedMember
     with EnvironmentContext(
-            cfg, script,
-            fn=lambda rev, _: script._upgrade_revs('head', rev),
-            as_sql=False, starting_rev=None, destination_rev='head',
-            tag=None), db.engine.connect() as connection:
+            cfg, script, fn=lambda rev, _: script._upgrade_revs('head', rev), as_sql=False, starting_rev=None,
+            destination_rev='head', tag=None), db.engine.connect() as connection:
         alembic_context.configure(connection=connection)
 
-        if app.config.get('DB_BACKEND', 'sqlite') == 'sqlite':
+        with alembic_context.begin_transaction():
             alembic_context.run_migrations()
-        else:
-            with alembic_context.begin_transaction():
-                alembic_context.run_migrations()
 
     # Initialize user roles if missing
     try:
@@ -380,19 +319,23 @@ def query_users(username: Optional[str] = None, active: Optional[str] = None,
 
     :return: list of user objects
     """
-    q = DbUser.query
-    if username:
-        q = q.filter(DbUser.username.ilike(username.lower()))
-    if active:
-        try:
-            active = bool(int(active))
-        except ValueError:
-            raise ValidationError('active', '"active" must be 0 or 1')
-        q = q.filter(DbUser.active == active)
-    if roles:
-        for role in roles.split(','):
-            q = q.filter(DbUser.roles.any(DbRole.name == role))
-    return [User(u) for u in q]
+    try:
+        q = DbUser.query
+        if username:
+            q = q.filter(DbUser.username.ilike(username.lower()))
+        if active:
+            try:
+                active = bool(int(active))
+            except ValueError:
+                raise ValidationError('active', '"active" must be 0 or 1')
+            q = q.filter_by(active=active)
+        if roles:
+            for role in roles.split(','):
+                q = q.filter(DbUser.roles.any(DbRole.name == role))
+        return [User(u) for u in q]
+    except Exception:
+        db.session.rollback()
+        raise
 
 
 def get_user(user_id: int) -> User:
@@ -403,12 +346,16 @@ def get_user(user_id: int) -> User:
 
     :return: user object
     """
-    u = DbUser.query.get(user_id)
-    if u is None:
-        raise UnknownUserError(id=user_id)
+    try:
+        u = DbUser.query.get(user_id)
+        if u is None:
+            raise UnknownUserError(id=user_id)
 
-    # Convert to data model object
-    return User(u)
+        # Convert to data model object
+        return User(u)
+    except Exception:
+        db.session.rollback()
+        raise
 
 
 def create_user(user: User) -> User:
@@ -472,21 +419,22 @@ def update_user(user_id: int, user: User) -> User:
 
     :return: updated user object
     """
-    db_user = DbUser.query.get(user_id)
-    if db_user is None:
-        raise UnknownUserError(id=user_id)
-
-    for key, val in user.to_dict().items():
-        if key == 'id':
-            # Don't allow changing field cal ID
-            continue
-        if key == 'username' and val != db_user.username and \
-                DbUser.query.filter(
-                    db.func.lower(User.username) == val.lower(),
-                    User.id != user_id).count():
-            raise DuplicateUsernameError(username=val)
-        setattr(db_user, key, val)
     try:
+        db_user = DbUser.query.get(user_id)
+        if db_user is None:
+            raise UnknownUserError(id=user_id)
+
+        for key, val in user.to_dict().items():
+            if key == 'id':
+                # Don't allow changing field cal ID
+                continue
+            if key == 'username' and val != db_user.username and \
+                    DbUser.query.filter(
+                        db.func.lower(User.username) == val.lower(),
+                        User.id != user_id).count():
+                raise DuplicateUsernameError(username=val)
+            setattr(db_user, key, val)
+
         user = User(db_user)
         db.session.commit()
     except Exception:
@@ -502,11 +450,11 @@ def delete_user(user_id: int) -> None:
 
     :param user_id: user ID
     """
-    db_user = DbUser.query(user_id)
-    if db_user is None:
-        raise UnknownUserError(id=user_id)
-
     try:
+        db_user = DbUser.query(user_id)
+        if db_user is None:
+            raise UnknownUserError(id=user_id)
+
         db_user.roles = []
         db.session.delete(db_user)
         db.session.commit()

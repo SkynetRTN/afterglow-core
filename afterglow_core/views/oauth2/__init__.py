@@ -2,7 +2,7 @@
 Afterglow Core: OAuth2 server routes
 """
 
-from werkzeug.urls import url_encode
+from urllib.parse import urlencode
 from flask import Blueprint, Flask, current_app, redirect, request
 
 from ...auth import auth_required
@@ -38,7 +38,7 @@ def oauth2_authorize():
             user_id=request.user.id, client_id=client_id).count():
         # Redirect users to consent page if the client was not confirmed yet
         dashboard_prefix = current_app.config.get("DASHBOARD_PREFIX")
-        args = url_encode(dict(client_id=client_id, next=request.url))
+        args = urlencode(dict(client_id=client_id, next=request.url))
         return redirect(
             '{dashboard_prefix}/oauth2/consent?{args}'
             .format(dashboard_prefix=dashboard_prefix, args=args))

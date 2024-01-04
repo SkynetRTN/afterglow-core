@@ -15,18 +15,18 @@ DATA_ROOT = '.'
 # Database engine options
 ###############################################################################
 
-# Database backend: "sqlite", "Mysql", "mysql+mysqldb", etc.; see
+# Database backend: "Mysql", "mysql+mysqldb", etc.; see
 # https://docs.sqlalchemy.org/en/14/core/engines.html
-# Default is 'sqlite', which requires no further configuration
-DB_BACKEND = 'sqlite'
+# Note: sqlite not supported
+DB_BACKEND = ''
 
-# For non-sqlite backends, this is the database server address
+# Database server address
 DB_HOST = 'localhost'
 DB_PORT = 3306
 
 # Database server username/password
 DB_USER = 'afterglow_core'
-# Password must be encrypted using afterglow_core/scripts/encrypt.py
+# Password must be encrypted with afterglow_core/scripts/encrypt.py
 DB_PASS = ''
 
 # Database schema containing all Afterglow Core tables
@@ -38,10 +38,6 @@ DB_TIMEOUT = 30
 # Max number of db connections for the API; set to at least the number
 # of WSGI threads
 DB_POOL_SIZE = 10
-
-# Max number of db connections for the job server; set to at least one plus
-# the number of WSGI processes times the number of WSGI threads
-JOB_DB_POOL_SIZE = 10
 
 
 ###############################################################################
@@ -154,34 +150,27 @@ ANET_INDEX_PATH = []
 # Job server options
 ###############################################################################
 
-# TCP port job server listens on
-JOB_SERVER_PORT = 2109
+# RabbitMQ broker host
+JOB_SERVER_HOST = 'localhost'
 
-# Initial job pool size
-JOB_POOL_MIN = 1
+# RabbitMQ broker port
+JOB_SERVER_PORT = 5672
 
-# Maximum job pool size; 0 = no limit
-JOB_POOL_MAX = 16
+# RabbitMQ broker username
+JOB_SERVER_USER = 'guest'
+
+# RabbitMQ broker password encrypted with afterglow_core/scripts/encrypt.py
+JOB_SERVER_PASS = ''
+
+# RabbitMQ broker virtual host
+JOB_SERVER_VHOST = 'afterglow'
 
 # Maximum RAM in megabytes allowed to be allocated by certain memory-intensive
 # operations
 JOB_MAX_RAM = 100.0
 
-# Refuse to start jobs if the total RAM usage by all job workers exceeds this
-# percentage of available physical RAM
-JOB_MAX_TOTAL_RAM_PERCENT = 80.0
+# Maximum allowed job run time in seconds; None = no limit
+JOB_TIMEOUT = 3600
 
-# Cancel jobs that consume a larger percentage of total physical RAM
-JOB_MAX_RAM_PERCENT = 40.0
-
-# Job completion timeout in seconds: if job pool is exhausted, cancel jobs that
-# run longer than specified except those which progress is above
-# JOB_TIMEOUT_MAX_PROGRESS
-JOB_TIMEOUT = 1800
-
-# Don't time out jobs with progress above the given percentage
-JOB_TIMEOUT_MAX_PROGRESS = 90
-
-# Forcibly kill and restart job worker if it does not respond to cancellation
-# request in a timely manner (seconds)
+# Job cancellation timeout in seconds
 JOB_CANCEL_TIMEOUT = 10

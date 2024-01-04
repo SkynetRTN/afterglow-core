@@ -13,8 +13,7 @@ from .source_merge_job import SourceMergeSettingsSchema
 
 
 __all__ = [
-    'SourceExtractionSettingsSchema', 'SourceExtractionJobResultSchema',
-    'SourceExtractionJobSchema',
+    'SourceExtractionSettingsSchema', 'SourceExtractionJobResultSchema', 'SourceExtractionJobSchema',
 ]
 
 
@@ -45,21 +44,19 @@ class SourceExtractionSettingsSchema(AfterglowSchema):
     auto_sat_level: bool = Boolean(dump_default=False)
     discard_saturated: int = Integer(dump_default=1)
     max_sources: int = Integer(dump_default=10000)
+    clip_lo: float = Float(dump_default=0)
+    clip_hi: float = Float(dump_default=100)
 
 
 class SourceExtractionJobResultSchema(JobResultSchema):
-    data: TList[SourceExtractionDataSchema] = List(
-        Nested(SourceExtractionDataSchema), dump_default=[])
+    data: TList[SourceExtractionDataSchema] = List(Nested(SourceExtractionDataSchema), dump_default=[])
 
 
 class SourceExtractionJobSchema(JobSchema):
     type = 'source_extraction'
 
-    result: SourceExtractionJobResultSchema = Nested(
-        SourceExtractionJobResultSchema)
+    result: SourceExtractionJobResultSchema = Nested(SourceExtractionJobResultSchema)
     file_ids: TList[int] = List(Integer(), dump_default=[])
-    source_extraction_settings: SourceExtractionSettingsSchema = Nested(
-        SourceExtractionSettingsSchema, dump_default={})
+    source_extraction_settings: SourceExtractionSettingsSchema = Nested(SourceExtractionSettingsSchema, dump_default={})
     merge_sources: bool = Boolean(dump_default=True)
-    source_merge_settings: SourceMergeSettingsSchema = Nested(
-        SourceMergeSettingsSchema, dump_default={})
+    source_merge_settings: SourceMergeSettingsSchema = Nested(SourceMergeSettingsSchema, dump_default={})

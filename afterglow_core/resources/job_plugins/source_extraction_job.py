@@ -5,12 +5,11 @@ Afterglow Core: source extraction job plugin
 from typing import Dict as TDict, List as TList, Tuple
 
 from marshmallow.fields import Integer, List, Nested
-from numpy import ndarray
+import numpy as np
 from astropy.wcs import WCS
 
 from skylib.extraction import auto_sat_level, extract_sources
-from skylib.util.fits import (
-    get_fits_exp_length, get_fits_gain, get_fits_time)
+from skylib.util.fits import get_fits_exp_length, get_fits_gain, get_fits_time
 
 from ...models import Job, JobResult, SourceExtractionData
 from ...schemas import AfterglowSchema, Boolean, Float
@@ -51,33 +50,29 @@ class SourceExtractionSettings(AfterglowSchema):
     auto_sat_level: bool = Boolean(dump_default=False)
     discard_saturated: int = Integer(dump_default=1)
     max_sources: int = Integer(dump_default=10000)
+    clip_lo: float = Float(dump_default=0)
+    clip_hi: float = Float(dump_default=100)
 
 
 class SourceExtractionJobResult(JobResult):
-    data: TList[SourceExtractionData] = List(
-        Nested(SourceExtractionData), dump_default=[])
+    data: TList[SourceExtractionData] = List(Nested(SourceExtractionData), dump_default=[])
 
 
 class SourceExtractionJob(Job):
     type = 'source_extraction'
     description = 'Extract Sources'
 
-    result: SourceExtractionJobResult = Nested(
-        SourceExtractionJobResult)
+    result: SourceExtractionJobResult = Nested(SourceExtractionJobResult)
     file_ids: TList[int] = List(Integer(), dump_default=[])
-    source_extraction_settings: SourceExtractionSettings = Nested(
-        SourceExtractionSettings, dump_default={})
+    source_extraction_settings: SourceExtractionSettings = Nested(SourceExtractionSettings, dump_default={})
     merge_sources: bool = Boolean(dump_default=True)
-    source_merge_settings: SourceMergeSettings = Nested(
-        SourceMergeSettings, dump_default={})
+    source_merge_settings: SourceMergeSettings = Nested(SourceMergeSettings, dump_default={})
 
     def run(self):
-        result_data = run_source_extraction_job(
-            self, self.source_extraction_settings, self.file_ids)[0]
+        result_data = run_source_extraction_job(self, self.source_extraction_settings, self.file_ids)[0]
 
         if self.file_ids and len(self.file_ids) > 1 and self.merge_sources:
-            result_data = merge_sources(
-                result_data, self.source_merge_settings, self.id)
+            result_data = merge_sources(result_data, self.source_merge_settings, self.id)
 
         object.__setattr__(self.result, 'data', result_data)
 
@@ -86,21 +81,18 @@ def run_source_extraction_job(job: Job,
                               settings: SourceExtractionSettings,
                               job_file_ids: TList[int],
                               stage: int = 0, total_stages: int = 1) -> \
-        Tuple[TList[SourceExtractionData],
-              TDict[int, Tuple[ndarray, ndarray]]]:
+        Tuple[TList[SourceExtractionData], TDict[int, Tuple[np.ndarray, np.ndarray]]]:
     """
     Batch photometry job body; also used during photometric calibration
 
     :param job: job class instance
     :param settings: source extraction settings
     :param job_file_ids: data file IDs to process
-    :param stage: optional processing stage number; used to properly update
-        the job progress if cropping is a part of other job
-    :param total_stages: total number of stages in the enclosing job if any;
-        set to 0 to disable progress updates
+    :param stage: optional processing stage number; used to properly update the job progress if cropping is a part of
+        other job
+    :param total_stages: total number of stages in the enclosing job if any; set to 0 to disable progress updates
 
-    :return: list of source extraction results plus background and RMS map
-        pairs indexed by file IDs
+    :return: list of source extraction results plus background and RMS map pairs indexed by file IDs
     """
     extraction_kw = dict(
         downsample=settings.downsample,
@@ -130,9 +122,7 @@ def run_source_extraction_job(job: Job,
     for file_no, id in enumerate(job_file_ids):
         try:
             # Get image data
-            pixels = get_subframe(
-                job.user_id, id, settings.x, settings.y,
-                settings.width, settings.height)
+            pixels = get_subframe(job.user_id, id, settings.x, settings.y, settings.width, settings.height)
 
             with get_data_file_fits(job.user_id, id) as f:
                 hdr = f[0].header
@@ -157,6 +147,15 @@ def run_source_extraction_job(job: Job,
                 sat_img = pixels >= sat_level
             else:
                 sat_img = None
+
+            if settings.clip_lo > 0 or settings.clip_hi < 100:
+                if settings.clip_lo > 0 and settings.clip_hi < 100:
+                    lo, hi = np.percentile(pixels, (settings.clip_lo, settings.clip_hi))
+                elif settings.clip_lo > 0:
+                    lo, hi = np.percentile(pixels, settings.clip_lo), None
+                else:
+                    lo, hi = None, np.percentile(pixels, settings.clip_hi)
+                pixels = np.clip(pixels, lo, hi)
 
             # Extract sources
             source_table, background, background_rms = extract_sources(

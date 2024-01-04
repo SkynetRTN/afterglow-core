@@ -19,11 +19,11 @@ class FieldCal(AfterglowSchema):
     Field calibration prescription
     """
     id: int = Integer()
+    user_id: int = Integer()
     name: str = String()
     catalog_sources: TList[CatalogSource] = List(Nested(CatalogSource))
     catalogs: TList[str] = List(String())
-    custom_filter_lookup: TDict[str, TDict[str, str]] = Dict(
-        keys=String, values=Dict(keys=String, values=String))
+    custom_filter_lookup: TDict[str, TDict[str, str]] = Dict(keys=String, values=Dict(keys=String, values=String))
     source_inclusion_percent: float = Float()
     min_snr: float = Float()
     max_snr: float = Float()
@@ -38,8 +38,7 @@ class FieldCalResult(AfterglowSchema):
     Result of field calibration for a data file
     """
     file_id: int = Integer()
-    phot_results: TList[PhotometryData] = List(
-        Nested(PhotometryData), dump_default=[])
+    phot_results: TList[PhotometryData] = List(Nested(PhotometryData), dump_default=[])
     zero_point_corr: float = Float()
     zero_point_error: float = Float()
     limmag5: float = Float()

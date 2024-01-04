@@ -16,11 +16,10 @@ from skylib.enhancement.wavelet import wavelet_sharpen
 from skylib.color.radio import radio_nat
 from skylib.calibration.cosmetic import correct_cosmetic, detect_defects
 
+from ...database import db
 from ...models import Job, JobResult
 from ...schemas import Boolean, Float
-from ..data_files import (
-    create_data_file, get_data_file_data, get_data_file_db, get_data_file_fits,
-    get_root, save_data_file)
+from ..data_files import create_data_file, get_data_file_data, get_data_file_fits, get_root, save_data_file
 
 
 __all__ = ['PixelOpsJob']
@@ -226,19 +225,17 @@ class PixelOpsJob(Job):
                         'evaluating expression "{}"'
                         .format(datetime.utcnow(), file_id, expr))
 
-            with get_data_file_db(self.user_id) as adb:
-                try:
-                    if self.inplace:
-                        # Overwrite the existing data file
-                        save_data_file(
-                            adb, get_root(self.user_id), file_id, data, hdr)
-                    else:
-                        file_id = create_data_file(
-                            adb, None, get_root(self.user_id), data, hdr,
-                            duplicates='append', session_id=self.session_id).id
-                    adb.commit()
-                except Exception:
-                    adb.rollback()
-                    raise
+            try:
+                if self.inplace:
+                    # Overwrite the existing data file
+                    save_data_file(get_root(self.user_id), file_id, data, hdr)
+                else:
+                    file_id = create_data_file(
+                        self.user_id, None, get_root(self.user_id), data, hdr,
+                        duplicates='append', session_id=self.session_id).id
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                raise
 
             self.result.file_ids.append(file_id)

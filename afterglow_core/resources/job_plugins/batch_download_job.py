@@ -6,16 +6,13 @@ from io import BytesIO
 from zipfile import ZIP_DEFLATED, ZipFile
 from typing import List as TList
 
-from marshmallow.fields import Integer, List, String
+from marshmallow.fields import Integer, List, Nested, String
 
 from ...models import Job
 from ...errors import MissingFieldError, ValidationError
 from ...errors.data_file import UnknownDataFileGroupError
-from ...errors.data_provider import (
-    NonBrowseableDataProviderError, UnknownDataProviderError)
-from ..data_files import (
-    get_data_file, get_data_file_bytes, get_data_file_db, get_data_file_group,
-    get_data_file_path)
+from ...errors.data_provider import NonBrowseableDataProviderError, UnknownDataProviderError
+from ..data_files import get_data_file, get_data_file_bytes, get_data_file_group, get_data_file_path
 from .. import data_providers
 
 
@@ -39,21 +36,18 @@ class BatchDownloadJob(Job):
         if len(self.file_ids) == 1 and not self.group_names:
             # Single data file; don't create archive
             self.create_job_file(
-                'download',
-                get_data_file_bytes(self.user_id, self.file_ids[0]),
-                mimetype='image/fits')
+                'download', get_data_file_bytes(self.user_id, self.file_ids[0]), mimetype='image/fits')
             return
 
         # Collect data files in groups
         groups = {}
-        with get_data_file_db(self.user_id) as adb:
-            for file_id in self.file_ids:
-                try:
-                    df = get_data_file(adb, file_id)
-                    groups.setdefault(df.group_name, set()) \
-                        .add((file_id, df.name))
-                except Exception as e:
-                    self.add_error(e, {'file_id': file_id})
+        for file_id in self.file_ids:
+            try:
+                df = get_data_file(self.user_id, file_id)
+                groups.setdefault(df.group_name, set()) \
+                    .add((file_id, df.name))
+            except Exception as e:
+                self.add_error(e, {'file_id': file_id})
         for group_name in self.group_names:
             try:
                 group = get_data_file_group(self.user_id, group_name)
@@ -150,9 +144,7 @@ class BatchAssetDownloadJob(Job):
         if len(assets) == 1:
             # Single non-collection asset; don't create archive
             asset = assets[0][0]
-            self.create_job_file(
-                'download', provider.get_asset_data(asset.path),
-                mimetype=asset.mimetype)
+            self.create_job_file('download', provider.get_asset_data(asset.path), mimetype=asset.mimetype)
             return
 
         # Add asset to archive

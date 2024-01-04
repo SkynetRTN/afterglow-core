@@ -6,6 +6,10 @@ import datetime
 import json
 import os
 import errno
+import gzip
+import shutil
+from logging import Formatter, getLogger
+from logging.handlers import TimedRotatingFileHandler
 from base64 import urlsafe_b64encode
 from urllib.parse import urlencode
 from typing import Any, Dict as TDict, List as TList, Optional, Union
@@ -244,6 +248,73 @@ cipher = None
 cors = None
 
 
+class MaxLengthFormatter(Formatter):
+    """
+    Log formatter that ensures that the message does not exceed maximum length and truncates it in the middle otherwise
+    """
+    def __init__(self, *args, **kwargs):
+        self.max_length = max_length = kwargs.pop('max_length', 1000)
+        self.filler = filler = kwargs.pop('filler', ' [...] ')
+        min_partial = max(kwargs.pop('min_partial', 20), 1)
+
+        super().__init__(*args, **kwargs)
+
+        l = len(filler)
+        if l > max_length - min_partial:
+            self.max_length = max_length = l + min_partial
+        self._left = (max_length - l)//2
+        self._right = max_length - self._left - l
+
+    def format(self, record):
+        msg = super().format(record)
+        if len(msg) <= self.max_length:
+            return msg
+        return msg[:self._left] + self.filler + msg[-self._right:]
+
+
+class AfterglowLogHandler(TimedRotatingFileHandler):
+    """
+    Extended TimedRotatingFileHandler that does not roll over until the log file reaches maximum size and compresses
+    files after rollover
+    """
+    def __init__(self, *args, **kwargs):
+        self.max_bytes = kwargs.pop('max_bytes', 1 << 20)
+
+        super().__init__(*args, **kwargs)
+
+        self.formatter = MaxLengthFormatter('%(asctime)s %(levelname)-8s %(message)s')
+
+    def shouldRollover(self, record):
+        """
+        Determine if rollover should occur.
+
+        In addition to TimedRotatingFileHandler, don't roll over if the file size is less than 1 megabyte
+        """
+        res = super().shouldRollover(record)
+
+        if res:
+            if self.stream is None:
+                self.stream = self._open()
+            msg = "%s\n" % self.format(record)
+            self.stream.seek(0, 2)
+            if self.stream.tell() + len(msg) < self.max_bytes:
+                res = False
+
+        return res
+
+    @staticmethod
+    def namer(name):
+        """Appends .gz suffix to backup logs"""
+        return name + '.gz'
+
+    @staticmethod
+    def rotator(source, dest):
+        """Compresses backup logs"""
+        with open(source, 'rb') as f_in, gzip.open(dest, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+        os.remove(source)
+
+
 def create_app() -> Flask:
     """
     Flask app factory
@@ -252,11 +323,19 @@ def create_app() -> Flask:
     """
     global cipher, cors
 
+    # Set up logging
+    logger = getLogger()
+    logger.setLevel('INFO')
+    logger.addHandler(AfterglowLogHandler(
+        os.path.join(os.environ.get('AFTERGLOW_LOGGING_ROOT', '/skynet/logs'), 'afterglow.log'),
+        when='D', backupCount=10, max_bytes=1 << 20, encoding='utf8'))
+
     # noinspection PyShadowingNames
     app = Flask(__name__)
     cors = CORS(app, resources={'/api/*': {'origins': '*'}})
     app.config.from_object('afterglow_core.default_cfg')
     app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=True)
+    app.config.from_envvar('AFTERGLOW_CORE_SECRETS', silent=True)
 
     proxy_count = app.config.get('APP_PROXY')
     if proxy_count:
@@ -300,9 +379,15 @@ def create_app() -> Flask:
         # noinspection PyPropertyAccess
         request.args = CombinedMultiDict(ds)
 
+    # Create data directory if not exists
+    try:
+        os.makedirs(os.path.abspath(app.config['DATA_ROOT']))
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+
     # Read/create secret key
-    keyfile = os.path.join(
-        os.path.abspath(app.config['DATA_ROOT']), 'AFTERGLOW_CORE_KEY')
+    keyfile = os.path.join(os.path.abspath(app.config['DATA_ROOT']), 'AFTERGLOW_CORE_KEY')
     try:
         with open(keyfile, 'rb') as f:
             key = f.read()
@@ -326,6 +411,10 @@ def create_app() -> Flask:
     del f, key, keyfile
 
     with app.app_context():
+        # Initialize database subsystem
+        from .database import init_db, db
+        init_db(app, cipher)
+
         if app.config.get('AUTH_ENABLED'):
             # Initialize user authentication and enable non-versioned /users
             # routes and Afterglow OAuth2 server at /oauth2
@@ -335,6 +424,12 @@ def create_app() -> Flask:
             init_auth()
             from .oauth2 import init_oauth
             init_oauth()
+
+        # Initialize data file and field cal tables
+        from .resources.data_files import init_data_files
+        from .resources.field_cals import init_field_cals
+        init_data_files()
+        init_field_cals()
 
         # Register resource plugins
         from .resources.data_providers import register
@@ -347,6 +442,18 @@ def create_app() -> Flask:
         # Install Flask handlers for all Afterglow exceptions
         from .errors import register
         register(app)
+
+        # Initialize job subsystem
+        from .job_server import init_jobs
+        init_jobs(app, cipher)
+
+        # Create all remaining db tables
+        db.create_all()
+
+    # shell context for flask cli
+    @app.shell_context_processor
+    def ctx():
+        return {"app": app}
 
     return app
 

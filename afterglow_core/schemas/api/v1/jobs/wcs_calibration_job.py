@@ -26,7 +26,7 @@ class WcsCalibrationSettingsSchema(AfterglowSchema):
     parity: Optional[bool] = Boolean(
         truthy={True, 1, 'negative'},
         falsy={False, 0, 'positive'}, dump_default=None)
-    sip_order: int = Integer(dump_default=3)
+    sip_order: int = Integer(dump_default=0)
     crpix_center: bool = Boolean(dump_default=True)
     max_sources: Optional[int] = Integer(dump_default=100)
 

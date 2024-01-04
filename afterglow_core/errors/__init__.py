@@ -56,16 +56,14 @@ def afterglow_error_handler(e: Exception) -> Response:
         'status': HTTP_STATUS_CODES.get(
             status, '{} Unknown Error'.format(status)),
         'id': str(getattr(e, 'id', e.__class__.__name__)),
-        'detail': str(e),
+        'detail': str(e) or e.__class__.__name__,
     }
 
     meta = getattr(e, 'meta', None)
     if meta:
         error['meta'] = dict(meta)
 
-    if status == 500:
-        error.setdefault('meta', {})['traceback'] = \
-            traceback.format_tb(sys.exc_info()[-1]),
+    error.setdefault('meta', {})['traceback'] = traceback.format_tb(sys.exc_info()[-1])
 
     return Response(
         json.dumps({
@@ -88,7 +86,7 @@ def unauthorized_error_handler(e: Exception) -> Response:
             'error': {
                 'status': HTTP_STATUS_CODES[401],
                 'id': e.__class__.__name__,
-                'detail': str(e),
+                'detail': str(e) or e.__class__.__name__,
             },
             'links': {'self': request.url},
         }), 401, mimetype='application/json')
@@ -107,7 +105,7 @@ def forbidden_error_handler(e: Exception) -> Response:
             'error': {
                 'status': HTTP_STATUS_CODES[403],
                 'id': e.__class__.__name__,
-                'detail': str(e),
+                'detail': str(e) or e.__class__.__name__,
             },
             'links': {'self': request.url},
         }), 403, mimetype='application/json')
@@ -127,7 +125,7 @@ def not_found_error_handler(e: Exception) -> Response:
             'error': {
                 'status': HTTP_STATUS_CODES[404],
                 'id': e.__class__.__name__,
-                'detail': str(e),
+                'detail': str(e) or e.__class__.__name__,
             },
             'links': {'self': request.url},
         }), 404, mimetype='application/json')
@@ -148,7 +146,7 @@ def internal_server_error_handler(e: Exception) -> Response:
             'error': {
                 'status': HTTP_STATUS_CODES[500],
                 'id': e.__class__.__name__,
-                'detail': str(e),
+                'detail': str(e) or e.__class__.__name__,
                 'meta': {
                     'type': et.__name__,
                     'value': str(ev),

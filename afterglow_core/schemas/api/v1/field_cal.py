@@ -21,12 +21,11 @@ class FieldCalSchema(Resource):
     __get_view__ = 'field_cals.field_cals'
 
     id: int = Integer()
+    user_id: int = Integer()
     name: str = String()
-    catalog_sources: TList[CatalogSourceSchema] = List(
-        Nested(CatalogSourceSchema))
+    catalog_sources: TList[CatalogSourceSchema] = List(Nested(CatalogSourceSchema))
     catalogs: TList[str] = List(String())
-    custom_filter_lookup: TDict[str, TDict[str, str]] = Dict(
-        keys=String, values=Dict(keys=String, values=String))
+    custom_filter_lookup: TDict[str, TDict[str, str]] = Dict(keys=String, values=Dict(keys=String, values=String))
     source_inclusion_percent: float = Float()
     min_snr: float = Float()
     max_snr: float = Float()
@@ -41,8 +40,7 @@ class FieldCalResultSchema(AfterglowSchema):
     Result of field calibration for a data file
     """
     file_id: int = Integer()
-    phot_results: TList[PhotometryDataSchema] = List(
-        Nested(PhotometryDataSchema), dump_default=[])
+    phot_results: TList[PhotometryDataSchema] = List(Nested(PhotometryDataSchema), dump_default=[])
     zero_point_corr: float = Float()
     zero_point_error: float = Float()
     limmag5: float = Float()

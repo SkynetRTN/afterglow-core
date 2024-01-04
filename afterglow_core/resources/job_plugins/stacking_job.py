@@ -9,10 +9,10 @@ from flask import current_app
 
 from skylib.combine.stacking import combine
 
+from ...database import db
 from ...models import Job, JobResult
 from ...schemas import AfterglowSchema, Boolean, Float
-from ..data_files import (
-    create_data_file, get_data_file_fits, get_data_file_db, get_root)
+from ..data_files import create_data_file, get_data_file_fits, get_root
 
 
 __all__ = ['StackingJob']
@@ -45,8 +45,7 @@ class StackingJob(Job):
 
     result: StackingJobResult = Nested(StackingJobResult, dump_default={})
     file_ids: TList[int] = List(Integer(), dump_default=[])
-    stacking_settings: StackingSettings = Nested(
-        StackingSettings, dump_default={})
+    stacking_settings: StackingSettings = Nested(StackingSettings, dump_default={})
 
     def run(self):
         settings = self.stacking_settings
@@ -172,12 +171,11 @@ class StackingJob(Job):
                 df.close()
 
         # Create a new data file in the given session and return its ID
-        with get_data_file_db(self.user_id) as adb:
-            try:
-                self.result.file_id = create_data_file(
-                    adb, None, get_root(self.user_id), data, header,
-                    duplicates='append', session_id=self.session_id).id
-                adb.commit()
-            except Exception:
-                adb.rollback()
-                raise
+        try:
+            self.result.file_id = create_data_file(
+                self.user_id, None, get_root(self.user_id), data, header,
+                duplicates='append', session_id=self.session_id).id
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
