@@ -359,7 +359,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
     )
     if sys.platform.startswith('win'):
         config.update(
-            # https://docs.celeryq.dev/en/stable/userguide/configuration.html#std-setting-worker_pool
+            # https://stackoverflow.com/questions/41636273/celery-tasks-received-but-not-executing
             worker_pool='eventlet',
         )
     celery_app.config_from_object(config)
