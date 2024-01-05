@@ -339,9 +339,9 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
 
     # Create Celery app
     celery_app = Celery('afterglow_core.job_server', task_cls=AfterglowTask)
-    celery_app.config_from_object(dict(
+    config = dict(
         broker_url=f'amqp://{quote(app.config["JOB_SERVER_USER"])}{broker_pass}@{app.config["JOB_SERVER_HOST"]}:'
-        f'{app.config["JOB_SERVER_PORT"]}/{app.config["JOB_SERVER_VHOST"]}',
+                   f'{app.config["JOB_SERVER_PORT"]}/{app.config["JOB_SERVER_VHOST"]}',
         broker_connection_retry_on_startup=True,
         result_backend='db+' + app.config['SQLALCHEMY_DATABASE_URI'],
         database_engine_options=app.config['SQLALCHEMY_ENGINE_OPTIONS'],
@@ -356,7 +356,16 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
                 schedule=crontab(hour='4', minute='0'),
             ),
         },
-    ))
+    )
+    if sys.platform.startswith('win'):
+        config.update(
+            # https://stackoverflow.com/questions/41636273/celery-tasks-received-but-not-executing
+            worker_pool='eventlet',
+        )
+    celery_app.config_from_object(config)
+    # Workaround for Windows, https://stackoverflow.com/questions/75659790/flask-celery-attributeerrorcant-pickle-local-object-celery-init-app-locals
+    # noinspection PyPropertyAccess
+    celery_app.Task = AfterglowTask
     celery_app.set_default()
     app.extensions['celery'] = celery_app
     app.logger.info('Afterglow job server initialized')
