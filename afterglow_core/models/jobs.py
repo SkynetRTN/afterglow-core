@@ -321,7 +321,17 @@ class Job(AfterglowSchema):
                 'completed': 'FAILURE' if self.result.errors else 'SUCCESS',
                 'canceled': 'ABORTED',
             }[self.state.status],
-            meta={'state': self.state.dump(self.state), 'result': self.result.dump(self.result)})
+            meta={'state': self.state.dump(self.state)})
+
+        # Save serialized result to job result file
+        d = job_result_dir()
+        try:
+            os.makedirs(d)
+        except OSError as _e_:
+            if _e_.errno != errno.EEXIST:
+                raise
+        with open(os.path.join(d, self.id), 'wt', encoding='utf8') as f:
+            print(self.result.dumps(self.result), file=f)
 
     def add_error(self, e: BaseException,
                   meta: Optional[TDict[str, Union[str, int, float, bool]]] =
