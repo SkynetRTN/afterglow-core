@@ -180,11 +180,7 @@ def user_tokens(user_id: int) -> Response:
 
         access_token = secrets.token_hex(20)
 
-        personal_token = DbPersistentToken(
-            access_token=access_token,
-            user_id=request.user.id,
-            note=note,
-        )
+        personal_token = DbPersistentToken(access_token=access_token, user_id=u.id, note=note)
         try:
             db.session.add(personal_token)
             db.session.commit()
