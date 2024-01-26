@@ -12,8 +12,8 @@ from ....resources.users import *
 from ....schemas.api.v1 import TokenSchema, UserSchema
 from ....errors import ValidationError
 from ....errors.auth import (
-    AdminOrSameUserRequiredError, AdminRequiredError,
-    CannotDeactivateTheOnlyAdminError, CannotDeleteCurrentUserError)
+    AdminOrSameUserRequiredError, AdminRequiredError, CannotDeactivateTheOnlyAdminError, CannotDeleteCurrentUserError,
+    UnknownUserError)
 from . import url_prefix
 
 
@@ -165,7 +165,13 @@ def user_tokens(user_id: int) -> Response:
     if not request.user.is_admin and user_id != request.user.id:
         raise AdminOrSameUserRequiredError()
 
-    u = get_user(user_id)
+    try:
+        u = DbUser.query.get(user_id)
+        if u is None:
+            raise UnknownUserError(id=user_id)
+    except Exception:
+        db.session.rollback()
+        raise
 
     if request.method == 'POST':
         note = request.args.get('note')
@@ -174,18 +180,18 @@ def user_tokens(user_id: int) -> Response:
 
         access_token = secrets.token_hex(20)
 
-        personal_token = users.DbPersistentToken(
+        personal_token = DbPersistentToken(
             access_token=access_token,
             user_id=request.user.id,
             note=note,
         )
         try:
-            users.db.session.add(personal_token)
-            users.db.session.commit()
+            db.session.add(personal_token)
+            db.session.commit()
         except Exception:
             # noinspection PyBroadException
             try:
-                users.db.session.rollback()
+                db.session.rollback()
             except Exception:
                 pass
             raise
