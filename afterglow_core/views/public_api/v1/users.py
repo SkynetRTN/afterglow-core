@@ -190,7 +190,7 @@ def user_tokens(user_id: int) -> Response:
                 pass
             raise
 
-    return json_response([TokenSchema(tok) for tok in u.tokens])
+    return json_response([TokenSchema(tok) for tok in u.tokens], 201 if request.method == 'POST' else 200)
 
 
 # Aliases for logged in user
