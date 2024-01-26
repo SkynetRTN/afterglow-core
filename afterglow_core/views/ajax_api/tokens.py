@@ -5,27 +5,14 @@ Afterglow Core: settings routes
 import secrets
 
 from flask import Response, request
-from marshmallow.fields import Integer, String
 
 from ... import json_response
 from ...auth import auth_required
 from ...resources import users
-from ...schemas import Resource
+from ...schemas.api.v1 import TokenSchema
 from ...errors import ValidationError
 from ...errors.auth import UnknownTokenError
 from . import ajax_blp as blp
-
-
-class TokenSchema(Resource):
-    __get_view__ = 'ajax_api.tokens'
-
-    id: int = Integer()
-    user_id: int = Integer()
-    token_type: str = String()
-    access_token: str = String()
-    issued_at: int = Integer()
-    expires_in: int = Integer()
-    note: str = String()
 
 
 @blp.route('/tokens', methods=['GET', 'POST'])

@@ -2,13 +2,15 @@
 Afterglow Core: login and user account management routes
 """
 
+import secrets
 from flask import Blueprint, Flask, Response, request
 
 from .... import json_response
 from ....auth import auth_required
 from ....models import User
 from ....resources.users import *
-from ....schemas.api.v1 import UserSchema
+from ....schemas.api.v1 import TokenSchema, UserSchema
+from ....errors import ValidationError
 from ....errors.auth import (
     AdminOrSameUserRequiredError, AdminRequiredError,
     CannotDeactivateTheOnlyAdminError, CannotDeleteCurrentUserError)
@@ -142,6 +144,53 @@ def user(user_id: int) -> Response:
         delete_user(u.id)
 
         return json_response()
+
+
+@blp.route('/<int:user_id>/tokens', methods=['GET', 'POST'])
+@auth_required
+def user_tokens(user_id: int) -> Response:
+    """
+    Get and set API tokens for the given user
+
+    GET /users/[id]/tokens
+        - return API tokens for the given user; must be admin or same user
+
+    POST /users/[id]/tokens?note=...
+        - create API token for the given user
+
+    :param user_id: user ID
+
+    :return: list of all personal tokens for the user
+    """
+    if not request.user.is_admin and user_id != request.user.id:
+        raise AdminOrSameUserRequiredError()
+
+    u = get_user(user_id)
+
+    if request.method == 'POST':
+        note = request.args.get('note')
+        if not note or note == '':
+            raise ValidationError('note', 'Note cannot be empty')
+
+        access_token = secrets.token_hex(20)
+
+        personal_token = users.DbPersistentToken(
+            access_token=access_token,
+            user_id=request.user.id,
+            note=note,
+        )
+        try:
+            users.db.session.add(personal_token)
+            users.db.session.commit()
+        except Exception:
+            # noinspection PyBroadException
+            try:
+                users.db.session.rollback()
+            except Exception:
+                pass
+            raise
+
+    return json_response([TokenSchema(tok) for tok in u.tokens])
 
 
 # Aliases for logged in user
