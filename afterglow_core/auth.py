@@ -301,6 +301,17 @@ def user_login(user_profile: dict, auth_plugin: AuthnPluginBase) -> Response:
                 users.db.session.rollback()
                 raise
 
+    try:
+        # Make sure the user has an API token
+        if not users.DbPersistentToken.query.filter_by(user_id=user.id, token_type='personal').count():
+            users.db.session.add(users.DbPersistentToken(
+                user_id=user.id, token_type='personal', access_token=secrets.token_hex(20),
+                note=f'Auto-generated Afterglow Core API access token for {user.username}'))
+            users.db.session.commit()
+    except Exception:
+        users.db.session.rollback()
+        raise
+
     g._login_user = request.user = user
     return set_access_cookies(json_response(), user.id)
 
@@ -437,13 +448,11 @@ def init_auth() -> None:
             try:
                 if token_type == 'personal':
                     # Should be an existing permanent token
-                    token = users.DbPersistentToken.query.filter_by(
-                        access_token=access_token,
-                        token_type=token_type).one_or_none()
+                    token = users.DbPersistentToken.query.\
+                        filter_by(access_token=access_token, token_type=token_type).one_or_none()
                 else:
-                    token = users.Token.query.filter_by(
-                        access_token=access_token,
-                        access_token_revoked_at=0).one_or_none()
+                    token = users.Token.query.\
+                        filter_by(access_token=access_token, access_token_revoked_at=0).one_or_none()
                 if token is None:
                     raise ValueError('Token does not exist')
                 if not token.active:

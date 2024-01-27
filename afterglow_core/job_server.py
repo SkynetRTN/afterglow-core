@@ -17,7 +17,7 @@ from types import SimpleNamespace
 from urllib.parse import quote
 
 from sqlalchemy import Column, Float, ForeignKey, Integer, String
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.orm import Mapped, close_all_sessions, relationship
 from alembic import config as alembic_config, context as alembic_context
 from alembic.script import ScriptDirectory
 from alembic.runtime.environment import EnvironmentContext
@@ -239,6 +239,13 @@ def cleanup_jobs() -> None:
         db.session.rollback()
         current_app.logger.warning('Error deleting expired jobs', exc_info=True)
 
+    finally:
+        # noinspection PyBroadException
+        try:
+            db.session.remove()
+        except Exception:
+            pass
+
 
 celery_app: Celery
 
@@ -276,6 +283,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
             """Track the task start time"""
             with app.app_context():
                 try:
+                    close_all_sessions()
                     db_job = DbJob.query.get(task_id)
                     if db_job is None:
                         return

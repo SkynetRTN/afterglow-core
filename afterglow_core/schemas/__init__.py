@@ -330,8 +330,7 @@ class Resource(AfterglowSchema):
         if hasattr(self, '__get_view__') and self.__get_view__:
             for attr in ('id', 'name'):
                 if getattr(self, attr, None) is not None:
-                    return url_for(self.__get_view__, _external=True) + \
-                        quote(str(getattr(self, attr)))
+                    return url_for(self.__get_view__, _external=True) + '/' + quote(str(getattr(self, attr)))
         raise AttributeError('_uri')
 
     uri = fields.String(attribute='_uri')

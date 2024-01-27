@@ -6059,3 +6059,56 @@ paths:
                 $ref: '#/components/responses/UnknownUserError'
         default:
           $ref: '#/components/responses/GenericError'
+  /api/v1/users/{id}/tokens:
+    summary: Retrieve or create personal API tokens
+    parameters:
+      - name: id
+        in: path
+        description: user ID
+        schema:
+          type: integer
+        required: true
+    get:
+      summary: return the given user's API tokens
+      responses:
+        200:
+          description: list of token objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Token'
+        403:
+          description: administrator rights are required to access other user's account info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/AdminOrSameUserRequiredError'
+        404:
+          description: unknown user ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnknownUserError'
+        default:
+          $ref: '#/components/responses/GenericError'
+    post:
+      summary: create a new personal API access token
+      requestBody:
+        description: token parameters; only note is supported
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Token'
+      responses:
+        201:
+          description: list of token objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Token'
+        default:
+          $ref: '#/components/responses/GenericError'
