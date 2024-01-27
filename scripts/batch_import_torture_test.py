@@ -11,6 +11,7 @@ import base64
 import json
 import time
 import traceback
+from datetime import datetime
 from multiprocessing import Event, Lock, Process
 from typing import Dict, List, Union
 import warnings
@@ -127,7 +128,7 @@ def test_process(args: argparse.Namespace, username: str, api_key: str, skynet: 
                     job_id = job['id']
                 except Exception as e:
                     with console_lock:
-                        print(f'{prefix} error submitting job [{e}]')
+                        print(f'{datetime.now().isoformat(" ")} {prefix} error submitting job [{e}]')
                 else:
                     # Wait for job completion
                     while not terminate_event.is_set():
@@ -135,20 +136,39 @@ def test_process(args: argparse.Namespace, username: str, api_key: str, skynet: 
                             state = api_request('GET', f'jobs/{job_id}/state', args, api_key)
                         except Exception as e:
                             with console_lock:
-                                print(f'{prefix} error requesting job state [{e}]')
+                                print(f'{datetime.now().isoformat(" ")} {prefix} error requesting job state [{e}]')
                         else:
                             if state['status'] == 'completed':
+                                # Report job result
                                 try:
                                     result = api_request('GET', f'jobs/{job_id}/result', args, api_key)
                                 except Exception as e:
                                     with console_lock:
-                                        print(f'{prefix} error requesting job result [{e}]')
+                                        print(f'{datetime.now().isoformat(" ")} {prefix} error requesting job result '
+                                              f'[{e}]')
                                 else:
+                                    # Calculate job pickup time
+                                    # noinspection PyBroadException
+                                    try:
+                                        try:
+                                            t1 = datetime.strptime(state['created_on'], '%Y-%m-%d %H:%M:%S.%f')
+                                        except ValueError:
+                                            t1 = datetime.strptime(state['created_on'], '%Y-%m-%d %H:%M:%S')
+                                        try:
+                                            t2 = datetime.strptime(state['started_on'], '%Y-%m-%d %H:%M:%S.%f')
+                                        except ValueError:
+                                            t2 = datetime.strptime(state['started_on'], '%Y-%m-%d %H:%M:%S')
+                                        pickup_time = f'; picked up in {(t2 - t1).total_seconds():.3f} s'
+                                    except Exception:
+                                        pickup_time = ''
+
+                                    duration = f'Finished in {time.time() - t0:.1f} s{pickup_time}'
                                     with console_lock:
                                         if result.get('errors'):
-                                            print(f'{prefix} {"; ".join(e["detail"] for e in result["errors"])}')
+                                            print(f'{datetime.now().isoformat(" ")} {prefix} '
+                                                  f'{"; ".join(e["detail"] for e in result["errors"])}. {duration}')
                                         else:
-                                            print(f'{prefix} finished in {time.time() - t0:.1f} s')
+                                            print(f'{datetime.now().isoformat(" ")} {prefix} {duration}')
                                 break
                         time.sleep(1)
                 finally:
@@ -157,7 +177,7 @@ def test_process(args: argparse.Namespace, username: str, api_key: str, skynet: 
                         result = api_request('GET', f'data-files', args, api_key)
                     except Exception as e:
                         with console_lock:
-                            print(f'{prefix} error requesting data file IDs [{e}]')
+                            print(f'{datetime.now().isoformat(" ")} {prefix} error requesting data file IDs [{e}]')
                     else:
                         for df in result:
                             # noinspection PyBroadException
@@ -169,7 +189,7 @@ def test_process(args: argparse.Namespace, username: str, api_key: str, skynet: 
         pass
     except Exception as e:
         with console_lock:
-            print(f'{username}: error in test process [{e}]')
+            print(f'{datetime.now().isoformat(" ")} {username}: error in test process [{e}]')
             traceback.print_exc()
 
 

@@ -3,6 +3,7 @@ Afterglow Core: batch data file import job plugin
 """
 
 import json
+import time
 from io import BytesIO
 from typing import List as TList
 
@@ -51,26 +52,20 @@ class BatchImportJob(Job):
                     asset_path = settings.path
 
                     try:
-                        provider = data_providers.providers[
-                            settings.provider_id]
+                        provider = data_providers.providers[settings.provider_id]
                     except KeyError:
-                        raise UnknownDataProviderError(
-                            id=settings.provider_id)
+                        raise UnknownDataProviderError(id=settings.provider_id)
 
                     def recursive_import(path, depth=0):
                         asset = provider.get_asset(path)
                         if asset.collection:
                             if not provider.browseable:
-                                raise CannotImportFromCollectionAssetError(
-                                    provider_id=provider.id, path=path)
+                                raise CannotImportFromCollectionAssetError(provider_id=provider.id, path=path)
                             if not settings.recurse and depth:
                                 return []
                             return sum(
-                                [recursive_import(child_asset.path,
-                                                  depth + 1)
-                                 for child_asset in provider.
-                                 get_child_assets(
-                                     asset.path)[0]], [])
+                                [recursive_import(child_asset.path, depth + 1)
+                                 for child_asset in provider.get_child_assets(asset.path)[0]], [])
                         return [f.id for f in import_data_file(
                             self.user_id, root, provider.id, asset.path, asset.metadata,
                             BytesIO(provider.get_asset_data(asset.path)),
@@ -84,8 +79,7 @@ class BatchImportJob(Job):
                         if not isinstance(asset_path, list):
                             asset_path = [asset_path]
 
-                    self.result.file_ids += sum(
-                        [recursive_import(p) for p in asset_path], [])
+                    self.result.file_ids += sum([recursive_import(p) for p in asset_path], [])
                 except Exception as e:
                     self.add_error(e, {'file_no': i + 1})
                 finally:
