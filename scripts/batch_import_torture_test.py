@@ -193,6 +193,25 @@ def test_process(args: argparse.Namespace, username: str, api_key: str, skynet: 
             traceback.print_exc()
 
 
+def cleanup_workbenches(args: argparse.Namespace, api_keys) -> None:
+    """
+    Clean up the given users' Workbenches
+    """
+    for api_key in api_keys:
+        # noinspection PyBroadException
+        try:
+            result = api_request('GET', f'data-files', args, api_key)
+        except Exception:
+            pass
+        else:
+            for df in result:
+                # noinspection PyBroadException
+                try:
+                    api_request('DELETE', f'data-files/{df["id"]}', args, api_key)
+                except Exception:
+                    pass
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
 
@@ -207,6 +226,8 @@ def main():
     parser.add_argument('-p', '--password', help='authenticate with this password')
     parser.add_argument('-t', '--token', help='authenticate with this personal token')
     parser.add_argument('-k', '--skynet-token', help='Skynet API access token')
+    parser.add_argument(
+        '-c', '--cleanup-only', action='store_true', help='don\'t run tests, only clean up users\' data files')
     parser.add_argument(
         'users', metavar='@USERFILE|-|USERNAME,USERNAME,...',
         help='usernames, comma-separated, list file, or read from console ("-")')
@@ -227,15 +248,18 @@ def main():
     if not usernames:
         print('No usernames provided', file=sys.stderr)
         sys.exit(-1)
-    if args.obs_ids.startswith('@'):
-        with open(args.obs_ids[1:], encoding='utf8') as f:
-            obs_ids = ','.join(f.read().splitlines())
+    if args.cleanup_only:
+        obs_ids = []
     else:
-        obs_ids = args.obs_ids
-    obs_ids = [int(s) for s in obs_ids.split(',') if s.strip()]
-    if not obs_ids:
-        print('No observation IDs provided', file=sys.stderr)
-        sys.exit(-2)
+        if args.obs_ids.startswith('@'):
+            with open(args.obs_ids[1:], encoding='utf8') as f:
+                obs_ids = ','.join(f.read().splitlines())
+        else:
+            obs_ids = args.obs_ids
+        obs_ids = [int(s) for s in obs_ids.split(',') if s.strip()]
+        if not obs_ids:
+            print('No observation IDs provided', file=sys.stderr)
+            sys.exit(-2)
 
     # Retrieve user API tokens
     user_cache_filename = 'users@' + args.host
@@ -284,26 +308,48 @@ def main():
     api_keys = {username: users[username]['api_token'] for username in usernames}
 
     print(f'User{"s" if len(usernames) > 1 else ""}: {", ".join(usernames)}')
+    if args.cleanup_only:
+        print('Cleaning up Workbenches')
+        cleanup_workbenches(args, api_keys.values())
+        return
+
     print(f'Observation ID{"s" if len(obs_ids) > 1 else ""}: {", ".join(str(obs_id) for obs_id in obs_ids)}')
 
-    # Get obs groups/usernames via Skynet API
-    obs_paths = {}
+    # Get obs collabs/groups/usernames via Skynet API
+    obs_cache_filename = 'obs.cache'
+    # noinspection PyBroadException
+    try:
+        # Get user info from cache
+        with open(obs_cache_filename, encoding='utf8') as f:
+            obs_paths = json.load(f)
+    except Exception:
+        obs_paths = {}
     headers = {'Authentication-Token': args.skynet_token}
+    paths_added = False
     for obs_id in obs_ids:
-        try:
-            r = requests.get(f'https://api.skynet.unc.edu/2.0/obs/{obs_id}', headers=headers, verify=False)
-            if r.status_code != 200:
-                raise RuntimeError(r.text)
-            obs = r.json()
-        except Exception as e:
-            print(f'Cannot retrieve observation {obs_id} [{e}]')
-            sys.exit(-6)
+        if str(obs_id) not in obs_paths:
+            try:
+                r = requests.get(f'https://api.skynet.unc.edu/2.0/obs/{obs_id}', headers=headers, verify=False)
+                if r.status_code != 200:
+                    raise RuntimeError(r.text)
+                obs = r.json()
+            except Exception as e:
+                print(f'Cannot retrieve observation {obs_id} [{e}]')
+                sys.exit(-6)
 
-        if obs.get('group'):
-            path = f'Group Observations/{obs["group"]["name"]}/{obs["user"]["username"]}/{obs_id}/reduced'
-        else:
-            path = f'User Observations/{obs_id}/reduced'
-        obs_paths[obs_id] = path
+            if obs.get('group'):
+                if obs.get('collab'):
+                    path = f'Collaboration Observations/{obs["collab"]["name"]}/{obs["group"]["name"]}/' \
+                        f'{obs["user"]["username"]}/{obs_id}/reduced'
+                else:
+                    path = f'Group Observations/{obs["group"]["name"]}/{obs["user"]["username"]}/{obs_id}/reduced'
+            else:
+                path = f'User Observations/{obs_id}/reduced'
+            obs_paths[str(obs_id)] = path
+            paths_added = True
+    if paths_added:
+        with open(obs_cache_filename, 'w', encoding='utf8') as f:
+            json.dump(obs_paths, f)
 
     # Get Skynet data provider ID
     skynet = [p['id'] for p in api_request('GET', 'data-providers', args) if p['name'] == 'skynet_local'][0]
@@ -330,20 +376,7 @@ def main():
         for p in processes:
             p.join()
 
-        # Clean up all users' Workbenches
-        for api_key in api_keys:
-            # noinspection PyBroadException
-            try:
-                result = api_request('GET', f'data-files', args, api_key)
-            except Exception:
-                pass
-            else:
-                for df in result:
-                    # noinspection PyBroadException
-                    try:
-                        api_request('DELETE', f'data-files/{df["id"]}', args, api_key)
-                    except Exception:
-                        pass
+        cleanup_workbenches(args, api_keys.values())
 
 
 if __name__ == '__main__':
