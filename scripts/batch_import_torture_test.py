@@ -28,14 +28,14 @@ def api_request(method: str, resource: str, args: argparse.Namespace, token: str
         token = args.token
 
     if token:
-        headers['Authorization'] = 'Bearer {}'.format(args.token)
+        headers['Authorization'] = 'Bearer {}'.format(token)
 
         if method != 'GET':
             # Extract CSRF token from access/refresh token
             # noinspection PyBroadException
             try:
-                s = args.token[:args.token.rfind('.')]
-                s = base64.decodebytes(s + '='*((4 - len(s) % 4) % 4))
+                s = token[:token.rfind('.')].encode('ascii')
+                s = base64.decodebytes(s + b'='*((4 - len(s) % 4) % 4))
                 i = 1
                 while i <= len(s):
                     try:
