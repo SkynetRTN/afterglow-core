@@ -740,6 +740,10 @@ components:
           description: UTC time of job creation
           type: string
           format: 'date-time'
+        started_on:
+          description: UTC time of starting job
+          type: string
+          format: 'date-time'
         completed_on:
           description: UTC time of job completion or cancellation
           type: string

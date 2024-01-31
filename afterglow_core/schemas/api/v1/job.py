@@ -24,11 +24,13 @@ class JobStateSchema(AfterglowSchema):
             "completed" when it's finished (no matter success or error), and
             "canceled" if it's canceled by the client
         created_on: time of job creation (UTC "YYYY-MM-DD HH:MM:SS.SSSSSS")
+        started_on: time of actual job start
         completed_on: time of completion or cancellation
         progress: current job progress, a number from 0 to 100
     """
     status: str = String(dump_default='pending')
     created_on: datetime = DateTime()
+    started_on: datetime = DateTime()
     completed_on: datetime = DateTime()
     progress: float = Float()
 
