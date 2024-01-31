@@ -283,6 +283,8 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         def before_start(self, task_id: str, args, kwargs) -> None:
             """Track the task start time"""
             with app.app_context():
+                close_all_sessions()
+
                 for _ in range(3):
                     try:
                         db_job = DbJob.query.get(task_id)
@@ -292,15 +294,14 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
                         db_job.state.started_on = datetime.utcnow()
                         db.session.commit()
                     except Exception:
-                        current_app.logger.exception('Error updating job %s state to in_progress', task_id)
+                        current_app.logger.warning(
+                            'Error updating job %s state to in_progress', task_id, exc_info=True)
                         try:
                             db.session.rollback()
                         except Exception:
                             pass
                     else:
                         break
-
-                close_all_sessions()
 
         # noinspection PyBroadException
         def after_return(self, status, retval, task_id, args, kwargs, einfo):
