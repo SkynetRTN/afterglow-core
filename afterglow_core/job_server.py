@@ -173,6 +173,7 @@ def run_job(task: Task, *args, **kwargs):
                 # Avoid "Server has gone away" errors
                 # noinspection PyBroadException
                 try:
+                    close_all_sessions()
                     db.session.remove()
                 except Exception:
                     pass
@@ -282,19 +283,21 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         def before_start(self, task_id: str, args, kwargs) -> None:
             """Track the task start time"""
             with app.app_context():
-                try:
-                    close_all_sessions()
-                    db_job = DbJob.query.get(task_id)
-                    if db_job is None:
-                        return
-                    db_job.state.status = js.IN_PROGRESS
-                    db_job.state.started_on = datetime.utcnow()
-                    db.session.commit()
-                except Exception:
+                for _ in range(3):
                     try:
-                        db.session.rollback()
+                        db_job = DbJob.query.get(task_id)
+                        if db_job is None:
+                            return
+                        db_job.state.status = js.IN_PROGRESS
+                        db_job.state.started_on = datetime.utcnow()
+                        db.session.commit()
                     except Exception:
-                        pass
+                        try:
+                            db.session.rollback()
+                        except Exception:
+                            pass
+                    else:
+                        break
 
         # noinspection PyBroadException
         def after_return(self, status, retval, task_id, args, kwargs, einfo):
@@ -353,6 +356,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         broker_connection_retry_on_startup=True,
         result_backend='db+' + app.config['SQLALCHEMY_DATABASE_URI'],
         database_engine_options=app.config['SQLALCHEMY_ENGINE_OPTIONS'],
+        database_short_lived_sessions=True,
         task_default_queue='afterglow',
         task_track_started=True,
         task_soft_time_limit=app.config['JOB_TIMEOUT'],
