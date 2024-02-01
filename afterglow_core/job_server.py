@@ -323,7 +323,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         #                 db_job.state.started_on = datetime.utcnow()
         #                 db.session.commit()
         #             except Exception:
-        #                 current_app.logger.warning(
+        #                 app.logger.warning(
         #                     'Error updating job %s state to in_progress', task_id, exc_info=True)
         #                 try:
         #                     db.session.rollback()
@@ -342,23 +342,36 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
                 self.update_state(state=status, meta={'result': retval})
 
             with app.app_context():
-                try:
-                    db_job = DbJob.query.get(task_id)
-                    if db_job is None:
-                        return
-                    db_job.state.status = js.COMPLETED if status != 'ABORTED' else js.CANCELED
-                    db_job.state.completed_on = datetime.utcnow()
+                close_all_sessions()
+
+                for niter in range(JOB_STATE_UPDATE_ATTEMPTS):
                     try:
-                        # Save the last progress if the task terminated prematurely or was aborted
-                        db_job.state.progress = res['state']['progress']
+                        db_job = DbJob.query.get(task_id)
+                        if db_job is None:
+                            return
+                        db_job.state.status = js.COMPLETED if status != 'ABORTED' else js.CANCELED
+                        db_job.state.completed_on = datetime.utcnow()
+                        try:
+                            # Save the last progress if the task terminated prematurely or was aborted
+                            db_job.state.progress = res['state']['progress']
+                        except Exception:
+                            pass
+                        db.session.commit()
                     except Exception:
-                        pass
-                    db.session.commit()
-                except Exception:
-                    try:
-                        db.session.rollback()
-                    except Exception:
-                        pass
+                        if niter < JOB_STATE_UPDATE_ATTEMPTS - 1:
+                            current_app.logger.warning(
+                                'Error updating job %s state on completion, retrying %s more time%s',
+                                task_id, JOB_STATE_UPDATE_ATTEMPTS - niter - 1,
+                                's' if JOB_STATE_UPDATE_ATTEMPTS - niter - 1 > 1 else '',
+                                exc_info=True)
+                        else:
+                            current_app.logger.exception('Error updating job %s state on completion', task_id)
+
+                        # noinspection PyBroadException
+                        try:
+                            db.session.rollback()
+                        except Exception:
+                            pass
 
                 close_all_sessions()
 
