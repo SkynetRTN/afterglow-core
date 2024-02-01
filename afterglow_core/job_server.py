@@ -45,6 +45,7 @@ from celery.exceptions import TaskRevokedError, WorkerLostError
 from celery.result import AsyncResult
 from celery.schedules import crontab
 from celery.signals import after_setup_logger, after_setup_task_logger
+from celery.loaders.app import AppLoader
 
 from .database import db
 from .resources.base import DateTime, JSONType
@@ -65,6 +66,8 @@ js.PENDING = 'pending'
 js.IN_PROGRESS = 'in_progress'
 js.COMPLETED = 'completed'
 js.CANCELED = 'canceled'
+
+JOB_STATE_UPDATE_ATTEMPTS = 3
 
 
 class DbJobState(db.Model):
@@ -154,6 +157,34 @@ def run_job(task: Task, *args, **kwargs):
                 if user_id is not None:
                     g._login_user = DbUser.query.get_or_404(user_id, 'Unknown user')
 
+                for niter in range(JOB_STATE_UPDATE_ATTEMPTS):
+                    # noinspection PyBroadException
+                    try:
+                        db_job = DbJob.query.get(job_id)
+                        if db_job is None:
+                            return
+                        db_job.state.status = js.IN_PROGRESS
+                        db_job.state.started_on = datetime.utcnow()
+                        db.session.commit()
+                    except Exception as e:
+                        if niter < JOB_STATE_UPDATE_ATTEMPTS - 1:
+                            current_app.logger.warning(
+                                'Error updating job %s state to in_progress, retrying %s more time%s',
+                                job_id, JOB_STATE_UPDATE_ATTEMPTS - niter - 1,
+                                's' if JOB_STATE_UPDATE_ATTEMPTS - niter - 1 > 1 else '',
+                                exc_info=True)
+
+                        # noinspection PyBroadException
+                        try:
+                            db.session.rollback()
+                        except Exception:
+                            pass
+
+                        if niter == JOB_STATE_UPDATE_ATTEMPTS - 1:
+                            raise RuntimeError(f'Error updating job state to in_progress [{e}]')
+                    else:
+                        break
+
                 job.run()
 
                 # Upon successful completion, always set progress to 100%
@@ -173,7 +204,6 @@ def run_job(task: Task, *args, **kwargs):
                 # Avoid "Server has gone away" errors
                 # noinspection PyBroadException
                 try:
-                    close_all_sessions()
                     db.session.remove()
                 except Exception:
                     pass
@@ -279,29 +309,28 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
             with app.app_context():
                 return self.run(*args, **kwargs)
 
-        # noinspection PyBroadException
-        def before_start(self, task_id: str, args, kwargs) -> None:
-            """Track the task start time"""
-            with app.app_context():
-                close_all_sessions()
-
-                for _ in range(3):
-                    try:
-                        db_job = DbJob.query.get(task_id)
-                        if db_job is None:
-                            return
-                        db_job.state.status = js.IN_PROGRESS
-                        db_job.state.started_on = datetime.utcnow()
-                        db.session.commit()
-                    except Exception:
-                        current_app.logger.warning(
-                            'Error updating job %s state to in_progress', task_id, exc_info=True)
-                        try:
-                            db.session.rollback()
-                        except Exception:
-                            pass
-                    else:
-                        break
+        # def before_start(self, task_id: str, args: tuple, kwargs: dict) -> None:
+        #     """Track the task start time"""
+        #     with app.app_context():
+        #         close_all_sessions()
+        #
+        #         for _ in range(3):
+        #             try:
+        #                 db_job = DbJob.query.get(task_id)
+        #                 if db_job is None:
+        #                     return
+        #                 db_job.state.status = js.IN_PROGRESS
+        #                 db_job.state.started_on = datetime.utcnow()
+        #                 db.session.commit()
+        #             except Exception:
+        #                 current_app.logger.warning(
+        #                     'Error updating job %s state to in_progress', task_id, exc_info=True)
+        #                 try:
+        #                     db.session.rollback()
+        #                 except Exception:
+        #                     pass
+        #             else:
+        #                 break
 
         # noinspection PyBroadException
         def after_return(self, status, retval, task_id, args, kwargs, einfo):
@@ -331,6 +360,15 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
                     except Exception:
                         pass
 
+                close_all_sessions()
+
+    class AfterglowAppLoader(AppLoader):
+        """Custom Celery app loader"""
+        def on_task_init(self, task_id: str, task: Task):
+            """Called before a task is executed"""
+            # Make sure that all connections are committed to the pool before the first db query
+            close_all_sessions()
+
     # Create/upgrade job tables via Alembic
     cfg = alembic_config.Config()
     cfg.set_main_option(
@@ -353,7 +391,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         broker_pass = ':' + quote(cipher.decrypt(broker_pass).decode('utf8'))
 
     # Create Celery app
-    celery_app = Celery('afterglow_core.job_server', task_cls=AfterglowTask)
+    celery_app = Celery('afterglow_core.job_server', task_cls=AfterglowTask, loader=AfterglowAppLoader)
     config = dict(
         broker_url=f'amqp://{quote(app.config["JOB_SERVER_USER"])}{broker_pass}@{app.config["JOB_SERVER_HOST"]}:'
                    f'{app.config["JOB_SERVER_PORT"]}/{app.config["JOB_SERVER_VHOST"]}',
@@ -406,17 +444,26 @@ def get_job_state(db_job: DbJob) -> TDict[str, object]:
         'completed_on': db_job.state.completed_on,
     }
 
+    if status == js.PENDING:
+        res = AsyncResult(db_job.id)
+        if res.state == 'STARTED':
+            # Task status updated in celery_taskmeta but not in job_states
+            status = js.IN_PROGRESS
+    else:
+        res = None
+
     if status == js.IN_PROGRESS:
         # Extract progress info from broker
-        res = AsyncResult(db_job.id).result
-        if isinstance(res, (TaskRevokedError, WorkerLostError)):
+        if res is None:
+            res = AsyncResult(db_job.id)
+        if isinstance(res.result, (TaskRevokedError, WorkerLostError)):
             # This happens when the task did not respond to cancellation request and was killed or the worker process
             # was lost due to SIGSEGV, OOM, etc.
             result['status'] = js.CANCELED
         else:
             # noinspection PyBroadException
             try:
-                result['progress'] = res['state']['progress']
+                result['progress'] = res.result['state']['progress']
             except Exception:
                 pass
     elif status == js.COMPLETED:
