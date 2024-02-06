@@ -296,7 +296,8 @@ def setup_logger(logger, *args, **kwargs):
 @worker_process_init.connect
 def worker_process_init_handler(*_, **__):
     faulthandler.enable(file=sys.__stderr__)
-    current_app.logger.info('[Job worker %s] Worker process started', os.getpid())
+    with current_app.app_context():
+        current_app.logger.info('[Worker %s] Started', os.getpid())
 
 
 def init_jobs(app: Flask, cipher: Fernet) -> Celery:
