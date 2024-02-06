@@ -294,7 +294,7 @@ def setup_logger(logger, *args, **kwargs):
 
 # Set up crash reporting for worker processes
 @worker_process_init.connect
-def worker_process_init_handler():
+def worker_process_init_handler(*_, **__):
     faulthandler.enable()
     current_app.logger.info('[Job worker %s] Worker process started', os.getpid())
 
