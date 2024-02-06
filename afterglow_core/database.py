@@ -12,8 +12,7 @@ from cryptography.fernet import Fernet
 __all__ = ['db', 'init_db']
 
 
-# TODO: Don't use pool pre-ping to avoid "Server has gone away" errors
-db = SQLAlchemy(engine_options={'pool_pre_ping': True})
+db = SQLAlchemy()
 
 
 def init_db(app: Flask, cipher: Fernet) -> None:
@@ -35,6 +34,7 @@ def init_db(app: Flask, cipher: Fernet) -> None:
     app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {})['pool_timeout'] = app.config['DB_TIMEOUT']
     app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('pool_recycle', 3600)
     app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('pool_size', app.config['DB_POOL_SIZE'])
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('pool_pre_ping', False)
     app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
 
     db.init_app(app)

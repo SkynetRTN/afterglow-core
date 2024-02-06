@@ -10,14 +10,15 @@ import sys
 import traceback
 import ctypes
 import signal
+import faulthandler
 from datetime import datetime, timedelta
 from threading import Event, Thread
 from typing import Dict as TDict, Union
 from types import SimpleNamespace
 from urllib.parse import quote
 
-from sqlalchemy import Column, Float, ForeignKey, Integer, String
-from sqlalchemy.orm import Mapped, close_all_sessions, relationship
+from sqlalchemy import Column, Float, ForeignKey, Integer, String, text
+from sqlalchemy.orm import Mapped, relationship
 from alembic import config as alembic_config, context as alembic_context
 from alembic.script import ScriptDirectory
 from alembic.runtime.environment import EnvironmentContext
@@ -44,7 +45,7 @@ from celery import Celery, Task, shared_task
 from celery.exceptions import TaskRevokedError, WorkerLostError
 from celery.result import AsyncResult
 from celery.schedules import crontab
-from celery.signals import after_setup_logger, after_setup_task_logger
+from celery.signals import after_setup_logger, after_setup_task_logger, worker_process_init
 from celery.loaders.app import AppLoader
 
 from .database import db
@@ -133,7 +134,7 @@ def run_job(task: Task, *args, **kwargs):
     """
     pid = os.getpid()
     job_id = kwargs['id'] = task.request.id  # use task ID as job ID
-    prefix = f'[Job worker {pid}@{task.request.hostname}]'
+    prefix = f'[Worker {pid}]'
     current_app.logger.info('%s Got job request: %s', prefix, kwargs)
 
     # Create job object from description; kwargs is guaranteed to contain at least type, ID, and user ID, and
@@ -169,8 +170,8 @@ def run_job(task: Task, *args, **kwargs):
                     except Exception as e:
                         if niter < JOB_STATE_UPDATE_ATTEMPTS - 1:
                             current_app.logger.warning(
-                                'Error updating job %s state to in_progress, retrying %s more time%s',
-                                job_id, JOB_STATE_UPDATE_ATTEMPTS - niter - 1,
+                                '%s Error updating job %s state to in_progress, retrying %s more time%s',
+                                prefix, job_id, JOB_STATE_UPDATE_ATTEMPTS - niter - 1,
                                 's' if JOB_STATE_UPDATE_ATTEMPTS - niter - 1 > 1 else '',
                                 exc_info=True)
 
@@ -291,6 +292,13 @@ def setup_logger(logger, *args, **kwargs):
         handler.setFormatter(MaxLengthFormatter('%(asctime)s %(levelname)-8s %(message)s'))
 
 
+# Set up crash reporting for worker processes
+@worker_process_init.connect
+def worker_process_init_handler():
+    faulthandler.enable()
+    current_app.logger.info('[Job worker %s] Worker process started', os.getpid())
+
+
 def init_jobs(app: Flask, cipher: Fernet) -> Celery:
     """
     Initialize the job subsystem
@@ -312,8 +320,6 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         # def before_start(self, task_id: str, args: tuple, kwargs: dict) -> None:
         #     """Track the task start time"""
         #     with app.app_context():
-        #         close_all_sessions()
-        #
         #         for _ in range(3):
         #             try:
         #                 db_job = DbJob.query.get(task_id)
@@ -342,8 +348,6 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
                 self.update_state(state=status, meta={'result': retval})
 
             with app.app_context():
-                close_all_sessions()
-
                 for niter in range(JOB_STATE_UPDATE_ATTEMPTS):
                     try:
                         db_job = DbJob.query.get(task_id)
@@ -373,14 +377,17 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
                         except Exception:
                             pass
 
-                close_all_sessions()
-
     class AfterglowAppLoader(AppLoader):
         """Custom Celery app loader"""
         def on_task_init(self, task_id: str, task: Task):
             """Called before a task is executed"""
-            # Make sure that all connections are committed to the pool before the first db query
-            close_all_sessions()
+            # Validate the current connection
+            with app.app_context():
+                try:
+                    db.session.execute(text('SELECT 1'))
+                except Exception as e:
+                    # Connection is invalidated
+                    current_app.logger.warning('Ping failed [%s]', e)
 
     # Create/upgrade job tables via Alembic
     cfg = alembic_config.Config()
@@ -405,13 +412,16 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
 
     # Create Celery app
     celery_app = Celery('afterglow_core.job_server', task_cls=AfterglowTask, loader=AfterglowAppLoader)
+    # Workaround for Windows, https://stackoverflow.com/questions/75659790/flask-celery-attributeerrorcant-pickle-local-object-celery-init-app-locals
+    # noinspection PyPropertyAccess
+    celery_app.Task = AfterglowTask
     config = dict(
         broker_url=f'amqp://{quote(app.config["JOB_SERVER_USER"])}{broker_pass}@{app.config["JOB_SERVER_HOST"]}:'
                    f'{app.config["JOB_SERVER_PORT"]}/{app.config["JOB_SERVER_VHOST"]}',
         broker_connection_retry_on_startup=True,
         result_backend='db+' + app.config['SQLALCHEMY_DATABASE_URI'],
         database_engine_options=app.config['SQLALCHEMY_ENGINE_OPTIONS'],
-        database_short_lived_sessions=True,
+        # database_short_lived_sessions=True,
         task_default_queue='afterglow',
         task_track_started=True,
         task_soft_time_limit=app.config['JOB_TIMEOUT'],
@@ -430,9 +440,6 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
             worker_pool='eventlet',
         )
     celery_app.config_from_object(config)
-    # Workaround for Windows, https://stackoverflow.com/questions/75659790/flask-celery-attributeerrorcant-pickle-local-object-celery-init-app-locals
-    # noinspection PyPropertyAccess
-    celery_app.Task = AfterglowTask
     celery_app.set_default()
     app.extensions['celery'] = celery_app
     app.logger.info('Afterglow job server initialized')
