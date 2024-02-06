@@ -282,6 +282,23 @@ def cleanup_jobs() -> None:
 celery_app: Celery
 
 
+# Set up logging
+# noinspection PyUnusedLocal
+@after_setup_logger.connect
+@after_setup_task_logger.connect
+def setup_logger(logger, *args, **kwargs):
+    from . import MaxLengthFormatter
+    for handler in logger.handlers:
+        handler.setFormatter(MaxLengthFormatter('%(asctime)s %(levelname)-8s %(message)s'))
+
+
+# Set up crash reporting for worker processes
+# noinspection PyUnusedLocal
+@worker_process_init.connect
+def worker_process_init_handler(*args, **kwargs):
+    faulthandler.enable(file=sys.__stderr__)
+
+
 def init_jobs(app: Flask, cipher: Fernet) -> Celery:
     """
     Initialize the job subsystem
@@ -371,23 +388,6 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
                 except Exception as e:
                     # Connection is invalidated
                     current_app.logger.warning('Ping failed [%s]', e)
-
-    # Set up logging
-    # noinspection PyUnusedLocal
-    @after_setup_logger.connect
-    @after_setup_task_logger.connect
-    def setup_logger(logger, *args, **kwargs):
-        from . import MaxLengthFormatter
-        for handler in logger.handlers:
-            handler.setFormatter(MaxLengthFormatter('%(asctime)s %(levelname)-8s %(message)s'))
-
-    # Set up crash reporting for worker processes
-    # noinspection PyUnusedLocal
-    @worker_process_init.connect
-    def worker_process_init_handler(*args, **kwargs):
-        faulthandler.enable(file=sys.__stderr__)
-        with app.app_context():
-            app.logger.info('[Worker %s] Started', os.getpid())
 
     # Create/upgrade job tables via Alembic
     cfg = alembic_config.Config()
