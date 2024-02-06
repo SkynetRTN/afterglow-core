@@ -10,7 +10,6 @@ import sys
 import traceback
 import ctypes
 import signal
-import faulthandler
 from datetime import datetime, timedelta
 from threading import Event, Thread
 from typing import Dict as TDict, Union
@@ -45,7 +44,7 @@ from celery import Celery, Task, shared_task
 from celery.exceptions import TaskRevokedError, WorkerLostError
 from celery.result import AsyncResult
 from celery.schedules import crontab
-from celery.signals import after_setup_logger, after_setup_task_logger, worker_process_init
+from celery.signals import after_setup_logger, after_setup_task_logger
 from celery.loaders.app import AppLoader
 
 from .database import db
@@ -292,13 +291,6 @@ def setup_logger(logger, *args, **kwargs):
         handler.setFormatter(MaxLengthFormatter('%(asctime)s %(levelname)-8s %(message)s'))
 
 
-# Set up crash reporting for worker processes
-# noinspection PyUnusedLocal
-@worker_process_init.connect
-def worker_process_init_handler(*args, **kwargs):
-    faulthandler.enable(file=sys.__stderr__)
-
-
 def init_jobs(app: Flask, cipher: Fernet) -> Celery:
     """
     Initialize the job subsystem
@@ -383,16 +375,16 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
             """Called before a task is executed"""
             # Validate the current connection
             with app.app_context():
+                # noinspection PyBroadException
                 try:
                     db.session.execute(text('SELECT 1'))
-                except Exception as e:
+                except Exception:
                     # Connection is invalidated
-                    current_app.logger.warning('Ping failed [%s]', e)
+                    pass
 
     # Create/upgrade job tables via Alembic
     cfg = alembic_config.Config()
-    cfg.set_main_option(
-        'script_location', os.path.abspath(os.path.join(__file__, '..', 'db_migration', 'jobs'))
+    cfg.set_main_option('script_location', os.path.abspath(os.path.join(__file__, '..', 'db_migration', 'jobs'))
     )
     script = ScriptDirectory.from_config(cfg)
     with EnvironmentContext(
