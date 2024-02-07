@@ -16,8 +16,8 @@ from typing import Dict as TDict, Union
 from types import SimpleNamespace
 from urllib.parse import quote
 
-from sqlalchemy import Column, Float, ForeignKey, Integer, String
-from sqlalchemy.orm import Mapped, close_all_sessions, relationship
+from sqlalchemy import Column, Float, ForeignKey, Integer, String, text
+from sqlalchemy.orm import Mapped, relationship
 from alembic import config as alembic_config, context as alembic_context
 from alembic.script import ScriptDirectory
 from alembic.runtime.environment import EnvironmentContext
@@ -45,6 +45,7 @@ from celery.exceptions import TaskRevokedError, WorkerLostError
 from celery.result import AsyncResult
 from celery.schedules import crontab
 from celery.signals import after_setup_logger, after_setup_task_logger
+from celery.loaders.app import AppLoader
 
 from .database import db
 from .resources.base import DateTime, JSONType
@@ -65,6 +66,8 @@ js.PENDING = 'pending'
 js.IN_PROGRESS = 'in_progress'
 js.COMPLETED = 'completed'
 js.CANCELED = 'canceled'
+
+JOB_STATE_UPDATE_ATTEMPTS = 3
 
 
 class DbJobState(db.Model):
@@ -130,7 +133,7 @@ def run_job(task: Task, *args, **kwargs):
     """
     pid = os.getpid()
     job_id = kwargs['id'] = task.request.id  # use task ID as job ID
-    prefix = f'[Job worker {pid}@{task.request.hostname}]'
+    prefix = f'[Worker {pid}]'
     current_app.logger.info('%s Got job request: %s', prefix, kwargs)
 
     # Create job object from description; kwargs is guaranteed to contain at least type, ID, and user ID, and
@@ -153,6 +156,34 @@ def run_job(task: Task, *args, **kwargs):
                 # flask_login.current_user support
                 if user_id is not None:
                     g._login_user = DbUser.query.get_or_404(user_id, 'Unknown user')
+
+                for niter in range(JOB_STATE_UPDATE_ATTEMPTS):
+                    # noinspection PyBroadException
+                    try:
+                        db_job = DbJob.query.get(job_id)
+                        if db_job is None:
+                            return
+                        db_job.state.status = js.IN_PROGRESS
+                        db_job.state.started_on = datetime.utcnow()
+                        db.session.commit()
+                    except Exception as e:
+                        if niter < JOB_STATE_UPDATE_ATTEMPTS - 1:
+                            current_app.logger.warning(
+                                '%s Error updating job %s state to in_progress, retrying %s more time%s',
+                                prefix, job_id, JOB_STATE_UPDATE_ATTEMPTS - niter - 1,
+                                's' if JOB_STATE_UPDATE_ATTEMPTS - niter - 1 > 1 else '',
+                                exc_info=True)
+
+                        # noinspection PyBroadException
+                        try:
+                            db.session.rollback()
+                        except Exception:
+                            pass
+
+                        if niter == JOB_STATE_UPDATE_ATTEMPTS - 1:
+                            raise RuntimeError(f'Error updating job state to in_progress [{e}]')
+                    else:
+                        break
 
                 job.run()
 
@@ -279,24 +310,6 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
                 return self.run(*args, **kwargs)
 
         # noinspection PyBroadException
-        def before_start(self, task_id: str, args, kwargs) -> None:
-            """Track the task start time"""
-            with app.app_context():
-                try:
-                    close_all_sessions()
-                    db_job = DbJob.query.get(task_id)
-                    if db_job is None:
-                        return
-                    db_job.state.status = js.IN_PROGRESS
-                    db_job.state.started_on = datetime.utcnow()
-                    db.session.commit()
-                except Exception:
-                    try:
-                        db.session.rollback()
-                    except Exception:
-                        pass
-
-        # noinspection PyBroadException
         def after_return(self, status, retval, task_id, args, kwargs, einfo):
             """Persist the final task state in the database"""
             res = self.AsyncResult(task_id).result
@@ -306,29 +319,51 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
                 self.update_state(state=status, meta={'result': retval})
 
             with app.app_context():
+                for niter in range(JOB_STATE_UPDATE_ATTEMPTS):
+                    try:
+                        db_job = DbJob.query.get(task_id)
+                        if db_job is None:
+                            return
+                        db_job.state.status = js.COMPLETED if status != 'ABORTED' else js.CANCELED
+                        db_job.state.completed_on = datetime.utcnow()
+                        try:
+                            # Save the last progress if the task terminated prematurely or was aborted
+                            db_job.state.progress = res['state']['progress']
+                        except Exception:
+                            pass
+                        db.session.commit()
+                    except Exception:
+                        if niter < JOB_STATE_UPDATE_ATTEMPTS - 1:
+                            current_app.logger.warning(
+                                'Error updating job %s state on completion, retrying %s more time%s',
+                                task_id, JOB_STATE_UPDATE_ATTEMPTS - niter - 1,
+                                's' if JOB_STATE_UPDATE_ATTEMPTS - niter - 1 > 1 else '',
+                                exc_info=True)
+                        else:
+                            current_app.logger.exception('Error updating job %s state on completion', task_id)
+
+                        # noinspection PyBroadException
+                        try:
+                            db.session.rollback()
+                        except Exception:
+                            pass
+
+    class AfterglowAppLoader(AppLoader):
+        """Custom Celery app loader"""
+        def on_task_init(self, task_id: str, task: Task):
+            """Called before a task is executed"""
+            # Validate the current connection
+            with app.app_context():
+                # noinspection PyBroadException
                 try:
-                    db_job = DbJob.query.get(task_id)
-                    if db_job is None:
-                        return
-                    db_job.state.status = js.COMPLETED if status != 'ABORTED' else js.CANCELED
-                    db_job.state.completed_on = datetime.utcnow()
-                    try:
-                        # Save the last progress if the task terminated prematurely or was aborted
-                        db_job.state.progress = res['state']['progress']
-                    except Exception:
-                        pass
-                    db.session.commit()
+                    db.session.execute(text('SELECT 1'))
                 except Exception:
-                    try:
-                        db.session.rollback()
-                    except Exception:
-                        pass
+                    # Connection is invalidated
+                    pass
 
     # Create/upgrade job tables via Alembic
     cfg = alembic_config.Config()
-    cfg.set_main_option(
-        'script_location', os.path.abspath(os.path.join(__file__, '..', 'db_migration', 'jobs'))
-    )
+    cfg.set_main_option('script_location', os.path.abspath(os.path.join(__file__, '..', 'db_migration', 'jobs')))
     script = ScriptDirectory.from_config(cfg)
     with EnvironmentContext(
             cfg, script, fn=lambda rev, _: script._upgrade_revs('head', rev), as_sql=False,
@@ -346,13 +381,17 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         broker_pass = ':' + quote(cipher.decrypt(broker_pass).decode('utf8'))
 
     # Create Celery app
-    celery_app = Celery('afterglow_core.job_server', task_cls=AfterglowTask)
+    celery_app = Celery('afterglow_core.job_server', task_cls=AfterglowTask, loader=AfterglowAppLoader)
+    # Workaround for Windows, https://stackoverflow.com/questions/75659790/flask-celery-attributeerrorcant-pickle-local-object-celery-init-app-locals
+    # noinspection PyPropertyAccess
+    celery_app.Task = AfterglowTask
     config = dict(
         broker_url=f'amqp://{quote(app.config["JOB_SERVER_USER"])}{broker_pass}@{app.config["JOB_SERVER_HOST"]}:'
                    f'{app.config["JOB_SERVER_PORT"]}/{app.config["JOB_SERVER_VHOST"]}',
         broker_connection_retry_on_startup=True,
         result_backend='db+' + app.config['SQLALCHEMY_DATABASE_URI'],
         database_engine_options=app.config['SQLALCHEMY_ENGINE_OPTIONS'],
+        # database_short_lived_sessions=True,
         task_default_queue='afterglow',
         task_track_started=True,
         task_soft_time_limit=app.config['JOB_TIMEOUT'],
@@ -371,9 +410,6 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
             worker_pool='eventlet',
         )
     celery_app.config_from_object(config)
-    # Workaround for Windows, https://stackoverflow.com/questions/75659790/flask-celery-attributeerrorcant-pickle-local-object-celery-init-app-locals
-    # noinspection PyPropertyAccess
-    celery_app.Task = AfterglowTask
     celery_app.set_default()
     app.extensions['celery'] = celery_app
     app.logger.info('Afterglow job server initialized')
@@ -398,17 +434,26 @@ def get_job_state(db_job: DbJob) -> TDict[str, object]:
         'completed_on': db_job.state.completed_on,
     }
 
+    if status == js.PENDING:
+        res = AsyncResult(db_job.id)
+        if res.state == 'STARTED':
+            # Task status updated in celery_taskmeta but not in job_states
+            status = js.IN_PROGRESS
+    else:
+        res = None
+
     if status == js.IN_PROGRESS:
         # Extract progress info from broker
-        res = AsyncResult(db_job.id).result
-        if isinstance(res, (TaskRevokedError, WorkerLostError)):
+        if res is None:
+            res = AsyncResult(db_job.id)
+        if isinstance(res.result, (TaskRevokedError, WorkerLostError)):
             # This happens when the task did not respond to cancellation request and was killed or the worker process
             # was lost due to SIGSEGV, OOM, etc.
             result['status'] = js.CANCELED
         else:
             # noinspection PyBroadException
             try:
-                result['progress'] = res['state']['progress']
+                result['progress'] = res.result['state']['progress']
             except Exception:
                 pass
     elif status == js.COMPLETED:

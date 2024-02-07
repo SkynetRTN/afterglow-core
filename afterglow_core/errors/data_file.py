@@ -6,12 +6,10 @@ from . import AfterglowError
 
 
 __all__ = [
-    'CannotCreateDataFileDirError', 'CannotImportFromCollectionAssetError',
-    'MissingWCSError', 'UnknownDataFileError', 'UnrecognizedDataFormatError',
-    'UnknownSessionError', 'DuplicateSessionNameError',
-    'UnknownDataFileGroupError', 'DataFileExportError',
-    'DataFileUploadNotAllowedError', 'DuplicateDataFileNameError',
-    'DuplicateDataFileGroupNameError',
+    'CannotCreateDataFileDirError', 'CannotCreateDataFileError', 'CannotImportFromCollectionAssetError',
+    'MissingWCSError', 'UnknownDataFileError', 'UnrecognizedDataFormatError', 'UnknownSessionError',
+    'DuplicateSessionNameError', 'UnknownDataFileGroupError', 'DataFileExportError', 'DataFileUploadNotAllowedError',
+    'DuplicateDataFileNameError', 'DuplicateDataFileGroupNameError',
 ]
 
 
@@ -28,15 +26,24 @@ class UnknownDataFileError(AfterglowError):
 
 class CannotCreateDataFileDirError(AfterglowError):
     """
-    Initializing the user data file storage failed (e.g. directory not
-    writable or database creation error)
+    Initializing the user data file storage failed (e.g. directory not writable or database creation error)
 
     Extra attributes::
-        reason: error message describing the reason why the operation
-            has failed
+        reason: error message describing the reason why the operation has failed
     """
     code = 403
     message = 'Cannot create data file storage directory'
+
+
+class CannotCreateDataFileError(AfterglowError):
+    """
+    Creating data file failed
+
+    Extra attributes::
+        reason: error message describing the reason why the operation has failed
+    """
+    code = 403
+    message = 'Cannot create data file'
 
 
 class CannotImportFromCollectionAssetError(AfterglowError):
