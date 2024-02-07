@@ -309,27 +309,6 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
             with app.app_context():
                 return self.run(*args, **kwargs)
 
-        # def before_start(self, task_id: str, args: tuple, kwargs: dict) -> None:
-        #     """Track the task start time"""
-        #     with app.app_context():
-        #         for _ in range(3):
-        #             try:
-        #                 db_job = DbJob.query.get(task_id)
-        #                 if db_job is None:
-        #                     return
-        #                 db_job.state.status = js.IN_PROGRESS
-        #                 db_job.state.started_on = datetime.utcnow()
-        #                 db.session.commit()
-        #             except Exception:
-        #                 app.logger.warning(
-        #                     'Error updating job %s state to in_progress', task_id, exc_info=True)
-        #                 try:
-        #                     db.session.rollback()
-        #                 except Exception:
-        #                     pass
-        #             else:
-        #                 break
-
         # noinspection PyBroadException
         def after_return(self, status, retval, task_id, args, kwargs, einfo):
             """Persist the final task state in the database"""
@@ -384,8 +363,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
 
     # Create/upgrade job tables via Alembic
     cfg = alembic_config.Config()
-    cfg.set_main_option('script_location', os.path.abspath(os.path.join(__file__, '..', 'db_migration', 'jobs'))
-    )
+    cfg.set_main_option('script_location', os.path.abspath(os.path.join(__file__, '..', 'db_migration', 'jobs')))
     script = ScriptDirectory.from_config(cfg)
     with EnvironmentContext(
             cfg, script, fn=lambda rev, _: script._upgrade_revs('head', rev), as_sql=False,
