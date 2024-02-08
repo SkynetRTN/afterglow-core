@@ -306,7 +306,7 @@ class AlignmentJob(Job):
             total_stages += 1
         stage = 0
 
-        wcs_cache, ref_star_cache = {}, {}
+        wcs_cache, data_cache = {}, {}
         transforms, history = {}, {}
         mosaics = []
 
@@ -317,7 +317,7 @@ class AlignmentJob(Job):
                     continue
                 try:
                     transforms[file_id], history[file_id] = get_transform(
-                        self, alignment_kwargs, file_id, ref_file_id, wcs_cache, ref_star_cache)
+                        self, alignment_kwargs, file_id, ref_file_id, wcs_cache, data_cache)
                 except Exception as e:
                     self.add_error(e, {'file_id': file_ids[i]})
                 finally:
@@ -326,7 +326,7 @@ class AlignmentJob(Job):
                     # except KeyError:
                     #     pass
                     # try:
-                    #     del ref_star_cache[file_id]
+                    #     del data_cache[file_id]
                     # except KeyError:
                     #     pass
                     self.update_progress((i + 1)/len(file_ids)*100, stage, total_stages)
@@ -413,7 +413,7 @@ class AlignmentJob(Job):
                         # noinspection PyBroadException
                         try:
                             rel_transforms[file_id, other_file_id], history[file_id] = get_transform(
-                                self, alignment_kwargs, other_file_id, file_id, wcs_cache, ref_star_cache)
+                                self, alignment_kwargs, other_file_id, file_id, wcs_cache, data_cache)
                         except Exception:
                             pass
                         else:
@@ -614,7 +614,7 @@ class AlignmentJob(Job):
                             ref_wcss[other_file_id] = wcs
                         break
 
-        del wcs_cache, ref_star_cache
+        del wcs_cache, data_cache
         gc.collect()
 
         # Save and later temporarily clear the original masks if auto-cropping is enabled; the masks will be restored by
@@ -756,7 +756,7 @@ def get_source_xy(source: SourceExtractionData, user_id: Optional[int], file_id:
 
 
 def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id: int, ref_file_id: int,
-                  wcs_cache: TDict[int, WCS], ref_star_cache: TDict[int, Any]) \
+                  wcs_cache: TDict[int, WCS], data_cache: TDict[int, Any]) \
         -> Tuple[Tuple[Optional[np.ndarray], np.ndarray], str]:
     settings = job.settings
     user_id = job.user_id
@@ -779,7 +779,7 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
     if isinstance(settings, AlignmentSettingsSources):
         # Extract alignment stars for reference image
         try:
-            ref_stars, anonymous_ref_stars = ref_star_cache[ref_file_id]
+            ref_stars, anonymous_ref_stars = data_cache[ref_file_id]
         except KeyError:
             if isinstance(settings, AlignmentSettingsSourcesManual):
                 ref_sources = [source for source in settings.sources if getattr(source, 'file_id', None) == ref_file_id]
@@ -812,7 +812,7 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
                 anonymous_ref_stars = [(source.x, source.y) for source in ref_sources]
             else:
                 raise ValueError('Unknown alignment mode "{}"'.format(settings.mode))
-            ref_star_cache[ref_file_id] = ref_stars, anonymous_ref_stars
+            data_cache[ref_file_id] = ref_stars, anonymous_ref_stars
 
         if ref_stars:
             # Explicit matching by source IDs: extract current image sources that are also present in the reference
@@ -892,7 +892,6 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
         if settings.detect_edges:
             data1 = np.hypot(nd.sobel(data1, 0, mode='nearest'), nd.sobel(data1, 1, mode='nearest'))
             data2 = np.hypot(nd.sobel(data2, 0, mode='nearest'), nd.sobel(data2, 1, mode='nearest'))
-            settings.detect_edges = False
         data = np.ma.concatenate([data1.ravel(), data2.ravel()])
         have_nans = data.mask is not False
         if have_nans:
@@ -929,14 +928,14 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
         kp1, des1 = get_image_features(
             data1,
             algorithm=settings.algorithm,
-            detect_edges=settings.detect_edges,
+            detect_edges=False,
             clip_min=clip_min,
             clip_max=clip_max,
             **alignment_kwargs)
         kp2, des2 = get_image_features(
             data2,
             algorithm=settings.algorithm,
-            detect_edges=settings.detect_edges,
+            detect_edges=False,
             clip_min=clip_min,
             clip_max=clip_max,
             **alignment_kwargs)
