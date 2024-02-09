@@ -65,6 +65,7 @@ class AlignmentSettingsFeaturesSchema(AlignmentSettingsSchema):
     detect_edges: bool = Boolean(dump_default=False)
     percentile_min: float = Float(dump_default=10)
     percentile_max: float = Float(dump_default=99)
+    global_contrast: bool = Boolean(dump_default=True)
 
 
 class AlignmentSettingsFeaturesAKAZESchema(AlignmentSettingsFeaturesSchema):
