@@ -3,6 +3,7 @@ Afterglow Core: image alignment job plugin
 """
 
 import gc
+import time
 from datetime import datetime
 from typing import Any, Dict as TDict, List as TList, Tuple, Optional
 
@@ -15,6 +16,7 @@ from numba import njit
 from marshmallow.fields import String, Integer, List, Nested
 from astropy.wcs import WCS
 import cv2 as cv
+from flask import current_app
 
 from skylib.combine.alignment import *
 from skylib.combine.pattern_matching import pattern_match
@@ -435,7 +437,9 @@ class AlignmentJob(Job):
                                 self, alignment_kwargs, other_file_id, file_id, wcs_cache, data_cache, clip_min,
                                 clip_max)
                         except Exception:
-                            pass
+                            current_app.logger.warning(
+                                'Error getting transform between data files %s and %s', file_id, other_file_id,
+                                exc_info=True)
                         else:
                             # Add inverse transformations
                             mat, offset = rel_transforms[file_id, other_file_id]
@@ -809,9 +813,10 @@ def calc_contrast(data: np.ndarray, percentile_min: float, percentile_max: float
     return clip_min, clip_max
 
 
-def extract_image_features(data: np.ndarray, algorithm: str, clip_min: float, clip_max: float, alignment_kwargs: dict):
+def extract_image_features(data: np.ndarray, algorithm: str, detect_edges: bool, clip_min: float, clip_max: float,
+                           alignment_kwargs: dict):
     return get_image_features(
-        data, algorithm=algorithm, detect_edges=False, clip_min=clip_min, clip_max=clip_max, **alignment_kwargs)
+        data, algorithm=algorithm, detect_edges=detect_edges, clip_min=clip_min, clip_max=clip_max, **alignment_kwargs)
 
 
 def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id: int, ref_file_id: int,
@@ -960,22 +965,22 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
                 # clip_min and clip_max are already calculated; extract features for those images in the pair that
                 # are missing from the cache
                 if any(item is None for item in (kp1, des1)):
-                    data1 = get_data_file_data(user_id, file_id)[0]
-                    if settings.detect_edges:
-                        data1 = np.hypot(nd.sobel(data1, 0, mode='nearest'), nd.sobel(data1, 1, mode='nearest'))
-                    from flask import current_app
-                    import time; t0 = time.time()
+                    with get_data_file_fits(user_id, file_id) as fits:
+                        data1 = fits[0].data
+                        del fits[0].data
+                    t0 = time.time()
                     data_cache[file_id] = kp1, des1 = extract_image_features(
-                        data1, settings.algorithm, clip_min, clip_max, alignment_kwargs)
+                        data1, settings.algorithm, settings.detect_edges, clip_min, clip_max, alignment_kwargs)
+                    del data1
                     current_app.logger.info('PROFILE extract_image_features %s', time.time() - t0)
                 if any(item is None for item in (kp2, des2)):
-                    data2 = get_data_file_data(user_id, ref_file_id)[0]
-                    if settings.detect_edges:
-                        data2 = np.hypot(nd.sobel(data2, 0, mode='nearest'), nd.sobel(data2, 1, mode='nearest'))
-                    from flask import current_app
-                    import time; t0 = time.time()
+                    with get_data_file_fits(user_id, ref_file_id) as fits:
+                        data2 = fits[0].data
+                        del fits[0].data
+                    t0 = time.time()
                     data_cache[ref_file_id] = kp2, des2 = extract_image_features(
-                        data2, settings.algorithm, clip_min, clip_max, alignment_kwargs)
+                        data2, settings.algorithm, settings.detect_edges, clip_min, clip_max, alignment_kwargs)
+                    del data2
                     current_app.logger.info('PROFILE extract_image_features %s', time.time() - t0)
             else:
                 # Make sure that both images are on the same contrast scale
@@ -990,7 +995,8 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
                     data2 = np.hypot(nd.sobel(data2, 0, mode='nearest'), nd.sobel(data2, 1, mode='nearest'))
                 if clip_min is None or clip_max is None:
                     clip_min, clip_max = calc_contrast(
-                        np.concatenate([data1.ravel(), data2.ravel()]), settings.percentile_min, settings.percentile_max)
+                        np.concatenate([data1.ravel(), data2.ravel()]),
+                        settings.percentile_min, settings.percentile_max)
                 kp1, des1 = extract_image_features(data1, settings.algorithm, clip_min, clip_max, alignment_kwargs)
                 kp2, des2 = extract_image_features(data2, settings.algorithm, clip_min, clip_max, alignment_kwargs)
 
