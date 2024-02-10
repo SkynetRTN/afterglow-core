@@ -350,6 +350,7 @@ class AlignmentJob(Job):
 
         else:  # Mosaicing mode
             # Crop images to prevent memory overflow if realigning
+            t0 = time.time()
             total_pixels = 0
             for i, file_id in enumerate(file_ids):
                 data, hdr = get_data_file_data(self.user_id, file_id)
@@ -388,9 +389,11 @@ class AlignmentJob(Job):
                             raise
                 self.update_progress((i + 1)/len(file_ids)*100, stage, total_stages)
             stage += 1
+            current_app.logger.info('PROFILE pre_crop %s', time.time() - t0)
 
             if settings.global_contrast:
                 # Calculate the global contrast, which allows to cache features
+                t0 = time.time()
                 data = np.zeros(total_pixels, np.float32)  # temporary array holding all tiles
                 ofs = 0
                 for i, file_id in enumerate(file_ids):
@@ -407,11 +410,13 @@ class AlignmentJob(Job):
                 self.update_progress(100, stage, total_stages)
                 stage += 1
                 del data
+                current_app.logger.info('PROFILE global_contrast %s', time.time() - t0)
             else:
                 # Calculate the contrast for each pair of tiles
                 clip_min = clip_max = None
 
             # Find all possible pairwise transformations
+            t0 = time.time()
             rel_transforms, weights, fovs = {}, {}, {}
             n = len(file_ids)
             total_pairs = n*(n - 1)//2
@@ -421,15 +426,16 @@ class AlignmentJob(Job):
                 with get_data_file_fits(self.user_id, file_id) as f:
                     fovs[file_id] = ra0, dec0, r0, _, w0, h0 = get_fits_fov(f[0].header)
                 for other_file_id in file_ids[i + 1:]:
+                    # Calculate the GCD between tile centers
                     with get_data_file_fits(self.user_id, other_file_id) as f:
                         other_ra0, other_dec0, other_r0, _, w, h = get_fits_fov(f[0].header)
                     if all(x is not None for x in (ra0, dec0, other_ra0, other_dec0)):
                         gcd = angdist(ra0, dec0, other_ra0, other_dec0)
                     else:
                         gcd = None
+
                     # Ignore faraway tiles unless WCS mode or FOV unknown
-                    if isinstance(settings, AlignmentSettingsWCS) or \
-                            any(x is None for x in (ra0, dec0, r0, other_ra0, other_dec0, other_r0)) or \
+                    if isinstance(settings, AlignmentSettingsWCS) or any(x is None for x in (r0, other_r0, gcd)) or \
                             gcd < (r0 + other_r0)*max_r:
                         # noinspection PyBroadException
                         try:
@@ -437,9 +443,8 @@ class AlignmentJob(Job):
                                 self, alignment_kwargs, other_file_id, file_id, wcs_cache, data_cache, clip_min,
                                 clip_max)
                         except Exception:
-                            current_app.logger.warning(
-                                'Error getting transform between data files %s and %s', file_id, other_file_id,
-                                exc_info=True)
+                            # No match found
+                            pass
                         else:
                             # Add inverse transformations
                             mat, offset = rel_transforms[file_id, other_file_id]
@@ -449,8 +454,7 @@ class AlignmentJob(Job):
                             else:
                                 inv_mat = inv(mat)
                                 inv_offset = -np.dot(inv_mat, offset)
-                            rel_transforms[other_file_id, file_id] = (
-                                inv_mat, inv_offset)
+                            rel_transforms[other_file_id, file_id] = (inv_mat, inv_offset)
                             # Calculate graph edge weights
                             if isinstance(settings, AlignmentSettingsWCS):
                                 # For WCS-based alignment, tiles don't necessarily overlap. Use GCD as the measure of
@@ -486,6 +490,7 @@ class AlignmentJob(Job):
                     self.update_progress(k/total_pairs*100, stage, total_stages)
 
             stage += 1
+            current_app.logger.info('PROFILE get_pairwise_transforms %s', time.time() - t0)
 
             with get_data_file_fits(self.user_id, file_ids[-1]) as f:
                 fovs[file_ids[-1]] = get_fits_fov(f[0].header)
@@ -522,6 +527,7 @@ class AlignmentJob(Job):
 
             # Process each mosaic separately
             for mosaic in mosaics:
+                t0 = time.time()
                 # Put the tile closest to the average mosaic RA/Dec first; this will be the reference tile
                 mosaic = list(mosaic)
                 ra0, dec0 = average_radec([fovs[file_id][:2] for file_id in mosaic])
@@ -530,7 +536,7 @@ class AlignmentJob(Job):
                     mosaic = [mosaic[i]] + mosaic[:i] + mosaic[i+1:]
 
                 # Based on the existing pairwise transformations, build an undirected weighted graph with vertices
-                # representing tile centers and edge weights equal to great circle distances
+                # representing tile centers and edge weights defined by great circle distances or overlap areas
                 n = len(mosaic)
                 graph = np.full((n, n), np.nan, np.float64)
                 for idx, d in weights.items():
@@ -614,8 +620,7 @@ class AlignmentJob(Job):
                         'Mosaic size ({0}x{1}) exceeds the maximum ({2}x{2})'
                         .format(ref_width, ref_height, MAX_MOSAIC_SIZE))
 
-                # Invert all transforms since apply_transform() assumes
-                # the backward direction
+                # Invert all transforms since apply_transform() assumes the backward direction
                 for file_id in mosaic:
                     mat, offset = transforms[file_id]
                     if mat is None:
@@ -638,6 +643,8 @@ class AlignmentJob(Job):
                             ref_wcss[other_file_id] = wcs
                         break
 
+                current_app.logger.info('PROFILE get_abs_transforms %s', time.time() - t0)
+
         del wcs_cache, data_cache
         gc.collect()
 
@@ -650,6 +657,7 @@ class AlignmentJob(Job):
             else [[ref_file_id]] if ref_file_id is not None else [[]]
 
         # Apply transforms
+        t0 = time.time()
         for i, file_id in enumerate(file_ids):
             try:
                 try:
@@ -663,7 +671,9 @@ class AlignmentJob(Job):
 
                 overwrite_ref = self.crop and isinstance(data, MaskedArray) and data.mask.any()
 
+                _t0 = time.time()
                 data = apply_transform(data, mat, offset, ref_widths[file_id], ref_heights[file_id], settings.prefilter)
+                current_app.logger.info('PROFILE apply_transform %s', time.time() - _t0)
 
                 if overwrite_ref:
                     # Save and clear the mask before auto-cropping
@@ -743,6 +753,7 @@ class AlignmentJob(Job):
                 self.update_progress((i + 1)/len(file_ids)*100, stage, total_stages)
 
         stage += 1
+        current_app.logger.info('PROFILE create_large_tiles %s', time.time() - t0)
 
         # Optionally crop aligned files in place
         if self.crop:
@@ -997,11 +1008,14 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
                     clip_min, clip_max = calc_contrast(
                         np.concatenate([data1.ravel(), data2.ravel()]),
                         settings.percentile_min, settings.percentile_max)
-                kp1, des1 = extract_image_features(data1, settings.algorithm, clip_min, clip_max, alignment_kwargs)
-                kp2, des2 = extract_image_features(data2, settings.algorithm, clip_min, clip_max, alignment_kwargs)
+                kp1, des1 = extract_image_features(
+                    data1, settings.algorithm, False, clip_min, clip_max, alignment_kwargs)
+                kp2, des2 = extract_image_features(
+                    data2, settings.algorithm, False, clip_min, clip_max, alignment_kwargs)
 
         # Compute the transformation based on matching features
-        return get_transform_features(
+        t0 = time.time()
+        res = get_transform_features(
             kp1, des1, kp2, des2,
             enable_rot=settings.enable_rot,
             enable_scale=settings.enable_scale,
@@ -1009,6 +1023,8 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
             algorithm=settings.algorithm,
             ratio_threshold=settings.ratio_threshold,
             **alignment_kwargs), f'{settings.algorithm} feature detection'
+        current_app.logger.info('PROFILE get_transform_features %s', time.time() - t0)
+        return res
 
     if isinstance(settings, AlignmentSettingsPixels):
         return get_transform_pixel(
