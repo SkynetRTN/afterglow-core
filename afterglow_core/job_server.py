@@ -155,7 +155,27 @@ def run_job(task: Task, *args, **kwargs):
             try:
                 # flask_login.current_user support
                 if user_id is not None:
-                    g._login_user = DbUser.query.get_or_404(user_id, 'Unknown user')
+                    for niter in range(JOB_STATE_UPDATE_ATTEMPTS):
+                        try:
+                            g._login_user = DbUser.query.get_or_404(user_id, 'Unknown user')
+                        except Exception as e:
+                            if niter < JOB_STATE_UPDATE_ATTEMPTS - 1:
+                                current_app.logger.warning(
+                                    '%s Error impersonating user for job %s, retrying %s more time%s',
+                                    prefix, job_id, JOB_STATE_UPDATE_ATTEMPTS - niter - 1,
+                                    's' if JOB_STATE_UPDATE_ATTEMPTS - niter - 1 > 1 else '',
+                                    exc_info=True)
+
+                            # noinspection PyBroadException
+                            try:
+                                db.session.rollback()
+                            except Exception:
+                                pass
+
+                            if niter == JOB_STATE_UPDATE_ATTEMPTS - 1:
+                                raise RuntimeError(f'Error impersonating user [{e}]')
+                        else:
+                            break
 
                 for niter in range(JOB_STATE_UPDATE_ATTEMPTS):
                     # noinspection PyBroadException
