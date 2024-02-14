@@ -306,14 +306,12 @@ class Job(AfterglowSchema):
         """
         Run the job; fully implemented by job plugin
         """
-        raise MethodNotImplementedError(
-            class_name=self.__class__.__name__, method_name='run')
+        raise MethodNotImplementedError(class_name=self.__class__.__name__, method_name='run')
 
     def update(self) -> None:
         """
-        Notify the job server about job state change; should be called after
-        modifying any of the JobState or JobResult fields while the job
-        is still in progress; also called automatically upon job completion
+        Notify the job server about job state change; should be called after` modifying any of the JobState or JobResult
+        fields while the job is still in progress; also called automatically upon job completion
         """
         self._task.update_state(
             task_id=self.id,
@@ -332,15 +330,12 @@ class Job(AfterglowSchema):
         except OSError as _e_:
             if _e_.errno != errno.EEXIST:
                 raise
-        with open(os.path.join(d, self.id), 'wt', encoding='utf8') as f:
+        with open(os.path.join(d, self.id), 'w', encoding='utf8') as f:
             print(self.result.dumps(self.result), file=f)
 
-    def add_error(self, e: BaseException,
-                  meta: Optional[TDict[str, Union[str, int, float, bool]]] =
-                  None) -> None:
+    def add_error(self, e: BaseException, meta: Optional[TDict[str, Union[str, int, float, bool]]] = None) -> None:
         """
-        Add error to Job.result.errors; in debug mode, error metadata also
-        includes exception traceback
+        Add error to Job.result.errors; in debug mode, error metadata also includes exception traceback
 
         :param e: exception
         :param meta: optional additional exception metadata
@@ -348,8 +343,7 @@ class Job(AfterglowSchema):
         error = {}
         status = getattr(e, 'code', None)
         if status:
-            error['status'] = HTTP_STATUS_CODES.get(
-                status, '{} Unknown Error'.format(status))
+            error['status'] = HTTP_STATUS_CODES.get(status, '{} Unknown Error'.format(status))
         error['id'] = str(getattr(e, 'id', e.__class__.__name__))
         error['detail'] = str(e)
         if meta is None:
