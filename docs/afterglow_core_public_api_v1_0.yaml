@@ -1456,10 +1456,6 @@ components:
           minimum: 0
           exclusiveMinimum: true
           default: 1
-        prefilter:
-          description: apply spline filter before interpolation to decrease blurring
-          type: boolean
-          default: true
         enable_rot:
           description: allow rotation transformation for >= 2 WCS grid points or sources
           type: boolean

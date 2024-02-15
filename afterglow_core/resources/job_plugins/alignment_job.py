@@ -46,7 +46,6 @@ class AlignmentSettings(AfterglowSchema):
     mode: str = String(dump_default='WCS', load_default='WCS')
     ref_image: Optional[str] = String(dump_default='central', allow_none=True)
     mosaic_search_radius: float = Float(dump_default=1)
-    prefilter: bool = Boolean(dump_default=True)
     enable_rot: bool = Boolean(dump_default=True)
     enable_scale: bool = Boolean(dump_default=True)
     enable_skew: bool = Boolean(dump_default=True)
@@ -672,7 +671,7 @@ class AlignmentJob(Job):
                 overwrite_ref = self.crop and isinstance(data, MaskedArray) and data.mask.any()
 
                 _t0 = time.time()
-                data = apply_transform(data, mat, offset, ref_widths[file_id], ref_heights[file_id], settings.prefilter)
+                data = apply_transform(data, mat, offset, ref_widths[file_id], ref_heights[file_id])
                 current_app.logger.info('PROFILE apply_transform %s', time.time() - _t0)
 
                 if overwrite_ref:
