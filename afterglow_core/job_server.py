@@ -10,6 +10,7 @@ import sys
 import traceback
 import ctypes
 import signal
+import time
 from datetime import datetime, timedelta
 from threading import Event, Thread
 from typing import Dict as TDict, Union
@@ -117,9 +118,7 @@ def cancel_watchdog() -> None:
     Watchdog thread that kills the worker if job cancellation is not acknowledged in a timely manner
     """
     if not job_cancel_ack_event.wait(job_cancel_timeout):
-        print('Killing worker')
         os.kill(os.getpid(), signal.SIGKILL)
-    print('Terminated in a timely manner')
 
 
 @shared_task(name='run_job', bind=True)
@@ -136,7 +135,7 @@ def run_job(task: Task, *args, **kwargs):
     prefix = f'[Worker {pid}]'
     current_app.logger.info('%s Got job request: %s', prefix, kwargs)
 
-    # Create job object from description; kwargs is guaranteed to contain at least type, ID, and user ID, and
+    # Create job object from description; kwargs are guaranteed to contain at least type, ID, and user ID, and
     # the corresponding job plugin is guaranteed to exist
     try:
         job = Job(*args, _task=task, **kwargs)
@@ -155,14 +154,47 @@ def run_job(task: Task, *args, **kwargs):
             try:
                 # flask_login.current_user support
                 if user_id is not None:
-                    g._login_user = DbUser.query.get_or_404(user_id, 'Unknown user')
+                    for niter in range(JOB_STATE_UPDATE_ATTEMPTS):
+                        try:
+                            g._login_user = DbUser.query.get_or_404(user_id, 'Unknown user')
+                        except Exception as e:
+                            if niter < JOB_STATE_UPDATE_ATTEMPTS - 1:
+                                current_app.logger.warning(
+                                    '%s Error impersonating user for job %s, retrying %s more time%s',
+                                    prefix, job_id, JOB_STATE_UPDATE_ATTEMPTS - niter - 1,
+                                    's' if niter + 2 < JOB_STATE_UPDATE_ATTEMPTS else '',
+                                    exc_info=True)
+
+                            # noinspection PyBroadException
+                            try:
+                                db.session.rollback()
+                            except Exception:
+                                pass
+
+                            if niter == JOB_STATE_UPDATE_ATTEMPTS - 1:
+                                raise RuntimeError(f'Error impersonating user [{e}]')
+                        else:
+                            break
+
+                # Wait until the job is added to the database
+                while True:
+                    # noinspection PyBroadException
+                    try:
+                        db_job = DbJob.query.get_or_404(job_id, 'Unknown job')
+                    except Exception:
+                        # Invalidate cached objects
+                        # noinspection PyBroadException
+                        try:
+                            db.session.rollback()
+                        except Exception:
+                            pass
+                        time.sleep(0.1)
+                    else:
+                        break
 
                 for niter in range(JOB_STATE_UPDATE_ATTEMPTS):
                     # noinspection PyBroadException
                     try:
-                        db_job = DbJob.query.get(job_id)
-                        if db_job is None:
-                            return
                         db_job.state.status = js.IN_PROGRESS
                         db_job.state.started_on = datetime.utcnow()
                         db.session.commit()
@@ -171,7 +203,7 @@ def run_job(task: Task, *args, **kwargs):
                             current_app.logger.warning(
                                 '%s Error updating job %s state to in_progress, retrying %s more time%s',
                                 prefix, job_id, JOB_STATE_UPDATE_ATTEMPTS - niter - 1,
-                                's' if JOB_STATE_UPDATE_ATTEMPTS - niter - 1 > 1 else '',
+                                's' if niter + 2 < JOB_STATE_UPDATE_ATTEMPTS else '',
                                 exc_info=True)
 
                         # noinspection PyBroadException
@@ -238,7 +270,7 @@ def run_job(task: Task, *args, **kwargs):
         if _e_.errno != errno.EEXIST:
             raise
     serialized = job.result.dumps(job.result)
-    with open(os.path.join(d, job_id), 'wt', encoding='utf8') as f:
+    with open(os.path.join(d, job_id), 'w', encoding='utf8') as f:
         print(serialized, file=f)
 
     current_app.logger.info('%s Job %s -> %s', prefix, job_id, serialized)
@@ -337,7 +369,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
                             current_app.logger.warning(
                                 'Error updating job %s state on completion, retrying %s more time%s',
                                 task_id, JOB_STATE_UPDATE_ATTEMPTS - niter - 1,
-                                's' if JOB_STATE_UPDATE_ATTEMPTS - niter - 1 > 1 else '',
+                                's' if niter + 2 < JOB_STATE_UPDATE_ATTEMPTS else '',
                                 exc_info=True)
                         else:
                             current_app.logger.exception('Error updating job %s state on completion', task_id)

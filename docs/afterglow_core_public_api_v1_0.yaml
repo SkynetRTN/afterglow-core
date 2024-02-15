@@ -1604,6 +1604,10 @@ components:
               minimum: 0
               maximum: 100
               default: 99
+            global_contrast:
+              description: in mosaic mode, put all tiles on the same contrast scale (faster but less accurate)
+              type: boolean
+              default: true
 
     AlignmentSettingsFeaturesAKAZE:
       description: settings for AKAZE feature-based alignment
