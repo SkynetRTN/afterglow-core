@@ -6,6 +6,7 @@ astroquery==0.4.6
 billiard==4.2.0
 celery==5.3.6
 email_validator==2.1.0.post1
+eventlet==0.35.1; sys_platform == 'win32'
 ExifRead==3.0.0
 Flask==3.0.0
 Flask_Login==0.6.3
