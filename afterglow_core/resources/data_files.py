@@ -11,7 +11,7 @@ from datetime import datetime
 import json
 import time
 from io import BytesIO
-from typing import Dict as TDict, List as TList, Optional, Tuple, Union
+from typing import BinaryIO, Dict as TDict, List as TList, Optional, Tuple, Union
 import warnings
 
 from sqlalchemy import Boolean, CheckConstraint, Column, ForeignKey, Integer, String, Text, UniqueConstraint
@@ -1032,7 +1032,7 @@ def import_data_files(user_id: Optional[int],
                       width: Optional[int] = None,
                       height: Optional[int] = None,
                       pixel_value: float = 0,
-                      files: Optional[TDict[str, bytes]] = None) \
+                      files: Optional[TDict[str, BinaryIO]] = None) \
         -> TList[DataFile]:
     """
     Create, import, or upload data files defined by request parameters:
