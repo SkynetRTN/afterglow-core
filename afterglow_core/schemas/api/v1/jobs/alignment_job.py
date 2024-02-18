@@ -65,6 +65,7 @@ class AlignmentSettingsFeaturesSchema(AlignmentSettingsSchema):
     percentile_min: float = Float(dump_default=10)
     percentile_max: float = Float(dump_default=99)
     global_contrast: bool = Boolean(dump_default=True)
+    downsample: int = Integer(dump_default=2)
 
 
 class AlignmentSettingsFeaturesAKAZESchema(AlignmentSettingsFeaturesSchema):

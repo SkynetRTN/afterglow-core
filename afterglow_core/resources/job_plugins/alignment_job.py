@@ -87,6 +87,7 @@ class AlignmentSettingsFeatures(AlignmentSettings):
     percentile_min: float = Float(dump_default=10)
     percentile_max: float = Float(dump_default=99)
     global_contrast: bool = Boolean(dump_default=True)
+    downsample: int = Integer(dump_default=2)
 
 
 class AlignmentSettingsFeaturesAKAZE(AlignmentSettingsFeatures):
@@ -224,6 +225,7 @@ class AlignmentJob(Job):
                 raise ValueError('Missing data file ID for at least one source')
         elif isinstance(settings, AlignmentSettingsFeatures):
             # Extract algorithm-specific keywords
+            alignment_kwargs['downsample'] = settings.downsample
             if isinstance(settings, AlignmentSettingsFeaturesAKAZE):
                 if settings.descriptor_type not in ('KAZE', 'KAZE_UPRIGHT', 'MLDB', 'MLDB_UPRIGHT'):
                     raise ValueError(f'Invalid descriptor type "{settings.descriptor_type}"')
@@ -819,12 +821,6 @@ def calc_contrast(data: np.ndarray, percentile_min: float, percentile_max: float
     return clip_min, clip_max
 
 
-def extract_image_features(data: np.ndarray, algorithm: str, detect_edges: bool, clip_min: float, clip_max: float,
-                           alignment_kwargs: dict):
-    return get_image_features(
-        data, algorithm=algorithm, detect_edges=detect_edges, clip_min=clip_min, clip_max=clip_max, **alignment_kwargs)
-
-
 def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id: int, ref_file_id: int,
                   wcs_cache: TDict[int, WCS], data_cache: TDict[int, Any], clip_min: float | None = None,
                   clip_max: float | None = None) -> Tuple[Tuple[Optional[np.ndarray], np.ndarray], str]:
@@ -975,8 +971,9 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
                         data1 = fits[0].data
                         del fits[0].data
                     t0 = time.time()
-                    data_cache[file_id] = kp1, des1 = extract_image_features(
-                        data1, settings.algorithm, settings.detect_edges, clip_min, clip_max, alignment_kwargs)
+                    data_cache[file_id] = kp1, des1 = get_image_features(
+                        data1, settings.algorithm, settings.detect_edges, clip_min=clip_min, clip_max=clip_max,
+                        **alignment_kwargs)
                     del data1
                     current_app.logger.info('PROFILE extract_image_features %s', time.time() - t0)
                 if any(item is None for item in (kp2, des2)):
@@ -984,8 +981,9 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
                         data2 = fits[0].data
                         del fits[0].data
                     t0 = time.time()
-                    data_cache[ref_file_id] = kp2, des2 = extract_image_features(
-                        data2, settings.algorithm, settings.detect_edges, clip_min, clip_max, alignment_kwargs)
+                    data_cache[ref_file_id] = kp2, des2 = get_image_features(
+                        data2, settings.algorithm, settings.detect_edges, clip_min=clip_min, clip_max=clip_max,
+                        **alignment_kwargs)
                     del data2
                     current_app.logger.info('PROFILE extract_image_features %s', time.time() - t0)
             else:
@@ -1003,13 +1001,14 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
                     clip_min, clip_max = calc_contrast(
                         np.concatenate([data1.ravel(), data2.ravel()]),
                         settings.percentile_min, settings.percentile_max)
-                kp1, des1 = extract_image_features(
-                    data1, settings.algorithm, False, clip_min, clip_max, alignment_kwargs)
-                kp2, des2 = extract_image_features(
-                    data2, settings.algorithm, False, clip_min, clip_max, alignment_kwargs)
+                kp1, des1 = get_image_features(
+                    data1, settings.algorithm, False, clip_min=clip_min, clip_max=clip_max,
+                    **alignment_kwargs)
+                kp2, des2 = get_image_features(
+                    data2, settings.algorithm, False, clip_min=clip_min, clip_max=clip_max,
+                    **alignment_kwargs)
 
         # Compute the transformation based on matching features
-        t0 = time.time()
         res = get_transform_features(
             kp1, des1, kp2, des2,
             enable_rot=settings.enable_rot,
@@ -1018,7 +1017,6 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
             algorithm=settings.algorithm,
             ratio_threshold=settings.ratio_threshold,
             **alignment_kwargs), f'{settings.algorithm} feature detection'
-        current_app.logger.info('PROFILE get_transform_features %s', time.time() - t0)
         return res
 
     if isinstance(settings, AlignmentSettingsPixels):
