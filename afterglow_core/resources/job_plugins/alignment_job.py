@@ -179,8 +179,8 @@ class AlignmentJob(Job):
         if not file_ids:
             return
 
-        # Get reference image index and the corresponding data file ID
         try:
+            # Get reference image index and the corresponding data file ID
             if settings.ref_image is None:
                 ref_image = None
             elif settings.ref_image == 'first':
@@ -309,7 +309,7 @@ class AlignmentJob(Job):
             total_stages += 1
             if settings.global_contrast:
                 # Calculation of global clip_min, clip_max
-                total_stages += 2
+                total_stages += 1
         stage = 0
 
         wcs_cache, data_cache = {}, {}
@@ -333,14 +333,11 @@ class AlignmentJob(Job):
 
             with get_data_file_fits(self.user_id, ref_file_id) as f:
                 hdr = f[0].header
-                ref_width, ref_height = hdr['NAXIS1'], hdr['NAXIS2']
+            ref_width, ref_height = hdr['NAXIS1'], hdr['NAXIS2']
             try:
-                ref_wcs = wcs_cache[ref_file_id]
-            except KeyError:
-                try:
-                    ref_wcs = get_wcs(self.user_id, ref_file_id, wcs_cache)
-                except ValueError:
-                    ref_wcs = None
+                ref_wcs = get_wcs(self.user_id, ref_file_id, wcs_cache)
+            except ValueError:
+                ref_wcs = None
 
             # Reference image parameters are the same for all non-ref images
             ref_heights = {file_id: ref_height for file_id in file_ids if file_id != ref_file_id}
@@ -350,15 +347,20 @@ class AlignmentJob(Job):
         else:  # Mosaicing mode
             # Crop images to prevent memory overflow if realigning
             t0 = time.time()
-            total_pixels = 0
+            fovs, shapes = {}, {}
+            all_data = []
             for i, file_id in enumerate(file_ids):
-                data, hdr = get_data_file_data(self.user_id, file_id)
-                total_pixels += data.size
-                if isinstance(data, np.ma.MaskedArray):
-                    left, right, bottom, top = get_auto_crop(data.mask)
+                with get_data_file_fits(self.user_id, file_id) as f:
+                    hdr = f[0].header
+                    data = f[0].data
+                    del f[0].data
+                mask = np.isnan(data)
+                if mask.any():
+                    left, right, bottom, top = get_auto_crop(mask)
                     if any([left, right, bottom, top]) and left + right < data.shape[1] and \
                             bottom + top < data.shape[0]:
                         data = data[bottom:data.shape[0]-top, left:data.shape[1]-right]
+                        hdr['NAXIS2'], hdr['NAXIS1'] = data.shape
                         if left:
                             try:
                                 hdr['CRPIX1'] -= left
@@ -386,29 +388,34 @@ class AlignmentJob(Job):
                         except Exception:
                             db.session.rollback()
                             raise
+
+                # Cache tile geometry
+                fovs[file_id] = get_fits_fov(hdr)
+                shapes[file_id] = data.shape
+                # noinspection PyBroadException
+                try:
+                    wcs_cache[file_id] = WCS(hdr)
+                except Exception:
+                    wcs_cache[file_id] = None
+
+                if settings.global_contrast:
+                    if settings.detect_edges:
+                        data = np.hypot(nd.sobel(data, 0, mode='nearest'), nd.sobel(data, 1, mode='nearest'))
+                    all_data.append(data.ravel())
+
+                del data
                 self.update_progress((i + 1)/len(file_ids)*100, stage, total_stages)
             stage += 1
-            current_app.logger.info('PROFILE pre_crop %s', time.time() - t0)
+            current_app.logger.info('PROFILE preprocess %s', time.time() - t0)
 
-            if settings.global_contrast:
+            if all_data:
                 # Calculate the global contrast, which allows to cache features
                 t0 = time.time()
-                data = np.zeros(total_pixels, np.float32)  # temporary array holding all tiles
-                ofs = 0
-                for i, file_id in enumerate(file_ids):
-                    with get_data_file_fits(self.user_id, file_id) as fits:
-                        data1 = fits[0].data
-                        del fits[0].data
-                    if settings.detect_edges:
-                        data1 = np.hypot(nd.sobel(data1, 0, mode='nearest'), nd.sobel(data1, 1, mode='nearest'))
-                    data[ofs:ofs + data1.size] = data1.ravel()
-                    ofs += data1.size
-                    self.update_progress((i + 1)/len(file_ids)*100, stage, total_stages)
-                stage += 1
-                clip_min, clip_max = calc_contrast(data, settings.percentile_min, settings.percentile_max)
+                clip_min, clip_max = calc_contrast(
+                    np.concatenate(all_data), settings.percentile_min, settings.percentile_max)
                 self.update_progress(100, stage, total_stages)
                 stage += 1
-                del data
+                del all_data
                 current_app.logger.info('PROFILE global_contrast %s', time.time() - t0)
             else:
                 # Calculate the contrast for each pair of tiles
@@ -416,18 +423,16 @@ class AlignmentJob(Job):
 
             # Find all possible pairwise transformations
             t0 = time.time()
-            rel_transforms, weights, fovs = {}, {}, {}
+            rel_transforms, weights = {}, {}
             n = len(file_ids)
             total_pairs = n*(n - 1)//2
             max_r = settings.mosaic_search_radius
             k = 0
             for i, file_id in enumerate(file_ids[:-1]):
-                with get_data_file_fits(self.user_id, file_id) as f:
-                    fovs[file_id] = ra0, dec0, r0, _, w0, h0 = get_fits_fov(f[0].header)
+                ra0, dec0, r0, _, w0, h0 = fovs[file_id]
                 for other_file_id in file_ids[i + 1:]:
                     # Calculate the GCD between tile centers
-                    with get_data_file_fits(self.user_id, other_file_id) as f:
-                        other_ra0, other_dec0, other_r0, _, w, h = get_fits_fov(f[0].header)
+                    other_ra0, other_dec0, other_r0, _, w, h = fovs[other_file_id]
                     if all(x is not None for x in (ra0, dec0, other_ra0, other_dec0)):
                         gcd = angdist(ra0, dec0, other_ra0, other_dec0)
                     else:
@@ -491,9 +496,6 @@ class AlignmentJob(Job):
             stage += 1
             current_app.logger.info('PROFILE get_pairwise_transforms %s', time.time() - t0)
 
-            with get_data_file_fits(self.user_id, file_ids[-1]) as f:
-                fovs[file_ids[-1]] = get_fits_fov(f[0].header)
-
             # Include each image in one of the sets of connected images ("mosaics") if it has at least one match
             ref_widths, ref_heights, ref_wcss = {}, {}, {}
             for file_id in file_ids:
@@ -549,9 +551,7 @@ class AlignmentJob(Job):
                 pred = shortest_path(graph, return_predecessors=True)[1]
 
                 # Establish the global reference frame based on the first image
-                with get_data_file_fits(self.user_id, mosaic[0]) as f:
-                    hdr = f[0].header
-                    ref_width, ref_height = hdr['NAXIS1'], hdr['NAXIS2']
+                ref_height, ref_width = shapes[mosaic[0]]
                 transforms[mosaic[0]] = None, np.zeros(2)
 
                 # Update the mosaic image shape and transformations by adding each subsequent image
@@ -586,10 +586,7 @@ class AlignmentJob(Job):
                     # Got new transform; check that the transformed tile fits within the current global mosaic frame
                     transforms[file_id] = mat, offset
                     dy, dx = offset
-                    with get_data_file_fits(self.user_id, file_id) as f:
-                        hdr = f[0].header
-                        shape = hdr['NAXIS2'], hdr['NAXIS1']
-                    y, x = np.indices(shape)
+                    y, x = np.indices(shapes[file_id])
                     if mat is None:
                         x = x + dx  # adding float to int
                         y = y + dy
@@ -768,25 +765,24 @@ def get_wcs(user_id: Optional[int], file_id: int, wcs_cache: TDict[int, WCS]) ->
         # noinspection PyBroadException
         try:
             with get_data_file_fits(user_id, file_id) as fits:
-                hdr = fits[0].header
-            wcs = WCS(hdr)
+                wcs = WCS(fits[0].header)
             if not wcs.has_celestial:
                 wcs = None
         except Exception:
             wcs = None
-        if wcs is None:
-            raise ValueError('Missing WCS')
         wcs_cache[file_id] = wcs
+    if wcs is None:
+        raise ValueError('Missing WCS')
     return wcs
 
 
 def get_source_xy(source: SourceExtractionData, user_id: Optional[int], file_id: int, wcs_cache: TDict[int, WCS]) \
         -> Tuple[float, float]:
     x, y = getattr(source, 'x', None), getattr(source, 'y', None)
-    if x is not None and y is not None:
-        return x, y
-    wcs = get_wcs(user_id, file_id, wcs_cache)
-    return tuple(wcs.all_world2pix(source.ra_hours*15, source.dec_degs, 1, quiet=True))
+    if x is None or y is None:
+        wcs = get_wcs(user_id, file_id, wcs_cache)
+        x, y = wcs.all_world2pix(source.ra_hours*15, source.dec_degs, 1, quiet=True)
+    return x, y
 
 
 @njit(cache=True)
