@@ -396,6 +396,8 @@ def data_files_hist(id: int) -> Response:
     """
     data_filename = os.path.join(get_root(request.user.id), f'{id}.fits')
     hist_filename = data_filename + '.hist'
+    if not os.path.isfile(data_filename):
+        data_filename += '.gz'
 
     # noinspection PyBroadException
     try:

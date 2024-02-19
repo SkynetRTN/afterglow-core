@@ -204,7 +204,9 @@ def save_data_file(root: str, file_id: int, data: Union[np.ndarray, np.ma.Masked
             raise
 
     # Save FITS to data file directory
-    fits.writeto(os.path.join(root, '{}.fits'.format(file_id)), 'silentfix+ignore', overwrite=True)
+    fits.writeto(
+        os.path.join(root, f'{file_id}.fits{".gz" if current_app.config.get("DATA_FILE_COMPRESSION", True) else ""}'),
+        'silentfix+ignore', overwrite=True)
 
     # Update image dimensions and file modification timestamp
     if data.dtype.fields is None:
@@ -788,7 +790,10 @@ def get_data_file_path(user_id: Optional[int], file_id: int) -> str:
 
     :return: path to data file
     """
-    return os.path.join(get_root(user_id), '{}.fits'.format(file_id))
+    return os.path.join(
+        get_root(user_id),
+        f'{file_id}.fits{".gz" if current_app.config.get("DATA_FILE_COMPRESSION", True) else ""}'
+    )
 
 
 def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readonly') -> pyfits.HDUList:
@@ -801,8 +806,15 @@ def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readon
 
     :return: FITS file object
     """
+    filename = get_data_file_path(user_id, file_id)
+    if not os.path.isfile(filename):
+        if filename.lower().endswith('.gz'):
+            filename = filename[:-3]
+        else:
+            filename += '.gz'
+
     try:
-        with pyfits.open(get_data_file_path(user_id, file_id), mode, memmap=False) as fits:
+        with pyfits.open(filename, mode, memmap=False) as fits:
             data = fits[0].data
             if data is not None and data.dtype.fields is None:
                 hdr = fits[0].header
