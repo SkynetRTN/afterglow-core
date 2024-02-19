@@ -534,9 +534,9 @@ def import_data_file(user_id: Optional[int], root: str, provider_id: Optional[Un
 
                 try:
                     all_data_files.append(create_data_file(
-                        user_id, name, root, hdu.data, hdr, provider_id, asset_path, 'FITS', asset_metadata,
-                        layer, duplicates, session_id, group_name=group_name, group_order=i,
-                        allow_duplicate_group_name=i > 0))
+                        user_id, name, root, hdu.data, hdr, provider=provider_id, path=asset_path, file_type='FITS',
+                        metadata=asset_metadata, layer=layer, duplicates=duplicates, session_id=session_id,
+                        group_name=group_name, group_order=i, allow_duplicate_group_name=i > 0))
                 except Exception as e:
                     raise CannotCreateDataFileError(reason=str(e))
 
@@ -674,8 +674,9 @@ def import_data_file(user_id: Optional[int], root: str, provider_id: Optional[Un
             # Store FITS image bottom to top
             try:
                 all_data_files.append(create_data_file(
-                    user_id, name, root, data[::-1], hdr, provider_id, asset_path, asset_type, asset_metadata, layer,
-                    duplicates, session_id, group_name=group_name, group_order=i, allow_duplicate_group_name=i > 0))
+                    user_id, name, root, data[::-1], hdr, provider=provider_id, path=asset_path, file_type=asset_type,
+                    metadata=asset_metadata, layer=layer, duplicates=duplicates, session_id=session_id,
+                    group_name=group_name, group_order=i, allow_duplicate_group_name=i > 0))
             except Exception as e:
                 raise CannotCreateDataFileError(reason=str(e))
 
