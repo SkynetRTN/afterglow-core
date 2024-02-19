@@ -147,8 +147,8 @@ def get_root(user_id: Optional[int]) -> str:
     return os.path.abspath(os.path.expanduser(root))
 
 
-def save_data_file(root: str, file_id: int, data: Union[np.ndarray, np.ma.MaskedArray], hdr, modified: bool = True) \
-        -> None:
+def save_data_file(root: str, file_id: int, data: Union[np.ndarray, np.ma.MaskedArray], hdr, modified: bool = True,
+                   origin: Tuple[int, int] | None = None, size: Tuple[int, int] | None = None) -> None:
     """
     Save data file to the user's data file directory as a single-HDU FITS or a primary + table HDU FITS, depending on
     whether the input HDU contains an image or a table
@@ -158,6 +158,11 @@ def save_data_file(root: str, file_id: int, data: Union[np.ndarray, np.ma.Masked
     :param data: image or table data; image data can be a masked array
     :param hdr: FITS header
     :param modified: if True, set the file modification flag; not set on initial creation
+    :param origin: optional coordinates (X, Y), 0-based, of the left top corner of the image in a large image padded
+        with NaNs; used to store only non-masked part of a tile resulting from mosaic alignment; must be accompanied
+        by `size`
+    :param size: (width, height) size of the large tile; :func:`get_data_file_data` will return an image of this size
+        with non-masked data at `origin`
     """
     db_data_file = DbDataFile.query.get(file_id)
 
@@ -166,6 +171,21 @@ def save_data_file(root: str, file_id: int, data: Union[np.ndarray, np.ma.Masked
         hdr = pyfits.Header()
     hdr['AGFILEID'] = (file_id, 'ID in Afterglow Workbench')
     hdr['AGFILNAM'] = (db_data_file.name, 'Name in Afterglow Workbench')
+    if origin is not None:
+        if size is None:
+            raise ValueError('Missing "size"')
+        hdr['AGORGN1'] = (origin[0], 'X offset of data')
+        hdr['AGORGN2'] = (origin[1], 'Y offset of data')
+        hdr['AGSIZE1'] = (size[0], 'Actual data width')
+        hdr['AGSIZE2'] = (size[1], 'Actual data height')
+    elif size is not None:
+        raise ValueError('Missing "origin"')
+    else:
+        for s in ('AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2'):
+            try:
+                del hdr[s]
+            except KeyError:
+                pass
 
     if data.dtype.fields is None:
         # Convert image data to float32
@@ -233,17 +253,12 @@ def append_suffix(name: str, suffix: str):
     return name
 
 
-def create_data_file(user_id: Optional[int], name: Optional[str], root: str, data: np.ndarray,
-                     hdr=None, provider: Optional[str] = None,
-                     path: Optional[str] = None,
-                     file_type: Optional[str] = None,
-                     metadata: Optional[dict] = None,
-                     layer: Optional[str] = None, duplicates: str = 'ignore',
-                     session_id: Optional[int] = None,
-                     group_name: Optional[str] = None,
-                     group_order: Optional[int] = 0,
-                     allow_duplicate_file_name: bool = True,
-                     allow_duplicate_group_name: bool = False) -> DbDataFile:
+def create_data_file(user_id: Optional[int], name: Optional[str], root: str, data: np.ndarray, hdr=None,
+                     origin: Tuple[int, int] | None = None, size: Tuple[int, int] | None = None,
+                     provider: Optional[str] = None, path: Optional[str] = None, file_type: Optional[str] = None,
+                     metadata: Optional[dict] = None, layer: Optional[str] = None, duplicates: str = 'ignore',
+                     session_id: Optional[int] = None, group_name: Optional[str] = None, group_order: Optional[int] = 0,
+                     allow_duplicate_file_name: bool = True, allow_duplicate_group_name: bool = False) -> DbDataFile:
     """
     Create a database entry for a new data file and save it to data file directory as a single (image) or double
     (image + mask) HDU FITS or a primary + table HDU FITS, depending on whether the input HDU contains an image or
@@ -254,6 +269,11 @@ def create_data_file(user_id: Optional[int], name: Optional[str], root: str, dat
     :param root: user's data file storage root directory
     :param data: image or table data; image data can be a masked array
     :param hdr: FITS header
+    :param origin: optional coordinates (X, Y), 0-based, of the left top corner of the image in a large image padded
+        with NaNs; used to store only non-masked part of a tile resulting from mosaic alignment; must be accompanied
+        by `size`
+    :param size: (width, height) size of the large tile; :func:`get_data_file_data` will return an image of this size
+        with non-masked data at `origin`
     :param provider: data provider ID/name if not creating an empty data file
     :param path: path of the data provider asset the file was imported from
     :param file_type: original file type ("FITS", "JPEG", etc.)
@@ -273,7 +293,9 @@ def create_data_file(user_id: Optional[int], name: Optional[str], root: str, dat
     :return: data file instance
     """
     t0 = time.time()
-    if data.dtype.fields is None:
+    if size is not None:
+        width, height = size
+    elif data.dtype.fields is None:
         # Image HDU; get image dimensions from array shape
         height, width = data.shape
     else:
@@ -375,7 +397,7 @@ def create_data_file(user_id: Optional[int], name: Optional[str], root: str, dat
         current_app.logger.info('PROFILE create_data_file %s %s %.3f', user_id, path, time.time() - t0)
 
         t0 = time.time()
-        save_data_file(root, db_data_file.id, data, hdr, modified=False)
+        save_data_file(root, db_data_file.id, data, hdr, modified=False, origin=origin, size=size)
         current_app.logger.info('PROFILE save_data_file %s %s %.3f', user_id, path, time.time() - t0)
     except Exception:
         db.session.rollback()
@@ -780,7 +802,26 @@ def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readon
     :return: FITS file object
     """
     try:
-        return pyfits.open(get_data_file_path(user_id, file_id), mode, memmap=False)
+        with pyfits.open(get_data_file_path(user_id, file_id), mode, memmap=False) as fits:
+            data = fits[0].data
+            if data is not None and data.dtype.fields is None:
+                hdr = fits[0].header
+                if all(s in hdr for s in ('AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2')):
+                    # Pad image with NaNs
+                    try:
+                        x, y, w, h = int(hdr['AGORGN1']), int(hdr['AGORGN2']), int(hdr['AGSIZE1']), int(hdr['AGSIZE2'])
+                        large_data = np.full((h, w), np.nan, np.float32)
+                        large_data[y:y+data.shape[0], x:x+data.shape[1]] = data
+                        del data
+                        fits[0].data = large_data
+                    except Exception as e:
+                        current_app.logger.warning('Error reading padded image [%s]', e)
+                    else:
+                        for s in 'AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2':
+                            del hdr[s]
+
+            return fits
+
     except Exception:
         raise UnknownDataFileError(file_id=file_id)
 
@@ -797,13 +838,14 @@ def get_data_file_data(user_id: Optional[int], file_id: int) \
         a :class:`numpy.ma.MaskedArray` instance
     """
     with get_data_file_fits(user_id, file_id) as fits:
+        hdr = fits[0].header
         if fits[0].data is None:
             # Table stored in extension HDU
             data = fits[1].data
         elif fits[0].data.dtype.fields is None:
             # Image stored in the primary HDU, with NaNs for masked values
             data = np.ma.masked_invalid(fits[0].data)
-            if not data.mask.any():
+            if data.mask is False or not data.mask.any():
                 # Normal image data
                 data = data.data
         else:
@@ -811,7 +853,7 @@ def get_data_file_data(user_id: Optional[int], file_id: int) \
             data = fits[0].data
         del fits[0].data  # recommended by Astropy
 
-        return data, fits[0].header
+    return data, hdr
 
 
 def get_data_file_uint8(user_id: Optional[int], file_id: int) -> np.ndarray:

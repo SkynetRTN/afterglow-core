@@ -669,9 +669,7 @@ class AlignmentJob(Job):
 
                 overwrite_ref = self.crop and isinstance(data, MaskedArray) and data.mask.any()
 
-                _t0 = time.time()
                 data = apply_transform(data, mat, offset, ref_widths[file_id], ref_heights[file_id])
-                current_app.logger.info('PROFILE apply_transform %s', time.time() - _t0)
 
                 if overwrite_ref:
                     # Save and clear the mask before auto-cropping
@@ -711,6 +709,18 @@ class AlignmentJob(Job):
                     for name, val in orig_kw.items():
                         hdr[name] = val
 
+                # Store only non-masked area
+                origin = size = None
+                if mosaics and isinstance(data, np.ma.MaskedArray) and data.mask is not False and data.mask.any():
+                    left, right, bottom, top = get_auto_crop(data.mask)
+                    if any([left, right, bottom, top]) and left + right < data.shape[1] and \
+                            bottom + top < data.shape[0]:
+                        origin = left, top
+                        size = tuple(data.shape[::-1])
+                        data = data[bottom:data.shape[0]-top, left:data.shape[1]-right]
+                        if not data.mask.any():
+                            data = data.data
+
                 new_file_id = file_id
                 if not self.inplace:
                     # Don't create a new data file for reference image that was not listed in file_ids but was instead
@@ -720,15 +730,15 @@ class AlignmentJob(Job):
                             hdr.add_history(
                                 'Original data file: {}'.format(get_data_file(self.user_id, file_id).name or file_id))
                             new_file_id = create_data_file(
-                                self.user_id, None, get_root(self.user_id), data, hdr, duplicates='append',
-                                session_id=self.session_id).id
+                                self.user_id, None, get_root(self.user_id), data, hdr, origin=origin, size=size,
+                                duplicates='append', session_id=self.session_id).id
                             db.session.commit()
                         except Exception:
                             db.session.rollback()
                             raise
                 elif i != ref_image or overwrite_ref:
                     try:
-                        save_data_file(get_root(self.user_id), file_id, data, hdr)
+                        save_data_file(get_root(self.user_id), file_id, data, hdr, origin=origin, size=size)
                         db.session.commit()
                     except Exception:
                         db.session.rollback()
