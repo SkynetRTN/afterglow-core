@@ -91,7 +91,7 @@ DATA_PROVIDERS = [
 DATA_FILE_ROOT = DATA_ROOT
 
 # Store data files compressed (.fits.gz)
-DATA_FILE_COMPRESSION = True
+DATA_FILE_COMPRESSION = False
 
 # Data files authentication; defaults to any method registered in USER_AUTH
 DATA_FILE_AUTH = None
