@@ -973,29 +973,28 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
             kp2 = des2 = None
         if any(item is None for item in (kp1, des1, kp2, des2)):
             # Extract missing features
+            feature_kwargs = dict(alignment_kwargs)
+            feature_kwargs.update(dict(
+                algorithm=settings.algorithm,
+                clip_min=clip_min, clip_max=clip_max,
+                downsample=settings.downsample,
+            ))
             if settings.global_contrast:
                 # clip_min and clip_max are already calculated; extract features for those images in the pair that
                 # are missing from the cache
+                feature_kwargs['detect_edges'] = settings.detect_edges
                 if any(item is None for item in (kp1, des1)):
                     with get_data_file_fits(user_id, file_id) as fits:
                         data1 = fits[0].data
                         del fits[0].data
-                    t0 = time.time()
-                    data_cache[file_id] = kp1, des1 = get_image_features(
-                        data1, settings.algorithm, settings.detect_edges, clip_min=clip_min, clip_max=clip_max,
-                        **alignment_kwargs)
+                    data_cache[file_id] = kp1, des1 = get_image_features(data1, **feature_kwargs)
                     del data1
-                    current_app.logger.info('PROFILE extract_image_features %s', time.time() - t0)
                 if any(item is None for item in (kp2, des2)):
                     with get_data_file_fits(user_id, ref_file_id) as fits:
                         data2 = fits[0].data
                         del fits[0].data
-                    t0 = time.time()
-                    data_cache[ref_file_id] = kp2, des2 = get_image_features(
-                        data2, settings.algorithm, settings.detect_edges, clip_min=clip_min, clip_max=clip_max,
-                        **alignment_kwargs)
+                    data_cache[ref_file_id] = kp2, des2 = get_image_features(data2, **feature_kwargs)
                     del data2
-                    current_app.logger.info('PROFILE extract_image_features %s', time.time() - t0)
             else:
                 # Make sure that both images are on the same contrast scale
                 with get_data_file_fits(user_id, file_id) as fits:
@@ -1008,15 +1007,12 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
                     data1 = np.hypot(nd.sobel(data1, 0, mode='nearest'), nd.sobel(data1, 1, mode='nearest'))
                     data2 = np.hypot(nd.sobel(data2, 0, mode='nearest'), nd.sobel(data2, 1, mode='nearest'))
                 if clip_min is None or clip_max is None:
-                    clip_min, clip_max = calc_contrast(
+                    feature_kwargs['clip_min'], feature_kwargs['clip_max'] = calc_contrast(
                         np.concatenate([data1.ravel(), data2.ravel()]),
                         settings.percentile_min, settings.percentile_max)
-                kp1, des1 = get_image_features(
-                    data1, settings.algorithm, False, clip_min=clip_min, clip_max=clip_max,
-                    **alignment_kwargs)
-                kp2, des2 = get_image_features(
-                    data2, settings.algorithm, False, clip_min=clip_min, clip_max=clip_max,
-                    **alignment_kwargs)
+                feature_kwargs['detect_edges'] = False
+                kp1, des1 = get_image_features(data1, **feature_kwargs)
+                kp2, des2 = get_image_features(data2, **feature_kwargs)
 
         # Compute the transformation based on matching features
         res = get_transform_features(
