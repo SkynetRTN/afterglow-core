@@ -122,10 +122,8 @@ if __name__ == '__main__':
         root = '/core'
     elif root and not root.startswith('/'):
         root = '/' + root
-    url = 'http{}://{}:{:d}{}/'.format(
-        's' if args.https else '', args.host, args.port, root)
-    if not args.resource.startswith('oauth2') and \
-            not args.resource.startswith('ajax'):
+    url = 'http{}://{}:{:d}{}/'.format('s' if args.https else '', args.host, args.port, root)
+    if not args.resource.startswith('oauth2') and not args.resource.startswith('ajax'):
         url += 'api/v{}/'.format(args.api_version)
     url += args.resource
     print('\n{} {}'.format(method, url), file=sys.stderr)
@@ -135,22 +133,23 @@ if __name__ == '__main__':
         try:
             params[name] = json.loads(val)
         except ValueError:
-            pass
+            # noinspection PyBroadException
+            try:
+                params[name] = eval(val, {}, {})
+            except Exception:
+                pass
     files = json_data = None
     if method not in ('GET', 'HEAD', 'OPTIONS') and params:
         # For requests other than GET, we must pass parameters as JSON
         if data:
-            # Also passing raw data; use multipart/form-data, guess filename
-            # from args
-            files = {'data': (params.get('name', 'data'), data,
-                              'application/octet-stream')}
+            # Also passing raw data; use multipart/form-data, guess filename from args
+            files = {'data': (params.get('name', 'data'), data, 'application/octet-stream')}
             data = None
         else:
             params, json_data = None, params
         # headers['Content-Type'] = 'application/json'
     if headers:
-        print('\n'.join('{}: {}'.format(h, v) for h, v in headers.items()),
-              file=sys.stderr)
+        print('\n'.join('{}: {}'.format(h, v) for h, v in headers.items()), file=sys.stderr)
     if params:
         print(params, file=sys.stderr)
     if json_data:
@@ -160,17 +159,14 @@ if __name__ == '__main__':
 
     warnings.filterwarnings('ignore', 'Unverified HTTPS request is being made')
     r = requests.request(
-        method, url, verify=False, params=params, headers=headers, data=data,
-        json=json_data, files=files, auth=auth)
+        method, url, verify=False, params=params, headers=headers, data=data, json=json_data, files=files, auth=auth)
 
     print('\nHTTP {:d} - {}'.format(
         r.status_code,
-        getattr(requests.status_codes, '_codes').get(
-            r.status_code, '')[0].upper().replace('_', ' ')), file=sys.stderr)
+        getattr(requests.status_codes, '_codes').get(r.status_code, '')[0].upper().replace('_', ' ')), file=sys.stderr)
 
     try:
-        print('Content-Type: {}'.format(r.headers['Content-Type']),
-              file=sys.stderr)
+        print('Content-Type: {}'.format(r.headers['Content-Type']), file=sys.stderr)
         content_type = r.headers['Content-Type'].split(';')[0].strip()
     except KeyError:
         pass
@@ -185,13 +181,11 @@ if __name__ == '__main__':
             # Binary data, print as is as well, could be then redirected to
             # a file
             try:
-                print('Content-Length: {}'.format(r.headers['Content-Length']),
-                      file=sys.stderr)
+                print('Content-Length: {}'.format(r.headers['Content-Length']), file=sys.stderr)
             except KeyError:
                 pass
             try:
-                print('Content-Encoding: {}'.format(
-                    r.headers['Content-Encoding']), file=sys.stderr)
+                print('Content-Encoding: {}'.format(r.headers['Content-Encoding']), file=sys.stderr)
             except KeyError:
                 pass
             sys.stdout.buffer.write(r.content)
