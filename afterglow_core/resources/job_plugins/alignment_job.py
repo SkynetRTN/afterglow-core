@@ -715,7 +715,7 @@ class AlignmentJob(Job):
                     left, right, bottom, top = get_auto_crop(data.mask)
                     if any([left, right, bottom, top]) and left + right < data.shape[1] and \
                             bottom + top < data.shape[0]:
-                        origin = left, top
+                        origin = left, bottom
                         size = tuple(data.shape[::-1])
                         data = data[bottom:data.shape[0]-top, left:data.shape[1]-right]
                         if not data.mask.any():
