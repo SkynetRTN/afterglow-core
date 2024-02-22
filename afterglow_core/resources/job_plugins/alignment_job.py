@@ -49,6 +49,7 @@ class AlignmentSettings(AfterglowSchema):
     enable_rot: bool = Boolean(dump_default=True)
     enable_scale: bool = Boolean(dump_default=True)
     enable_skew: bool = Boolean(dump_default=True)
+    ignore_overlap: bool = Boolean(dump_default=True)
 
 
 class AlignmentSettingsWCS(AlignmentSettings):
@@ -62,7 +63,6 @@ class AlignmentSettingsSources(AlignmentSettings):
     min_edge: float = Float(dump_default=0.003)
     ratio_limit: float = Float(dump_default=10)
     confidence: float = Float(dump_default=0.15)
-    ignore_overlap: bool = Boolean(dump_default=True)
 
 
 class AlignmentSettingsSourcesManual(AlignmentSettingsSources):
@@ -89,7 +89,6 @@ class AlignmentSettingsFeatures(AlignmentSettings):
     percentile_max: float = Float(dump_default=99)
     global_contrast: bool = Boolean(dump_default=True)
     downsample: int = Integer(dump_default=2)
-    ignore_overlap: bool = Boolean(dump_default=True)
 
 
 class AlignmentSettingsFeaturesAKAZE(AlignmentSettingsFeatures):
@@ -155,7 +154,6 @@ class AlignmentSettingsFeaturesSURF(AlignmentSettingsFeatures):
 class AlignmentSettingsPixels(AlignmentSettings):
     mode = 'pixels'
     detect_edges: bool = Boolean(dump_default=False)
-    ignore_overlap: bool = Boolean(dump_default=True)
 
 
 class AlignmentJobResult(JobResult):
@@ -412,7 +410,7 @@ class AlignmentJob(Job):
                 del data
                 self.update_progress((i + 1)/len(file_ids)*100, stage, total_stages)
             stage += 1
-            current_app.logger.info('PROFILE preprocess %s', time.time() - t0)
+            current_app.logger.info('PROFILE preprocess %.3g', time.time() - t0)
 
             if all_data:
                 # Calculate global contrast (separately for each filter), which allows to cache features
@@ -428,13 +426,14 @@ class AlignmentJob(Job):
                     self.update_progress((i + 1)/len(all_data)*100, stage, total_stages)
                 stage += 1
                 del all_data
-                current_app.logger.info('PROFILE global_contrast %s', time.time() - t0)
+                current_app.logger.info('PROFILE global_contrast %.3g', time.time() - t0)
             else:
                 # Calculate the contrast for each pair of tiles
                 clip = {file_id: (None, None) for file_id in file_ids}
 
             # Find all possible pairwise transformations
             t0 = time.time()
+            gcd_time = get_transform_time = update_progress_time = 0
             rel_transforms, weights = {}, {}
             n = len(file_ids)
             total_pairs = n*(n - 1)//2
@@ -444,21 +443,28 @@ class AlignmentJob(Job):
                 ra0, dec0, r0, _, w0, h0 = fovs[file_id]
                 for other_file_id in file_ids[i + 1:]:
                     # Calculate the GCD between tile centers
+                    t00 = time.time()
                     other_ra0, other_dec0, other_r0, _, w, h = fovs[other_file_id]
                     if all(x is not None for x in (ra0, dec0, other_ra0, other_dec0)):
                         gcd = angdist(ra0, dec0, other_ra0, other_dec0)
+                        if r0 is None or other_r0 is None:
+                            max_gcd = None
+                        else:
+                            max_gcd = (r0 + other_r0)*max_r
                     else:
-                        gcd = None
+                        gcd = max_gcd = None
+                    gcd_time += time.time() - t00
 
                     # Ignore faraway tiles unless WCS mode or FOV unknown
-                    if isinstance(settings, AlignmentSettingsWCS) or any(x is None for x in (r0, other_r0, gcd)) or \
-                            gcd < (r0 + other_r0)*max_r:
+                    if isinstance(settings, AlignmentSettingsWCS) or max_gcd is None or gcd < max_gcd:
                         # Calculate pairwise transform
                         # noinspection PyBroadException
                         try:
+                            t00 = time.time()
                             rel_transforms[file_id, other_file_id], history[file_id] = get_transform(
                                 self, alignment_kwargs, other_file_id, file_id, wcs_cache, data_cache,
                                 clip[file_id][0], clip[file_id][1], clip[other_file_id][0], clip[other_file_id][1])
+                            get_transform_time += time.time() - t00
                         except Exception:
                             # No match found
                             pass
@@ -472,8 +478,12 @@ class AlignmentJob(Job):
                                 inv_mat = inv(mat)
                                 inv_offset = -np.dot(inv_mat, offset)
                             rel_transforms[other_file_id, file_id] = (inv_mat, inv_offset)
+
                             # Calculate graph edge weights
-                            if isinstance(settings, AlignmentSettingsWCS):
+                            if settings.ignore_overlap:
+                                # Assign unit lengths to all edges
+                                weights[file_id, other_file_id] = 1
+                            elif isinstance(settings, AlignmentSettingsWCS):
                                 # For WCS-based alignment, tiles don't necessarily overlap. Use GCD as the measure of
                                 # path length on the graph.
                                 if gcd is not None:
@@ -481,8 +491,6 @@ class AlignmentJob(Job):
                                 else:
                                     # No RA/Dec info in header, assume constant weight
                                     weights[file_id, other_file_id] = 1
-                            elif getattr(settings, 'ignore_overlap', False):
-                                weights[file_id, other_file_id] = 1
                             else:
                                 # For other alignment modes, the distance is the inverse square of the normalized tile
                                 # overlap area. Tile pairs with no overlap are considered false matches.
@@ -506,10 +514,16 @@ class AlignmentJob(Job):
                                 # Match discarded because of no overlap
                                 pass
                     k += 1
-                    self.update_progress(k/total_pairs*100, stage, total_stages)
+                    if not k % 10 or k == total_pairs:
+                        t00 = time.time()
+                        self.update_progress(k/total_pairs*100, stage, total_stages)
+                        update_progress_time += time.time() - t00
 
             stage += 1
-            current_app.logger.info('PROFILE get_pairwise_transforms %s', time.time() - t0)
+            current_app.logger.info('PROFILE gcd %.3g', gcd_time)
+            current_app.logger.info('PROFILE get_transform %.3g', get_transform_time)
+            current_app.logger.info('PROFILE update_progress %.3g', update_progress_time)
+            current_app.logger.info('PROFILE get_pairwise_transforms %.3g', time.time() - t0)
 
             # Include each image in one of the sets of connected images ("mosaics") if it has at least one match
             ref_widths, ref_heights, ref_wcss = {}, {}, {}
@@ -654,7 +668,7 @@ class AlignmentJob(Job):
                             ref_wcss[other_file_id] = wcs
                         break
 
-                current_app.logger.info('PROFILE get_abs_transforms %s', time.time() - t0)
+                current_app.logger.info('PROFILE get_abs_transforms %.3g', time.time() - t0)
 
         del wcs_cache, data_cache
         gc.collect()
@@ -774,7 +788,7 @@ class AlignmentJob(Job):
                 self.update_progress((i + 1)/len(file_ids)*100, stage, total_stages)
 
         stage += 1
-        current_app.logger.info('PROFILE create_large_tiles %s', time.time() - t0)
+        current_app.logger.info('PROFILE create_large_tiles %.3g', time.time() - t0)
 
         # Optionally crop aligned files in place
         if self.crop:
