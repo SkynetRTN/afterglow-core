@@ -38,6 +38,7 @@ class AlignmentSettingsSourcesSchema(AlignmentSettingsSchema):
     min_edge: float = Float(dump_default=0.003)
     ratio_limit: float = Float(dump_default=10)
     confidence: float = Float(dump_default=0.15)
+    ignore_overlap: bool = Boolean(dump_default=True)
 
 
 class AlignmentSettingsSourcesManualSchema(AlignmentSettingsSourcesSchema):
@@ -66,6 +67,7 @@ class AlignmentSettingsFeaturesSchema(AlignmentSettingsSchema):
     percentile_max: float = Float(dump_default=99)
     global_contrast: bool = Boolean(dump_default=True)
     downsample: int = Integer(dump_default=2)
+    ignore_overlap: bool = Boolean(dump_default=True)
 
 
 class AlignmentSettingsFeaturesAKAZESchema(AlignmentSettingsFeaturesSchema):
@@ -131,6 +133,7 @@ class AlignmentSettingsFeaturesSURFSchema(AlignmentSettingsFeaturesSchema):
 class AlignmentSettingsPixelsSchema(AlignmentSettingsSchema):
     mode = 'pixels'
     detect_edges: bool = Boolean(dump_default=False)
+    ignore_overlap: bool = Boolean(dump_default=True)
 
 
 class AlignmentJobResultSchema(JobResultSchema):

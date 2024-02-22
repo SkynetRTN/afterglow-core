@@ -62,6 +62,7 @@ class AlignmentSettingsSources(AlignmentSettings):
     min_edge: float = Float(dump_default=0.003)
     ratio_limit: float = Float(dump_default=10)
     confidence: float = Float(dump_default=0.15)
+    ignore_overlap: bool = Boolean(dump_default=True)
 
 
 class AlignmentSettingsSourcesManual(AlignmentSettingsSources):
@@ -88,6 +89,7 @@ class AlignmentSettingsFeatures(AlignmentSettings):
     percentile_max: float = Float(dump_default=99)
     global_contrast: bool = Boolean(dump_default=True)
     downsample: int = Integer(dump_default=2)
+    ignore_overlap: bool = Boolean(dump_default=True)
 
 
 class AlignmentSettingsFeaturesAKAZE(AlignmentSettingsFeatures):
@@ -153,6 +155,7 @@ class AlignmentSettingsFeaturesSURF(AlignmentSettingsFeatures):
 class AlignmentSettingsPixels(AlignmentSettings):
     mode = 'pixels'
     detect_edges: bool = Boolean(dump_default=False)
+    ignore_overlap: bool = Boolean(dump_default=True)
 
 
 class AlignmentJobResult(JobResult):
@@ -470,6 +473,8 @@ class AlignmentJob(Job):
                                 else:
                                     # No RA/Dec info in header, assume constant weight
                                     weights[file_id, other_file_id] = 1
+                            elif getattr(settings, 'ignore_overlap', False):
+                                weights[file_id, other_file_id] = 1
                             else:
                                 # For other alignment modes, the distance is the inverse square of the normalized tile
                                 # overlap area. Tile pairs with no overlap are considered false matches.
