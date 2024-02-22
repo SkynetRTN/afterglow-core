@@ -560,7 +560,7 @@ class AlignmentJob(Job):
                 t0 = time.time()
                 # Put the tile closest to the average mosaic RA/Dec first; this will be the reference tile
                 mosaic = list(mosaic)
-                ra0, dec0 = average_radec([fovs[file_id][:2] for file_id in mosaic])
+                ra0, dec0 = average_radec(np.array([fovs[file_id][:2] for file_id in mosaic]))
                 i = np.argmin([angdist(ra0, dec0, *fovs[file_id][:2]) for file_id in mosaic])
                 if i:
                     mosaic = [mosaic[i]] + mosaic[:i] + mosaic[i+1:]
