@@ -6,6 +6,7 @@ astroquery==0.4.6
 billiard==4.2.0
 celery==5.3.6
 email_validator==2.1.0.post1
+eventlet==0.35.1; sys_platform == 'win32'
 ExifRead==3.0.0
 Flask==3.0.0
 Flask_Login==0.6.3
@@ -20,7 +21,7 @@ matplotlib==3.8.2
 numba==0.58.1
 numpy==1.26.3
 oauthlib==3.2.2
-opencv-contrib-python==4.9.0.80
+opencv-contrib-python-headless==4.9.0.80
 photutils==1.10.0
 Pillow==10.2.0
 plaster_pastedeploy==1.0.1

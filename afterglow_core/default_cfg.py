@@ -90,6 +90,9 @@ DATA_PROVIDERS = [
 # Root directory for data file storage
 DATA_FILE_ROOT = DATA_ROOT
 
+# Store data files compressed (.fits.gz)
+DATA_FILE_COMPRESSION = False
+
 # Data files authentication; defaults to any method registered in USER_AUTH
 DATA_FILE_AUTH = None
 

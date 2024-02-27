@@ -12,8 +12,7 @@ from ..source_extraction import SourceExtractionDataSchema
 from .source_extraction_job import SourceExtractionSettingsSchema
 
 
-__all__ = ['AlignmentSettingsSchema', 'AlignmentJobResultSchema',
-           'AlignmentJobSchema']
+__all__ = ['AlignmentSettingsSchema', 'AlignmentJobResultSchema', 'AlignmentJobSchema']
 
 
 class AlignmentSettingsSchema(AfterglowSchema):
@@ -22,10 +21,10 @@ class AlignmentSettingsSchema(AfterglowSchema):
     mode: str = String(dump_default='WCS', load_default='WCS')
     ref_image: Optional[str] = String(dump_default='central', allow_none=True)
     mosaic_search_radius: float = Float(dump_default=1)
-    prefilter: bool = Boolean(dump_default=True)
     enable_rot: bool = Boolean(dump_default=True)
     enable_scale: bool = Boolean(dump_default=True)
     enable_skew: bool = Boolean(dump_default=True)
+    ignore_overlap: bool = Boolean(dump_default=True)
 
 
 class AlignmentSettingsWCSSchema(AlignmentSettingsSchema):
@@ -44,15 +43,13 @@ class AlignmentSettingsSourcesSchema(AlignmentSettingsSchema):
 class AlignmentSettingsSourcesManualSchema(AlignmentSettingsSourcesSchema):
     mode = 'sources_manual'
     max_sources: int = Integer(dump_default=100)
-    sources: TList[SourceExtractionDataSchema] = List(
-        Nested(SourceExtractionDataSchema), dump_default=[])
+    sources: TList[SourceExtractionDataSchema] = List(Nested(SourceExtractionDataSchema), dump_default=[])
 
 
 class AlignmentSettingsSourcesAutoSchema(AlignmentSettingsSourcesSchema):
     mode = 'sources_auto'
-    source_extraction_settings: Optional[SourceExtractionSettingsSchema] = \
-        Nested(
-            SourceExtractionSettingsSchema, allow_none=True, dump_default=None)
+    source_extraction_settings: Optional[SourceExtractionSettingsSchema] = Nested(
+        SourceExtractionSettingsSchema, allow_none=True, dump_default=None)
 
 
 class AlignmentSettingsFeaturesSchema(AlignmentSettingsSchema):
@@ -65,7 +62,8 @@ class AlignmentSettingsFeaturesSchema(AlignmentSettingsSchema):
     detect_edges: bool = Boolean(dump_default=False)
     percentile_min: float = Float(dump_default=10)
     percentile_max: float = Float(dump_default=99)
-    global_contrast: bool = Boolean(dump_default=False)
+    global_contrast: bool = Boolean(dump_default=True)
+    downsample: int = Integer(dump_default=2)
 
 
 class AlignmentSettingsFeaturesAKAZESchema(AlignmentSettingsFeaturesSchema):
@@ -140,10 +138,8 @@ class AlignmentJobResultSchema(JobResultSchema):
 class AlignmentJobSchema(JobSchema):
     type = 'alignment'
 
-    result: AlignmentJobResultSchema = Nested(
-        AlignmentJobResultSchema, dump_default={})
+    result: AlignmentJobResultSchema = Nested(AlignmentJobResultSchema, dump_default={})
     file_ids: TList[int] = List(Integer(), dump_default=[])
-    settings: AlignmentSettingsSchema = NestedPoly(
-        AlignmentSettingsSchema, dump_default={})
+    settings: AlignmentSettingsSchema = NestedPoly(AlignmentSettingsSchema, dump_default={})
     inplace: bool = Boolean(dump_default=False)
     crop: bool = Boolean(dump_default=False)

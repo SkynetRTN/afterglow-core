@@ -46,10 +46,10 @@ class AlignmentSettings(AfterglowSchema):
     mode: str = String(dump_default='WCS', load_default='WCS')
     ref_image: Optional[str] = String(dump_default='central', allow_none=True)
     mosaic_search_radius: float = Float(dump_default=1)
-    prefilter: bool = Boolean(dump_default=True)
     enable_rot: bool = Boolean(dump_default=True)
     enable_scale: bool = Boolean(dump_default=True)
     enable_skew: bool = Boolean(dump_default=True)
+    ignore_overlap: bool = Boolean(dump_default=True)
 
 
 class AlignmentSettingsWCS(AlignmentSettings):
@@ -87,7 +87,8 @@ class AlignmentSettingsFeatures(AlignmentSettings):
     detect_edges: bool = Boolean(dump_default=False)
     percentile_min: float = Float(dump_default=10)
     percentile_max: float = Float(dump_default=99)
-    global_contrast: bool = Boolean(dump_default=False)
+    global_contrast: bool = Boolean(dump_default=True)
+    downsample: int = Integer(dump_default=2)
 
 
 class AlignmentSettingsFeaturesAKAZE(AlignmentSettingsFeatures):
@@ -180,8 +181,8 @@ class AlignmentJob(Job):
         if not file_ids:
             return
 
-        # Get reference image index and the corresponding data file ID
         try:
+            # Get reference image index and the corresponding data file ID
             if settings.ref_image is None:
                 ref_image = None
             elif settings.ref_image == 'first':
@@ -225,6 +226,7 @@ class AlignmentJob(Job):
                 raise ValueError('Missing data file ID for at least one source')
         elif isinstance(settings, AlignmentSettingsFeatures):
             # Extract algorithm-specific keywords
+            alignment_kwargs['downsample'] = settings.downsample
             if isinstance(settings, AlignmentSettingsFeaturesAKAZE):
                 if settings.descriptor_type not in ('KAZE', 'KAZE_UPRIGHT', 'MLDB', 'MLDB_UPRIGHT'):
                     raise ValueError(f'Invalid descriptor type "{settings.descriptor_type}"')
@@ -310,7 +312,7 @@ class AlignmentJob(Job):
             total_stages += 1
             if settings.global_contrast:
                 # Calculation of global clip_min, clip_max
-                total_stages += 2
+                total_stages += 1
         stage = 0
 
         wcs_cache, data_cache = {}, {}
@@ -334,14 +336,11 @@ class AlignmentJob(Job):
 
             with get_data_file_fits(self.user_id, ref_file_id) as f:
                 hdr = f[0].header
-                ref_width, ref_height = hdr['NAXIS1'], hdr['NAXIS2']
+            ref_width, ref_height = hdr['NAXIS1'], hdr['NAXIS2']
             try:
-                ref_wcs = wcs_cache[ref_file_id]
-            except KeyError:
-                try:
-                    ref_wcs = get_wcs(self.user_id, ref_file_id, wcs_cache)
-                except ValueError:
-                    ref_wcs = None
+                ref_wcs = get_wcs(self.user_id, ref_file_id, wcs_cache)
+            except ValueError:
+                ref_wcs = None
 
             # Reference image parameters are the same for all non-ref images
             ref_heights = {file_id: ref_height for file_id in file_ids if file_id != ref_file_id}
@@ -351,15 +350,20 @@ class AlignmentJob(Job):
         else:  # Mosaicing mode
             # Crop images to prevent memory overflow if realigning
             t0 = time.time()
-            total_pixels = 0
+            fovs, shapes, filters = {}, {}, {}
+            all_data = {}
             for i, file_id in enumerate(file_ids):
-                data, hdr = get_data_file_data(self.user_id, file_id)
-                total_pixels += data.size
-                if isinstance(data, np.ma.MaskedArray):
-                    left, right, bottom, top = get_auto_crop(data.mask)
+                with get_data_file_fits(self.user_id, file_id) as f:
+                    hdr = f[0].header
+                    data = f[0].data
+                    del f[0].data
+                mask = np.isnan(data)
+                if mask.any():
+                    left, right, bottom, top = get_auto_crop(mask)
                     if any([left, right, bottom, top]) and left + right < data.shape[1] and \
                             bottom + top < data.shape[0]:
                         data = data[bottom:data.shape[0]-top, left:data.shape[1]-right]
+                        hdr['NAXIS2'], hdr['NAXIS1'] = data.shape
                         if left:
                             try:
                                 hdr['CRPIX1'] -= left
@@ -387,61 +391,80 @@ class AlignmentJob(Job):
                         except Exception:
                             db.session.rollback()
                             raise
+
+                # Cache tile geometry and other info
+                fovs[file_id] = get_fits_fov(hdr)
+                shapes[file_id] = data.shape
+                # noinspection PyBroadException
+                try:
+                    wcs_cache[file_id] = WCS(hdr)
+                except Exception:
+                    wcs_cache[file_id] = None
+                flt = filters[file_id] = hdr.get('FILTER', '')
+
+                if settings.global_contrast:
+                    if settings.detect_edges:
+                        data = np.hypot(nd.sobel(data, 0, mode='nearest'), nd.sobel(data, 1, mode='nearest'))
+                    all_data.setdefault(flt, []).append(data.ravel())
+
+                del data
                 self.update_progress((i + 1)/len(file_ids)*100, stage, total_stages)
             stage += 1
-            current_app.logger.info('PROFILE pre_crop %s', time.time() - t0)
+            current_app.logger.info('PROFILE preprocess %.3g', time.time() - t0)
 
-            if settings.global_contrast:
-                # Calculate the global contrast, which allows to cache features
+            if all_data:
+                # Calculate global contrast (separately for each filter), which allows to cache features
                 t0 = time.time()
-                data = np.zeros(total_pixels, np.float32)  # temporary array holding all tiles
-                ofs = 0
-                for i, file_id in enumerate(file_ids):
-                    with get_data_file_fits(self.user_id, file_id) as fits:
-                        data1 = fits[0].data
-                        del fits[0].data
-                    if settings.detect_edges:
-                        data1 = np.hypot(nd.sobel(data1, 0, mode='nearest'), nd.sobel(data1, 1, mode='nearest'))
-                    data[ofs:ofs + data1.size] = data1.ravel()
-                    ofs += data1.size
-                    self.update_progress((i + 1)/len(file_ids)*100, stage, total_stages)
+                clip = {}
+                for i, (flt, all_data_for_filter) in enumerate(all_data.items()):
+                    clip_min, clip_max = calc_contrast(
+                        np.concatenate(all_data_for_filter), settings.percentile_min, settings.percentile_max)
+                    del all_data_for_filter
+                    for file_id in file_ids:
+                        if filters[file_id] == flt:
+                            clip[file_id] = clip_min, clip_max
+                    self.update_progress((i + 1)/len(all_data)*100, stage, total_stages)
                 stage += 1
-                clip_min, clip_max = calc_contrast(data, settings.percentile_min, settings.percentile_max)
-                self.update_progress(100, stage, total_stages)
-                stage += 1
-                del data
-                current_app.logger.info('PROFILE global_contrast %s', time.time() - t0)
+                del all_data
+                current_app.logger.info('PROFILE global_contrast %.3g', time.time() - t0)
             else:
                 # Calculate the contrast for each pair of tiles
-                clip_min = clip_max = None
+                clip = {file_id: (None, None) for file_id in file_ids}
 
             # Find all possible pairwise transformations
             t0 = time.time()
-            rel_transforms, weights, fovs = {}, {}, {}
+            gcd_time = get_transform_time = update_progress_time = 0
+            rel_transforms, weights = {}, {}
             n = len(file_ids)
             total_pairs = n*(n - 1)//2
             max_r = settings.mosaic_search_radius
             k = 0
             for i, file_id in enumerate(file_ids[:-1]):
-                with get_data_file_fits(self.user_id, file_id) as f:
-                    fovs[file_id] = ra0, dec0, r0, _, w0, h0 = get_fits_fov(f[0].header)
+                ra0, dec0, r0, _, w0, h0 = fovs[file_id]
                 for other_file_id in file_ids[i + 1:]:
                     # Calculate the GCD between tile centers
-                    with get_data_file_fits(self.user_id, other_file_id) as f:
-                        other_ra0, other_dec0, other_r0, _, w, h = get_fits_fov(f[0].header)
+                    t00 = time.time()
+                    other_ra0, other_dec0, other_r0, _, w, h = fovs[other_file_id]
                     if all(x is not None for x in (ra0, dec0, other_ra0, other_dec0)):
                         gcd = angdist(ra0, dec0, other_ra0, other_dec0)
+                        if r0 is None or other_r0 is None:
+                            max_gcd = None
+                        else:
+                            max_gcd = (r0 + other_r0)*max_r
                     else:
-                        gcd = None
+                        gcd = max_gcd = None
+                    gcd_time += time.time() - t00
 
                     # Ignore faraway tiles unless WCS mode or FOV unknown
-                    if isinstance(settings, AlignmentSettingsWCS) or any(x is None for x in (r0, other_r0, gcd)) or \
-                            gcd < (r0 + other_r0)*max_r:
+                    if isinstance(settings, AlignmentSettingsWCS) or max_gcd is None or gcd < max_gcd:
+                        # Calculate pairwise transform
                         # noinspection PyBroadException
                         try:
+                            t00 = time.time()
                             rel_transforms[file_id, other_file_id], history[file_id] = get_transform(
-                                self, alignment_kwargs, other_file_id, file_id, wcs_cache, data_cache, clip_min,
-                                clip_max)
+                                self, alignment_kwargs, other_file_id, file_id, wcs_cache, data_cache,
+                                clip[file_id][0], clip[file_id][1], clip[other_file_id][0], clip[other_file_id][1])
+                            get_transform_time += time.time() - t00
                         except Exception:
                             # No match found
                             pass
@@ -455,8 +478,12 @@ class AlignmentJob(Job):
                                 inv_mat = inv(mat)
                                 inv_offset = -np.dot(inv_mat, offset)
                             rel_transforms[other_file_id, file_id] = (inv_mat, inv_offset)
+
                             # Calculate graph edge weights
-                            if isinstance(settings, AlignmentSettingsWCS):
+                            if settings.ignore_overlap:
+                                # Assign unit lengths to all edges
+                                weights[file_id, other_file_id] = 1
+                            elif isinstance(settings, AlignmentSettingsWCS):
                                 # For WCS-based alignment, tiles don't necessarily overlap. Use GCD as the measure of
                                 # path length on the graph.
                                 if gcd is not None:
@@ -487,13 +514,16 @@ class AlignmentJob(Job):
                                 # Match discarded because of no overlap
                                 pass
                     k += 1
-                    self.update_progress(k/total_pairs*100, stage, total_stages)
+                    if not k % 10 or k == total_pairs:
+                        t00 = time.time()
+                        self.update_progress(k/total_pairs*100, stage, total_stages)
+                        update_progress_time += time.time() - t00
 
             stage += 1
-            current_app.logger.info('PROFILE get_pairwise_transforms %s', time.time() - t0)
-
-            with get_data_file_fits(self.user_id, file_ids[-1]) as f:
-                fovs[file_ids[-1]] = get_fits_fov(f[0].header)
+            current_app.logger.info('PROFILE gcd %.3g', gcd_time)
+            current_app.logger.info('PROFILE get_transform %.3g', get_transform_time)
+            current_app.logger.info('PROFILE update_progress %.3g', update_progress_time)
+            current_app.logger.info('PROFILE get_pairwise_transforms %.3g', time.time() - t0)
 
             # Include each image in one of the sets of connected images ("mosaics") if it has at least one match
             ref_widths, ref_heights, ref_wcss = {}, {}, {}
@@ -530,7 +560,7 @@ class AlignmentJob(Job):
                 t0 = time.time()
                 # Put the tile closest to the average mosaic RA/Dec first; this will be the reference tile
                 mosaic = list(mosaic)
-                ra0, dec0 = average_radec([fovs[file_id][:2] for file_id in mosaic])
+                ra0, dec0 = average_radec(np.array([fovs[file_id][:2] for file_id in mosaic]))
                 i = np.argmin([angdist(ra0, dec0, *fovs[file_id][:2]) for file_id in mosaic])
                 if i:
                     mosaic = [mosaic[i]] + mosaic[:i] + mosaic[i+1:]
@@ -550,9 +580,7 @@ class AlignmentJob(Job):
                 pred = shortest_path(graph, return_predecessors=True)[1]
 
                 # Establish the global reference frame based on the first image
-                with get_data_file_fits(self.user_id, mosaic[0]) as f:
-                    hdr = f[0].header
-                    ref_width, ref_height = hdr['NAXIS1'], hdr['NAXIS2']
+                ref_height, ref_width = shapes[mosaic[0]]
                 transforms[mosaic[0]] = None, np.zeros(2)
 
                 # Update the mosaic image shape and transformations by adding each subsequent image
@@ -587,10 +615,7 @@ class AlignmentJob(Job):
                     # Got new transform; check that the transformed tile fits within the current global mosaic frame
                     transforms[file_id] = mat, offset
                     dy, dx = offset
-                    with get_data_file_fits(self.user_id, file_id) as f:
-                        hdr = f[0].header
-                        shape = hdr['NAXIS2'], hdr['NAXIS1']
-                    y, x = np.indices(shape)
+                    y, x = np.indices(shapes[file_id])
                     if mat is None:
                         x = x + dx  # adding float to int
                         y = y + dy
@@ -643,7 +668,7 @@ class AlignmentJob(Job):
                             ref_wcss[other_file_id] = wcs
                         break
 
-                current_app.logger.info('PROFILE get_abs_transforms %s', time.time() - t0)
+                current_app.logger.info('PROFILE get_abs_transforms %.3g', time.time() - t0)
 
         del wcs_cache, data_cache
         gc.collect()
@@ -671,9 +696,7 @@ class AlignmentJob(Job):
 
                 overwrite_ref = self.crop and isinstance(data, MaskedArray) and data.mask.any()
 
-                _t0 = time.time()
-                data = apply_transform(data, mat, offset, ref_widths[file_id], ref_heights[file_id], settings.prefilter)
-                current_app.logger.info('PROFILE apply_transform %s', time.time() - _t0)
+                data = apply_transform(data, mat, offset, ref_widths[file_id], ref_heights[file_id])
 
                 if overwrite_ref:
                     # Save and clear the mask before auto-cropping
@@ -713,6 +736,18 @@ class AlignmentJob(Job):
                     for name, val in orig_kw.items():
                         hdr[name] = val
 
+                # Store only non-masked area
+                origin = size = None
+                if mosaics and isinstance(data, np.ma.MaskedArray) and data.mask is not False and data.mask.any():
+                    left, right, bottom, top = get_auto_crop(data.mask)
+                    if any([left, right, bottom, top]) and left + right < data.shape[1] and \
+                            bottom + top < data.shape[0]:
+                        origin = left, bottom
+                        size = tuple(data.shape[::-1])
+                        data = data[bottom:data.shape[0]-top, left:data.shape[1]-right]
+                        if not data.mask.any():
+                            data = data.data
+
                 new_file_id = file_id
                 if not self.inplace:
                     # Don't create a new data file for reference image that was not listed in file_ids but was instead
@@ -722,15 +757,15 @@ class AlignmentJob(Job):
                             hdr.add_history(
                                 'Original data file: {}'.format(get_data_file(self.user_id, file_id).name or file_id))
                             new_file_id = create_data_file(
-                                self.user_id, None, get_root(self.user_id), data, hdr, duplicates='append',
-                                session_id=self.session_id).id
+                                self.user_id, None, get_root(self.user_id), data, hdr, origin=origin, size=size,
+                                duplicates='append', session_id=self.session_id).id
                             db.session.commit()
                         except Exception:
                             db.session.rollback()
                             raise
                 elif i != ref_image or overwrite_ref:
                     try:
-                        save_data_file(get_root(self.user_id), file_id, data, hdr)
+                        save_data_file(get_root(self.user_id), file_id, data, hdr, origin=origin, size=size)
                         db.session.commit()
                     except Exception:
                         db.session.rollback()
@@ -753,7 +788,7 @@ class AlignmentJob(Job):
                 self.update_progress((i + 1)/len(file_ids)*100, stage, total_stages)
 
         stage += 1
-        current_app.logger.info('PROFILE create_large_tiles %s', time.time() - t0)
+        current_app.logger.info('PROFILE create_large_tiles %.3g', time.time() - t0)
 
         # Optionally crop aligned files in place
         if self.crop:
@@ -769,25 +804,24 @@ def get_wcs(user_id: Optional[int], file_id: int, wcs_cache: TDict[int, WCS]) ->
         # noinspection PyBroadException
         try:
             with get_data_file_fits(user_id, file_id) as fits:
-                hdr = fits[0].header
-            wcs = WCS(hdr)
+                wcs = WCS(fits[0].header)
             if not wcs.has_celestial:
                 wcs = None
         except Exception:
             wcs = None
-        if wcs is None:
-            raise ValueError('Missing WCS')
         wcs_cache[file_id] = wcs
+    if wcs is None:
+        raise ValueError('Missing WCS')
     return wcs
 
 
 def get_source_xy(source: SourceExtractionData, user_id: Optional[int], file_id: int, wcs_cache: TDict[int, WCS]) \
         -> Tuple[float, float]:
     x, y = getattr(source, 'x', None), getattr(source, 'y', None)
-    if x is not None and y is not None:
-        return x, y
-    wcs = get_wcs(user_id, file_id, wcs_cache)
-    return tuple(wcs.all_world2pix(source.ra_hours*15, source.dec_degs, 1, quiet=True))
+    if x is None or y is None:
+        wcs = get_wcs(user_id, file_id, wcs_cache)
+        x, y = wcs.all_world2pix(source.ra_hours*15, source.dec_degs, 1, quiet=True)
+    return x, y
 
 
 @njit(cache=True)
@@ -824,15 +858,10 @@ def calc_contrast(data: np.ndarray, percentile_min: float, percentile_max: float
     return clip_min, clip_max
 
 
-def extract_image_features(data: np.ndarray, algorithm: str, detect_edges: bool, clip_min: float, clip_max: float,
-                           alignment_kwargs: dict):
-    return get_image_features(
-        data, algorithm=algorithm, detect_edges=detect_edges, clip_min=clip_min, clip_max=clip_max, **alignment_kwargs)
-
-
 def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id: int, ref_file_id: int,
-                  wcs_cache: TDict[int, WCS], data_cache: TDict[int, Any], clip_min: float | None = None,
-                  clip_max: float | None = None) -> Tuple[Tuple[Optional[np.ndarray], np.ndarray], str]:
+                  wcs_cache: TDict[int, WCS], data_cache: TDict[int, Any], clip_min1: float | None = None,
+                  clip_max1: float | None = None, clip_min2: float | None = None, clip_max2: float | None = None) \
+        -> Tuple[Tuple[Optional[np.ndarray], np.ndarray], str]:
     settings = job.settings
     user_id = job.user_id
 
@@ -972,27 +1001,29 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
             kp2 = des2 = None
         if any(item is None for item in (kp1, des1, kp2, des2)):
             # Extract missing features
+            feature_kwargs = dict(alignment_kwargs)
+            feature_kwargs.update(dict(
+                algorithm=settings.algorithm,
+                downsample=settings.downsample,
+            ))
             if settings.global_contrast:
                 # clip_min and clip_max are already calculated; extract features for those images in the pair that
                 # are missing from the cache
+                feature_kwargs['detect_edges'] = settings.detect_edges
                 if any(item is None for item in (kp1, des1)):
                     with get_data_file_fits(user_id, file_id) as fits:
                         data1 = fits[0].data
                         del fits[0].data
-                    t0 = time.time()
-                    data_cache[file_id] = kp1, des1 = extract_image_features(
-                        data1, settings.algorithm, settings.detect_edges, clip_min, clip_max, alignment_kwargs)
+                    data_cache[file_id] = kp1, des1 = get_image_features(
+                        data1, clip_min=clip_min1, clip_max=clip_max1, **feature_kwargs)
                     del data1
-                    current_app.logger.info('PROFILE extract_image_features %s', time.time() - t0)
                 if any(item is None for item in (kp2, des2)):
                     with get_data_file_fits(user_id, ref_file_id) as fits:
                         data2 = fits[0].data
                         del fits[0].data
-                    t0 = time.time()
-                    data_cache[ref_file_id] = kp2, des2 = extract_image_features(
-                        data2, settings.algorithm, settings.detect_edges, clip_min, clip_max, alignment_kwargs)
+                    data_cache[ref_file_id] = kp2, des2 = get_image_features(
+                        data2, clip_min=clip_min2, clip_max=clip_max2, **feature_kwargs)
                     del data2
-                    current_app.logger.info('PROFILE extract_image_features %s', time.time() - t0)
             else:
                 # Make sure that both images are on the same contrast scale
                 with get_data_file_fits(user_id, file_id) as fits:
@@ -1004,17 +1035,15 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
                 if settings.detect_edges:
                     data1 = np.hypot(nd.sobel(data1, 0, mode='nearest'), nd.sobel(data1, 1, mode='nearest'))
                     data2 = np.hypot(nd.sobel(data2, 0, mode='nearest'), nd.sobel(data2, 1, mode='nearest'))
-                if clip_min is None or clip_max is None:
-                    clip_min, clip_max = calc_contrast(
+                if any(item is None for item in (clip_min1, clip_max1, clip_min2, clip_max2)):
+                    clip_min1, clip_max1 = clip_min2, clip_max2 = calc_contrast(
                         np.concatenate([data1.ravel(), data2.ravel()]),
                         settings.percentile_min, settings.percentile_max)
-                kp1, des1 = extract_image_features(
-                    data1, settings.algorithm, False, clip_min, clip_max, alignment_kwargs)
-                kp2, des2 = extract_image_features(
-                    data2, settings.algorithm, False, clip_min, clip_max, alignment_kwargs)
+                feature_kwargs['detect_edges'] = False
+                kp1, des1 = get_image_features(data1, clip_min=clip_min1, clip_max=clip_max1, **feature_kwargs)
+                kp2, des2 = get_image_features(data2, clip_min=clip_min2, clip_max=clip_max2, **feature_kwargs)
 
         # Compute the transformation based on matching features
-        t0 = time.time()
         res = get_transform_features(
             kp1, des1, kp2, des2,
             enable_rot=settings.enable_rot,
@@ -1023,7 +1052,6 @@ def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id:
             algorithm=settings.algorithm,
             ratio_threshold=settings.ratio_threshold,
             **alignment_kwargs), f'{settings.algorithm} feature detection'
-        current_app.logger.info('PROFILE get_transform_features %s', time.time() - t0)
         return res
 
     if isinstance(settings, AlignmentSettingsPixels):

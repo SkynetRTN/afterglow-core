@@ -232,7 +232,8 @@ def main():
         'users', metavar='@USERFILE|-|USERNAME,USERNAME,...',
         help='usernames, comma-separated, list file, or read from console ("-")')
     parser.add_argument(
-        'obs_ids', metavar='@OBSFILE|ID,ID,...', help='Skynet observation IDs, comma-separated or list file')
+        'obs_ids', metavar='@OBSFILE|ID,ID,...', nargs='?', default='',
+        help='Skynet observation IDs, comma-separated or list file')
 
     args = parser.parse_args()
 
@@ -257,7 +258,7 @@ def main():
         else:
             obs_ids = args.obs_ids
         obs_ids = [int(s) for s in obs_ids.split(',') if s.strip()]
-        if not obs_ids:
+        if not obs_ids and not args.cleanup_only:
             print('No observation IDs provided', file=sys.stderr)
             sys.exit(-2)
 

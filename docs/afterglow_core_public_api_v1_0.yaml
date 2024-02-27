@@ -1456,8 +1456,8 @@ components:
           minimum: 0
           exclusiveMinimum: true
           default: 1
-        prefilter:
-          description: apply spline filter before interpolation to decrease blurring
+        ignore_overlap:
+          description: don't prioritize mosaic tile pairs with a larger overlap (faster)
           type: boolean
           default: true
         enable_rot:

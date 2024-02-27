@@ -45,7 +45,7 @@ from celery import Celery, Task, shared_task
 from celery.exceptions import TaskRevokedError, WorkerLostError
 from celery.result import AsyncResult
 from celery.schedules import crontab
-from celery.signals import after_setup_logger, after_setup_task_logger
+from celery.signals import after_setup_logger, after_setup_task_logger, worker_process_init
 from celery.loaders.app import AppLoader
 
 from .database import db
@@ -323,6 +323,11 @@ def setup_logger(logger, *args, **kwargs):
         handler.setFormatter(MaxLengthFormatter('%(asctime)s %(levelname)-8s %(message)s'))
 
 
+@worker_process_init.connect
+def init_worker(*args, **kwargs):
+    pass
+
+
 def init_jobs(app: Flask, cipher: Fernet) -> Celery:
     """
     Initialize the job subsystem
@@ -437,10 +442,11 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         },
     )
     if sys.platform.startswith('win'):
-        config.update(
-            # https://stackoverflow.com/questions/41636273/celery-tasks-received-but-not-executing
-            worker_pool='eventlet',
-        )
+        # https://stackoverflow.com/questions/41636273/celery-tasks-received-but-not-executing
+        config.update(worker_pool='eventlet')
+    elif sys.platform == 'darwin':
+        # OpenCV segfaults with prefork
+        config.update(worker_pool='solo')
     celery_app.config_from_object(config)
     celery_app.set_default()
     app.extensions['celery'] = celery_app

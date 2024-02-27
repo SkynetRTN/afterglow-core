@@ -7,12 +7,12 @@ import os
 import astropy.io.fits as pyfits
 import gzip
 from io import BytesIO
-from datetime import datetime
 from typing import Optional, Union
 
 import numpy
 from flask import Blueprint, Flask, Response, current_app, request
 from astropy.wcs import WCS
+from PIL import Image
 
 from skylib.extraction import histogram
 from skylib.util.fits import get_fits_exp_length, get_fits_gain
@@ -43,18 +43,16 @@ def register(app: Flask) -> None:
     app.register_blueprint(blp)
 
 
-def make_data_response(data: Union[bytes, numpy.ndarray, numpy.ma.MaskedArray],
-                       mimetype: Optional[str] = None,
+def make_data_response(data: Union[bytes, numpy.ndarray, numpy.ma.MaskedArray], mimetype: Optional[str] = None,
                        status_code: int = 200) -> Response:
     """
     Initialize a Flask response object returning the binary data array
 
-    Depending on the request headers (Accept and Accept-Encoding), the data are
-    returned either as an optionally gzipped binary stream or as a JSON list.
+    Depending on the request headers (Accept and Accept-Encoding), the data are returned either as an optionally gzipped
+    binary stream or as a JSON list.
 
     :param data: data to send to the client
-    :param mimetype: optional MIME type of the data; automatically guessed
-        if not set
+    :param mimetype: optional MIME type of the data; automatically guessed if not set
     :param status_code: optional HTTP status code; defaults to 200 - OK
 
     :return: Flask response object
@@ -88,14 +86,12 @@ def make_data_response(data: Union[bytes, numpy.ndarray, numpy.ma.MaskedArray],
 
     if allow_bin:
         if is_array:
-            if isinstance(data, numpy.ma.MaskedArray) and \
-                    data.fill_value != numpy.nan:
+            if isinstance(data, numpy.ma.MaskedArray) and data.fill_value != numpy.nan:
                 # Replace masked values with NaNs
                 data = data.filled(numpy.nan)
             # Make sure data are in little-endian byte order before sending
             # over the net
-            if data.dtype.byteorder == '>' or \
-                    data.dtype.byteorder == '=' and sys.byteorder == 'big':
+            if data.dtype.byteorder == '>' or data.dtype.byteorder == '=' and sys.byteorder == 'big':
                 data = data.astype(data.dtype.newbyteorder('<'))
             data = data.tobytes()
             if not mimetype:
@@ -108,10 +104,10 @@ def make_data_response(data: Union[bytes, numpy.ndarray, numpy.ma.MaskedArray],
             with gzip.GzipFile(fileobj=s, mode='wb') as f:
                 f.write(data)
             data = s.getvalue()
-            headers = [('Content-Encoding', 'gzip')]
+            headers = {'Content-Encoding': 'gzip'}
         else:
-            headers = []
-        headers.append(('Content-Length', str(len(data))))
+            headers = {}
+        headers['Content-Length'] = str(len(data))
         return Response(data, status_code if data else 204, headers, mimetype)
 
     if allow_json and is_array:
@@ -128,52 +124,43 @@ def data_files() -> Response:
     Return or create data files
 
     GET /data-files?session_id=...
-        - return a list of all user's data files associated with the given
-          session or with the default anonymous session if unspecified
+        - return a list of all user's data files associated with the given session or with the default anonymous session
+          if unspecified
 
-    POST /data-files?name=...&width=...&height=...&pixel_value=...
-        [&session_id=...]
-        - create a single data file of the given width and height, with data
-          values set to pixel_value (0 by default); associate with the given
-          session (anonymous if not set)
+    POST /data-files?name=...&width=...&height=...&pixel_value=...[&session_id=...]
+        - create a single data file of the given width and height, with data values set to pixel_value (0 by default);
+          associate with the given session (anonymous if not set)
 
     POST /data-files?name=...[&session_id=...]
         - import data file from multipart/form-data to the given session
 
-    POST /data-files?provider_id=...&path=...&duplicates=...&recurse=...
-                     [&session_id=...]
-        - import file(s) to the given session (anonymous by default) from
-          a data provider asset at the given path; if the path identifies
-          a collection asset of a browsable data provider, import all
-          non-collection child assets (and, optionally, all collection assets
-          too if recurse=1); the `duplicates` argument defines the import
-          behavior in the case when a certain non-collection asset was already
-          imported: "ignore" (default) = skip already imported assets,
-          "overwrite" = re-import, "append" = always create a new data file;
-          multiple asset paths can be passed as a JSON list
+    POST /data-files?provider_id=...&path=...&duplicates=...&recurse=...[&session_id=...]
+        - import file(s) to the given session (anonymous by default) from a data provider asset at the given path;
+          if the path identifies a collection asset of a browsable data provider, import all non-collection child assets
+          (and, optionally, all collection assets too if recurse=1); the `duplicates` argument defines the import
+          behavior in the case when a certain non-collection asset was already imported: "ignore" (default) = skip
+          already imported assets, "overwrite" = re-import, "append" = always create a new data file; multiple asset
+          paths can be passed as a JSON list
 
     POST /data-files?name=...&file_id=...[&session_id=...]
         - duplicate the given data file
 
     :return:
-        GET: JSON response containing the list of serialized data file objects
-            matching the given parameters
+        GET: JSON response containing the list of serialized data file objects matching the given parameters
         POST: JSON-serialized list of the new data file(s)
     """
     if request.method == 'GET':
         # List all data files for the given session
         return json_response([
-            DataFileSchema(df)
-            for df in query_data_files(
-                request.user.id, request.args.get('session_id'))])
+            DataFileSchema(df) for df in query_data_files(request.user.id, request.args.get('session_id'))
+        ])
 
     if request.method == 'POST':
         # Create data file(s)
         res = [
             DataFileSchema(df)
-            for df in import_data_files(
-                request.user.id, files=request.files,
-                **request.args.to_dict())]
+            for df in import_data_files(request.user.id, files=request.files, **request.args.to_dict())
+        ]
 
         return json_response(res, 201 if res else 200)
 
@@ -226,10 +213,8 @@ def data_files_header(id: int) -> Response:
 
     :param id: data file ID
 
-    :return: JSON-serialized structure
-        [{"key": key, "value": value, "comment": comment}, ...]
-        containing the data file header cards in the order they appear in the
-        underlying FITS file header
+    :return: JSON-serialized structure [{"key": key, "value": value, "comment": comment}, ...] containing the data file
+        header cards in the order they appear in the underlying FITS file header
     """
     if request.method == 'GET':
         with get_data_file_fits(request.user.id, id) as fits:
@@ -257,12 +242,11 @@ def data_files_header(id: int) -> Response:
                         modified = True
 
         if modified:
-            update_data_file(
-                request.user.id, id, DataFile(only=[]), force=True)
+            update_data_file(request.user.id, id, DataFile(only=[]), force=True)
 
-    return json_response([
-        dict(key=key, value=value, comment=hdr.comments[i])
-        for i, (key, value) in enumerate(hdr.items())])
+    return json_response(
+        [dict(key=key, value=value, comment=hdr.comments[i]) for i, (key, value) in enumerate(hdr.items())]
+    )
 
 
 @blp.route('/<int:id>/wcs', methods=['GET', 'PUT'])
@@ -274,16 +258,13 @@ def data_files_wcs(id: int) -> Response:
     GET /data-files/[id]/wcs
 
     PUT /data-files/[id]/wcs?keyword=value...
-        - must contain all relevant WCS info; the previous WCS (CDn_m, PCn_m,
-          CDELTn, and CROTAn) is removed
+        - must contain all relevant WCS info; the previous WCS (CDn_m, PCn_m, CDELTn, and CROTAn) is removed
 
     :param id: data file ID
 
-    :return: JSON-serialized structure
-        [{"key": key, "value": value, "comment": comment}, ...]
-        containing the data file header cards pertaining to the WCS
-        in the order they are returned by WCSLib; empty if the existing
-        or updated FITS header has no valid WCS info
+    :return: JSON-serialized structure [{"key": key, "value": value, "comment": comment}, ...] containing the data file
+        header cards pertaining to the WCS in the order they are returned by WCSLib; empty if the existing or updated
+        FITS header has no valid WCS info
     """
     if request.method == 'GET':
         with get_data_file_fits(request.user.id, id) as fits:
@@ -311,8 +292,7 @@ def data_files_wcs(id: int) -> Response:
                         modified = True
 
         if modified:
-            update_data_file(
-                request.user.id, id, DataFile(only=[]), force=True)
+            update_data_file(request.user.id, id, DataFile(only=[]), force=True)
 
     wcs_hdr = None
     # noinspection PyBroadException
@@ -346,14 +326,12 @@ def data_files_phot_cal(id: int) -> Response:
 
     :param id: data file ID
 
-    :return: JSON-serialized structure {"m0": ..., "m0_err": ...} containing
-        photometric zero point and its error, if any; empty structure means
-        no calibration data available
+    :return: JSON-serialized structure {"m0": ..., "m0_err": ...} containing photometric zero point and its error,
+        if any; empty structure means no calibration data available
     """
     if request.method == 'GET':
         phot_cal = {}
-        with pyfits.open(get_data_file_path(request.user.id, id),
-                         'readonly', memmap=False) as fits:
+        with pyfits.open(get_data_file_path(request.user.id, id), 'readonly', memmap=False) as fits:
             hdr = fits[0].header
             for field, name in PHOT_CAL_MAPPING:
                 try:
@@ -361,27 +339,22 @@ def data_files_phot_cal(id: int) -> Response:
                 except (KeyError, ValueError):
                     pass
     else:
-        with pyfits.open(get_data_file_path(request.user.id, id),
-                         'update', memmap=False) as fits:
+        with pyfits.open(get_data_file_path(request.user.id, id), 'update', memmap=False) as fits:
             phot_cal = {}
             try:
-                phot_cal['m0'] = (float(request.args['m0']),
-                                  'Photometric zero point')
+                phot_cal['m0'] = (float(request.args['m0']), 'Photometric zero point')
             except KeyError:
                 pass
             except ValueError:
-                raise errors.ValidationError(
-                    'm0', 'Floating-point m0 expected')
+                raise errors.ValidationError('m0', 'Floating-point m0 expected')
             try:
-                phot_cal['m0_err'] = (float(request.args['m0_err']),
-                                      'Photometric zero point error')
+                phot_cal['m0_err'] = (float(request.args['m0_err']), 'Photometric zero point error')
                 if phot_cal['m0_err'][0] <= 0:
                     raise ValueError()
             except KeyError:
                 pass
             except ValueError:
-                raise errors.ValidationError(
-                    'm0_err', 'Positive floating-point m0_err expected')
+                raise errors.ValidationError('m0_err', 'Positive floating-point m0_err expected')
 
             hdr = fits[0].header
             modified = False
@@ -399,8 +372,7 @@ def data_files_phot_cal(id: int) -> Response:
                         modified = True
 
         if modified:
-            update_data_file(
-                request.user.id, id, DataFile(only=[]), force=True)
+            update_data_file(request.user.id, id, DataFile(only=[]), force=True)
 
     return json_response(phot_cal)
 
@@ -413,53 +385,44 @@ def data_files_hist(id: int) -> Response:
 
     GET /data-files/[id]/hist
 
-    The number of bins in the histogram is controlled by the HISTOGRAM_BINS
-    configuration variable. It is either the fixed number of bins or a name of
-    the method used to adaptively calculate the number of bins required to
-    adequately represent the data; see
-    `https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html`_
+    The number of bins in the histogram is controlled by the HISTOGRAM_BINS configuration variable. It is either
+    the fixed number of bins or a name of the method used to adaptively calculate the number of bins required to
+    adequately represent the data; see `https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html`_
 
     :param id: data file ID
 
-    :return: JSON-serialized structure
-        {"data": [value, value, ...], "min_bin": min_bin, "max_bin": max_bin}
-        containing the integer-valued histogram data array and the
-        floating-point left and right histogram limits set from the data
+    :return: JSON-serialized structure {"data": [value, value, ...], "min_bin": min_bin, "max_bin": max_bin} containing
+        the integer-valued histogram data array and the floating-point left and right histogram limits set from the data
     """
-    root = get_root(request.user.id)
+    data_filename = os.path.join(get_root(request.user.id), f'{id}.fits')
+    hist_filename = data_filename + '.hist'
+    if not os.path.isfile(data_filename):
+        data_filename += '.gz'
 
     # noinspection PyBroadException
     try:
         # First try using the cached histogram
-        with pyfits.open(os.path.join(root, '{}.fits.hist'.format(id)), 'readonly', memmap=False) as hist:
+        if os.stat(data_filename).st_mtime > os.stat(hist_filename).st_mtime:
+            raise Exception('Histogram outdated')
+
+        with pyfits.open(hist_filename, 'readonly', memmap=False) as hist:
             hdr = hist[0].header
             min_bin, max_bin = hdr['MINBIN'], hdr['MAXBIN']
             data = hist[0].data
-            if get_data_file(request.user.id, id).modified_on > datetime.strptime(hdr['DATE'], '%Y-%m-%dT%H:%M:%S.%f'):
-                raise Exception('Histogram outdated')
+            del hist[0].data
+
     except Exception:
-        # Cached histogram not found or outdated, (re)calculate and return
-        try:
-            data, min_bin, max_bin = histogram(
-                get_data_file_data(request.user.id, id)[0],
-                current_app.config['HISTOGRAM_BINS'])
+        # Cached histogram not found, outdated, or invalid; (re)calculate and return
+        data, min_bin, max_bin = histogram(
+            get_data_file_data(request.user.id, id)[0], current_app.config['HISTOGRAM_BINS'])
 
-            # Cache histogram and limits
-            hist = pyfits.PrimaryHDU(data)
-            hist.header['MINBIN'] = min_bin, 'Lower histogram boundary'
-            hist.header['MAXBIN'] = max_bin, 'Upper histogram boundary'
-            hist.header['DATE'] = (datetime.utcnow().isoformat(),
-                                   'UTC timestamp of the histogram')
-            hist.writeto(
-                os.path.join(root, '{}.fits.hist'.format(id)),
-                overwrite=True)
-        except errors.AfterglowError:
-            raise
-        except Exception:
-            raise UnknownDataFileError(file_id=id)
+        # Cache histogram and limits
+        hist = pyfits.PrimaryHDU(data)
+        hist.header['MINBIN'] = min_bin, 'Lower histogram boundary'
+        hist.header['MAXBIN'] = max_bin, 'Upper histogram boundary'
+        hist.writeto(hist_filename, overwrite=True)
 
-    return json_response(
-        dict(data=data.tolist(), min_bin=min_bin, max_bin=max_bin))
+    return json_response(dict(data=data.tolist(), min_bin=min_bin, max_bin=max_bin))
 
 
 @blp.route('/<int:id>/pixels')
@@ -470,12 +433,10 @@ def data_files_pixels(id: int) -> Response:
 
     GET /data-files/[id]/pixels?x=...&y=...&width=...&height=...
 
-    By default, x and y are set to 1, width = image width - (x - 1), height =
-    image height - (y - 1).
+    By default, x and y are set to 1, width = image width - (x - 1), height = image height - (y - 1).
 
-    Depending on the request headers (Accept and Accept-Encoding), the pixel
-    data are returned either as an optionally gzipped binary stream or as
-    a JSON list.
+    Depending on the request headers (Accept and Accept-Encoding), the pixel data are returned either as an optionally
+    gzipped binary stream or as a JSON list.
 
     [Accept: application/octet-stream]
     [Accept: */octet-stream]
@@ -498,15 +459,12 @@ def data_files_pixels(id: int) -> Response:
     -> (JSON)
     Content-Type: application/json
 
-    Binary data are returned in the little-endian byte order (LSB first, Intel)
-    by row, i.e. in C format, from bottom to top.
+    Binary data are returned in the little-endian byte order (LSB first, Intel) by row, i.e. in C format, bottom to top.
 
     :param id: data file ID
 
-    :return: depending on the Accept and Accept-Encoding HTTP headers (see
-        above), either the gzipped binary data (application/octet-stream) or
-        a JSON list of rows, each one being, in turn, a list of data values
-        within the row
+    :return: depending on the Accept and Accept-Encoding HTTP headers (see above), either the gzipped binary data
+        (application/octet-stream) or a JSON list of rows, each one being, in turn, a list of data values within the row
     """
     try:
         return make_data_response(get_subframe(
@@ -533,41 +491,30 @@ def data_file_photometry(id: int) -> Response:
     :param id: data file ID
 
     Request parameters::
-        x: X position or a comma-separated list of positions of aperture
-            centers; the ending comma is ignored, so, if the caller wants
-            a list even in the case of a single input item, the input value can
-            be terminated with a comma
-        y: Y position or a comma-separated list of positions of aperture
-            centers; same length as `x`
-        ra_hours: RA or a comma-separated list of RAs of aperture centers; can
-            be passed instead of `x` and `y` provided the data file is
-            astrometric-calibrated
-        dec_degs: Dec or a comma-separated list of Decs of aperture centers;
-            can be passed instead of `x` and `y` provided the data file is
-            astrometric-calibrated
-        a: aperture radius or semi-major axis (for elliptical aperture), in
-            pixels
-        b: semi-minor aperture axis in pixels for elliptical aperture; if
-            omitted or equal to `a`, circular aperture is used
-        theta: rotation angle of semi-major axis in degrees counter-clockwise
-            from the X axis; default: 0; unused for circular aperture
-        a_in: inner radius or semi-major axis of annulus in pixels; defaults to
-            `a` (annulus starts right at the aperture boundary)
-        a_out: outer radius or semi-major axis of annulus in pixels; setting
-            `a_out` enables local background subtraction; must be > a_in (or a,
-            if a_in is unspecified)
-        b_out: outer semi-minor axis of annulus; defaults to a_out*b/a, i.e.
-            assumes the same ellipticity as the aperture
-        theta_out: rotation angle of the outer semi-major annulus axis in
-            degrees counter-clockwise from the X axis; defaults to `theta`,
-            i.e. same rotation as the aperture
-        centroid_radius: if given, then the input XY coordinates are treated as
-            the initial guess, and the actual coordinates are calculated by
-            finding the photocenter around (`x`, `y`) within the given radius
-            in pixels
+        x: X position or a comma-separated list of positions of aperture centers; the ending comma is ignored, so, if
+            the caller wants a list even in the case of a single input item, the input value can be terminated with
+            a comma
+        y: Y position or a comma-separated list of positions of aperture centers; same length as `x`
+        ra_hours: RA or a comma-separated list of RAs of aperture centers; can be passed instead of `x` and `y` provided
+            the data file is WCS-calibrated
+        dec_degs: Dec or a comma-separated list of Decs of aperture centers; can be passed instead of `x` and `y`
+            provided the data file is WCS-calibrated
+        a: aperture radius or semi-major axis (for elliptical aperture), in pixels
+        b: semi-minor aperture axis in pixels for elliptical aperture; omitted or equal to `a` => circular aperture
+        theta: rotation angle of semi-major axis in degrees counter-clockwise from the X axis; default: 0; unused for
+            circular aperture
+        a_in: inner radius or semi-major axis of annulus in pixels; defaults to `a` (annulus starts right at
+            the aperture boundary)
+        a_out: outer radius or semi-major axis of annulus in pixels; setting `a_out` enables local background
+            subtraction; must be > a_in (or a, if a_in is unspecified)
+        b_out: outer semi-minor axis of annulus; defaults to a_out*b/a, i.e. same ellipticity as the aperture
+        theta_out: rotation angle of the outer semi-major annulus axis in degrees counter-clockwise from the X axis;
+            defaults to `theta`, i.e. same rotation as the aperture
+        centroid_radius: if given, then the input XY coordinates are treated as initial guess, and the actual
+            coordinates are calculated by finding the photocenter around (`x`, `y`) within the given radius in pixels
 
-    :return: JSON response containing serialized Photometry object (single xy
-        or RA/Dec value) or a list of Photometry objects otherwise
+    :return: JSON response containing serialized Photometry object (single XY or RA/Dec value) or a list of Photometry
+        objects otherwise
     """
     # Get request parameters
     try:
@@ -588,29 +535,24 @@ def data_file_photometry(id: int) -> Response:
                 if not dec[-1].strip():
                     dec = dec[-1]
                 if len(ra) != len(dec):
-                    raise errors.ValidationError(
-                        'dec_degs', 'Same number of items expected')
+                    raise errors.ValidationError('dec_degs', 'Same number of items expected')
                 try:
                     ra = [float(_ra) for _ra in ra]
                 except ValueError:
-                    raise errors.ValidationError(
-                        'ra_hours', 'Floating-point value(s) expected')
+                    raise errors.ValidationError('ra_hours', 'Floating-point value(s) expected')
                 try:
                     dec = [float(_dec) for _dec in dec]
                 except ValueError:
-                    raise errors.ValidationError(
-                        'dec_degs', 'Floating-point value(s) expected')
+                    raise errors.ValidationError('dec_degs', 'Floating-point value(s) expected')
             else:
                 try:
                     ra = [float(ra)]
                 except ValueError:
-                    raise errors.ValidationError(
-                        'ra', 'Floating-point value(s) expected')
+                    raise errors.ValidationError('ra', 'Floating-point value(s) expected')
                 try:
                     dec = [float(dec)]
                 except ValueError:
-                    raise errors.ValidationError(
-                        'dec', 'Floating-point value(s) expected')
+                    raise errors.ValidationError('dec', 'Floating-point value(s) expected')
     else:
         # XY supplied
         ra = dec = None
@@ -624,35 +566,29 @@ def data_file_photometry(id: int) -> Response:
             if not y[-1].strip():
                 y = y[:-1]
             if len(x) != len(y):
-                raise errors.ValidationError(
-                    'y', 'Same number of items expected')
+                raise errors.ValidationError('y', 'Same number of items expected')
             try:
                 x = [float(_x) for _x in x]
             except ValueError:
-                raise errors.ValidationError(
-                    'x', 'Floating-point value(s) expected')
+                raise errors.ValidationError('x', 'Floating-point value(s) expected')
             try:
                 y = [float(_y) for _y in y]
             except ValueError:
-                raise errors.ValidationError(
-                    'y', 'Floating-point value(s) expected')
+                raise errors.ValidationError('y', 'Floating-point value(s) expected')
         else:
             try:
                 x = [float(x)]
             except ValueError:
-                raise errors.ValidationError(
-                    'x', 'Floating-point value(s) expected')
+                raise errors.ValidationError('x', 'Floating-point value(s) expected')
             try:
                 y = [float(y)]
             except ValueError:
-                raise errors.ValidationError(
-                    'y', 'Floating-point value(s) expected')
+                raise errors.ValidationError('y', 'Floating-point value(s) expected')
 
     try:
         a = float(request.args['a'])
         if a <= 0:
-            raise errors.ValidationError(
-                'a', 'Aperture radius/semi-major axis must be positive', 422)
+            raise errors.ValidationError('a', 'Aperture radius/semi-major axis must be positive', 422)
     except KeyError:
         raise errors.MissingFieldError(field='a')
     except ValueError:
@@ -661,8 +597,7 @@ def data_file_photometry(id: int) -> Response:
     try:
         b = float(request.args['b'])
         if b <= 0:
-            raise errors.ValidationError(
-                'b', 'Semi-minor aperture axis must be positive', 422)
+            raise errors.ValidationError('b', 'Semi-minor aperture axis must be positive', 422)
     except KeyError:
         b = None
     except ValueError:
@@ -678,9 +613,7 @@ def data_file_photometry(id: int) -> Response:
     try:
         a_in = float(request.args['a_in'])
         if a_in <= 0:
-            raise errors.ValidationError(
-                'a_in',
-                'Inner annulus radius/semi-major axis must be positive', 422)
+            raise errors.ValidationError('a_in', 'Inner annulus radius/semi-major axis must be positive', 422)
     except KeyError:
         a_in = None
     except ValueError:
@@ -689,9 +622,7 @@ def data_file_photometry(id: int) -> Response:
     try:
         a_out = float(request.args['a_out'])
         if a_out <= 0:
-            raise errors.ValidationError(
-                'a_out',
-                'Outer annulus radius/semi-major axis must be positive', 422)
+            raise errors.ValidationError('a_out', 'Outer annulus radius/semi-major axis must be positive', 422)
     except KeyError:
         a_out = None
     except ValueError:
@@ -700,8 +631,7 @@ def data_file_photometry(id: int) -> Response:
     try:
         b_out = float(request.args['b_out'])
         if b_out <= 0:
-            raise errors.ValidationError(
-                'b_out', 'Outer annulus semi-minor axis must be positive', 422)
+            raise errors.ValidationError('b_out', 'Outer annulus semi-minor axis must be positive', 422)
     except KeyError:
         b_out = None
     except ValueError:
@@ -712,8 +642,7 @@ def data_file_photometry(id: int) -> Response:
     except KeyError:
         theta_out = None
     except ValueError:
-        raise errors.ValidationError(
-            'theta_out', 'Floating-point value expected')
+        raise errors.ValidationError('theta_out', 'Floating-point value expected')
 
     centroid_radius = request.args.get('centroid_radius')
     if centroid_radius:
@@ -724,8 +653,7 @@ def data_file_photometry(id: int) -> Response:
             elif centroid_radius < 0:
                 raise ValueError()
         except ValueError:
-            raise errors.ValidationError(
-                'centroid_radius', 'Positive floating-point value expected')
+            raise errors.ValidationError('centroid_radius', 'Positive floating-point value expected')
     else:
         centroid_radius = None
 
@@ -737,15 +665,14 @@ def data_file_photometry(id: int) -> Response:
         wcs = WCS(hdr)
         if not any(wcs.wcs.ctype):
             raise MissingWCSError()
-        x, y = wcs.all_world2pix(
-            numpy.array(ra)*15, numpy.array(dec), 1, quiet=True)
+        x, y = wcs.all_world2pix(numpy.array(ra)*15, numpy.array(dec), 1, quiet=True)
 
     res = [
         get_photometry(
-            data, get_fits_exp_length(hdr), get_fits_gain(hdr), _x, _y, a, b,
-            theta, a_in, a_out, b_out, theta_out,
+            data, get_fits_exp_length(hdr), get_fits_gain(hdr), _x, _y, a, b, theta, a_in, a_out, b_out, theta_out,
             centroid_radius=centroid_radius)
-        for _x, _y in zip(x, y)]
+        for _x, _y in zip(x, y)
+    ]
 
     if multiple:
         return json_response([PhotometrySchema(phot) for phot in res])
@@ -760,8 +687,8 @@ def data_files_fits(id: int) -> Response:
 
     GET /data-files/[id]/fits
 
-    Depending on the request headers (Accept and Accept-Encoding), the FITS
-    file is returned either as a gzipped or uncompressed (default) FITS.
+    Depending on the request headers (Accept and Accept-Encoding), the FITS file is returned either as a gzipped or
+    uncompressed (default) FITS.
 
     [Accept-Encoding:]
     [Accept-Encoding: identity]
@@ -775,8 +702,8 @@ def data_files_fits(id: int) -> Response:
 
     :param id: data file ID
 
-    :return: depending on the Accept and Accept-Encoding HTTP headers (see
-        above), either the gzipped or uncompressed FITS file data
+    :return: depending on the Accept and Accept-Encoding HTTP headers (see above), either the gzipped or uncompressed
+        FITS file data
     """
     return make_data_response(get_data_file_bytes(request.user.id, id))
 
@@ -789,8 +716,8 @@ def data_files_image(id: int, fmt: str) -> Response:
 
     GET /data-files/[id]/[fmt]
 
-    Depending on the request headers (Accept and Accept-Encoding), the FITS
-    file is returned either as a gzipped or uncompressed (default) FITS.
+    Depending on the request headers (Accept and Accept-Encoding), the FITS file is returned either as a gzipped or
+    uncompressed (default) FITS.
 
     [Accept-Encoding:]
     [Accept-Encoding: identity]
@@ -805,14 +732,11 @@ def data_files_image(id: int, fmt: str) -> Response:
     :param id: data file ID
     :param fmt: image format supported by Pillow
 
-    :return: depending on the Accept and Accept-Encoding HTTP headers (see
-        above), either the gzipped or uncompressed image data
+    :return: depending on the Accept and Accept-Encoding HTTP headers (see above), either the gzipped or uncompressed
+        image data
     """
     data = get_data_file_bytes(request.user.id, id, fmt=fmt)
-    from PIL import Image  # guaranteed to be available if export succeeded
-    return make_data_response(
-        data, mimetype=Image.MIME.get(fmt, Image.MIME.get(
-            fmt.upper(), 'image')))
+    return make_data_response(data, mimetype=Image.MIME.get(fmt, Image.MIME.get(fmt.upper(), 'image')))
 
 
 @sessions_blp.route('/', methods=['GET', 'POST'])
@@ -833,16 +757,13 @@ def sessions() -> Response:
     """
     if request.method == 'GET':
         # List all sessions
-        return json_response(
-            [SessionSchema(sess)
-             for sess in query_sessions(request.user.id)])
+        return json_response([SessionSchema(sess) for sess in query_sessions(request.user.id)])
 
     if request.method == 'POST':
         # Create session
         return json_response(SessionSchema(create_session(
             request.user.id,
-            Session(SessionSchema(**request.args.to_dict()),
-                    only=list(request.args.keys())))), 201)
+            Session(SessionSchema(**request.args.to_dict()), only=list(request.args.keys())))), 201)
 
 
 @sessions_blp.route('/<id>', methods=['GET', 'PUT', 'DELETE'])
@@ -863,14 +784,13 @@ def session(id: Union[int, str]) -> Response:
     :param id: session ID or name
 
     :return:
-        GET: JSON response containing the list of serialized session objects
-            when no id/name supplied or a single session otherwise
+        GET: JSON response containing the list of serialized session objects when no id/name supplied or a single
+            session otherwise
         POST: JSON-serialized new session object
         PUT: JSON-serialized updated session object
         DELETE: empty response
     """
-    # When getting, updating, or deleting specific session, check that it
-    # exists
+    # When getting, updating, or deleting specific session, check that it exists
     sess = get_session(request.user.id, id)
 
     if request.method == 'GET':
@@ -880,9 +800,7 @@ def session(id: Union[int, str]) -> Response:
     if request.method == 'PUT':
         # Update data file
         return json_response(DataFileSchema(update_session(
-            request.user.id, id,
-            Session(SessionSchema(**request.args.to_dict()),
-                    only=list(request.args.keys())))))
+            request.user.id, id, Session(SessionSchema(**request.args.to_dict()), only=list(request.args.keys())))))
 
     if request.method == 'DELETE':
         # Delete data file
