@@ -31,7 +31,7 @@ class SourceExtractionSettingsSchema(AfterglowSchema):
     theta: float = Float(dump_default=0)
     min_pixels: int = Integer(dump_default=3)
     min_fwhm: float = Float(dump_default=0.8)
-    max_fwhm: float = Float(dump_default=10)
+    max_fwhm: float = Float(dump_default=50)
     max_ellipticity: float = Float(dump_default=2)
     deblend: bool = Boolean(dump_default=False)
     deblend_levels: int = Integer(dump_default=32)
