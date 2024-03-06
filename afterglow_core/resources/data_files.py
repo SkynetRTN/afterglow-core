@@ -832,6 +832,9 @@ def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readon
                     else:
                         for s in 'AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2':
                             del hdr[s]
+                elif not data.dtype.isnative:
+                    # Make sure the data array is in native byte order, which is required by Numba and SEP
+                    fits[0].data = data.byteswap().newbyteorder()
 
             return fits
 
