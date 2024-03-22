@@ -649,7 +649,6 @@ def job_server_request(resource: str, method: str, **args) -> TDict[str, object]
                             user_id=db_job.user_id,
                             session_id=db_job.session_id,
                             state=get_job_state(db_job),
-                            result=get_job_result(db_job),
                         ))
                         result[-1].update(db_job.args)
                 except Exception:

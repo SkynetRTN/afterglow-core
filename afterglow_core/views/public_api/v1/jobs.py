@@ -69,7 +69,7 @@ def jobs() -> Response:
         msg = job_server_request('jobs', method, **args)
         if msg['status'] != 200:
             return error_response(msg)
-        return json_response([JobSchema(**j) for j in msg['json']])
+        return json_response([JobSchema(exclude=['result'], **j) for j in msg['json']])
 
     if method == 'POST':
         # Submit a job
