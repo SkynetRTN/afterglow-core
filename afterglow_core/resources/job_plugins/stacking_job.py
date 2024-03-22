@@ -121,6 +121,7 @@ class StackingJob(Job):
                     self.add_error(ValueError(
                         'Shape mismatch: expected {0[0]}x{0[1]}, got {1[0]}x{1[1]}'.format(shape, data_file[0].shape)),
                         {'file_id': self.file_ids[i + 1]})
+                    data_file.close()
                     data_files.remove(data_file)
 
             # Combine using the given settings
