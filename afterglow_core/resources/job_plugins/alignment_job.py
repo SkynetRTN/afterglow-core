@@ -5,7 +5,6 @@ Afterglow Core: image alignment job plugin
 import gc
 import time
 from datetime import datetime
-from typing import Any, Dict as TDict, List as TList, Tuple, Optional
 
 import numpy as np
 from numpy.ma import MaskedArray
@@ -44,13 +43,15 @@ class AlignmentSettings(AfterglowSchema):
     __polymorphic_on__ = 'mode'
 
     mode: str = String(dump_default='WCS', load_default='WCS')
-    ref_image: Optional[str] = String(dump_default='central', allow_none=True)
+    ref_image: str | None = String(dump_default='central', allow_none=True)
     mosaic_search_radius: float = Float(dump_default=1)
     enable_rot: bool = Boolean(dump_default=True)
     enable_scale: bool = Boolean(dump_default=True)
     enable_skew: bool = Boolean(dump_default=True)
     ignore_overlap: bool = Boolean(dump_default=True)
     global_contrast: bool = Boolean(dump_default=True)
+    percentile_min: float = Float(dump_default=10)
+    percentile_max: float = Float(dump_default=99)
     detect_edges: bool = Boolean(dump_default=False)
 
 
@@ -70,12 +71,12 @@ class AlignmentSettingsSources(AlignmentSettings):
 class AlignmentSettingsSourcesManual(AlignmentSettingsSources):
     mode = 'sources_manual'
     max_sources: int = Integer(dump_default=100)
-    sources: TList[SourceExtractionData] = List(Nested(SourceExtractionData), dump_default=[])
+    sources: list[SourceExtractionData] = List(Nested(SourceExtractionData), dump_default=[])
 
 
 class AlignmentSettingsSourcesAuto(AlignmentSettingsSources):
     mode = 'sources_auto'
-    source_extraction_settings: Optional[SourceExtractionSettings] = Nested(
+    source_extraction_settings: SourceExtractionSettings | None = Nested(
         SourceExtractionSettings, allow_none=True, dump_default=None)
 
 
@@ -86,8 +87,6 @@ class AlignmentSettingsFeatures(AlignmentSettings):
 
     algorithm: str = String(dump_default='AKAZE', load_default='AKAZE')
     ratio_threshold: float = Float(dump_default=0.4)
-    percentile_min: float = Float(dump_default=10)
-    percentile_max: float = Float(dump_default=99)
     downsample: int = Integer(dump_default=2)
 
 
@@ -156,7 +155,7 @@ class AlignmentSettingsPixels(AlignmentSettings):
 
 
 class AlignmentJobResult(JobResult):
-    file_ids: TList[int] = List(Integer(), dump_default=[])
+    file_ids: list[int] = List(Integer(), dump_default=[])
 
 
 class AlignmentJob(Job):
@@ -167,7 +166,7 @@ class AlignmentJob(Job):
     description = 'Align Images'
 
     result: AlignmentJobResult = Nested(AlignmentJobResult, dump_default={})
-    file_ids: TList[int] = List(Integer(), dump_default=[])
+    file_ids: list[int] = List(Integer(), dump_default=[])
     settings: AlignmentSettings = NestedPoly(AlignmentSettings, dump_default={})
     inplace: bool = Boolean(dump_default=False)
     crop: bool = Boolean(dump_default=False)
@@ -412,7 +411,7 @@ class AlignmentJob(Job):
             current_app.logger.info('PROFILE preprocess %.3g', time.time() - t0)
 
             if all_data:
-                # Calculate global contrast (separately for each filter), which allows to cache features
+                # Calculate global contrast (separately for each filter), which allows caching features
                 t0 = time.time()
                 clip = {}
                 for i, (flt, all_data_for_filter) in enumerate(all_data.items()):
@@ -796,7 +795,7 @@ class AlignmentJob(Job):
                     self, None, file_ids, inplace=True, masks=masks, stage=stage, total_stages=total_stages)
 
 
-def get_wcs(user_id: Optional[int], file_id: int, wcs_cache: TDict[int, WCS]) -> WCS:
+def get_wcs(user_id: int | None, file_id: int, wcs_cache: dict[int, WCS]) -> WCS:
     try:
         wcs = wcs_cache[file_id]
     except KeyError:
@@ -814,8 +813,8 @@ def get_wcs(user_id: Optional[int], file_id: int, wcs_cache: TDict[int, WCS]) ->
     return wcs
 
 
-def get_source_xy(source: SourceExtractionData, user_id: Optional[int], file_id: int, wcs_cache: TDict[int, WCS]) \
-        -> Tuple[float, float]:
+def get_source_xy(source: SourceExtractionData, user_id: int | None, file_id: int, wcs_cache: dict[int, WCS]) \
+        -> tuple[float, float]:
     x, y = getattr(source, 'x', None), getattr(source, 'y', None)
     if x is None or y is None:
         wcs = get_wcs(user_id, file_id, wcs_cache)
@@ -824,7 +823,7 @@ def get_source_xy(source: SourceExtractionData, user_id: Optional[int], file_id:
 
 
 @njit(cache=True)
-def calc_contrast(data: np.ndarray, percentile_min: float, percentile_max: float) -> Tuple[float, float]:
+def calc_contrast(data: np.ndarray, percentile_min: float, percentile_max: float) -> tuple[float, float]:
     have_nans = False
     for x in data:
         if np.isnan(x):
@@ -857,10 +856,10 @@ def calc_contrast(data: np.ndarray, percentile_min: float, percentile_max: float
     return clip_min, clip_max
 
 
-def get_transform(job: AlignmentJob, alignment_kwargs: TDict[str, Any], file_id: int, ref_file_id: int,
-                  wcs_cache: TDict[int, WCS], data_cache: TDict[int, Any], clip_min1: float | None = None,
+def get_transform(job: AlignmentJob, alignment_kwargs: dict[str, object], file_id: int, ref_file_id: int,
+                  wcs_cache: dict[int, WCS], data_cache: dict[int, object], clip_min1: float | None = None,
                   clip_max1: float | None = None, clip_min2: float | None = None, clip_max2: float | None = None) \
-        -> Tuple[Tuple[Optional[np.ndarray], np.ndarray], str]:
+        -> tuple[tuple[np.ndarray | None, np.ndarray], str]:
     settings = job.settings
     user_id = job.user_id
 
