@@ -188,8 +188,7 @@ def run_photometry_job(job: Job, settings: PhotSettings,
 
             if r_cent > 0:
                 # Obtain the accurate centroids if requested
-                source_table['x'], source_table['y'] = centroid_sources(
-                    data, source_table['x'], source_table['y'], r_cent)
+                centroid_sources(data, source_table['x'], source_table['y'], r_cent)
 
             # Photometer all sources in the current image
             source_table = aperture_photometry(data, source_table, **phot_kw)
