@@ -1464,6 +1464,10 @@ components:
           description: in mosaic mode, put all tiles on the same contrast scale (faster but less accurate)
           type: boolean
           default: true
+        detect_edges:
+          description: apply edge detection before feature extraction
+          type: boolean
+          default: false
         enable_rot:
           description: allow rotation transformation for >= 2 WCS grid points or sources
           type: boolean
@@ -1592,10 +1596,6 @@ components:
               type: number
               minimum: 0
               default: 0.5
-            detect_edges:
-              description: apply edge detection before feature extraction
-              type: boolean
-              default: false
             percentile_min:
               description: lower percentile for conversion to 8 bit
               type: number
