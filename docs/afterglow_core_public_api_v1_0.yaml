@@ -619,6 +619,8 @@ components:
         aper_theta:
           description: position angle of aperture major axis [degrees], counter-clockwise
           type: number
+          minimum: -90
+          maximum: 90
         annulus_a_in:
           description: annulus inner radius or semi-major axis [pixels]
           type: number
@@ -632,6 +634,8 @@ components:
         annulus_theta_in:
           description: position angle of major axis of inner annulus ellipse [degrees], counter-clockwise
           type: number
+          minimum: -90
+          maximum: 90
         annulus_a_out:
           description: annulus outer radius or semi-major axis [pixels]
           type: number
@@ -645,6 +649,8 @@ components:
         annulus_theta_out:
           description: position angle of major axis of outer annulus ellipse [degrees], counter-clockwise
           type: number
+          minimum: -90
+          maximum: 90
       required: [aper_a]
 
     ISourceId:
@@ -1085,6 +1091,8 @@ components:
         theta:
           description: position angle of semi-major axis [degrees], counter-clockwise, for mode=aperture and `a` != `b`
           type: number
+          minimum: -90
+          maximum: 90
           nullable: true
           default: 0
         a_in:
@@ -1108,6 +1116,8 @@ components:
         theta_out:
           description: annulus position angle [degrees], defaults to `theta`
           type: number
+          minimum: -90
+          maximum: 90
           nullable: true
         gain:
           description: default gain if not present in FITS headers
@@ -4697,6 +4707,8 @@ paths:
           description: rotation angle of semi-major axis in degrees counter-clockwise from the X axis; unused for circular aperture
           schema:
             type: number
+            minimum: -90
+            maximum: 90
             nullable: true
             default: null
         - name: a_in
@@ -4728,6 +4740,8 @@ paths:
           description: rotation angle of the outer semi-major annulus axis in degrees counter-clockwise from the X axis; defaults to `theta`, i.e. same rotation as the aperture
           schema:
             type: number
+            minimum: -90
+            maximum: 90
             nullable: true
             default: null
         - name: centroid_radius
