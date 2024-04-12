@@ -822,7 +822,7 @@ def get_source_xy(source: SourceExtractionData, user_id: int | None, file_id: in
     return x, y
 
 
-@njit(cache=True)
+@njit(nogil=True, cache=True)
 def calc_contrast(data: np.ndarray, percentile_min: float, percentile_max: float) -> tuple[float, float]:
     have_nans = False
     for x in data:
