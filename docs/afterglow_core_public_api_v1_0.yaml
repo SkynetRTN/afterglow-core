@@ -1151,6 +1151,10 @@ components:
           type: number
           minimum: 0
           default: 0.0001
+        reject_bkg_outliers:
+          description: perform robust outlier rejection for background pixels in the annulus
+          type: boolean
+          default: false
       nullable: true
       default: null
 
