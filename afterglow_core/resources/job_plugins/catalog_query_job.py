@@ -150,6 +150,7 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
     for wcs in wcs_list:
         height, width = wcs.array_shape
         center = wcs.all_pix2world((width - 1)/2, (height - 1)/2, 0)
+        center[0] %= 360
 
         # Move center to RA = Dec = 0 so that we get a proper box size in terms
         # of catalog query, i.e. RA size multiplied by cos(dec); the box is
@@ -164,6 +165,7 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
         ras, decs = wcs0.all_pix2world(
             [(0, 0), (width - 1, 0), (width - 1, height - 1), (0, height - 1)],
             0).T
+        ras %= 360
         boxes.append((center[0], center[1],
                       ras[ras < 180].max() - ras[ras >= 180].min() + 360,
                       decs.max() - decs.min()))

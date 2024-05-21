@@ -102,6 +102,7 @@ class SourceExtractionData(ISourceMeta, IAstrometry, IFwhm, ISourceId):
         if wcs is not None:
             # Apply astrometric calibration
             self.ra_hours, self.dec_degs = wcs.all_pix2world(self.x, self.y, 1)
+            self.ra_hours %= 360
             self.ra_hours /= 15
 
 
@@ -175,4 +176,4 @@ def get_source_radec(source, epoch: datetime, wcs: Optional[WCS]) \
         theta = deg2rad(source.pm_pos_angle_pixel)
         ra, dec = wcs.all_pix2world(
             source.x + mu*cos(theta), source.y + mu*sin(theta), 1)
-    return ra/15, dec
+    return (ra % 360)/15, dec
