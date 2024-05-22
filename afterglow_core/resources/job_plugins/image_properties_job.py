@@ -81,8 +81,10 @@ class ImagePropsExtractionJob(Job):
                     hdr = f[0].header
                 # noinspection PyBroadException
                 try:
-                    wcs = WCS(hdr)
-                    if not wcs.has_celestial:
+                    wcs = WCS(hdr, relax=True)
+                    if wcs.has_celestial:
+                        wcs.wcs.crval[0] %= 360
+                    else:
                         wcs = None
                 except Exception:
                     wcs = None

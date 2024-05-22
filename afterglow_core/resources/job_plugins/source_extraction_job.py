@@ -170,8 +170,10 @@ def run_source_extraction_job(job: Job,
             # Apply astrometric calibration if present
             # noinspection PyBroadException
             try:
-                wcs = WCS(hdr)
-                if not wcs.has_celestial:
+                wcs = WCS(hdr, relax=True)
+                if wcs.has_celestial:
+                    wcs.wcs.crval[0] %= 360
+                else:
                     wcs = None
             except Exception:
                 wcs = None

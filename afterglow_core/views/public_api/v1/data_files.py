@@ -299,6 +299,7 @@ def data_files_wcs(id: int) -> Response:
     try:
         wcs = WCS(hdr, relax=True)
         if wcs.has_celestial:
+            wcs.wcs.crval[0] %= 360
             wcs_hdr = wcs.to_header(relax=True)
     except Exception:
         pass
@@ -662,8 +663,10 @@ def data_file_photometry(id: int) -> Response:
 
     if ra is not None and dec is not None:
         # Convert RA/Dec to XY if we have astrometric calibration
-        wcs = WCS(hdr)
-        if not any(wcs.wcs.ctype):
+        wcs = WCS(hdr, relax=True)
+        if wcs.has_celestial:
+            wcs.wcs.crval[0] %= 360
+        else:
             raise MissingWCSError()
         x, y = wcs.all_world2pix(numpy.array(ra)*15, numpy.array(dec), 1, quiet=True)
 
