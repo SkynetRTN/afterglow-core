@@ -3,7 +3,6 @@ Afterglow Core: image alignment job plugin
 """
 
 import gc
-import time
 from datetime import datetime
 
 import numpy as np
@@ -347,7 +346,6 @@ class AlignmentJob(Job):
 
         else:  # Mosaicing mode
             # Crop images to prevent memory overflow if realigning
-            t0 = time.time()
             fovs, shapes, filters = {}, {}, {}
             all_data = {}
             for i, file_id in enumerate(file_ids):
@@ -412,11 +410,9 @@ class AlignmentJob(Job):
                 del data
                 self.update_progress((i + 1)/len(file_ids)*100, stage, total_stages)
             stage += 1
-            current_app.logger.info('PROFILE preprocess %.3g', time.time() - t0)
 
             if isinstance(settings, AlignmentSettingsFeatures) and all_data:
                 # Calculate global contrast (separately for each filter), which allows caching features
-                t0 = time.time()
                 clip = {}
                 for i, (flt, all_data_for_filter) in enumerate(all_data.items()):
                     clip_min, clip_max = calc_contrast(
@@ -428,14 +424,11 @@ class AlignmentJob(Job):
                     self.update_progress((i + 1)/len(all_data)*100, stage, total_stages)
                 stage += 1
                 del all_data
-                current_app.logger.info('PROFILE global_contrast %.3g', time.time() - t0)
             else:
                 # Calculate the contrast for each pair of tiles
                 clip = {file_id: (None, None) for file_id in file_ids}
 
             # Find all possible pairwise transformations
-            t0 = time.time()
-            gcd_time = get_transform_time = update_progress_time = 0
             rel_transforms, weights = {}, {}
             n = len(file_ids)
             total_pairs = n*(n - 1)//2
@@ -445,7 +438,6 @@ class AlignmentJob(Job):
                 ra0, dec0, r0, _, w0, h0 = fovs[file_id]
                 for other_file_id in file_ids[i + 1:]:
                     # Calculate the GCD between tile centers
-                    t00 = time.time()
                     other_ra0, other_dec0, other_r0, _, w, h = fovs[other_file_id]
                     if all(x is not None for x in (ra0, dec0, other_ra0, other_dec0)):
                         gcd = angdist(ra0, dec0, other_ra0, other_dec0)
@@ -455,18 +447,15 @@ class AlignmentJob(Job):
                             max_gcd = (r0 + other_r0)*max_r
                     else:
                         gcd = max_gcd = None
-                    gcd_time += time.time() - t00
 
                     # Ignore faraway tiles unless WCS mode or FOV unknown
                     if isinstance(settings, AlignmentSettingsWCS) or max_gcd is None or gcd < max_gcd:
                         # Calculate pairwise transform
                         # noinspection PyBroadException
                         try:
-                            t00 = time.time()
                             rel_transforms[file_id, other_file_id], history[file_id] = get_transform(
                                 self, alignment_kwargs, other_file_id, file_id, wcs_cache, data_cache,
                                 clip[file_id][0], clip[file_id][1], clip[other_file_id][0], clip[other_file_id][1])
-                            get_transform_time += time.time() - t00
                         except Exception:
                             # No match found
                             pass
@@ -517,15 +506,9 @@ class AlignmentJob(Job):
                                 pass
                     k += 1
                     if not k % 10 or k == total_pairs:
-                        t00 = time.time()
                         self.update_progress(k/total_pairs*100, stage, total_stages)
-                        update_progress_time += time.time() - t00
 
             stage += 1
-            current_app.logger.info('PROFILE gcd %.3g', gcd_time)
-            current_app.logger.info('PROFILE get_transform %.3g', get_transform_time)
-            current_app.logger.info('PROFILE update_progress %.3g', update_progress_time)
-            current_app.logger.info('PROFILE get_pairwise_transforms %.3g', time.time() - t0)
 
             # Include each image in one of the sets of connected images ("mosaics") if it has at least one match
             ref_widths, ref_heights, ref_wcss = {}, {}, {}
@@ -559,7 +542,6 @@ class AlignmentJob(Job):
 
             # Process each mosaic separately
             for mosaic in mosaics:
-                t0 = time.time()
                 # Put the tile closest to the average mosaic RA/Dec first; this will be the reference tile
                 mosaic = list(mosaic)
                 ra0, dec0 = average_radec(np.array([fovs[file_id][:2] for file_id in mosaic]))
@@ -670,8 +652,6 @@ class AlignmentJob(Job):
                             ref_wcss[other_file_id] = wcs
                         break
 
-                current_app.logger.info('PROFILE get_abs_transforms %.3g', time.time() - t0)
-
         del wcs_cache, data_cache
         gc.collect()
 
@@ -684,7 +664,6 @@ class AlignmentJob(Job):
             else [[ref_file_id]] if ref_file_id is not None else [[]]
 
         # Apply transforms
-        t0 = time.time()
         for i, file_id in enumerate(file_ids):
             try:
                 try:
@@ -790,7 +769,6 @@ class AlignmentJob(Job):
                 self.update_progress((i + 1)/len(file_ids)*100, stage, total_stages)
 
         stage += 1
-        current_app.logger.info('PROFILE create_large_tiles %.3g', time.time() - t0)
 
         # Optionally crop aligned files in place
         if self.crop:
@@ -897,10 +875,10 @@ def get_transform(job: AlignmentJob, alignment_kwargs: dict[str, object], file_i
                     source.id: get_source_xy(source, user_id, ref_file_id, wcs_cache)
                     for source in ref_sources if getattr(source, 'id', None) is not None
                 }
-                anonymous_ref_stars = [
+                anonymous_ref_stars = np.array([
                     get_source_xy(source, user_id, ref_file_id, wcs_cache)
                     for source in ref_sources if getattr(source, 'id', None) is None
-                ]
+                ])
                 if ref_stars and anonymous_ref_stars:
                     # Cannot mix sources with and without ID
                     raise ValueError('All or none of the reference image source must have source ID')
@@ -908,16 +886,18 @@ def get_transform(job: AlignmentJob, alignment_kwargs: dict[str, object], file_i
                     # Too many stars for pattern matching; sort by brightness and use at most max_sources stars
                     ref_sources.sort(key=lambda source: getattr(source, 'mag', -getattr(source, 'flux', 0)))
                     ref_sources = ref_sources[:settings.max_sources]
-                    anonymous_ref_stars = [
-                        get_source_xy(source, user_id, ref_file_id, wcs_cache) for source in ref_sources
-                    ]
+                    anonymous_ref_stars = np.empty((len(ref_sources), 2), np.float64)
+                    for i, source in enumerate(ref_sources):
+                        anonymous_ref_stars[i] = get_source_xy(source, user_id, ref_file_id, wcs_cache)
             elif isinstance(settings, AlignmentSettingsSourcesAuto):
                 ref_sources = run_source_extraction_job(
                     job, settings.source_extraction_settings, [ref_file_id], total_stages=0)[0]
                 if not ref_sources:
                     raise ValueError('Cannot extract any alignment stars from reference image')
                 ref_stars = {}
-                anonymous_ref_stars = [(source.x, source.y) for source in ref_sources]
+                anonymous_ref_stars = np.empty((len(ref_sources), 2), np.float64)
+                for i, source in enumerate(ref_sources):
+                    anonymous_ref_stars[i] = source.x, source.y
             else:
                 raise ValueError('Unknown alignment mode "{}"'.format(settings.mode))
             data_cache[ref_file_id] = ref_stars, anonymous_ref_stars
@@ -968,7 +948,9 @@ def get_transform(job: AlignmentJob, alignment_kwargs: dict[str, object], file_i
             src_stars = [(img_sources[0].x, img_sources[0].y)]
             dst_stars = anonymous_ref_stars
         else:
-            img_stars = [get_source_xy(source, user_id, file_id, wcs_cache) for source in img_sources]
+            img_stars = np.empty((len(img_sources), 2), np.float64)
+            for i, source in enumerate(img_sources):
+                img_stars[i] = get_source_xy(source, user_id, file_id, wcs_cache)
             # Match two sets of points using pattern matching
             src_stars, dst_stars = [], []
             for k, l in enumerate(pattern_match(
