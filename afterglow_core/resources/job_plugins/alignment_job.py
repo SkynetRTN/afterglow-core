@@ -49,10 +49,6 @@ class AlignmentSettings(AfterglowSchema):
     enable_scale: bool = Boolean(dump_default=True)
     enable_skew: bool = Boolean(dump_default=True)
     ignore_overlap: bool = Boolean(dump_default=True)
-    global_contrast: bool = Boolean(dump_default=True)
-    percentile_min: float = Float(dump_default=10)
-    percentile_max: float = Float(dump_default=99)
-    detect_edges: bool = Boolean(dump_default=False)
 
 
 class AlignmentSettingsWCS(AlignmentSettings):
@@ -88,6 +84,10 @@ class AlignmentSettingsFeatures(AlignmentSettings):
     algorithm: str = String(dump_default='AKAZE', load_default='AKAZE')
     ratio_threshold: float = Float(dump_default=0.4)
     downsample: int = Integer(dump_default=2)
+    global_contrast: bool = Boolean(dump_default=True)
+    percentile_min: float = Float(dump_default=10)
+    percentile_max: float = Float(dump_default=99)
+    detect_edges: bool = Boolean(dump_default=False)
 
 
 class AlignmentSettingsFeaturesAKAZE(AlignmentSettingsFeatures):
@@ -308,7 +308,7 @@ class AlignmentJob(Job):
         if ref_file_id is None:
             # Pre-cropping
             total_stages += 1
-            if settings.global_contrast:
+            if isinstance(settings, AlignmentSettingsFeatures) and settings.global_contrast:
                 # Calculation of global clip_min, clip_max
                 total_stages += 1
         stage = 0
@@ -404,7 +404,7 @@ class AlignmentJob(Job):
                     wcs_cache[file_id] = None
                 flt = filters[file_id] = hdr.get('FILTER', '')
 
-                if settings.global_contrast:
+                if isinstance(settings, AlignmentSettingsFeatures) and settings.global_contrast:
                     if settings.detect_edges:
                         data = np.hypot(nd.sobel(data, 0, mode='nearest'), nd.sobel(data, 1, mode='nearest'))
                     all_data.setdefault(flt, []).append(data.ravel())
@@ -414,7 +414,7 @@ class AlignmentJob(Job):
             stage += 1
             current_app.logger.info('PROFILE preprocess %.3g', time.time() - t0)
 
-            if all_data:
+            if isinstance(settings, AlignmentSettingsFeatures) and all_data:
                 # Calculate global contrast (separately for each filter), which allows caching features
                 t0 = time.time()
                 clip = {}

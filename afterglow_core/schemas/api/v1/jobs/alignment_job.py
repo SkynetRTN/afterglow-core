@@ -25,10 +25,6 @@ class AlignmentSettingsSchema(AfterglowSchema):
     enable_scale: bool = Boolean(dump_default=True)
     enable_skew: bool = Boolean(dump_default=True)
     ignore_overlap: bool = Boolean(dump_default=True)
-    global_contrast: bool = Boolean(dump_default=True)
-    percentile_min: float = Float(dump_default=10)
-    percentile_max: float = Float(dump_default=99)
-    detect_edges: bool = Boolean(dump_default=False)
 
 
 class AlignmentSettingsWCSSchema(AlignmentSettingsSchema):
@@ -64,6 +60,10 @@ class AlignmentSettingsFeaturesSchema(AlignmentSettingsSchema):
     algorithm: str = String(dump_default='AKAZE', load_default='AKAZE')
     ratio_threshold: float = Float(dump_default=0.4)
     downsample: int = Integer(dump_default=2)
+    global_contrast: bool = Boolean(dump_default=True)
+    percentile_min: float = Float(dump_default=10)
+    percentile_max: float = Float(dump_default=99)
+    detect_edges: bool = Boolean(dump_default=False)
 
 
 class AlignmentSettingsFeaturesAKAZESchema(AlignmentSettingsFeaturesSchema):
