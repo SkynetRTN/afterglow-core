@@ -105,6 +105,9 @@ DATA_FILE_UPLOAD = False
 # or "background" for the experimental background-based histogramming
 HISTOGRAM_BINS = 1024
 
+# Clean up workbenches unused for more than this number of days; set to 0 to never clean up old data files
+DATA_FILE_EXPIRATION = 365
+
 
 ###############################################################################
 # Catalog options

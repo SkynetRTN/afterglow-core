@@ -1073,7 +1073,7 @@ def query_data_files(user_id: Optional[int], session_id: Optional[Union[int, str
             session_id = session.id
 
         q = DbDataFile.query.filter_by(user_id=user_id)
-        if session_id == '*':
+        if session_id != '*':
             q = q.filter_by(session_id=session_id)
         return [DataFile(db_data_file) for db_data_file in q]
     except Exception:

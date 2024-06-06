@@ -9,9 +9,11 @@ import errno
 import sys
 import traceback
 import ctypes
+import shutil
 import signal
 import time
 from datetime import datetime, timedelta
+from glob import glob
 from threading import Event, Thread
 from typing import Dict as TDict, Union
 from types import SimpleNamespace
@@ -45,7 +47,7 @@ from celery import Celery, Task, shared_task
 from celery.exceptions import TaskRevokedError, WorkerLostError
 from celery.result import AsyncResult
 from celery.schedules import crontab
-from celery.signals import after_setup_logger, after_setup_task_logger, worker_process_init
+from celery.signals import after_setup_logger, after_setup_task_logger
 from celery.loaders.app import AppLoader
 
 from .database import db
@@ -276,7 +278,7 @@ def run_job(task: Task, *args, **kwargs):
     current_app.logger.info('%s Job %s -> %s', prefix, job_id, serialized)
 
 
-# noinspection PyBroadException
+# noinspection PyPackageRequirements
 @shared_task(name='cleanup_jobs')
 def cleanup_jobs() -> None:
     """
@@ -303,7 +305,60 @@ def cleanup_jobs() -> None:
         current_app.logger.warning('Error deleting expired jobs', exc_info=True)
 
     finally:
-        # noinspection PyBroadException
+        try:
+            db.session.remove()
+        except Exception:
+            pass
+
+
+# noinspection PyPackageRequirements
+@shared_task(name='cleanup_old_user_accounts')
+def cleanup_old_user_accounts(expiration: float, data_root: str) -> None:
+    """
+    Periodic task that cleans up abandoned workbenches
+
+    :param expiration: data file expiration time in days
+    :param data_root: DATA_FILE_ROOT option
+    """
+    expiration = (datetime.utcnow() - timedelta(days=expiration)).timestamp()
+    user_count = file_count = 0
+    try:
+        for path in glob(os.path.join(data_root, '*')):
+            try:
+                if os.stat(path).st_mtime > expiration:
+                    continue
+
+                # User's Workbench unused for a long time
+                try:
+                    user_id = int(os.path.basename(path))
+                except ValueError:
+                    continue
+
+                count = 0
+                q = db.session.query(data_files.DbDataFile).filter_by(user_id=user_id)
+                count += q.count()
+                if count:
+                    q.delete()
+                    user_count += 1
+                    file_count += count
+
+                shutil.rmtree(path, ignore_errors=True)
+            except Exception:
+                db.session.rollback()
+                current_app.logger.warning(
+                    'Error deleting expired data files for used %s', os.path.basename(path), exc_info=True)
+
+        if user_count:
+            db.session.commit()
+            current_app.logger.info(
+                'Deleted %s expired data file%s for %s user%s', file_count, 's' if file_count > 1 else '',
+                user_count, 's' if user_count > 1 else '')
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.warning('Error deleting expired data files', exc_info=True)
+
+    finally:
         try:
             db.session.remove()
         except Exception:
@@ -321,11 +376,6 @@ def setup_logger(logger, *args, **kwargs):
     from . import MaxLengthFormatter
     for handler in logger.handlers:
         handler.setFormatter(MaxLengthFormatter('%(asctime)s %(levelname)-8s %(message)s'))
-
-
-@worker_process_init.connect
-def init_worker(*args, **kwargs):
-    pass
 
 
 def init_jobs(app: Flask, cipher: Fernet) -> Celery:
@@ -435,12 +485,20 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
         task_time_limit=app.config['JOB_TIMEOUT'] + app.config['JOB_CANCEL_TIMEOUT']
         if app.config['JOB_TIMEOUT'] else None,
         beat_schedule={
-            'cleanup-jobs': dict(  # wipe expired jobs daily at 4am
+            # Wipe expired jobs daily at 4am
+            'cleanup-jobs': dict(
                 task='cleanup_jobs',
                 schedule=crontab(hour='4', minute='0'),
             ),
-        },
+        }
     )
+    if app.config.get('DATA_FILE_EXPIRATION'):
+        # Wipe users' workbenches if unused for a long time
+        config['beat_schedule']['cleanup-old-user-accounts'] = dict(
+            task='cleanup_old_user_accounts',
+            schedule=crontab(hour='4', minute='0'),
+            args=(app.config['DATA_FILE_EXPIRATION'], app.config['DATA_FILE_ROOT']),
+        ),
     if sys.platform.startswith('win'):
         # https://stackoverflow.com/questions/41636273/celery-tasks-received-but-not-executing
         config.update(worker_pool='eventlet')
