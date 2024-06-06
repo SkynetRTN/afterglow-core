@@ -1059,12 +1059,12 @@ def query_data_files(user_id: Optional[int], session_id: Optional[Union[int, str
     Return data file objects matching the given criteria
 
     :param user_id: current user ID (None if user auth is disabled)
-    :param session_id: only return data files belonging to the given session (ID or name)
+    :param session_id: only return data files belonging to the given session (ID or name); "*" means all sessions
 
     :return: list of data file objects
     """
     try:
-        if session_id is not None:
+        if session_id not in (None, '*'):
             session = DbSession.query.get(session_id)
             if session is None or session.user_id != user_id:
                 session = DbSession.query.filter_by(user_id=user_id, name=session_id).one_or_none()
@@ -1072,8 +1072,10 @@ def query_data_files(user_id: Optional[int], session_id: Optional[Union[int, str
                 raise errors.ValidationError('session_id', f'Unknown session "{session_id}"', 404)
             session_id = session.id
 
-        return [DataFile(db_data_file)
-                for db_data_file in DbDataFile.query.filter_by(user_id=user_id, session_id=session_id)]
+        q = DbDataFile.query.filter_by(user_id=user_id)
+        if session_id == '*':
+            q = q.filter_by(session_id=session_id)
+        return [DataFile(db_data_file) for db_data_file in q]
     except Exception:
         db.session.rollback()
         raise

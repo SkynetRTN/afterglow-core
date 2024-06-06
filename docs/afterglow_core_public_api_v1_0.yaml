@@ -3995,7 +3995,7 @@ paths:
       parameters:
         - name: session_id
           in: query
-          description: optional session ID, defaults to anonymous session
+          description: optional session ID, defaults to anonymous session; "*" means return data files for all user's sessions
           schema:
             type: integer
             nullable: true
