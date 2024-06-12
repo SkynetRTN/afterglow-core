@@ -57,7 +57,7 @@ __all__ = [
     'convert_exif_field',
     # Data/metadata retrieval
     'get_data_file_bytes', 'get_data_file_data', 'get_data_file_fits',
-    'get_data_file_group_bytes', 'get_subframe',
+    'get_data_file_group_bytes',
     # Data file creation
     'create_data_file', 'import_data_file', 'save_data_file',
     # API endpoint interface
@@ -711,77 +711,6 @@ def convert_exif_field(val):
     return str(val)
 
 
-def get_subframe(user_id: Optional[int], file_id: int, x0: Optional[int] = None, y0: Optional[int] = None,
-                 w: Optional[int] = None, h: Optional[int] = None) -> np.ndarray:
-    """
-    Return pixel data for the given image data file ID within a rectangle defined by the optional request parameters
-    "x", "y", "width", and "height"; XY are in the FITS system with (1,1) in the bottom left corner of the image
-
-    :param user_id: current user ID (None if user auth is disabled)
-    :param file_id: data file ID
-    :param x0: optional subframe origin X coordinate (1-based)
-    :param y0: optional subframe origin Y coordinate (1-based)
-    :param w: optional subframe width
-    :param h: optional subframe height
-
-    :return: NumPy float32 array containing image data within the specified region
-    """
-    data = get_data_file_data(user_id, file_id)[0]
-    is_image = data.dtype.fields is None
-    if is_image:
-        height, width = data.shape
-    else:
-        # FITS table
-        width = len(data.dtype.fields)
-        height = len(data)
-
-    if x0 is None:
-        x0 = 1
-    try:
-        x0 = int(x0) - 1
-        if x0 < 0 or x0 >= width:
-            raise errors.ValidationError('x', 'X must be positive and not greater than image width', 422)
-    except ValueError:
-        raise errors.ValidationError('x', 'X must be a positive integer')
-
-    if y0 is None:
-        y0 = 1
-    try:
-        y0 = int(y0) - 1
-        if y0 < 0 or y0 >= height:
-            raise errors.ValidationError('y', 'Y must be positive and not greater than image height', 422)
-    except ValueError:
-        raise errors.ValidationError('y', 'Y must be a positive integer')
-
-    if not w:
-        w = width - x0
-    try:
-        w = int(w)
-        if w <= 0 or w > width - x0:
-            raise errors.ValidationError(
-                'width', f'Width must be positive and less than or equal to {width - x0:d}', 422)
-    except ValueError:
-        raise errors.ValidationError('width', 'Width must be a positive integer')
-
-    if not h:
-        h = height - y0
-    try:
-        h = int(h)
-        if h <= 0 or h > height - y0:
-            raise errors.ValidationError(
-                'height', f'Height must be positive and less than or equal to {height - y0:d}', 422)
-    except ValueError:
-        raise errors.ValidationError('height', 'Height must be a positive integer')
-
-    if is_image:
-        return data[y0:y0+h, x0:x0+w]
-
-    # For tables, convert Astropy FITS table to NumPy structured array and extract the required range of columns, then
-    # the required range of rows
-    data = np.array(data)
-    return data[list(data.dtype.names[x0:x0+w])][y0:y0+h]
-
-
 def get_data_file_path(user_id: Optional[int], file_id: int) -> str:
     """
     Return data file path on disk
@@ -842,25 +771,81 @@ def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readon
         raise UnknownDataFileError(file_id=file_id)
 
 
-def get_data_file_data(user_id: Optional[int], file_id: int) \
-        -> Tuple[Union[np.ndarray, np.ma.MaskedArray], pyfits.Header]:
+def get_data_file_data(user_id: int | None, file_id: int, x0: int | str | None = None, y0: int | str | None = None,
+                       w: int | str | None = None, h: int | str | None = None) \
+        -> tuple[np.ndarray | np.ma.MaskedArray, pyfits.Header]:
     """
     Return FITS file data and header for a data file with the given ID; handles masked images
 
     :param user_id: current user ID (None if user auth is disabled)
     :param file_id: data file ID
+    :param x0: optional X coordinate of origin (1-based); if None, 1 is assumed; ignored for tables along with y0, w, h
+    :param y0: optional Y coordinate of origin (1-based); if None, 1 is assumed
+    :param w: optional subframe width; if None, extend the subframe to the right image boundary
+    :param h: optional subframe height; if None, extend the subframe to the bottom image boundary
 
     :return: tuple (data, hdr); if the underlying FITS file contains a mask in an extra image HDU, it is converted into
         a :class:`numpy.ma.MaskedArray` instance
     """
     with get_data_file_fits(user_id, file_id) as fits:
         hdr = fits[0].header
+
         if fits[0].data is None:
             # Table stored in extension HDU
             data = fits[1].data
         elif fits[0].data.dtype.fields is None:
             # Image stored in the primary HDU, with NaNs for masked values
-            data = np.ma.masked_invalid(fits[0].data)
+            width, height = hdr.get('NAXIS1'), hdr.get('NAXIS2')
+
+            if x0 is None:
+                x0 = 0
+            else:
+                try:
+                    x0 = int(x0) - 1
+                    if x0 < 0 or x0 >= width:
+                        raise errors.ValidationError('x', 'X must be positive and not greater than image width', 422)
+                except ValueError:
+                    raise errors.ValidationError('x', 'X must be a positive integer')
+
+            if y0 is None:
+                y0 = 0
+            else:
+                try:
+                    y0 = int(y0) - 1
+                    if y0 < 0 or y0 >= height:
+                        raise errors.ValidationError('y', 'Y must be positive and not greater than image height', 422)
+                except ValueError:
+                    raise errors.ValidationError('y', 'Y must be a positive integer')
+
+            if not w:
+                w = width - x0
+            else:
+                try:
+                    w = int(w)
+                    if w <= 0 or w > width - x0:
+                        raise errors.ValidationError(
+                            'width', f'Width must be positive and less than or equal to {width - x0:d}', 422)
+                except ValueError:
+                    raise errors.ValidationError('width', 'Width must be a positive integer')
+
+            if not h:
+                h = height - y0
+            else:
+                try:
+                    h = int(h)
+                    if h <= 0 or h > height - y0:
+                        raise errors.ValidationError(
+                            'height', f'Height must be positive and less than or equal to {height - y0:d}', 422)
+                except ValueError:
+                    raise errors.ValidationError('height', 'Height must be a positive integer')
+
+            if (x0, y0, w, h) == (0, 0, width, height):
+                # Return the whole image
+                data = fits[0].data
+            else:
+                # Return a subframe
+                data = fits[0].section[y0:y0+h, x0:x0+w]
+            data = np.ma.masked_invalid(data)
             if data.mask is False or not data.mask.any():
                 # Normal image data
                 data = data.data
