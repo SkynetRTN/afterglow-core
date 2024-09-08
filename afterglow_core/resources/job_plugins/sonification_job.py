@@ -15,7 +15,7 @@ from skylib.sonification import sonify_image
 
 from ...models import Job
 from ...schemas import AfterglowSchema, Boolean, Float
-from ..data_files import get_data_file, get_data_file_data, get_subframe
+from ..data_files import get_data_file, get_data_file_data
 
 
 __all__ = ['SonificationJob']
@@ -54,9 +54,9 @@ class SonificationJob(Job):
 
     def run(self):
         settings = self.settings
-        pixels = get_subframe(
+        pixels = get_data_file_data(
             self.user_id, self.file_id,
-            x0=settings.x, y0=settings.y, w=settings.width, h=settings.height)
+            x0=settings.x, y0=settings.y, w=settings.width, h=settings.height)[0]
 
         x0 = settings.x - 1
         y0 = settings.y - 1
@@ -64,16 +64,14 @@ class SonificationJob(Job):
         df = get_data_file(self.user_id, self.file_id)
         height, width = pixels.shape
         if width != df.width or height != df.height:
-            # Sonifying a subimage; estimate background from the whole image
-            # first, then supply a cutout of background and RMS
-            # to sonify_image()
+            # Sonifying a subimage; estimate background from the whole image first, then supply a cutout of background
+            # and RMS to sonify_image()
             full_img = get_data_file_data(self.user_id, self.file_id)[0]
             bkg, rms = estimate_background(full_img, size=settings.bkg_scale)
             bkg = bkg[y0:y0+height, x0:x0+width]
             rms = rms[y0:y0+height, x0:x0+width]
         else:
-            # When sonifying the whole image, sonify_image() will estimate
-            # background automatically
+            # When sonifying the whole image, sonify_image() will estimate background automatically
             bkg = rms = None
 
         data = BytesIO()

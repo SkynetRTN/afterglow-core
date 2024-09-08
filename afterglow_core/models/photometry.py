@@ -57,6 +57,7 @@ class PhotSettings(AfterglowSchema):
     fix_ell: bool = Boolean(dump_default=True)
     fix_rot: bool = Boolean(dump_default=True)
     apcorr_tol: float = Float(dump_default=0.0001)
+    reject_bkg_outliers: bool = Boolean(dump_default=False)
 
 
 class PhotometryData(SourceExtractionData, IPhotometry, IAperture):

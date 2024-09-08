@@ -299,6 +299,7 @@ def data_files_wcs(id: int) -> Response:
     try:
         wcs = WCS(hdr, relax=True)
         if wcs.has_celestial:
+            wcs.wcs.crval[0] %= 360
             wcs_hdr = wcs.to_header(relax=True)
     except Exception:
         pass
@@ -467,12 +468,12 @@ def data_files_pixels(id: int) -> Response:
         (application/octet-stream) or a JSON list of rows, each one being, in turn, a list of data values within the row
     """
     try:
-        return make_data_response(get_subframe(
+        return make_data_response(get_data_file_data(
             request.user.id, id,
-            x0=request.args.get('x', 1),
-            y0=request.args.get('y', 1),
+            x0=request.args.get('x'),
+            y0=request.args.get('y'),
             w=request.args.get('width'),
-            h=request.args.get('height')))
+            h=request.args.get('height'))[0])
     except errors.AfterglowError:
         raise
     except Exception:
@@ -662,8 +663,10 @@ def data_file_photometry(id: int) -> Response:
 
     if ra is not None and dec is not None:
         # Convert RA/Dec to XY if we have astrometric calibration
-        wcs = WCS(hdr)
-        if not any(wcs.wcs.ctype):
+        wcs = WCS(hdr, relax=True)
+        if wcs.has_celestial:
+            wcs.wcs.crval[0] %= 360
+        else:
             raise MissingWCSError()
         x, y = wcs.all_world2pix(numpy.array(ra)*15, numpy.array(dec), 1, quiet=True)
 

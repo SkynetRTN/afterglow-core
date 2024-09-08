@@ -619,6 +619,8 @@ components:
         aper_theta:
           description: position angle of aperture major axis [degrees], counter-clockwise
           type: number
+          minimum: -90
+          maximum: 90
         annulus_a_in:
           description: annulus inner radius or semi-major axis [pixels]
           type: number
@@ -632,6 +634,8 @@ components:
         annulus_theta_in:
           description: position angle of major axis of inner annulus ellipse [degrees], counter-clockwise
           type: number
+          minimum: -90
+          maximum: 90
         annulus_a_out:
           description: annulus outer radius or semi-major axis [pixels]
           type: number
@@ -645,6 +649,8 @@ components:
         annulus_theta_out:
           description: position angle of major axis of outer annulus ellipse [degrees], counter-clockwise
           type: number
+          minimum: -90
+          maximum: 90
       required: [aper_a]
 
     ISourceId:
@@ -1085,6 +1091,8 @@ components:
         theta:
           description: position angle of semi-major axis [degrees], counter-clockwise, for mode=aperture and `a` != `b`
           type: number
+          minimum: -90
+          maximum: 90
           nullable: true
           default: 0
         a_in:
@@ -1108,6 +1116,8 @@ components:
         theta_out:
           description: annulus position angle [degrees], defaults to `theta`
           type: number
+          minimum: -90
+          maximum: 90
           nullable: true
         gain:
           description: default gain if not present in FITS headers
@@ -1141,6 +1151,10 @@ components:
           type: number
           minimum: 0
           default: 0.0001
+        reject_bkg_outliers:
+          description: perform robust outlier rejection for background pixels in the annulus
+          type: boolean
+          default: false
       nullable: true
       default: null
 
@@ -1460,26 +1474,6 @@ components:
           description: don't prioritize mosaic tile pairs with a larger overlap (faster)
           type: boolean
           default: true
-        global_contrast:
-          description: in mosaic mode, put all tiles on the same contrast scale (faster but less accurate)
-          type: boolean
-          default: true
-        percentile_min:
-          description: lower percentile for conversion to 8 bit
-          type: number
-          minimum: 0
-          maximum: 100
-          default: 10
-        percentile_max:
-          description: upper percentile for conversion to 8 bit
-          type: number
-          minimum: 0
-          maximum: 100
-          default: 99
-        detect_edges:
-          description: apply edge detection before feature extraction
-          type: boolean
-          default: false
         enable_rot:
           description: allow rotation transformation for >= 2 WCS grid points or sources
           type: boolean
@@ -1608,6 +1602,26 @@ components:
               type: number
               minimum: 0
               default: 0.5
+            global_contrast:
+              description: in mosaic mode, put all tiles on the same contrast scale (faster but less accurate)
+              type: boolean
+              default: true
+            percentile_min:
+              description: lower percentile for conversion to 8 bit
+              type: number
+              minimum: 0
+              maximum: 100
+              default: 10
+            percentile_max:
+              description: upper percentile for conversion to 8 bit
+              type: number
+              minimum: 0
+              maximum: 100
+              default: 99
+            detect_edges:
+              description: apply edge detection before feature extraction
+              type: boolean
+              default: false
 
     AlignmentSettingsFeaturesAKAZE:
       description: settings for AKAZE feature-based alignment
@@ -3981,7 +3995,7 @@ paths:
       parameters:
         - name: session_id
           in: query
-          description: optional session ID, defaults to anonymous session
+          description: optional session ID, defaults to anonymous session; "*" means return data files for all user's sessions
           schema:
             type: integer
             nullable: true
@@ -4697,6 +4711,8 @@ paths:
           description: rotation angle of semi-major axis in degrees counter-clockwise from the X axis; unused for circular aperture
           schema:
             type: number
+            minimum: -90
+            maximum: 90
             nullable: true
             default: null
         - name: a_in
@@ -4728,6 +4744,8 @@ paths:
           description: rotation angle of the outer semi-major annulus axis in degrees counter-clockwise from the X axis; defaults to `theta`, i.e. same rotation as the aperture
           schema:
             type: number
+            minimum: -90
+            maximum: 90
             nullable: true
             default: null
         - name: centroid_radius

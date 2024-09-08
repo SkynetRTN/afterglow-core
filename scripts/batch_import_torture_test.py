@@ -13,7 +13,6 @@ import time
 import traceback
 from datetime import datetime
 from multiprocessing import Event, Lock, Process
-from typing import Dict, List, Union
 import warnings
 
 
@@ -21,7 +20,7 @@ warnings.filterwarnings('ignore', 'Unverified HTTPS request is being made')
 
 
 def api_request(method: str, resource: str, args: argparse.Namespace, token: str | None = None, **data) \
-        -> Union[Dict[str, dict], List[Dict[str, dict]]]:
+        -> dict[str, dict] | list[dict[str, dict]] | str | bytes:
     headers = {}
 
     if not token:
@@ -92,11 +91,11 @@ def api_request(method: str, resource: str, args: argparse.Namespace, token: str
                 raise RuntimeError(res['error']['detail'])
             return res.get('data')
         if content_type.split('/')[0].lower() == 'text':
-            raise RuntimeError(f'Unexpected response:\n{r.text}')
-        raise RuntimeError(f'Unexpected response:\n{r.content}')
+            return r.text
+        return r.content
 
 
-def test_process(args: argparse.Namespace, username: str, api_key: str, skynet: str, obs_paths: Dict[int, str],
+def test_process(args: argparse.Namespace, username: str, api_key: str, obs_paths: list[str, str],
                  terminate_event: Event, console_lock: Lock) -> None:
     """
     Test process body for the given user
@@ -104,25 +103,33 @@ def test_process(args: argparse.Namespace, username: str, api_key: str, skynet: 
     :param args: parsed command-line arguments
     :param username: impersonate the given user for API calls
     :param api_key: user's personal Afterglow API token
-    :param skynet: Skynet data provider ID
-    :param obs_paths: Skynet data provider asset paths for the observations indexed by obs IDs
+    :param obs_paths: list of pairs (provider_id, path)
+    :param terminate_event: event set when
     """
     try:
         warnings.filterwarnings('ignore', 'Unverified HTTPS request is being made')
 
-        while not terminate_event.is_set():
-            for obs_id, obs_path in obs_paths.items():
+        ts = args.tile_size
+        cycle = 0
+        while cycle < args.num_cycles and not terminate_event.is_set():
+            cycle += 1
+            for job_no, (provider_id, obs_path) in enumerate(obs_paths):
+                prefix = (
+                    f'{username}, cycle {cycle}{f"/{args.num_cycles}" if args.num_cycles else ""}, '
+                    f'job {job_no + 1}/{len(obs_paths)}:'
+                )
+
                 if terminate_event.is_set():
                     break
 
                 # Submit batch import job
                 time.sleep(1)
-                prefix = f'{username}, obs {obs_id}:'
+                result = {}
                 t0 = time.time()
                 try:
                     job = api_request(
                         'POST', 'jobs', args, api_key, type='batch_import',
-                        settings=[dict(provider_id=skynet, path=obs_path)])
+                        settings=[dict(provider_id=provider_id, path=obs_path, duplicates='append')])
                     if job.get('detail'):
                         raise RuntimeError(job['detail'])
                     job_id = job['id']
@@ -131,21 +138,19 @@ def test_process(args: argparse.Namespace, username: str, api_key: str, skynet: 
                         print(f'{datetime.now().isoformat(" ")} {prefix} error submitting job [{e}]')
                 else:
                     # Wait for job completion
+                    msg = ''
                     while not terminate_event.is_set():
                         try:
                             state = api_request('GET', f'jobs/{job_id}/state', args, api_key)
                         except Exception as e:
-                            with console_lock:
-                                print(f'{datetime.now().isoformat(" ")} {prefix} error requesting job state [{e}]')
+                            msg = f'error requesting job state [{e}]'
                         else:
                             if state['status'] == 'completed':
                                 # Report job result
                                 try:
                                     result = api_request('GET', f'jobs/{job_id}/result', args, api_key)
                                 except Exception as e:
-                                    with console_lock:
-                                        print(f'{datetime.now().isoformat(" ")} {prefix} error requesting job result '
-                                              f'[{e}]')
+                                    msg = f'error requesting job result [{e}]'
                                 else:
                                     # Calculate job pickup time
                                     # noinspection PyBroadException
@@ -158,33 +163,51 @@ def test_process(args: argparse.Namespace, username: str, api_key: str, skynet: 
                                             t2 = datetime.strptime(state['started_on'], '%Y-%m-%d %H:%M:%S.%f')
                                         except ValueError:
                                             t2 = datetime.strptime(state['started_on'], '%Y-%m-%d %H:%M:%S')
-                                        pickup_time = f'; picked up in {(t2 - t1).total_seconds():.3f} s'
+                                        msg = f'job pick-up {int(round((t2 - t1).total_seconds()))} s, '
                                     except Exception:
-                                        pickup_time = ''
+                                        msg = ''
 
-                                    duration = f'Finished in {time.time() - t0:.1f} s{pickup_time}'
-                                    with console_lock:
-                                        if result.get('errors'):
-                                            print(f'{datetime.now().isoformat(" ")} {prefix} '
-                                                  f'{"; ".join(e["detail"] for e in result["errors"])}. {duration}')
-                                        else:
-                                            print(f'{datetime.now().isoformat(" ")} {prefix} {duration}')
+                                    msg += f'completion {time.time() - t0:.1f} s'
+                                    if result.get('errors'):
+                                        msg += '; ' + '; '.join(e['detail'] for e in result['errors'])
                                 break
                         time.sleep(1)
-                finally:
-                    # Clean up the user's Workbench
-                    try:
-                        result = api_request('GET', f'data-files', args, api_key)
-                    except Exception as e:
-                        with console_lock:
-                            print(f'{datetime.now().isoformat(" ")} {prefix} error requesting data file IDs [{e}]')
-                    else:
-                        for df in result:
-                            # noinspection PyBroadException
+
+                    if ts and result.get('file_ids'):
+                        # Retrieve pixel data
+                        if msg:
+                            msg += '; '
+                        t0 = time.time()
+                        for file_id in result['file_ids']:
                             try:
-                                api_request('DELETE', f'data-files/{df["id"]}', args, api_key)
-                            except Exception:
-                                pass
+                                # Get image size
+                                df = api_request('GET', f'data-files/{file_id}', args, api_key)
+                            except Exception as e:
+                                msg += f'error requesting data file info [{e}]; '
+                            else:
+                                w, h = df.get('width') or 0, df.get('height') or 0
+                                if w <= 0 or h <= 0:
+                                    msg += 'empty data file; '
+                                else:
+                                    for y in range(0, h, ts):
+                                        for x in range(0, w, ts):
+                                            try:
+                                                api_request(
+                                                    'GET', f'data-files/{file_id}/pixels', args, api_key,
+                                                    x=x + 1, y=y + 1, width=min(ts, w - x), height=min(ts, h - y))
+                                            except Exception as e:
+                                                msg += f'error retrieving pixel data [{e}]; '
+                        msg += f'pixels {time.time() - t0:.1f} s'
+                    with console_lock:
+                        print(f'{datetime.now().isoformat(" ")} {prefix} {msg}')
+                finally:
+                    # Remove the newly imported images
+                    for file_id in result.get('file_ids', []):
+                        # noinspection PyBroadException
+                        try:
+                            api_request('DELETE', f'data-files/{file_id}', args, api_key)
+                        except Exception:
+                            pass
     except (KeyboardInterrupt, SystemExit):
         pass
     except Exception as e:
@@ -197,6 +220,7 @@ def cleanup_workbenches(args: argparse.Namespace, api_keys) -> None:
     """
     Clean up the given users' Workbenches
     """
+    print('Cleaning up Workbenches')
     for api_key in api_keys:
         # noinspection PyBroadException
         try:
@@ -227,17 +251,22 @@ def main():
     parser.add_argument('-t', '--token', help='authenticate with this personal token')
     parser.add_argument('-k', '--skynet-token', help='Skynet API access token')
     parser.add_argument(
+        '-n', '--num-cycles', metavar='N', type=int, default=0, help='number of test cycles; 0 = infinite')
+    parser.add_argument(
+        '-z', '--tile-size', metavar='PIXELS', type=int, default=1024,
+        help='image tile size; 0 = don\'t download pixel data after import')
+    parser.add_argument(
         '-c', '--cleanup-only', action='store_true', help='don\'t run tests, only clean up users\' data files')
     parser.add_argument(
-        'users', metavar='@USERFILE|-|USERNAME,USERNAME,...',
-        help='usernames, comma-separated, list file, or read from console ("-")')
+        'users', metavar='@USERFILE|-|USERNAME[*n],USERNAME[*n],...',
+        help='usernames with optional repeats, comma-separated, list file, or read from console ("-")')
     parser.add_argument(
-        'obs_ids', metavar='@OBSFILE|ID,ID,...', nargs='?', default='',
-        help='Skynet observation IDs, comma-separated or list file')
+        'obs', metavar='@OBSFILE|{ID|PROVIDER:PATH,...}', nargs='?', default='',
+        help='Skynet observation IDs or provider:path pairs, comma-separated or list file')
 
     args = parser.parse_args()
 
-    # Read usernames and obs IDs from command line or file
+    # Read usernames from command line or file
     if args.users.startswith('@'):
         with open(args.users[1:], encoding='utf8') as f:
             usernames = ','.join(f.read().splitlines())
@@ -245,21 +274,54 @@ def main():
         usernames = ','.join(sys.stdin.read().splitlines())
     else:
         usernames = args.users
-    usernames = [s.strip() for s in usernames.split(',') if s.strip()]
+    initial_usernames = usernames.split(',')
+    usernames = {}
+    for s in initial_usernames:
+        s = s.strip()
+        if not s:
+            continue
+        if '*' in s:
+            # Handle repeats
+            s, repeats = s.rsplit('*')
+            repeats = int(repeats)
+        else:
+            repeats = 1
+        try:
+            usernames[s] += repeats
+        except KeyError:
+            usernames[s] = repeats
     if not usernames:
         print('No usernames provided', file=sys.stderr)
         sys.exit(-1)
-    if args.cleanup_only:
-        obs_ids = []
-    else:
-        if args.obs_ids.startswith('@'):
-            with open(args.obs_ids[1:], encoding='utf8') as f:
-                obs_ids = ','.join(f.read().splitlines())
+    test_usernames = []
+    for username, repeats in usernames.items():
+        if repeats == 1:
+            test_usernames.append(username)
         else:
-            obs_ids = args.obs_ids
-        obs_ids = [int(s) for s in obs_ids.split(',') if s.strip()]
-        if not obs_ids and not args.cleanup_only:
-            print('No observation IDs provided', file=sys.stderr)
+            for i in range(1, repeats + 1):
+                test_usernames.append(f'{username}#{i}')
+
+    # Read job parameters from command line or file
+    if args.cleanup_only:
+        obs_paths = []
+    else:
+        if args.obs.startswith('@'):
+            with open(args.obs[1:], encoding='utf8') as f:
+                obs_specs = ','.join(f.read().splitlines())
+        else:
+            obs_specs = args.obs
+        obs_paths = []
+        for spec in obs_specs.split(','):
+            spec = spec.strip()
+            if not spec:
+                continue
+            if ':' in spec:
+                provider, path = spec.split(':')
+            else:
+                provider, path = 'skynet_local', spec
+            obs_paths.append((provider, path))
+        if not obs_paths and not args.cleanup_only:
+            print('No observation IDs/paths provided', file=sys.stderr)
             sys.exit(-2)
 
     # Retrieve user API tokens
@@ -308,27 +370,36 @@ def main():
         sys.exit(-5)
     api_keys = {username: users[username]['api_token'] for username in usernames}
 
-    print(f'User{"s" if len(usernames) > 1 else ""}: {", ".join(usernames)}')
+    print(
+        f'User{"s" if len(usernames) > 1 else ""}:',
+        ', '.join(username if repeats == 1 else f'{username}*{repeats}' for username, repeats in usernames.items()))
     if args.cleanup_only:
-        print('Cleaning up Workbenches')
         cleanup_workbenches(args, api_keys.values())
         return
 
-    print(f'Observation ID{"s" if len(obs_ids) > 1 else ""}: {", ".join(str(obs_id) for obs_id in obs_ids)}')
-
-    # Get obs collabs/groups/usernames via Skynet API
+    # Translate Skynet obs IDs to full asset paths
     obs_cache_filename = 'obs.cache'
     # noinspection PyBroadException
     try:
         # Get user info from cache
         with open(obs_cache_filename, encoding='utf8') as f:
-            obs_paths = json.load(f)
+            obs_cache = json.load(f)
     except Exception:
-        obs_paths = {}
+        obs_cache = {}
     headers = {'Authentication-Token': args.skynet_token}
     paths_added = False
-    for obs_id in obs_ids:
-        if str(obs_id) not in obs_paths:
+    for i, (provider, path) in enumerate(obs_paths):
+        if provider != 'skynet_local':
+            continue
+
+        try:
+            obs_id = int(path)
+        except ValueError:
+            continue
+
+        try:
+            path = obs_cache[str(obs_id)]
+        except KeyError:
             try:
                 r = requests.get(f'https://api.skynet.unc.edu/2.0/obs/{obs_id}', headers=headers, verify=False)
                 if r.status_code != 200:
@@ -346,14 +417,22 @@ def main():
                     path = f'Group Observations/{obs["group"]["name"]}/{obs["user"]["username"]}/{obs_id}/reduced'
             else:
                 path = f'User Observations/{obs_id}/reduced'
-            obs_paths[str(obs_id)] = path
+            obs_cache[str(obs_id)] = path
             paths_added = True
+
+        obs_paths[i] = (provider, path)
+
     if paths_added:
         with open(obs_cache_filename, 'w', encoding='utf8') as f:
-            json.dump(obs_paths, f)
+            json.dump(obs_cache, f)
 
-    # Get Skynet data provider ID
-    skynet = [p['id'] for p in api_request('GET', 'data-providers', args) if p['name'] == 'skynet_local'][0]
+    # Get data provider IDs
+    provider_ids = {}
+    for p in api_request('GET', 'data-providers', args):
+        # Allow referencing data providers by name or ID if ambiguous
+        provider_ids[p['name']] = provider_ids[str(p['id'])] = p['id']
+    for i, (provider, path) in enumerate(obs_paths):
+        obs_paths[i] = (provider_ids[provider], path)
 
     # Run test in a separate process for each user
     terminate_event = Event()
@@ -361,17 +440,28 @@ def main():
     processes = [
         Process(
             target=test_process,
-            args=(args, username, api_keys[username], skynet, obs_paths, terminate_event, console_lock))
-        for username in usernames
+            args=(args, username, api_keys[username if '#' not in username else username[:username.index('#')]],
+                  obs_paths, terminate_event, console_lock)
+        )
+        for username in test_usernames
     ]
+    print('Press Ctrl-C to terminate\n')
+    for p in processes:
+        p.start()
     try:
-        print('Press Enter to terminate\n')
-        for p in processes:
-            p.start()
-        try:
-            input()
-        except (KeyboardInterrupt, SystemExit):
-            pass
+        while processes:
+            time.sleep(0.1)
+            i = 0
+            while i < len(processes):
+                p = processes[i]
+                if p.is_alive():
+                    i += 1
+                else:
+                    p.join()
+                    del processes[i]
+        print('All test processes finished')
+    except (KeyboardInterrupt, SystemExit):
+        print('Terminating')
         terminate_event.set()
     finally:
         for p in processes:

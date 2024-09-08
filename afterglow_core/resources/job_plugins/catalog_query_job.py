@@ -132,17 +132,18 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
     for file_id in file_ids:
         with get_data_file_fits(job.user_id, file_id) as fits:
             try:
-                wcs = WCS(fits[0].header)
+                wcs = WCS(fits[0].header, relax=True)
             except Exception:
                 if skip_failed:
                     continue
                 raise ValueError('Data file ID {} has no WCS'.format(file_id))
             else:
-                if not wcs.has_celestial:
-                    if skip_failed:
-                        continue
-                    raise ValueError(
-                        'Invalid WCS for data file ID {}'.format(file_id))
+                if wcs.has_celestial:
+                    wcs.wcs.crval[0] %= 360
+                elif skip_failed:
+                    continue
+                else:
+                    raise ValueError('Invalid WCS for data file ID {}'.format(file_id))
         wcs_list.append(wcs)
 
     # Calculate bounding box centers and RA/Dec sizes for each of the FOVs
@@ -150,6 +151,7 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
     for wcs in wcs_list:
         height, width = wcs.array_shape
         center = wcs.all_pix2world((width - 1)/2, (height - 1)/2, 0)
+        center[0] %= 360
 
         # Move center to RA = Dec = 0 so that we get a proper box size in terms
         # of catalog query, i.e. RA size multiplied by cos(dec); the box is
@@ -164,6 +166,7 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
         ras, decs = wcs0.all_pix2world(
             [(0, 0), (width - 1, 0), (width - 1, height - 1), (0, height - 1)],
             0).T
+        ras %= 360
         boxes.append((center[0], center[1],
                       ras[ras < 180].max() - ras[ras >= 180].min() + 360,
                       decs.max() - decs.min()))

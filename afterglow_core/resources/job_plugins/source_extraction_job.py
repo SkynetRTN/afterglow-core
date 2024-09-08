@@ -13,7 +13,7 @@ from skylib.util.fits import get_fits_exp_length, get_fits_gain, get_fits_time
 
 from ...models import Job, JobResult, SourceExtractionData
 from ...schemas import AfterglowSchema, Boolean, Float
-from ..data_files import get_data_file_fits, get_subframe
+from ..data_files import get_data_file_data
 from .source_merge_job import SourceMergeSettings, merge_sources
 
 
@@ -119,13 +119,11 @@ def run_source_extraction_job(job: Job,
 
     result_data = []
     backgrounds = {}
-    for file_no, id in enumerate(job_file_ids):
+    for file_no, file_id in enumerate(job_file_ids):
         try:
             # Get image data
-            pixels = get_subframe(job.user_id, id, settings.x, settings.y, settings.width, settings.height)
-
-            with get_data_file_fits(job.user_id, id) as f:
-                hdr = f[0].header
+            pixels, hdr = get_data_file_data(
+                job.user_id, file_id, settings.x, settings.y, settings.width, settings.height)
 
             if settings.gain is None:
                 gain = get_fits_gain(hdr)
@@ -160,7 +158,7 @@ def run_source_extraction_job(job: Job,
             # Extract sources
             source_table, background, background_rms = extract_sources(
                 pixels, gain=gain, sat_img=sat_img, **extraction_kw)
-            backgrounds[id] = (background, background_rms)
+            backgrounds[file_id] = (background, background_rms)
 
             if settings.limit and len(source_table) > settings.limit:
                 # Leave only the given number of the brightest sources
@@ -170,8 +168,10 @@ def run_source_extraction_job(job: Job,
             # Apply astrometric calibration if present
             # noinspection PyBroadException
             try:
-                wcs = WCS(hdr)
-                if not wcs.has_celestial:
+                wcs = WCS(hdr, relax=True)
+                if wcs.has_celestial:
+                    wcs.wcs.crval[0] %= 360
+                else:
                     wcs = None
             except Exception:
                 wcs = None
@@ -182,7 +182,7 @@ def run_source_extraction_job(job: Job,
                     ofs_x=settings.x - 1,
                     ofs_y=settings.y - 1,
                     wcs=wcs,
-                    file_id=id,
+                    file_id=file_id,
                     time=epoch,
                     filter=flt,
                     telescope=scope,
@@ -193,6 +193,6 @@ def run_source_extraction_job(job: Job,
                 job.update_progress(
                     (file_no + 1)/len(job_file_ids)*100, stage, total_stages)
         except Exception as e:
-            job.add_error(e, {'file_id': id})
+            job.add_error(e, {'file_id': file_id})
 
     return result_data, backgrounds
