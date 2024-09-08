@@ -40,7 +40,7 @@ Werkzeug==3.0.3
 # extra skynet dependencies
 jwt
 mysqlclient==2.2.4
-cryptography==42.0.8
+cryptography==43.0.1
 marshmallow-sqlalchemy==1.0.0
 PyMySQL==1.1.1
 redis==5.0.1
