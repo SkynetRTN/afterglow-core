@@ -498,7 +498,7 @@ def init_jobs(app: Flask, cipher: Fernet) -> Celery:
             task='cleanup_old_user_accounts',
             schedule=crontab(hour='4', minute='0'),
             args=(app.config['DATA_FILE_EXPIRATION'], app.config['DATA_FILE_ROOT']),
-        ),
+        )
     if sys.platform.startswith('win'):
         # https://stackoverflow.com/questions/41636273/celery-tasks-received-but-not-executing
         config.update(worker_pool='eventlet')
