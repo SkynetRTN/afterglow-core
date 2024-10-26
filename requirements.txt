@@ -35,7 +35,7 @@ sep==1.2.1
 # 'SkyLib >= 0.2.0
 SQLAlchemy==2.0.30
 tbb==2021.10.0
-Werkzeug==3.0.3
+Werkzeug==3.0.6
 
 # extra skynet dependencies
 jwt
