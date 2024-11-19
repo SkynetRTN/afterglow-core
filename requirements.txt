@@ -4,7 +4,7 @@
 alembic==1.14.0
 amqp==5.3.1
 astropy==6.1.6
-astropy-iers-data==0.2024.11.11.0.32.38
+astropy-iers-data==0.2024.11.18.0.35.2
 astroquery==0.4.7
 astroscrappy==1.2.0
 async-timeout==5.0.1
@@ -27,7 +27,7 @@ cryptography==43.0.3
 cycler==0.12.1
 dnspython==2.7.0
 email-validator==2.2.0
-eventlet==0.37.0; sys_platform == "win32"
+eventlet==0.38.0; sys_platform == "win32"
 exifread==3.0.0
 flask==3.1.0
 flask-cors==4.0.2
