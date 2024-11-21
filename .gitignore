@@ -126,3 +126,6 @@ AFTERGLOW_CORE_KEY
 
 #Angular
 .angular
+
+# PDM package manager
+.pdm*
