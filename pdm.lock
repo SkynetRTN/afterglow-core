@@ -2,7 +2,7 @@
 # It is not intended for manual editing.
 
 [metadata]
-groups = ["default", "prod", "dev"]
+groups = ["default", "dev", "prod"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
 content_hash = "sha256:d0e87b57d3f46d34dc0eee9b9f3b3190a85e1dd7da5d8e387f790af0380a5319"
@@ -1443,7 +1443,7 @@ version = "2.0.0"
 requires_python = "<3.13,>=3.10"
 git = "https://github.com/SkynetRTN/skylib.git"
 ref = "master"
-revision = "e6a5faac1fc8f2a9d5b0ebf7ff021fc5d18ca2af"
+revision = "ead10a1d2c8b919e1472bb9a5093577ae7a8b664"
 summary = "A Python library for analyzing and processing astronomical image data"
 groups = ["prod"]
 dependencies = [
@@ -1468,7 +1468,7 @@ version = "2.0.0"
 requires_python = "<3.13,>=3.10"
 git = "https://github.com/SkynetRTN/skylib.git"
 ref = "develop"
-revision = "a2e31e3d3fe3a3a890eddb9864f44548c165e369"
+revision = "cc5027d43f6d440ad7e39cb723de783341479a4f"
 summary = "A Python library for analyzing and processing astronomical image data"
 groups = ["dev"]
 dependencies = [
