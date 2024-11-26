@@ -5,7 +5,7 @@
 groups = ["default", "dev", "prod"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:d0e87b57d3f46d34dc0eee9b9f3b3190a85e1dd7da5d8e387f790af0380a5319"
+content_hash = "sha256:eb872bd3a23348efe1d3ead0ff7547a8d1ec769f5cd5d394b0045aa2753b8d35"
 
 [[metadata.targets]]
 requires_python = ">=3.10,<3.11"
@@ -44,7 +44,7 @@ files = [
 
 [[package]]
 name = "astropy"
-version = "6.1.6"
+version = "6.1.7"
 requires_python = ">=3.10"
 summary = "Astronomy and astrophysics core library"
 groups = ["default", "dev", "prod"]
@@ -56,25 +56,25 @@ dependencies = [
     "pyerfa>=2.0.1.1",
 ]
 files = [
-    {file = "astropy-6.1.6-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:cf99e5e93108d3a28538bf01bce5fa72935925efa321e678681428c62e5b4755"},
-    {file = "astropy-6.1.6-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:2b8f38e3143fd16ff411e8a8786a4f3f465d4569b17f380cb63918797cd7ace6"},
-    {file = "astropy-6.1.6-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:44cab6d022ab262ab5c3a26fbd7f468b0526a611062c1798519f4ca971f9ba46"},
-    {file = "astropy-6.1.6-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7ecfe30f8467d09fa52822a913259ac07ea923fd58875f24311c8c37e562a114"},
-    {file = "astropy-6.1.6-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:d08970b29aaf3ba7bea71f1d145f982fa60c949a0fb9a622d9c67aeeb7dfb42f"},
-    {file = "astropy-6.1.6-cp310-cp310-win32.whl", hash = "sha256:fc241747142bd70fe26d2198e29049bd8b088f87ef7f78822548a3e6fefb3a6b"},
-    {file = "astropy-6.1.6-cp310-cp310-win_amd64.whl", hash = "sha256:5984a80e8e0d5ef65f1bf1d8fddb7f5e348bdba78b239b56adb60ce1f6a3553f"},
-    {file = "astropy-6.1.6.tar.gz", hash = "sha256:63e153747de7892138860925f0395de66d0bd036c69837f68bf93aeadaac6847"},
+    {file = "astropy-6.1.7-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:be954c5f7707a089609053665aeb76493b79e5c4753c39486761bc6d137bf040"},
+    {file = "astropy-6.1.7-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:b5e48df5ab2e3e521e82a7233a4b1159d071e64e6cbb76c45415dc68d3b97af1"},
+    {file = "astropy-6.1.7-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:55c78252633c644361e2f7092d71f80ef9c2e6649f08d97711d9f19af514aedc"},
+    {file = "astropy-6.1.7-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:985e5e74489d23f1a11953b6b283fccde3f46cb6c68fee4f7228e5f6d8350ba9"},
+    {file = "astropy-6.1.7-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:dc2ea28ed41a3d92c39b1481d9c5be016ae58d68f144f3fd8cecffe503525bab"},
+    {file = "astropy-6.1.7-cp310-cp310-win32.whl", hash = "sha256:4e4badadd8dfa5dca08fd86e9a50a3a91af321975859f5941579e6b7ce9ba199"},
+    {file = "astropy-6.1.7-cp310-cp310-win_amd64.whl", hash = "sha256:8d7f6727689288ee08fc0a4a297fc7e8089d01718321646bd00fea0906ad63dc"},
+    {file = "astropy-6.1.7.tar.gz", hash = "sha256:a405ac186306b6cb152e6df2f7444ab8bd764e4127d7519da1b3ae4dd65357ef"},
 ]
 
 [[package]]
 name = "astropy-iers-data"
-version = "0.2024.11.18.0.35.2"
+version = "0.2024.11.25.0.34.48"
 requires_python = ">=3.8"
 summary = "IERS Earth Rotation and Leap Second tables for the astropy core package"
 groups = ["default", "dev", "prod"]
 files = [
-    {file = "astropy_iers_data-0.2024.11.18.0.35.2-py3-none-any.whl", hash = "sha256:428fe5d96f89ce32361a3e100cad0f114263efa0b71c7b2fda0edef6653baf88"},
-    {file = "astropy_iers_data-0.2024.11.18.0.35.2.tar.gz", hash = "sha256:b15008eee9bbe51a655a9312fc8a7c9cd22ee651e8d863a1e897415ed42dd2d8"},
+    {file = "astropy_iers_data-0.2024.11.25.0.34.48-py3-none-any.whl", hash = "sha256:dd8f1c3e72719a896b86a62b921c464bef2675ad02c6f0f0b8e6bec38eb41456"},
+    {file = "astropy_iers_data-0.2024.11.25.0.34.48.tar.gz", hash = "sha256:690702c30886e7a3509c4dc39e076c8f94a5cf923c1a49c26455e6d0a5aa5356"},
 ]
 
 [[package]]
@@ -756,19 +756,6 @@ files = [
 ]
 
 [[package]]
-name = "jwt"
-version = "1.3.1"
-requires_python = ">= 3.6"
-summary = "JSON Web Token library for Python 3."
-groups = ["default"]
-dependencies = [
-    "cryptography!=3.4.0,>=3.1",
-]
-files = [
-    {file = "jwt-1.3.1-py3-none-any.whl", hash = "sha256:61c9170f92e736b530655e75374681d4fcca9cfa8763ab42be57353b2b203494"},
-]
-
-[[package]]
 name = "keyring"
 version = "25.5.0"
 requires_python = ">=3.8"
@@ -1222,6 +1209,17 @@ files = [
     {file = "pyerfa-2.0.1.5-cp39-abi3-win32.whl", hash = "sha256:d30b9b0df588ed5467e529d851ea324a67239096dd44703125072fd11b351ea2"},
     {file = "pyerfa-2.0.1.5-cp39-abi3-win_amd64.whl", hash = "sha256:66292d437dcf75925b694977aa06eb697126e7b86553e620371ed3e48b5e0ad0"},
     {file = "pyerfa-2.0.1.5.tar.gz", hash = "sha256:17d6b24fe4846c65d5e7d8c362dcb08199dc63b30a236aedd73875cc83e1f6c0"},
+]
+
+[[package]]
+name = "pyjwt"
+version = "2.10.0"
+requires_python = ">=3.9"
+summary = "JSON Web Token implementation in Python"
+groups = ["default"]
+files = [
+    {file = "PyJWT-2.10.0-py3-none-any.whl", hash = "sha256:543b77207db656de204372350926bed5a86201c4cbff159f623f79c7bb487a15"},
+    {file = "pyjwt-2.10.0.tar.gz", hash = "sha256:7628a7eb7938959ac1b26e819a1df0fd3259505627b575e4bad6d08f76db695c"},
 ]
 
 [[package]]
