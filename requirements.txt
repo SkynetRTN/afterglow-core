@@ -74,7 +74,7 @@ prompt-toolkit==3.0.48
 pycparser==2.22; platform_python_implementation != "PyPy"
 pycryptodome==3.21.0
 pyerfa==2.0.1.5
-pyjwt==2.10.0
+pyjwt==2.10.1
 pymysql==1.1.1
 pyparsing==3.2.0
 python-dateutil==2.9.0.post0
