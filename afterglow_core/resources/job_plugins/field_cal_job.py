@@ -3,7 +3,7 @@ Afterglow Core: photometric calibration job plugin
 """
 
 from datetime import datetime
-from typing import List as TList, Optional, Tuple
+from typing import List as TList, Optional
 
 from marshmallow.fields import Integer, List, Nested
 import numpy
@@ -13,6 +13,7 @@ from numpy import (
 from scipy.spatial import cKDTree
 from scipy.optimize import brenth
 from astropy.wcs import WCS
+from flask import current_app
 
 from skylib.util.angle import angdist
 from skylib.util.fits import get_fits_time
@@ -34,7 +35,7 @@ __all__ = ['FieldCalJob']
 
 
 class FieldCalJobResult(JobResult):
-    data: TList[FieldCalResult] = List(Nested(FieldCalResult), dump_default=[])
+    data: list[FieldCalResult] = List(Nested(FieldCalResult), dump_default=[])
 
 
 class FieldCalJob(Job):
@@ -42,10 +43,9 @@ class FieldCalJob(Job):
     description = 'Photometric Calibration'
 
     result: FieldCalJobResult = Nested(FieldCalJobResult, dump_default={})
-    file_ids: TList[int] = List(Integer(), dump_default=[])
+    file_ids: list[int] = List(Integer(), dump_default=[])
     field_cal: FieldCal = Nested(FieldCal, dump_default={})
-    source_extraction_settings: SourceExtractionSettings = Nested(
-        SourceExtractionSettings, dump_default=None)
+    source_extraction_settings: SourceExtractionSettings = Nested(SourceExtractionSettings, dump_default=None)
     photometry_settings: PhotSettings = Nested(PhotSettings, dump_default=None)
 
     def run(self):
@@ -66,13 +66,12 @@ class FieldCalJob(Job):
                     setattr(stored_field_cal, name, val)
             field_cal = stored_field_cal
 
-        source_extraction_settings = getattr(
-            self, 'source_extraction_settings', None)
+        source_extraction_settings = getattr(self, 'source_extraction_settings', None)
         if source_extraction_settings is not None:
             # Detect sources using settings provided
             detected_sources = run_source_extraction_job(
-                self, self.source_extraction_settings, self.file_ids,
-                stage=0, total_stages=2)[0]
+                self, self.source_extraction_settings, self.file_ids, stage=0, total_stages=2
+            )[0]
             if not detected_sources:
                 raise RuntimeError('Could not detect any sources')
         else:
@@ -81,10 +80,8 @@ class FieldCalJob(Job):
         catalog_sources = getattr(field_cal, 'catalog_sources', None)
         if not catalog_sources and not getattr(field_cal, 'catalogs', None):
             raise ValueError(
-                'Missing either catalog sources or catalog list in field '
-                'cal{}'.format(
-                    ' "{}"'.format(field_cal.name)
-                    if getattr(field_cal, 'name', None) else ''))
+                'Missing either catalog sources or catalog list in field cal{}'
+                .format(' "{}"'.format(field_cal.name) if getattr(field_cal, 'name', None) else ''))
 
         if catalog_sources:
             # Convert catalog magnitudes to Mag instances (not deserialized
@@ -95,13 +92,10 @@ class FieldCalJob(Job):
                         source.mags[name] = Mag(**val)
             self.run_for_sources(catalog_sources, detected_sources)
         else:
-            # No input catalog sources, query the specified catalogs, stop
-            # if succeeded
+            # No input catalog sources, query the specified catalogs, stop if succeeded
             for i, catalog in enumerate(field_cal.catalogs):
                 try:
-                    catalog_sources = run_catalog_query_job(
-                        self, [catalog], file_ids=self.file_ids,
-                        skip_failed=True)
+                    catalog_sources = run_catalog_query_job(self, [catalog], file_ids=self.file_ids, skip_failed=True)
                     if not catalog_sources:
                         raise ValueError('No catalog sources found')
                     self.run_for_sources(catalog_sources, detected_sources)
@@ -113,8 +107,8 @@ class FieldCalJob(Job):
                     else:
                         raise
 
-    def run_for_sources(self, catalog_sources: TList[CatalogSource],
-                        detected_sources: TList[SourceExtractionData]) -> None:
+    def run_for_sources(self, catalog_sources: list[CatalogSource],
+                        detected_sources: list[SourceExtractionData]) -> None:
         """
         Perform calibration given a list of catalog sources (either supplied by
         the caller or retrieved from a single catalog) and an optional list of
@@ -126,6 +120,8 @@ class FieldCalJob(Job):
 
         :return: None
         """
+        debug = current_app.config.get('DEBUG', False)
+        logger = current_app.logger
         file_ids = self.file_ids  # alias
 
         # Make sure that each input catalog source has a unique ID; it will
@@ -186,14 +182,11 @@ class FieldCalJob(Job):
             for file_id in file_ids:
                 # noinspection PyBroadException
                 try:
-                    var_stars[file_id] = run_catalog_query_job(
-                        self, ['VSX'], file_ids=[file_id])
+                    var_stars[file_id] = run_catalog_query_job(self, ['VSX'], file_ids=[file_id])
                 except Exception:
                     # No WCS?
                     var_stars[file_id] = []
-            unique_var_stars = list(
-                {star.id: star for star in sum(var_stars.values(), [])}
-                .values())
+            unique_var_stars = list({star.id: star for star in sum(var_stars.values(), [])}.values())
             for i, source in enumerate(list(catalog_sources)):
                 file_id = getattr(source, 'file_id', None)
                 if file_id is None:
@@ -205,56 +198,43 @@ class FieldCalJob(Job):
                     ra, dec = get_source_radec(source, epoch, wcs)
                 except Exception as e:
                     self.add_warning(
-                        'Could not check variability for source {}: not '
-                        'enough info to calculate source RA/Dec [{}]'
-                        .format(getattr(source, 'id', None) or
-                                '#'.format(i + 1), e))
+                        'Could not check variability for source {}: not enough info to calculate source RA/Dec [{}]'
+                        .format(getattr(source, 'id', None) or '#'.format(i + 1), e))
                     continue
                 file_id = getattr(source, 'file_id', None)
-                for star in var_stars[file_id] if file_id is not None \
-                        else unique_var_stars:
-                    if degrees(angdist(
-                            ra, dec, star.ra_hours, star.dec_degs))*3600 < \
-                            variable_check_tol:
+                for star in var_stars[file_id] if file_id is not None else unique_var_stars:
+                    if angdist(ra, dec, star.ra_hours, star.dec_degs)*3600 < variable_check_tol:
                         catalog_sources.remove(source)
                         break
 
         if detected_sources:
-            #  Match detected sources to input catalog sources by XY position
-            #  in each image
+            # Match detected sources to input catalog sources by XY position in each image
             tol = getattr(self.field_cal, 'source_match_tol', None)
             if tol is None:
                 raise ValueError('Missing catalog source match tolerance')
             if tol <= 0:
-                raise ValueError(
-                    'Positive catalog source match tolerance expected')
+                raise ValueError('Positive catalog source match tolerance expected')
             matching_catalog_sources = []
             catalog_sources_for_file = {file_id: [] for file_id in file_ids}
             for catalog_source in catalog_sources:
-                catalog_source_file_id = getattr(
-                    catalog_source, 'file_id', None)
-                if getattr(catalog_source, 'x', None) is None or \
-                        getattr(catalog_source, 'y', None) is None:
+                catalog_source_file_id = getattr(catalog_source, 'file_id', None)
+                if getattr(catalog_source, 'x', None) is None or getattr(catalog_source, 'y', None) is None:
                     # Require RA/Dec for a source and WCS for each data file
                     if getattr(catalog_source, 'ra_hours', None) is None or \
                             getattr(catalog_source, 'dec_degs', None) is None \
                             or catalog_source_file_id is not None and \
                             wcss.get(catalog_source_file_id, None) is None or \
                             catalog_source_file_id is None and all(
-                                wcss.get(file_id, None) is None
-                                for file_id in file_ids):
+                                wcss.get(file_id, None) is None for file_id in file_ids):
                         continue
                 if catalog_source_file_id is None:
                     for file_id in file_ids:
-                        catalog_sources_for_file[file_id].append(
-                            catalog_source)
+                        catalog_sources_for_file[file_id].append(catalog_source)
                 else:
-                    catalog_sources_for_file[catalog_source.file_id].append(
-                        catalog_source)
+                    catalog_sources_for_file[catalog_source.file_id].append(catalog_source)
             catalog_source_kdtree_for_file = {}
             catalog_source_xy_for_file = {}
-            for file_id, catalog_source_list in catalog_sources_for_file \
-                    .items():
+            for file_id, catalog_source_list in catalog_sources_for_file.items():
                 if not catalog_source_list:
                     catalog_source_kdtree_for_file[file_id] = None
                     continue
@@ -292,16 +272,11 @@ class FieldCalJob(Job):
                                 pm_pixel = pm_pos_angle_pixel = 0
                             else:
                                 pm_sky = getattr(source, 'pm_sky', 0)
-                                pm_pos_angle_sky = getattr(
-                                    source, 'pm_pos_angle_sky', 0)
+                                pm_pos_angle_sky = getattr(source, 'pm_pos_angle_sky', 0)
                                 pm_pixel = getattr(source, 'pm_pixel', 0)
-                                pm_pos_angle_pixel = getattr(
-                                    source, 'pm_pos_angle_pixel', 0)
-                    data.append(
-                        [x, y, ra, dec, pm_epoch, pm_sky, pm_pos_angle_sky,
-                         pm_pixel, pm_pos_angle_pixel])
-                x, y, ra, dec, pm_epoch, pm_sky, pm_pos_angle_sky, pm_pixel, \
-                    pm_pos_angle_pixel = transpose(data)
+                                pm_pos_angle_pixel = getattr(source, 'pm_pos_angle_pixel', 0)
+                    data.append([x, y, ra, dec, pm_epoch, pm_sky, pm_pos_angle_sky, pm_pixel, pm_pos_angle_pixel])
+                x, y, ra, dec, pm_epoch, pm_sky, pm_pos_angle_sky, pm_pixel, pm_pos_angle_pixel = transpose(data)
                 if wcs is not None:
                     # Prefer RA/Dec to XY if available and have a WCS
                     have_radec = isfinite(ra) & isfinite(dec)
@@ -310,26 +285,19 @@ class FieldCalJob(Job):
                         if epoch is not None:
                             have_pm = have_radec & isfinite(pm_epoch)
                             if have_pm.any():
-                                mu = pm_sky*array(
-                                    [dt.total_seconds()
-                                     for dt in (epoch - pm_epoch[have_pm])])
+                                mu = pm_sky*array([dt.total_seconds() for dt in (epoch - pm_epoch[have_pm])])
                                 theta = deg2rad(pm_pos_angle_sky[have_pm])
-                                cd = clip(
-                                    cos(deg2rad(dec[have_pm])), 1e-7, None)
+                                cd = clip(cos(deg2rad(dec[have_pm])), 1e-7, None)
                                 ra[have_pm] += mu*sin(theta)/cd
                                 ra[have_pm] %= 360
-                                dec[have_pm] = clip(
-                                    dec[have_pm] + mu*cos(theta), -90, 90)
+                                dec[have_pm] = clip(dec[have_pm] + mu*cos(theta), -90, 90)
                         x[have_radec], y[have_radec] = wcs.all_world2pix(
                             ra[have_radec], dec[have_radec], 1, quiet=True)
                 if epoch is not None:
-                    # Also apply proper motion in pixels, assuming that it does
-                    # not conflict with RA/Dec PM
+                    # Also apply proper motion in pixels, assuming that it does not conflict with RA/Dec PM
                     have_pm = isfinite(pm_epoch) & (pm_pixel != 0)
                     if have_pm.any():
-                        mu = pm_pixel[have_pm]*asarray(
-                            [dt.total_seconds()
-                             for dt in (epoch - pm_epoch[have_pm])])
+                        mu = pm_pixel[have_pm]*asarray([dt.total_seconds() for dt in (epoch - pm_epoch[have_pm])])
                         theta = deg2rad(pm_pos_angle_pixel[have_pm])
                         x[have_pm] += mu*cos(theta)
                         y[have_pm] += mu*sin(theta)
@@ -341,8 +309,7 @@ class FieldCalJob(Job):
             # Build k-d tree from detected source XYs for each file ID
             detected_sources_for_file = {}
             for source in detected_sources:
-                detected_sources_for_file.setdefault(source.file_id, []) \
-                    .append(source)
+                detected_sources_for_file.setdefault(source.file_id, []).append(source)
             detected_source_kdtree_for_file = {
                 file_id: cKDTree([(source.x, source.y) for source in sources])
                 for file_id, sources in detected_sources_for_file.items()
@@ -354,76 +321,59 @@ class FieldCalJob(Job):
                 tree = catalog_source_kdtree_for_file[file_id]
                 if tree is not None:
                     catalog_source_list = catalog_sources_for_file[file_id]
-                    i = tree.query(
-                        [source.x, source.y], distance_upper_bound=tol)[1]
+                    i = tree.query([source.x, source.y], distance_upper_bound=tol)[1]
                     if i < len(catalog_source_list):
                         catalog_source = catalog_source_list[i]
                         xc, yc = catalog_source_xy_for_file[file_id][i]
 
-                        # Make sure that all matches are unique by making
-                        # a reverse query: the given image source must be
-                        # the nearest neighbor for its matching catalog source
-                        detected_source_list = \
-                            detected_sources_for_file[file_id]
+                        # Make sure that all matches are unique by making a reverse query: the given image source must
+                        # be the nearest neighbor for its matching catalog source
+                        detected_source_list = detected_sources_for_file[file_id]
                         tree = detected_source_kdtree_for_file[file_id]
                         j = tree.query([xc, yc], distance_upper_bound=tol)[1]
-                        if j < len(detected_source_list) and \
-                                detected_source_list[j] is source:
+                        if j < len(detected_source_list) and detected_source_list[j] is source:
                             match_found = True
                 if match_found:
-                    # Copy catalog source data to extracted source and set
-                    # the latter as a new catalog source
-                    for attr in ('id', 'catalog_name', 'mags', 'label',
-                                 'mag', 'mag_error'):
+                    # Copy catalog source data to extracted source and set the latter as a new catalog source
+                    for attr in ('id', 'catalog_name', 'mags', 'label', 'mag', 'mag_error'):
                         val = getattr(catalog_source, attr, None)
                         if val is not None:
                             setattr(source, attr, val)
                     matching_catalog_sources.append(source)
             if not matching_catalog_sources:
-                raise RuntimeError(
-                    'Could not match any detected sources to the catalog '
-                    'sources provided')
+                raise RuntimeError('Could not match any detected sources to the catalog sources provided')
             catalog_sources = matching_catalog_sources
 
         photometry_settings = getattr(self, 'photometry_settings', None)
         if photometry_settings is not None:
-            # Do batch photometry using refstar positions; explicitly disable
-            # photometric calibration even if present in data file headers
-            # by setting field_cal_results to False since we need raw
-            # (uncalibrated) mags here
-            total_stages = 1 + int(
-                getattr(self, 'source_extraction_settings', None) is not None)
-            phot_data = [source for source in run_photometry_job(
-                self, photometry_settings, file_ids, catalog_sources,
-                stage=total_stages - 1, total_stages=total_stages)
-                if source.mag]
+            # Do batch photometry using refstar positions; explicitly disable photometric calibration even if present in
+            # data file headers by setting field_cal_results to False since we need raw (uncalibrated) mags here
+            total_stages = 1 + int(getattr(self, 'source_extraction_settings', None) is not None)
+            phot_data = [
+                source for source in run_photometry_job(
+                    self, photometry_settings, file_ids, catalog_sources,
+                    stage=total_stages - 1, total_stages=total_stages)
+                if source.mag
+            ]
             if not phot_data:
                 raise RuntimeError('No catalog sources could be photometered')
         else:
-            # If photometry is disabled, use instrumental magnitudes provided
-            # by the user
+            # If photometry is disabled, use instrumental magnitudes provided by the user
             phot_data = catalog_sources
             if len(file_ids) > 1:
-                if any(getattr(source, 'file_id', None) is None
-                       for source in phot_data):
-                    raise ValueError(
-                        '"file_id" is required for all sources when '
-                        'photometry is not enabled')
+                if any(getattr(source, 'file_id', None) is None for source in phot_data):
+                    raise ValueError('"file_id" is required for all sources when photometry is not enabled')
             else:
-                # Assume the same file ID for all sources if processing
-                # a single file
+                # Assume the same file ID for all sources if processing a single file
                 file_id = file_ids[0]
                 for source in phot_data:
                     if getattr(source, 'file_id', None) is None:
                         source.file_id = file_id
             if any(getattr(source, 'mag', None) is None
                    for source in phot_data):
-                raise ValueError(
-                    '"mag" is required for all sources when photometry is not '
-                    'enabled')
+                raise ValueError('"mag" is required for all sources when photometry is not enabled')
 
-            # Get filters from data file headers (will need them to map
-            # to catalog mags
+            # Get filters from data file headers (will need them to map to catalog mags
             filters = {}
             for source in phot_data:
                 file_id = source.file_id
@@ -460,72 +410,63 @@ class FieldCalJob(Job):
         filter_lookup = {
             catalog_name: known_catalogs[catalog_name].filter_lookup
             for catalog_name in {
-                catalog_source.catalog_name
-                for catalog_source in catalog_sources
+                catalog_source.catalog_name for catalog_source in catalog_sources
                 if getattr(catalog_source, 'catalog_name', '')}
             if catalog_name in known_catalogs and
             getattr(known_catalogs[catalog_name], 'filter_lookup', None)
         }
-        for catalog_name, lookup in getattr(
-                self.field_cal, 'custom_filter_lookup', {}).items():
+        for catalog_name, lookup in getattr(self.field_cal, 'custom_filter_lookup', {}).items():
             filter_lookup.setdefault(catalog_name, {}).update(lookup)
+        if debug:
+            logger.info('Filter lookup: %s', filter_lookup)
 
-        # For each data file ID, match photometry results to catalog sources
-        # and use (mag, ref_mag) pairs to obtain zero point
+        # For each data file ID, match photometry results to catalog sources and use (mag, ref_mag) pairs to obtain zero
+        # point
         context = dict(numpy.__dict__)
         eps = 1e-7
         all_sources = []
         cal_results = {}
         for file_id in file_ids:
             sources = []
-            for source in [source for source in phot_data
-                           if source.file_id == file_id]:
+            total_sources = matched_sources = 0
+            for source in [source for source in phot_data if source.file_id == file_id]:
+                total_sources += 1
                 try:
-                    catalog_source = [catalog_source
-                                      for catalog_source in catalog_sources
+                    catalog_source = [catalog_source for catalog_source in catalog_sources
                                       if catalog_source.id == source.id][0]
                 except IndexError:
                     continue
+                matched_sources += 1
 
                 # Get reference magnitude for the current filter
                 flt = getattr(source, 'filter', None)
                 try:
                     mag = catalog_source.mags[flt]
                 except (AttributeError, KeyError):
-                    # No magnitude available for the current filter+catalog;
-                    # try custom filter lookup
+                    # No magnitude available for the current filter+catalog; try custom filter lookup
                     # noinspection PyBroadException
                     try:
                         try:
-                            expr = filter_lookup[
-                                catalog_source.catalog_name][flt]
+                            expr = filter_lookup[catalog_source.catalog_name][flt]
                         except KeyError:
-                            # For unknown filters, try the default
-                            # mapping if any
-                            expr = filter_lookup[
-                                catalog_source.catalog_name]['*']
-                        # Evaluate magnitude expression in the NumPy-enabled
-                        # context extended with mags available for the current
-                        # catalog source
+                            # For unknown filters, try the default mapping if any
+                            expr = filter_lookup[catalog_source.catalog_name]['*']
+                        # Evaluate magnitude expression in the NumPy-enabled context extended with mags available for
+                        # the current catalog source
                         ctx = dict(context)
-                        ctx.update(
-                            {f: m.value
-                             for f, m in catalog_source.mags.items()})
+                        ctx.update({f: m.value for f, m in catalog_source.mags.items()})
                         mag = Mag(value=eval(expr, ctx, {}))
 
-                        # Calculate the resulting magnitude error by coadding
-                        # contributions from each filter
+                        # Calculate the resulting magnitude error by coadding contributions from each filter
                         err = 0
                         for f, m in catalog_source.mags.items():
                             e = getattr(m, 'error', None)
                             if e:
-                                # Partial derivative of final mag with resp. to
-                                # the current filter
+                                # Partial derivative of final mag with resp. to the current filter
                                 ctx[f] += eps
                                 # noinspection PyBroadException
                                 try:
-                                    err += ((eval(expr, ctx, {}) -
-                                             mag.value)/eps*e)**2
+                                    err += ((eval(expr, ctx, {}) - mag.value)/eps*e)**2
                                 except Exception:
                                     pass
                                 finally:
@@ -533,8 +474,9 @@ class FieldCalJob(Job):
                         if err:
                             mag.error = sqrt(err)
                     except Exception:
-                        # No magnitude available for the current
-                        # filter+catalog; skip this source
+                        # No magnitude available for the current filter+catalog; skip this source
+                        if debug:
+                            logger.warning('Magnitude calculation error for filter "%s"', flt, exc_info=True)
                         continue
 
                 m = getattr(mag, 'value', None)
@@ -548,71 +490,60 @@ class FieldCalJob(Job):
                 source.catalog_name = catalog_source.catalog_name
                 sources.append(source)
 
+            if debug:
+                logger.info('Matched sources: %d out of %d, %d usable', matched_sources, total_sources, len(sources))
+
             if not sources:
-                self.add_error(
-                    ValueError('No calibration sources'), {'file_id': file_id})
+                self.add_error(ValueError('No calibration sources'), {'file_id': file_id})
                 continue
             m0, m0_error, limmag = calc_solution(sources)
             cal_results[file_id] = (m0, m0_error, limmag, sources)
             all_sources += sources
 
-        source_inclusion_percent = getattr(
-            self.field_cal, 'source_inclusion_percent', None)
+        source_inclusion_percent = getattr(self.field_cal, 'source_inclusion_percent', None)
         if source_inclusion_percent:
-            # Keep only sources that are present in the given fraction
-            # of images
-            nmin = max(int(source_inclusion_percent/100 *
-                           len(cal_results) + 0.5), 1)
+            # Keep only sources that are present in the given fraction of images
+            nmin = max(int(source_inclusion_percent/100*len(cal_results) + 0.5), 1)
             source_ids_to_keep, source_ids_to_remove = [], []
             for source in all_sources:
                 id = source.id
                 if id in source_ids_to_keep or id in source_ids_to_remove:
                     continue
-                if len([s for s in all_sources
-                        if s.id == id and s.file_id in cal_results]) < nmin:
+                if len([s for s in all_sources if s.id == id and s.file_id in cal_results]) < nmin:
                     source_ids_to_remove.append(id)
                 else:
                     source_ids_to_keep.append(id)
             if source_ids_to_remove:
                 if source_ids_to_keep:
-                    all_sources = [source for source in all_sources
-                                   if source.id in source_ids_to_keep]
+                    all_sources = [source for source in all_sources if source.id in source_ids_to_keep]
                     for file_id in list(cal_results.keys()):
-                        sources = [source
-                                   for source in cal_results[file_id][-1]
-                                   if source.id in source_ids_to_keep]
+                        sources = [source for source in cal_results[file_id][-1] if source.id in source_ids_to_keep]
                         if sources:
                             m0, m0_error, limmag = calc_solution(sources)
-                            cal_results[file_id] = (m0, m0_error, limmag,
-                                                    sources)
+                            cal_results[file_id] = (m0, m0_error, limmag, sources)
                         else:
                             del cal_results[file_id]
-                            self.add_error(ValueError(
-                                'No calibration sources satisfy inclusion '
-                                'percent constraint'), {'file_id': file_id})
+                            self.add_error(
+                                ValueError('No calibration sources satisfy inclusion percent constraint'),
+                                {'file_id': file_id})
                 else:
                     raise ValueError(
-                        'No sources found that are present in ' +
-                        'all images' if source_inclusion_percent >= 100 else
-                        'at least one image' if nmin == 1 else
-                        'at least {:d} images'.format(nmin))
+                        'No sources found that are present in all images' if source_inclusion_percent >= 100 else
+                        'at least one image' if nmin == 1 else 'at least {:d} images'.format(nmin))
 
         max_star_rms = getattr(self.field_cal, 'max_star_rms', 0)
         max_stars = getattr(self.field_cal, 'max_stars', 0)
         if len(cal_results) > 1 and (max_star_rms > 0 or max_stars > 0):
-            # Recalculate the calibration using only best stars in terms of
-            # RMS for all images
+            # Recalculate the calibration using only best stars in terms of RMS for all images
             sources_used = {
                 id: [source for source in all_sources if source.id == id]
                 for id in set(source.id for source in all_sources)
             }
-            sources_used = {id: sources for id, sources in sources_used.items()
-                            if len(sources) > 1}
+            sources_used = {id: sources for id, sources in sources_used.items() if len(sources) > 1}
             if not sources_used:
                 raise ValueError(
-                    'No sources common to at least two data files, cannot '
-                    'calculate corrected refstar magnitude RMS; disable max '
-                    'star RMS and max star number constraints')
+                    'No sources common to at least two data files, cannot calculate corrected refstar magnitude RMS; '
+                    'disable max star RMS and max star number constraints')
             source_ids = array(list(sources_used.keys()))
             source_rms = array(
                 [array(
@@ -625,13 +556,11 @@ class FieldCalJob(Job):
             if max_star_rms > 0:
                 source_ids = source_ids[source_rms < max_star_rms]
                 if not len(source_ids):
-                    raise ValueError(
-                        'No sources satisfy max star RMS constraint')
+                    raise ValueError('No sources satisfy max star RMS constraint')
             if max_stars > 0:
                 source_ids = source_ids[:max_stars]
                 for file_id in list(cal_results.keys()):
-                    sources = [source for source in cal_results[file_id][-1]
-                               if source.id in source_ids]
+                    sources = [source for source in cal_results[file_id][-1] if source.id in source_ids]
                     if sources:
                         m0, m0_error, limmag = calc_solution(sources)
                         cal_results[file_id] = (m0, m0_error, limmag, sources)
@@ -651,26 +580,22 @@ class FieldCalJob(Job):
                 limmag5=limmag,
             ))
 
-            # Update photometric calibration info in data file header; use the
-            # absolute zero point value instead of the correction relative to
-            # PhotometrySettings.zero_point
+            # Update photometric calibration info in data file header; use the absolute zero point value instead of
+            # the correction relative to PhotometrySettings.zero_point
             try:
                 with get_data_file_fits(self.user_id, file_id, 'update') as f:
                     hdr = f[0].header
-                    hdr['PHOT_M0'] = (
-                        m0 + getattr(photometry_settings, 'zero_point', 0),
-                        'Photometric zero point')
+                    hdr['PHOT_M0'] = m0 + getattr(photometry_settings, 'zero_point', 0), 'Photometric zero point'
                     if m0_error:
-                        hdr['PHOT_M0E'] = (
-                            m0_error, 'Photometric zero point error')
+                        hdr['PHOT_M0E'] = m0_error, 'Photometric zero point error'
                     if getattr(self.field_cal, 'name', None):
                         hdr['PHOT_CAL'] = self.field_cal.name, 'Field cal name'
                     elif getattr(self.field_cal, 'id', None):
                         hdr['PHOT_CAL'] = self.field_cal.id, 'Field cal ID'
             except Exception as e:
                 self.add_warning(
-                    'Data file ID {}: Error saving photometric calibration '
-                    'info to FITS header [{}]'.format(file_id, e))
+                    'Data file ID {}: Error saving photometric calibration info to FITS header [{}]'
+                    .format(file_id, e))
 
         object.__setattr__(self.result, 'data', result_data)
 
@@ -690,11 +615,10 @@ def sigma_eq(sigma2, sigmas2, b, m0):
     return (((b - m0)**2*w - 1)*w).sum()
 
 
-def calc_solution(sources: TList[PhotometryData]) \
-        -> Tuple[float, float, Optional[float]]:
+def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float | None]:
     """
-    Calculate photometric solution (zero point and error) given a list of
-    sources with instrumental and catalog magnitudes
+    Calculate photometric solution (zero point and error) given a list of sources with instrumental and catalog
+    magnitudes
 
     :param sources: list of sources; each one must contain at least `mag`
         (instrumental magnitude) and `ref_mag` (catalog magnitude) attributes
@@ -703,7 +627,7 @@ def calc_solution(sources: TList[PhotometryData]) \
 
     :return: zero point, its error, and 5-sigma limiting magnitude if available
     """
-    # noinspection PyUnresolvedReferences
+    # noinspection PyTypeChecker
     mags, mag_errors, ref_mags, ref_mag_errors = transpose([
         (source.mag, getattr(source, 'mag_error', None) or 0,
          source.ref_mag, getattr(source, 'ref_mag_error', None) or 0)
@@ -723,14 +647,11 @@ def calc_solution(sources: TList[PhotometryData]) \
     for _ in range(1000):
         while True:
             if weights is None:
-                rejected = chauvenet(
-                    b, mean_type=1, sigma_type=1, max_iter=1)[0]
+                rejected = chauvenet(b, mean_type=1, sigma_type=1, max_iter=1)[0]
             else:
                 bmed = weighted_median(b, weights)
                 sigma68 = weighted_quantile(abs(b - bmed), weights, 0.683)
-                rejected = chauvenet(
-                    b, mean_override=bmed, sigma_override=sigma68,
-                    max_iter=1)[0]
+                rejected = chauvenet(b, mean_override=bmed, sigma_override=sigma68, max_iter=1)[0]
             if rejected.any():
                 good = ~rejected
                 mags = mags[good]
@@ -761,8 +682,7 @@ def calc_solution(sources: TList[PhotometryData]) \
         if not no_errors:
             left, right = 0.9*sigma2, 1.1*sigma2
             for _ in range(1000):
-                if sigma_eq(left, sigmas2, b, m0) * \
-                        sigma_eq(right, sigmas2, b, m0) < 0:
+                if sigma_eq(left, sigmas2, b, m0)*sigma_eq(right, sigmas2, b, m0) < 0:
                     break
                 left *= 0.9
                 right *= 1.1
@@ -776,6 +696,6 @@ def calc_solution(sources: TList[PhotometryData]) \
             break
 
         if not no_errors:
-            weights: Optional[ndarray] = 1/(sigmas2 + sigma2)
+            weights = 1/(sigmas2 + sigma2)
 
     return m0, 1/sqrt((1/(sigmas2 + sigma2)).sum()), limmag
