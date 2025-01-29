@@ -130,7 +130,7 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
     if not file_ids:
         file_ids = []
     for file_id in file_ids:
-        with get_data_file_fits(job.user_id, file_id) as fits:
+        with get_data_file_fits(job.user_id, file_id, read_data=False) as fits:
             try:
                 wcs = WCS(fits[0].header, relax=True)
             except Exception:

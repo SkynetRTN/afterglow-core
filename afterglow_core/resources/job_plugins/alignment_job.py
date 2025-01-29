@@ -331,7 +331,7 @@ class AlignmentJob(Job):
 
             stage += 1
 
-            with get_data_file_fits(self.user_id, ref_file_id) as f:
+            with get_data_file_fits(self.user_id, ref_file_id, read_data=False) as f:
                 hdr = f[0].header
             ref_width, ref_height = hdr['NAXIS1'], hdr['NAXIS2']
             try:
@@ -783,7 +783,7 @@ def get_wcs(user_id: int | None, file_id: int, wcs_cache: dict[int, WCS]) -> WCS
     except KeyError:
         # noinspection PyBroadException
         try:
-            with get_data_file_fits(user_id, file_id) as fits:
+            with get_data_file_fits(user_id, file_id, read_data=False) as fits:
                 wcs = WCS(fits[0].header, relax=True)
             if wcs.has_celestial:
                 wcs.wcs.crval[0] %= 360

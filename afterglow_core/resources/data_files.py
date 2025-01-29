@@ -726,13 +726,17 @@ def get_data_file_path(user_id: Optional[int], file_id: int) -> str:
     )
 
 
-def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readonly') -> pyfits.HDUList:
+def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readonly', read_data: bool = True) \
+        -> pyfits.HDUList:
     """
     Return FITS file given the data file ID
 
     :param user_id: current user ID (None if user auth is disabled)
     :param file_id: data file ID
     :param mode: optional FITS file open mode: "readonly" (default) or "update"
+    :param read_data: if True, read the data into memory and convert on the fly if necessary; not recommended in
+        conjunction with `mode` = "update" as it may overwrite the data and remove the potential storage optimization
+        via AGORGN1/2, AGSIZE1/2 keywords
 
     :return: FITS file object
     """
@@ -745,25 +749,35 @@ def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readon
 
     try:
         fits = pyfits.open(filename, mode, memmap=False)
-        data = fits[0].data
-        if data is not None and data.dtype.fields is None:
+        if read_data:
+            # When reading a data file, convert to the standard form on the fly if necessary
+            data = fits[0].data
+            if data is not None and data.dtype.fields is None:
+                hdr = fits[0].header
+                if all(s in hdr for s in ('AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2')):
+                    # Pad image with NaNs
+                    try:
+                        x, y, w, h = int(hdr['AGORGN1']), int(hdr['AGORGN2']), int(hdr['AGSIZE1']), int(hdr['AGSIZE2'])
+                        large_data = np.full((h, w), np.nan, np.float32)
+                        large_data[y:y+data.shape[0], x:x+data.shape[1]] = data
+                        del data
+                        fits[0].data = large_data
+                        hdr['NAXIS2'], hdr['NAXIS1'] = large_data.shape
+                        del large_data
+                        for s in 'AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2':
+                            del hdr[s]
+                    except Exception:
+                        current_app.logger.warning('Error reading padded image [%s]', exc_info=True)
+                elif not data.dtype.isnative:
+                    # Make sure the data array is in native byte order, which is required by Numba and SEP
+                    fits[0].data = data.byteswap().newbyteorder()
+        elif mode == 'readonly':
             hdr = fits[0].header
             if all(s in hdr for s in ('AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2')):
-                # Pad image with NaNs
-                try:
-                    x, y, w, h = int(hdr['AGORGN1']), int(hdr['AGORGN2']), int(hdr['AGSIZE1']), int(hdr['AGSIZE2'])
-                    large_data = np.full((h, w), np.nan, np.float32)
-                    large_data[y:y+data.shape[0], x:x+data.shape[1]] = data
-                    del data
-                    fits[0].data = large_data
-                except Exception as e:
-                    current_app.logger.warning('Error reading padded image [%s]', e)
-                else:
-                    for s in 'AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2':
-                        del hdr[s]
-            elif not data.dtype.isnative:
-                # Make sure the data array is in native byte order, which is required by Numba and SEP
-                fits[0].data = data.byteswap().newbyteorder()
+                # Adjust NAXIS1/2 to the actual data size
+                hdr['NAXIS1'], hdr['NAXIS2'] = int(hdr['AGSIZE1']), int(hdr['AGSIZE2'])
+                for s in 'AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2':
+                    del hdr[s]
 
         return fits
 
@@ -844,7 +858,11 @@ def get_data_file_data(user_id: int | None, file_id: int, x0: int | str | None =
                 data = fits[0].data
             else:
                 # Return a subframe
-                data = fits[0].section[y0:y0+h, x0:x0+w]
+                try:
+                    data = fits[0].section[y0:y0+h, x0:x0+w]
+                except ValueError:
+                    # .section may cause problems for in-memory images
+                    data = fits[0].data[y0:y0+h, x0:x0+w]
             data = np.ma.masked_invalid(data)
             if data.mask is False or not data.mask.any():
                 # Normal image data

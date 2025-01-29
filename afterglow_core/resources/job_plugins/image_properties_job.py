@@ -77,7 +77,7 @@ class ImagePropsExtractionJob(Job):
                                       for source in sources])
 
                 # Convert seeing to arcsecs if pixel scale is available
-                with get_data_file_fits(self.user_id, file_id) as f:
+                with get_data_file_fits(self.user_id, file_id, read_data=False) as f:
                     hdr = f[0].header
                 # noinspection PyBroadException
                 try:

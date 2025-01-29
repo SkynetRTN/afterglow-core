@@ -155,7 +155,7 @@ class FieldCalJob(Job):
             for file_id in file_ids:
                 # noinspection PyBroadException
                 try:
-                    with get_data_file_fits(self.user_id, file_id) as f:
+                    with get_data_file_fits(self.user_id, file_id, read_data=False) as f:
                         hdr = f[0].header
                 except Exception:
                     pass
@@ -382,7 +382,7 @@ class FieldCalJob(Job):
                 except KeyError:
                     # noinspection PyBroadException
                     try:
-                        with get_data_file_fits(self.user_id, file_id) as f:
+                        with get_data_file_fits(self.user_id, file_id, read_data=False) as f:
                             source.filter = f[0].header.get('FILTER')
                     except Exception:
                         source.filter = None
@@ -583,7 +583,7 @@ class FieldCalJob(Job):
             # Update photometric calibration info in data file header; use the absolute zero point value instead of
             # the correction relative to PhotometrySettings.zero_point
             try:
-                with get_data_file_fits(self.user_id, file_id, 'update') as f:
+                with get_data_file_fits(self.user_id, file_id, 'update', read_data=False) as f:
                     hdr = f[0].header
                     hdr['PHOT_M0'] = m0 + getattr(photometry_settings, 'zero_point', 0), 'Photometric zero point'
                     if m0_error:
