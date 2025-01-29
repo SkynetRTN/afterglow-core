@@ -745,25 +745,28 @@ def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readon
 
     try:
         fits = pyfits.open(filename, mode, memmap=False)
-        data = fits[0].data
-        if data is not None and data.dtype.fields is None:
-            hdr = fits[0].header
-            if all(s in hdr for s in ('AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2')):
-                # Pad image with NaNs
-                try:
-                    x, y, w, h = int(hdr['AGORGN1']), int(hdr['AGORGN2']), int(hdr['AGSIZE1']), int(hdr['AGSIZE2'])
-                    large_data = np.full((h, w), np.nan, np.float32)
-                    large_data[y:y+data.shape[0], x:x+data.shape[1]] = data
-                    del data
-                    fits[0].data = large_data
-                except Exception as e:
-                    current_app.logger.warning('Error reading padded image [%s]', e)
-                else:
-                    for s in 'AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2':
-                        del hdr[s]
-            elif not data.dtype.isnative:
-                # Make sure the data array is in native byte order, which is required by Numba and SEP
-                fits[0].data = data.byteswap().newbyteorder()
+        if mode == 'readonly':
+            # When reading a data file, convert to the standard form on the fly if necessary; if updating, keep
+            # the internal representation as is
+            data = fits[0].data
+            if data is not None and data.dtype.fields is None:
+                hdr = fits[0].header
+                if all(s in hdr for s in ('AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2')):
+                    # Pad image with NaNs
+                    try:
+                        x, y, w, h = int(hdr['AGORGN1']), int(hdr['AGORGN2']), int(hdr['AGSIZE1']), int(hdr['AGSIZE2'])
+                        large_data = np.full((h, w), np.nan, np.float32)
+                        large_data[y:y+data.shape[0], x:x+data.shape[1]] = data
+                        del data
+                        fits[0].data = large_data
+                    except Exception as e:
+                        current_app.logger.warning('Error reading padded image [%s]', e)
+                    else:
+                        for s in 'AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2':
+                            del hdr[s]
+                elif not data.dtype.isnative:
+                    # Make sure the data array is in native byte order, which is required by Numba and SEP
+                    fits[0].data = data.byteswap().newbyteorder()
 
         return fits
 
