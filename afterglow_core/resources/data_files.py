@@ -726,13 +726,17 @@ def get_data_file_path(user_id: Optional[int], file_id: int) -> str:
     )
 
 
-def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readonly') -> pyfits.HDUList:
+def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readonly', read_data: bool = True) \
+        -> pyfits.HDUList:
     """
     Return FITS file given the data file ID
 
     :param user_id: current user ID (None if user auth is disabled)
     :param file_id: data file ID
     :param mode: optional FITS file open mode: "readonly" (default) or "update"
+    :param read_data: if True, read the data into memory and convert on the fly if necessary; not recommended in
+        conjunction with `mode` = "update" as it may overwrite the data and remove the potential storage optimization
+        via AGOGRN1/2, AGSIZE1/2 keywords
 
     :return: FITS file object
     """
@@ -745,9 +749,8 @@ def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readon
 
     try:
         fits = pyfits.open(filename, mode, memmap=False)
-        if mode == 'readonly':
-            # When reading a data file, convert to the standard form on the fly if necessary; if updating, keep
-            # the internal representation as is
+        if read_data:
+            # When reading a data file, convert to the standard form on the fly if necessary
             data = fits[0].data
             if data is not None and data.dtype.fields is None:
                 hdr = fits[0].header

@@ -77,7 +77,7 @@ def group_key(user_id: int, file_id: int,
     """
     # noinspection PyBroadException
     try:
-        with get_data_file_fits(user_id, file_id) as f:
+        with get_data_file_fits(user_id, file_id, read_data=False) as f:
             hdr = f[0].header
     except Exception:
         return None, None
