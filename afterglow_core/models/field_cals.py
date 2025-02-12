@@ -42,3 +42,4 @@ class FieldCalResult(AfterglowSchema):
     zero_point_corr: float = Float()
     zero_point_error: float = Float()
     limmag5: float = Float()
+    rej_percent: float = Float()
