@@ -695,5 +695,19 @@ def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float | 
     if weights is None:
         weights = 1/(sigmas2 + sigma2)
 
-    m0_error = sqrt((weights*(b - m0)**2).sum()/(weights.sum()**2 - (weights**2).sum()))
+    # Calculate standard error of the weighted mean
+    # # As per RCR paper, Eq. 8
+    # sum_weights = weights.sum()
+    # m0_error = sqrt((weights*(b - m0)**2).sum()/(sum_weights - (weights**2).sum()/sum_weights))
+    n = len(b)
+    if n > 1:
+        # As per Gatz, 1995, Atmospheric Environment, 11, 1185
+        sum_weights = weights.sum()
+        mean_weight = sum_weights/n
+        d1 = weights*b - mean_weight*m0
+        d2 = weights - mean_weight
+        m0_error = n/(n - 1)/sum_weights**2 * ((d1**2).sum() - 2*m0*(d1*d2).sum() + m0**2*(d2**2).sum())
+    else:
+        m0_error = 0
+
     return m0, m0_error, limmag, (1 - len(b)/len(sources))*100
