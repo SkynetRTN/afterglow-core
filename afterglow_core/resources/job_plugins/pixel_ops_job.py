@@ -53,7 +53,7 @@ context['detect_defects'] = detect_defects
 context['correct_cosmetic'] = correct_cosmetic
 context['estimate_background'] = lambda *args: estimate_background(*args)[0]
 context['estimate_background_rms'] = lambda *args: estimate_background(*args)[1]
-context['subtract_background'] = lambda img, *args: img - estimate_background(*args)[0]
+context['subtract_background'] = lambda img, *args: img - estimate_background(img, *args)[0]
 
 
 class PixelOpsJobResult(JobResult):
