@@ -636,28 +636,29 @@ def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float, f
     weights= None
 
     while True:
-        if no_errors:
-            m0 = b.mean()
-        else:
-            m0 = (b/(sigmas2 + sigma2)).sum()/(1/(sigmas2 + sigma2)).sum()
+        while True:
+            if no_errors:
+                m0 = b.mean()
+            else:
+                m0 = (b/(sigmas2 + sigma2)).sum()/(1/(sigmas2 + sigma2)).sum()
 
-        prev_sigma2 = sigma2
-        sigma2 = ((b - m0)**2).sum()/len(b)
-        left, right = 0.9*sigma2, 1.1*sigma2
-        for _ in range(1000):
-            if sigma_eq(left, sigmas2, b, m0)*sigma_eq(right, sigmas2, b, m0) < 0:
+            prev_sigma2 = sigma2
+            sigma2 = ((b - m0)**2).sum()/len(b)
+            left, right = 0.9*sigma2, 1.1*sigma2
+            for _ in range(1000):
+                if sigma_eq(left, sigmas2, b, m0)*sigma_eq(right, sigmas2, b, m0) < 0:
+                    break
+                left *= 0.9
+                right *= 1.1
+            # noinspection PyBroadException
+            try:
+                sigma2 = brenth(sigma_eq, left, right, (sigmas2, b, m0))
+            except Exception:
+                # Unable to find the root; use unweighted sigma
+                pass
+
+            if len(b) < 2 or abs(sigma2 - prev_sigma2) < 1e-8:
                 break
-            left *= 0.9
-            right *= 1.1
-        # noinspection PyBroadException
-        try:
-            sigma2 = brenth(sigma_eq, left, right, (sigmas2, b, m0))
-        except Exception:
-            # Unable to find the root; use unweighted sigma
-            pass
-
-        if len(b) < 2:
-            break
 
         if no_errors:
             rejected = chauvenet(
@@ -672,7 +673,7 @@ def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float, f
                 sigma_override=sqrt((weights*(b - m0)**2).sum()/(sum_weights - (weights**2).sum()/sum_weights)),
                 max_iter=1
             )[0]
-        if not rejected.any() and abs(sigma2 - prev_sigma2) < 1e-8:
+        if not rejected.any():
             break
 
         good = ~rejected
