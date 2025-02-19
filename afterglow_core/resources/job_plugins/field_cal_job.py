@@ -707,4 +707,4 @@ def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float, f
         if limmag_a:
             limmag = (log10(5) - limmag_b)/limmag_a
 
-    return m0, m0_error, sigma2, limmag, (1 - len(b)/len(sources))*100
+    return m0, m0_error, sqrt(sigma2), limmag, (1 - len(b)/len(sources))*100
