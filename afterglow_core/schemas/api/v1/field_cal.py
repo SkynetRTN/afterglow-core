@@ -43,5 +43,6 @@ class FieldCalResultSchema(AfterglowSchema):
     phot_results: TList[PhotometryDataSchema] = List(Nested(PhotometryDataSchema), dump_default=[])
     zero_point_corr: float = Float()
     zero_point_error: float = Float()
+    zero_point_slop: float = Float()
     limmag5: float = Float()
     rej_percent: float = Float()

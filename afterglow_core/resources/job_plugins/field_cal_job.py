@@ -486,8 +486,7 @@ class FieldCalJob(Job):
             if not sources:
                 self.add_error(ValueError('No calibration sources'), {'file_id': file_id})
                 continue
-            m0, m0_error, limmag, rej_percent = calc_solution(sources)
-            cal_results[file_id] = (m0, m0_error, limmag, rej_percent, sources)
+            cal_results[file_id] = calc_solution(sources) + (sources,)
             all_sources += sources
 
         source_inclusion_percent = getattr(self.field_cal, 'source_inclusion_percent', None)
@@ -509,8 +508,7 @@ class FieldCalJob(Job):
                     for file_id in list(cal_results.keys()):
                         sources = [source for source in cal_results[file_id][-1] if source.id in source_ids_to_keep]
                         if sources:
-                            m0, m0_error, limmag, rej_percent = calc_solution(sources)
-                            cal_results[file_id] = (m0, m0_error, limmag, rej_percent, sources)
+                            cal_results[file_id] = calc_solution(sources) + (sources,)
                         else:
                             del cal_results[file_id]
                             self.add_error(
@@ -552,8 +550,7 @@ class FieldCalJob(Job):
                 for file_id in list(cal_results.keys()):
                     sources = [source for source in cal_results[file_id][-1] if source.id in source_ids]
                     if sources:
-                        m0, m0_error, limmag, rej_percent = calc_solution(sources)
-                        cal_results[file_id] = (m0, m0_error, limmag, rej_percent, sources)
+                        cal_results[file_id] = calc_solution(sources) + (sources,)
                     else:
                         del cal_results[file_id]
                         self.add_error(ValueError(
@@ -561,12 +558,13 @@ class FieldCalJob(Job):
                             {'file_id': file_id})
 
         result_data = []
-        for file_id, (m0, m0_error, limmag, rej_percent, sources) in cal_results.items():
+        for file_id, (m0, m0_error, slop, limmag, rej_percent, sources) in cal_results.items():
             result_data.append(FieldCalResult(
                 file_id=file_id,
                 phot_results=sources,
                 zero_point_corr=m0,
                 zero_point_error=m0_error,
+                zero_point_slop=slop,
                 limmag5=limmag,
                 rej_percent=rej_percent,
             ))
@@ -605,7 +603,7 @@ def sigma_eq(sigma2, sigmas2, b, m0):
     return (((b - m0)**2*w - 1)*w).sum()
 
 
-def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float | None, float]:
+def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float, float, float]:
     """
     Calculate photometric solution (zero point and error) given a list of sources with instrumental and catalog
     magnitudes
@@ -615,11 +613,11 @@ def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float | 
         and optionally `mag_error` and `ref_mag_error` for the corresponding
         errors
 
-    :return: zero point, its error, 5-sigma limiting magnitude if available, and the percentage (0 to 100) of sources
-        rejected during the iterative process
+    :return: zero point, its uncertainty and "slop", 5-sigma limiting magnitude if available, and the percentage
+        (0 to 100) of sources rejected during the iterative process
     """
     if not sources:
-        return nan, nan, None, 100
+        return nan, nan, nan, nan, 100
 
     # noinspection PyTypeChecker
     mags, mag_errors, ref_mags, ref_mag_errors = transpose([
@@ -630,84 +628,83 @@ def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float | 
     snr = where(mag_errors > 0, 1/(10**(mag_errors/2.5) - 1), 0)
 
     b = ref_mags - mags
-    good_stars = arange(len(b))
     sigmas2 = mag_errors**2 + ref_mag_errors**2
     no_errors = not sigmas2.any()
     if no_errors:
         sigmas2 = 0
-    m0 = sigma2 = 0
-    limmag = None
-    weights = None
-    for _ in range(1000):
-        while True:
-            if weights is None:
-                rejected = chauvenet(b, mean_type=1, sigma_type=1, max_iter=1)[0]
-            else:
-                bmed = weighted_median(b, weights)
-                sigma68 = weighted_quantile(abs(b - bmed), weights, 0.683)
-                rejected = chauvenet(b, mean_override=bmed, sigma_override=sigma68, max_iter=1)[0]
-            if rejected.any():
-                good = ~rejected
-                mags = mags[good]
-                snr = snr[good]
-                b = b[good]
-                if weights is not None:
-                    weights = weights[good]
-                good_stars = good_stars[good]
-                if not no_errors:
-                    sigmas2 = sigmas2[good]
-            else:
-                break
+    sigma2 = 0
+    weights= None
 
-        if sigma2:
-            m0 = (b/(sigmas2 + sigma2)).sum()/(1/(sigmas2 + sigma2)).sum()
-        else:
+    while True:
+        if no_errors:
             m0 = b.mean()
-
-        # Limiting magnitude
-        good = snr > 0
-        if good.any():
-            limmag_a, limmag_b = polyfit(mags[good] + m0, log10(snr[good]), 1)
-            if limmag_a:
-                limmag = (log10(5) - limmag_b)/limmag_a
+        else:
+            m0 = (b/(sigmas2 + sigma2)).sum()/(1/(sigmas2 + sigma2)).sum()
 
         prev_sigma2 = sigma2
         sigma2 = ((b - m0)**2).sum()/len(b)
-        if not no_errors:
-            left, right = 0.9*sigma2, 1.1*sigma2
-            for _ in range(1000):
-                if sigma_eq(left, sigmas2, b, m0)*sigma_eq(right, sigmas2, b, m0) < 0:
-                    break
-                left *= 0.9
-                right *= 1.1
-            # noinspection PyBroadException
-            try:
-                sigma2 = brenth(sigma_eq, left, right, (sigmas2, b, m0))
-            except Exception:
-                # Unable to find the root; use unweighted sigma
+        left, right = 0.9*sigma2, 1.1*sigma2
+        for _ in range(1000):
+            if sigma_eq(left, sigmas2, b, m0)*sigma_eq(right, sigmas2, b, m0) < 0:
                 break
+            left *= 0.9
+            right *= 1.1
+        # noinspection PyBroadException
+        try:
+            sigma2 = brenth(sigma_eq, left, right, (sigmas2, b, m0))
+        except Exception:
+            # Unable to find the root; use unweighted sigma
+            pass
 
-            weights = 1/(sigmas2 + sigma2)
-
-        if prev_sigma2 and abs(sigma2 - prev_sigma2) < 1e-8:
+        if len(b) < 2:
             break
 
-    if weights is None:
-        weights = 1/(sigmas2 + sigma2)
+        if no_errors:
+            rejected = chauvenet(
+                b, mean_override=m0, sigma_override=sqrt(((b - m0)**2).sum()/(len(b) - 1)), max_iter=1
+            )[0]
+        else:
+            # Eq. 8 from RCR paper
+            weights = 1/(sigmas2 + sigma2)
+            sum_weights = weights.sum()
+            rejected = chauvenet(
+                b, mean_override=m0,
+                sigma_override=sqrt((weights*(b - m0)**2).sum()/(sum_weights - (weights**2).sum()/sum_weights)),
+                max_iter=1
+            )[0]
+        if not rejected.any() and abs(sigma2 - prev_sigma2) < 1e-8:
+            break
+
+        good = ~rejected
+        mags = mags[good]
+        snr = snr[good]
+        b = b[good]
+        if weights is not None:
+            weights = weights[good]
+        if not no_errors:
+            sigmas2 = sigmas2[good]
 
     # Calculate standard error of the weighted mean
-    # # As per RCR paper, Eq. 8
-    # sum_weights = weights.sum()
-    # m0_error = sqrt((weights*(b - m0)**2).sum()/(sum_weights - (weights**2).sum()/sum_weights))
     n = len(b)
     if n > 1:
-        # As per Gatz, 1995, Atmospheric Environment, 11, 1185
-        sum_weights = weights.sum()
-        mean_weight = sum_weights/n
-        d1 = weights*b - mean_weight*m0
-        d2 = weights - mean_weight
-        m0_error = sqrt(n/(n - 1)/sum_weights**2 * ((d1**2).sum() - 2*m0*(d1*d2).sum() + m0**2*(d2**2).sum()))
+        if weights is None:
+            m0_error = sqrt(((b - m0)**2).sum()/n/(n - 1))
+        else:
+            # As per Gatz, 1995, Atmospheric Environment, 11, 1185
+            sum_weights = weights.sum()
+            mean_weight = sum_weights/n
+            d1 = weights*b - mean_weight*m0
+            d2 = weights - mean_weight
+            m0_error = sqrt(n/(n - 1)/sum_weights**2 * ((d1**2).sum() - 2*m0*(d1*d2).sum() + m0**2*(d2**2).sum()))
     else:
-        m0_error = 0
+        m0_error = nan
 
-    return m0, m0_error, limmag, (1 - len(b)/len(sources))*100
+    # Limiting magnitude
+    limmag = nan
+    good = snr > 0
+    if good.any():
+        limmag_a, limmag_b = polyfit(mags[good] + m0, log10(snr[good]), 1)
+        if limmag_a:
+            limmag = (log10(5) - limmag_b)/limmag_a
+
+    return m0, m0_error, sigma2, limmag, (1 - len(b)/len(sources))*100
