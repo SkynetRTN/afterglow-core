@@ -2,8 +2,7 @@
 Afterglow Core: photometric calibration job plugin
 """
 
-from datetime import datetime
-from typing import List as TList, Optional
+from datetime import datetime, timezone
 
 from marshmallow.fields import Integer, List, Nested
 import numpy
@@ -110,48 +109,40 @@ class FieldCalJob(Job):
     def run_for_sources(self, catalog_sources: list[CatalogSource],
                         detected_sources: list[SourceExtractionData]) -> None:
         """
-        Perform calibration given a list of catalog sources (either supplied by
-        the caller or retrieved from a single catalog) and an optional list of
-        detected sources
+        Perform calibration given a list of catalog sources (either supplied by the caller or retrieved from a single
+        catalog) and an optional list of detected sources
 
         :param catalog_sources: list of catalog sources
-        :param detected_sources: list of detected sources obtained from
-            :func:`run_source_extraction_job`
-
-        :return: None
+        :param detected_sources: list of detected sources obtained from :func:`run_source_extraction_job`
         """
         debug = current_app.config.get('DEBUG', False)
         logger = current_app.logger
         file_ids = self.file_ids  # alias
 
-        # Make sure that each input catalog source has a unique ID; it will
-        # be used later to match photometry results to catalog sources
-        prefix = '{}_{}_'.format(
-            datetime.utcnow().strftime('%Y%m%d%H%M%S'), self.id)
+        # Make sure that each input catalog source has a unique ID; it will be used later to match photometry results to
+        # catalog sources
+        prefix = f"{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{self.id}_"
         source_ids = set()
         for i, source in enumerate(catalog_sources):
-            id = getattr(source, 'id', None)
-            if id is None:
+            source_id = getattr(source, 'id', None)
+            if source_id is None:
                 # Auto-assign source ID
-                source.id = id = prefix + str(i + 1)
+                source.id = source_id = prefix + str(i + 1)
             if getattr(source, 'file_id', None) is not None:
-                id = (id, source.file_id)
-            if id in source_ids:
-                if isinstance(id, tuple):
-                    raise ValueError(
-                        'Non-unique source ID "{0[0]}" for file ID '
-                        '{0[1]}'.format(id))
+                source_id = (source_id, source.file_id)
+            if source_id in source_ids:
+                if isinstance(source_id, tuple):
+                    raise ValueError(f'Non-unique source ID "{source_id[0]}" for file ID {source_id[1]}')
                 else:
-                    raise ValueError('Non-unique source ID "{}"'.format(id))
-            source_ids.add(id)
+                    raise ValueError(f'Non-unique source ID "{source_id}"')
+            source_ids.add(source_id)
 
         wcss, epochs = {}, {}
         variable_check_tol = getattr(self.field_cal, 'variable_check_tol', 5)
         if variable_check_tol and any(
-                None in (getattr(source, 'ra_hours', None),
-                         getattr(source, 'dec_degs'))
-                for source in catalog_sources) or \
-                getattr(self, 'source_extraction_settings', None) is not None:
+                None in (getattr(source, 'ra_hours', None), getattr(source, 'dec_degs'))
+                for source in catalog_sources
+                ) or getattr(self, 'source_extraction_settings', None) is not None:
             for file_id in file_ids:
                 # noinspection PyBroadException
                 try:
@@ -176,8 +167,7 @@ class FieldCalJob(Job):
                         wcss[file_id] = wcs
 
         if variable_check_tol:
-            # To exclude known variable stars from the list of catalog sources,
-            # get all variable stars in all fields
+            # To exclude known variable stars from the list of catalog sources, get all variable stars in all fields
             var_stars = {}
             for file_id in file_ids:
                 # noinspection PyBroadException
@@ -198,8 +188,8 @@ class FieldCalJob(Job):
                     ra, dec = get_source_radec(source, epoch, wcs)
                 except Exception as e:
                     self.add_warning(
-                        'Could not check variability for source {}: not enough info to calculate source RA/Dec [{}]'
-                        .format(getattr(source, 'id', None) or '#'.format(i + 1), e))
+                        f"Could not check variability for source {getattr(source, 'id', None) or f'#{i + 1}'}: "
+                        f"not enough info to calculate source RA/Dec [{e}]")
                     continue
                 file_id = getattr(source, 'file_id', None)
                 for star in var_stars[file_id] if file_id is not None else unique_var_stars:
@@ -496,8 +486,7 @@ class FieldCalJob(Job):
             if not sources:
                 self.add_error(ValueError('No calibration sources'), {'file_id': file_id})
                 continue
-            m0, m0_error, limmag = calc_solution(sources)
-            cal_results[file_id] = (m0, m0_error, limmag, sources)
+            cal_results[file_id] = calc_solution(sources) + (sources,)
             all_sources += sources
 
         source_inclusion_percent = getattr(self.field_cal, 'source_inclusion_percent', None)
@@ -506,21 +495,20 @@ class FieldCalJob(Job):
             nmin = max(int(source_inclusion_percent/100*len(cal_results) + 0.5), 1)
             source_ids_to_keep, source_ids_to_remove = [], []
             for source in all_sources:
-                id = source.id
-                if id in source_ids_to_keep or id in source_ids_to_remove:
+                source_id = source.id
+                if source_id in source_ids_to_keep or source_id in source_ids_to_remove:
                     continue
-                if len([s for s in all_sources if s.id == id and s.file_id in cal_results]) < nmin:
-                    source_ids_to_remove.append(id)
+                if len([s for s in all_sources if s.id == source_id and s.file_id in cal_results]) < nmin:
+                    source_ids_to_remove.append(source_id)
                 else:
-                    source_ids_to_keep.append(id)
+                    source_ids_to_keep.append(source_id)
             if source_ids_to_remove:
                 if source_ids_to_keep:
                     all_sources = [source for source in all_sources if source.id in source_ids_to_keep]
                     for file_id in list(cal_results.keys()):
                         sources = [source for source in cal_results[file_id][-1] if source.id in source_ids_to_keep]
                         if sources:
-                            m0, m0_error, limmag = calc_solution(sources)
-                            cal_results[file_id] = (m0, m0_error, limmag, sources)
+                            cal_results[file_id] = calc_solution(sources) + (sources,)
                         else:
                             del cal_results[file_id]
                             self.add_error(
@@ -536,10 +524,10 @@ class FieldCalJob(Job):
         if len(cal_results) > 1 and (max_star_rms > 0 or max_stars > 0):
             # Recalculate the calibration using only best stars in terms of RMS for all images
             sources_used = {
-                id: [source for source in all_sources if source.id == id]
-                for id in set(source.id for source in all_sources)
+                source_id: [source for source in all_sources if source.id == source_id]
+                for source_id in set(source.id for source in all_sources)
             }
-            sources_used = {id: sources for id, sources in sources_used.items() if len(sources) > 1}
+            sources_used = {source_id: sources for source_id, sources in sources_used.items() if len(sources) > 1}
             if not sources_used:
                 raise ValueError(
                     'No sources common to at least two data files, cannot calculate corrected refstar magnitude RMS; '
@@ -548,8 +536,8 @@ class FieldCalJob(Job):
             source_rms = array(
                 [array(
                     [source.mag + cal_results[source.file_id][0]
-                     for source in sources_used[id]]).std()
-                 for id in source_ids])
+                     for source in sources_used[source_id]]).std()
+                 for source_id in source_ids])
             order = argsort(source_rms)
             source_ids = source_ids[order]
             source_rms = source_rms[order]
@@ -562,8 +550,7 @@ class FieldCalJob(Job):
                 for file_id in list(cal_results.keys()):
                     sources = [source for source in cal_results[file_id][-1] if source.id in source_ids]
                     if sources:
-                        m0, m0_error, limmag = calc_solution(sources)
-                        cal_results[file_id] = (m0, m0_error, limmag, sources)
+                        cal_results[file_id] = calc_solution(sources) + (sources,)
                     else:
                         del cal_results[file_id]
                         self.add_error(ValueError(
@@ -571,13 +558,15 @@ class FieldCalJob(Job):
                             {'file_id': file_id})
 
         result_data = []
-        for file_id, (m0, m0_error, limmag, sources) in cal_results.items():
+        for file_id, (m0, m0_error, slop, limmag, rej_percent, sources) in cal_results.items():
             result_data.append(FieldCalResult(
                 file_id=file_id,
                 phot_results=sources,
                 zero_point_corr=m0,
                 zero_point_error=m0_error,
+                zero_point_slop=slop,
                 limmag5=limmag,
+                rej_percent=rej_percent,
             ))
 
             # Update photometric calibration info in data file header; use the absolute zero point value instead of
@@ -594,8 +583,7 @@ class FieldCalJob(Job):
                         hdr['PHOT_CAL'] = self.field_cal.id, 'Field cal ID'
             except Exception as e:
                 self.add_warning(
-                    'Data file ID {}: Error saving photometric calibration info to FITS header [{}]'
-                    .format(file_id, e))
+                    f'Data file ID {file_id}: Error saving photometric calibration info to FITS header [{e}]')
 
         object.__setattr__(self.result, 'data', result_data)
 
@@ -615,7 +603,7 @@ def sigma_eq(sigma2, sigmas2, b, m0):
     return (((b - m0)**2*w - 1)*w).sum()
 
 
-def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float | None]:
+def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float, float, float]:
     """
     Calculate photometric solution (zero point and error) given a list of sources with instrumental and catalog
     magnitudes
@@ -625,8 +613,12 @@ def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float | 
         and optionally `mag_error` and `ref_mag_error` for the corresponding
         errors
 
-    :return: zero point, its error, and 5-sigma limiting magnitude if available
+    :return: zero point, its uncertainty and "slop", 5-sigma limiting magnitude if available, and the percentage
+        (0 to 100) of sources rejected during the iterative process
     """
+    if not sources:
+        return nan, nan, nan, nan, 100
+
     # noinspection PyTypeChecker
     mags, mag_errors, ref_mags, ref_mag_errors = transpose([
         (source.mag, getattr(source, 'mag_error', None) or 0,
@@ -636,50 +628,22 @@ def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float | 
     snr = where(mag_errors > 0, 1/(10**(mag_errors/2.5) - 1), 0)
 
     b = ref_mags - mags
-    good_stars = arange(len(b))
     sigmas2 = mag_errors**2 + ref_mag_errors**2
     no_errors = not sigmas2.any()
     if no_errors:
         sigmas2 = 0
-    m0 = sigma2 = 0
-    limmag = None
-    weights = None
-    for _ in range(1000):
+    sigma2 = 0
+    weights= None
+
+    while True:
         while True:
-            if weights is None:
-                rejected = chauvenet(b, mean_type=1, sigma_type=1, max_iter=1)[0]
+            if no_errors:
+                m0 = b.mean()
             else:
-                bmed = weighted_median(b, weights)
-                sigma68 = weighted_quantile(abs(b - bmed), weights, 0.683)
-                rejected = chauvenet(b, mean_override=bmed, sigma_override=sigma68, max_iter=1)[0]
-            if rejected.any():
-                good = ~rejected
-                mags = mags[good]
-                snr = snr[good]
-                b = b[good]
-                if weights is not None:
-                    weights = weights[good]
-                good_stars = good_stars[good]
-                if not no_errors:
-                    sigmas2 = sigmas2[good]
-            else:
-                break
+                m0 = (b/(sigmas2 + sigma2)).sum()/(1/(sigmas2 + sigma2)).sum()
 
-        if sigma2:
-            m0 = (b/(sigmas2 + sigma2)).sum()/(1/(sigmas2 + sigma2)).sum()
-        else:
-            m0 = b.mean()
-
-        # Limiting magnitude
-        good = snr > 0
-        if good.any():
-            limmag_a, limmag_b = polyfit(mags[good] + m0, log10(snr[good]), 1)
-            if limmag_a:
-                limmag = (log10(5) - limmag_b)/limmag_a
-
-        prev_sigma2 = sigma2
-        sigma2 = ((b - m0)**2).sum()/len(b)
-        if not no_errors:
+            prev_sigma2 = sigma2
+            sigma2 = ((b - m0)**2).sum()/len(b)
             left, right = 0.9*sigma2, 1.1*sigma2
             for _ in range(1000):
                 if sigma_eq(left, sigmas2, b, m0)*sigma_eq(right, sigmas2, b, m0) < 0:
@@ -691,11 +655,57 @@ def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float | 
                 sigma2 = brenth(sigma_eq, left, right, (sigmas2, b, m0))
             except Exception:
                 # Unable to find the root; use unweighted sigma
+                pass
+
+            if len(b) < 2 or abs(sigma2 - prev_sigma2) < 1e-8:
                 break
-        if prev_sigma2 and abs(sigma2 - prev_sigma2) < 1e-8:
+
+        if no_errors:
+            rejected = chauvenet(
+                b, mean_override=m0, sigma_override=sqrt(((b - m0)**2).sum()/(len(b) - 1)), max_iter=1
+            )[0]
+        else:
+            # Eq. 8 from RCR paper
+            weights = 1/(sigmas2 + sigma2)
+            sum_weights = weights.sum()
+            rejected = chauvenet(
+                b, mean_override=m0,
+                sigma_override=sqrt((weights*(b - m0)**2).sum()/(sum_weights - (weights**2).sum()/sum_weights)),
+                max_iter=1
+            )[0]
+        if not rejected.any():
             break
 
+        good = ~rejected
+        mags = mags[good]
+        snr = snr[good]
+        b = b[good]
+        if weights is not None:
+            weights = weights[good]
         if not no_errors:
-            weights = 1/(sigmas2 + sigma2)
+            sigmas2 = sigmas2[good]
 
-    return m0, 1/sqrt((1/(sigmas2 + sigma2)).sum()), limmag
+    # Calculate standard error of the weighted mean
+    n = len(b)
+    if n > 1:
+        if weights is None:
+            m0_error = sqrt(((b - m0)**2).sum()/n/(n - 1))
+        else:
+            # As per Gatz, 1995, Atmospheric Environment, 11, 1185
+            sum_weights = weights.sum()
+            mean_weight = sum_weights/n
+            d1 = weights*b - mean_weight*m0
+            d2 = weights - mean_weight
+            m0_error = sqrt(n/(n - 1)/sum_weights**2 * ((d1**2).sum() - 2*m0*(d1*d2).sum() + m0**2*(d2**2).sum()))
+    else:
+        m0_error = nan
+
+    # Limiting magnitude
+    limmag = nan
+    good = snr > 0
+    if good.any():
+        limmag_a, limmag_b = polyfit(mags[good] + m0, log10(snr[good]), 1)
+        if limmag_a:
+            limmag = (log10(5) - limmag_b)/limmag_a
+
+    return m0, m0_error, sqrt(sigma2), limmag, (1 - len(b)/len(sources))*100

@@ -14,6 +14,7 @@ import astropy.io.fits as pyfits
 
 from skylib.enhancement.wavelet import wavelet_sharpen
 from skylib.color.radio import radio_nat
+from skylib.calibration.background import estimate_background
 from skylib.calibration.cosmetic import correct_cosmetic, detect_defects
 
 from ...database import db
@@ -50,6 +51,9 @@ context['wavelet_sharpen'] = wavelet_sharpen
 context['radio_nat'] = radio_nat
 context['detect_defects'] = detect_defects
 context['correct_cosmetic'] = correct_cosmetic
+context['estimate_background'] = lambda *args: estimate_background(*args)[0]
+context['estimate_background_rms'] = lambda *args: estimate_background(*args)[1]
+context['subtract_background'] = lambda img, *args: img - estimate_background(img, *args)[0]
 
 
 class PixelOpsJobResult(JobResult):
