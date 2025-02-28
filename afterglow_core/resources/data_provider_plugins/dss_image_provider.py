@@ -249,10 +249,13 @@ class DSSImageDataProvider(DataProvider):
                 .format(res.status_code))
 
         buf = BytesIO(res.content)
-        with pyfits.open(buf, 'readonly', memmap=False) as f:
+        with pyfits.open(buf, 'readonly') as f:
             if len(f) > 1:
-                # Remove extension HDU
-                out = BytesIO()
-                f[0].writeto(out, output_verify='silentfix+ignore')
-                return out.getvalue()
+                try:
+                    # Remove extension HDU
+                    out = BytesIO()
+                    f[0].writeto(out, output_verify='silentfix+ignore')
+                    return out.getvalue()
+                finally:
+                    del f[0].data
         return res.content

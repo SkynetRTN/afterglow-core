@@ -112,6 +112,9 @@ class StackingJob(Job):
         if not self.file_ids:
             return
         data_files = [get_data_file_fits(self.user_id, file_id) for file_id in self.file_ids]
+        for df in data_files:
+            if not df[0].data.dtype.isnative:
+                df[0].data = df[0].data.byteswap().newbyteorder()
 
         try:
             # Check data dimensions
@@ -145,6 +148,7 @@ class StackingJob(Job):
                 callback=self.update_progress)[0]
         finally:
             for df in data_files:
+                del df[0].data
                 df.close()
 
         # Create a new data file in the given session and return its ID

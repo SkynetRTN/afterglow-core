@@ -239,8 +239,7 @@ class LocalDiskDataProvider(DataProvider):
         # A FITS file?
         # noinspection PyBroadException
         try:
-            with pyfits.open(filename, 'readonly', memmap=False,
-                             ignore_missing_end=True) as f:
+            with pyfits.open(filename, 'readonly', ignore_missing_end=True) as f:
                 layers = 0
                 flt = []
                 for hdu in f:
@@ -293,6 +292,8 @@ class LocalDiskDataProvider(DataProvider):
                         pass
                     else:
                         layers += 1
+                    finally:
+                        del hdu.data
 
             flt = ','.join(flt)
             if layers:
