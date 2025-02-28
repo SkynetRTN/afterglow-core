@@ -114,7 +114,7 @@ class StackingJob(Job):
         data_files = [get_data_file_fits(self.user_id, file_id) for file_id in self.file_ids]
         for df in data_files:
             if not df[0].data.dtype.isnative:
-                df[0].data = df[0].data.byteswap().newbyteorder()
+                df[0].data = df[0].data.astype(df[0].data.dtype.newbyteorder())
 
         try:
             # Check data dimensions
