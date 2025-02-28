@@ -864,7 +864,7 @@ def get_data_file_data(user_id: int | None, file_id: int, x0: int | str | None =
 
             if not data.dtype.isnative:
                 # Make sure the data array is in native byte order, which is required by Numba, SEP, and OpenCV
-                data = data.byteswap().newbyteorder()
+                data = data.astype(data.dtype.newbyteorder())
 
             data = np.ma.masked_invalid(data)
             if data.mask is False or not data.mask.any():

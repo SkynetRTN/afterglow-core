@@ -154,7 +154,7 @@ def run_cosmetic_correction_job(
             fits = [get_data_file_fits(job.user_id, file_id) for file_id in group]
             for hdul in fits:
                 if not hdul[0].data.dtype.isnative:
-                    hdul[0].data = hdul[0].data.byteswap().newbyteorder()
+                    hdul[0].data = hdul[0].data.astype(hdul[0].data.dtype.newbyteorder())
             try:
                 data = combine(fits, return_headers=False)[0]
             finally:
@@ -184,7 +184,7 @@ def run_cosmetic_correction_job(
                 if data.dtype.name != 'float64':
                     data = data.astype(np.float64)
                 if not data.dtype.isnative:
-                    data = data.byteswap().newbyteorder()
+                    data = data.astype(data.dtype.newbyteorder())
                 data = correct_cols_and_pixels(
                     data, col_mask, pixel_mask, m_col=settings.m_corr_col,
                     m_pixel=settings.m_corr_pixel)
