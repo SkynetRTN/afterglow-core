@@ -1022,6 +1022,10 @@ def get_transform(job: AlignmentJob, alignment_kwargs: dict[str, object], file_i
                     data1 = np.hypot(nd.sobel(data1, 0, mode='nearest'), nd.sobel(data1, 1, mode='nearest'))
                     data2 = np.hypot(nd.sobel(data2, 0, mode='nearest'), nd.sobel(data2, 1, mode='nearest'))
                 if any(item is None for item in (clip_min1, clip_max1, clip_min2, clip_max2)):
+                    if not data1.dtype.isnative:
+                        data1 = data1.byteswap().newbyteorder()
+                    if not data2.dtype.isnative:
+                        data2 = data2.byteswap().newbyteorder()
                     clip_min1, clip_max1 = clip_min2, clip_max2 = calc_contrast(
                         np.concatenate([data1.ravel(), data2.ravel()]),
                         settings.percentile_min, settings.percentile_max)

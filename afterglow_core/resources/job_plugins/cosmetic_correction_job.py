@@ -151,8 +151,10 @@ def run_cosmetic_correction_job(
     for group in groups:
         if len(group) > 1:
             # Combine images in group
-            fits = [get_data_file_fits(job.user_id, file_id)
-                    for file_id in group]
+            fits = [get_data_file_fits(job.user_id, file_id) for file_id in group]
+            for hdul in fits:
+                if not hdul[0].data.dtype.isnative:
+                    hdul[0].data = hdul[0].data.byteswap().newbyteorder()
             try:
                 data = combine(fits, return_headers=False)[0]
             finally:
@@ -168,17 +170,11 @@ def run_cosmetic_correction_job(
             if data.dtype.name != 'float64':
                 # Numba is faster for 64-bit floating point
                 data = data.astype(np.float64)
-            if not data.dtype.isnative:
-                # Non-native byte order is not supported by Numba
-                data = data.byteswap().newbyteorder()
-            initial_mask = flag_horiz(
-                data, m=settings.m_col, nu=settings.nu_col)
+            initial_mask = flag_horiz(data, m=settings.m_col, nu=settings.nu_col)
             col_mask = flag_columns(initial_mask)
-            pixel_mask = flag_pixels(
-                data, col_mask, m=settings.m_pixel, nu=settings.nu_pixel)
+            pixel_mask = flag_pixels(data, col_mask, m=settings.m_pixel, nu=settings.nu_pixel)
         except Exception as e:
-            job.add_error(
-                e, {'file_id': ','.join(str(file_id) for file_id in group)})
+            job.add_error(e, {'file_id': ','.join(str(file_id) for file_id in group)})
             continue
 
         # Apply cosmetics data to all images in group

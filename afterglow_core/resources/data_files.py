@@ -748,7 +748,7 @@ def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readon
             filename += '.gz'
 
     try:
-        fits = pyfits.open(filename, mode, memmap=False)
+        fits = pyfits.open(filename, mode)
         if read_data:
             # When reading a data file, convert to the standard form on the fly if necessary
             data = fits[0].data
@@ -756,6 +756,7 @@ def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readon
                 hdr = fits[0].header
                 if all(s in hdr for s in ('AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2')):
                     # Pad image with NaNs
+                    # noinspection PyBroadException
                     try:
                         x, y, w, h = int(hdr['AGORGN1']), int(hdr['AGORGN2']), int(hdr['AGSIZE1']), int(hdr['AGSIZE2'])
                         large_data = np.full((h, w), np.nan, np.float32)
@@ -768,9 +769,6 @@ def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readon
                             del hdr[s]
                     except Exception:
                         current_app.logger.warning('Error reading padded image [%s]', exc_info=True)
-                elif not data.dtype.isnative:
-                    # Make sure the data array is in native byte order, which is required by Numba and SEP
-                    fits[0].data = data.byteswap().newbyteorder()
         elif mode == 'readonly':
             hdr = fits[0].header
             if all(s in hdr for s in ('AGORGN1', 'AGORGN2', 'AGSIZE1', 'AGSIZE2')):
@@ -863,6 +861,11 @@ def get_data_file_data(user_id: int | None, file_id: int, x0: int | str | None =
                 except ValueError:
                     # .section may cause problems for in-memory images
                     data = fits[0].data[y0:y0+h, x0:x0+w]
+
+            if not data.dtype.isnative:
+                # Make sure the data array is in native byte order, which is required by Numba, SEP, and OpenCV
+                data = data.byteswap().newbyteorder()
+
             data = np.ma.masked_invalid(data)
             if data.mask is False or not data.mask.any():
                 # Normal image data
@@ -870,7 +873,8 @@ def get_data_file_data(user_id: int | None, file_id: int, x0: int | str | None =
         else:
             # Table data in the primary HDU (?)
             data = fits[0].data
-        del fits[0].data  # recommended by Astropy
+
+        del fits[0].data  # recommended by Astropy to avoid keeping references to memmapped array
 
     return data, hdr
 
