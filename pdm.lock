@@ -68,13 +68,13 @@ files = [
 
 [[package]]
 name = "astropy-iers-data"
-version = "0.2025.2.17.0.34.13"
+version = "0.2025.2.24.0.34.4"
 requires_python = ">=3.8"
 summary = "IERS Earth Rotation and Leap Second tables for the astropy core package"
 groups = ["default", "dev", "prod"]
 files = [
-    {file = "astropy_iers_data-0.2025.2.17.0.34.13-py3-none-any.whl", hash = "sha256:2024e3251e1360cdbd978ccf19152610396d2324f5b2af19746e903e243b7566"},
-    {file = "astropy_iers_data-0.2025.2.17.0.34.13.tar.gz", hash = "sha256:34b685447a32e63f43811adcee2588bcd55dd77dfc454a05c25f0bbf80066960"},
+    {file = "astropy_iers_data-0.2025.2.24.0.34.4-py3-none-any.whl", hash = "sha256:be8b3b75b09b1aa1d22de9b5243854e00d19936aca6d8f64466d16197c04bb28"},
+    {file = "astropy_iers_data-0.2025.2.24.0.34.4.tar.gz", hash = "sha256:fce62431ce38129d166360f59563f506fbe37b2d1df5e0038a4ad0b0277274f7"},
 ]
 
 [[package]]
@@ -129,7 +129,7 @@ files = [
 
 [[package]]
 name = "authlib"
-version = "1.4.1"
+version = "1.5.1"
 requires_python = ">=3.9"
 summary = "The ultimate Python library in building OAuth and OpenID Connect servers and clients."
 groups = ["default"]
@@ -137,8 +137,8 @@ dependencies = [
     "cryptography",
 ]
 files = [
-    {file = "Authlib-1.4.1-py2.py3-none-any.whl", hash = "sha256:edc29c3f6a3e72cd9e9f45fff67fc663a2c364022eb0371c003f22d5405915c1"},
-    {file = "authlib-1.4.1.tar.gz", hash = "sha256:30ead9ea4993cdbab821dc6e01e818362f92da290c04c7f6a1940f86507a790d"},
+    {file = "authlib-1.5.1-py2.py3-none-any.whl", hash = "sha256:8408861cbd9b4ea2ff759b00b6f02fd7d81ac5a56d0b2b22c08606c6049aae11"},
+    {file = "authlib-1.5.1.tar.gz", hash = "sha256:5cbc85ecb0667312c1cdc2f9095680bb735883b123fb509fde1e65b1c5df972e"},
 ]
 
 [[package]]
@@ -737,14 +737,14 @@ files = [
 
 [[package]]
 name = "jeepney"
-version = "0.8.0"
+version = "0.9.0"
 requires_python = ">=3.7"
 summary = "Low-level, pure Python DBus protocol wrapper."
 groups = ["default", "dev", "prod"]
 marker = "sys_platform == \"linux\""
 files = [
-    {file = "jeepney-0.8.0-py3-none-any.whl", hash = "sha256:c0a454ad016ca575060802ee4d590dd912e35c122fa04e70306de3d076cce755"},
-    {file = "jeepney-0.8.0.tar.gz", hash = "sha256:5efe48d255973902f6badc3ce55e2aa6c5c3b3bc642059ef3a91247bcfcc5806"},
+    {file = "jeepney-0.9.0-py3-none-any.whl", hash = "sha256:97e5714520c16fc0a45695e5365a2e11b81ea79bba796e26f9f1d178cb182683"},
+    {file = "jeepney-0.9.0.tar.gz", hash = "sha256:cf0e9e845622b81e4a28df94c40345400256ec608d0e55bb8a3feaa9163f5732"},
 ]
 
 [[package]]
@@ -925,7 +925,7 @@ files = [
 
 [[package]]
 name = "matplotlib"
-version = "3.10.0"
+version = "3.10.1"
 requires_python = ">=3.10"
 summary = "Python plotting package"
 groups = ["dev", "prod"]
@@ -941,16 +941,16 @@ dependencies = [
     "python-dateutil>=2.7",
 ]
 files = [
-    {file = "matplotlib-3.10.0-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:2c5829a5a1dd5a71f0e31e6e8bb449bc0ee9dbfb05ad28fc0c6b55101b3a4be6"},
-    {file = "matplotlib-3.10.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:a2a43cbefe22d653ab34bb55d42384ed30f611bcbdea1f8d7f431011a2e1c62e"},
-    {file = "matplotlib-3.10.0-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:607b16c8a73943df110f99ee2e940b8a1cbf9714b65307c040d422558397dac5"},
-    {file = "matplotlib-3.10.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:01d2b19f13aeec2e759414d3bfe19ddfb16b13a1250add08d46d5ff6f9be83c6"},
-    {file = "matplotlib-3.10.0-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:5e6c6461e1fc63df30bf6f80f0b93f5b6784299f721bc28530477acd51bfc3d1"},
-    {file = "matplotlib-3.10.0-cp310-cp310-win_amd64.whl", hash = "sha256:994c07b9d9fe8d25951e3202a68c17900679274dadfc1248738dcfa1bd40d7f3"},
-    {file = "matplotlib-3.10.0-pp310-pypy310_pp73-macosx_10_15_x86_64.whl", hash = "sha256:81713dd0d103b379de4516b861d964b1d789a144103277769238c732229d7f03"},
-    {file = "matplotlib-3.10.0-pp310-pypy310_pp73-macosx_11_0_arm64.whl", hash = "sha256:359f87baedb1f836ce307f0e850d12bb5f1936f70d035561f90d41d305fdacea"},
-    {file = "matplotlib-3.10.0-pp310-pypy310_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ae80dc3a4add4665cf2faa90138384a7ffe2a4e37c58d83e115b54287c4f06ef"},
-    {file = "matplotlib-3.10.0.tar.gz", hash = "sha256:b886d02a581b96704c9d1ffe55709e49b4d2d52709ccebc4be42db856e511278"},
+    {file = "matplotlib-3.10.1-cp310-cp310-macosx_10_12_x86_64.whl", hash = "sha256:ff2ae14910be903f4a24afdbb6d7d3a6c44da210fc7d42790b87aeac92238a16"},
+    {file = "matplotlib-3.10.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:0721a3fd3d5756ed593220a8b86808a36c5031fce489adb5b31ee6dbb47dd5b2"},
+    {file = "matplotlib-3.10.1-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d0673b4b8f131890eb3a1ad058d6e065fb3c6e71f160089b65f8515373394698"},
+    {file = "matplotlib-3.10.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8e875b95ac59a7908978fe307ecdbdd9a26af7fa0f33f474a27fcf8c99f64a19"},
+    {file = "matplotlib-3.10.1-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:2589659ea30726284c6c91037216f64a506a9822f8e50592d48ac16a2f29e044"},
+    {file = "matplotlib-3.10.1-cp310-cp310-win_amd64.whl", hash = "sha256:a97ff127f295817bc34517255c9db6e71de8eddaab7f837b7d341dee9f2f587f"},
+    {file = "matplotlib-3.10.1-pp310-pypy310_pp73-macosx_10_15_x86_64.whl", hash = "sha256:648406f1899f9a818cef8c0231b44dcfc4ff36f167101c3fd1c9151f24220fdc"},
+    {file = "matplotlib-3.10.1-pp310-pypy310_pp73-macosx_11_0_arm64.whl", hash = "sha256:02582304e352f40520727984a5a18f37e8187861f954fea9be7ef06569cf85b4"},
+    {file = "matplotlib-3.10.1-pp310-pypy310_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d3809916157ba871bcdd33d3493acd7fe3037db5daa917ca6e77975a94cef779"},
+    {file = "matplotlib-3.10.1.tar.gz", hash = "sha256:e8d2d0e3881b129268585bf4765ad3ee73a4591d77b9a18c214ac7e3a79fb2ba"},
 ]
 
 [[package]]
@@ -1481,7 +1481,7 @@ files = [
 
 [[package]]
 name = "skyfield"
-version = "1.50"
+version = "1.51"
 summary = "Elegant astronomy for Python"
 groups = ["dev", "prod"]
 dependencies = [
@@ -1491,17 +1491,17 @@ dependencies = [
     "sgp4>=2.2",
 ]
 files = [
-    {file = "skyfield-1.50-py3-none-any.whl", hash = "sha256:73c7d89568525f743652b6e202418d8cd8fc99eb9b5134ba9b543abf4202f80d"},
-    {file = "skyfield-1.50.tar.gz", hash = "sha256:3dd287fbed42ddcf32bdbf7d12b90cbeaf5f44fcefce700cd49514f5776c66ba"},
+    {file = "skyfield-1.51-py3-none-any.whl", hash = "sha256:7c9ef83b62377e4badc11ebfb3e41504ecbae747c939d168d06778ac519848aa"},
+    {file = "skyfield-1.51.tar.gz", hash = "sha256:afebb71a86ff1049885133120f9149a54ed2d8b38721307eeb0e0a93ca73aafc"},
 ]
 
 [[package]]
 name = "skylib"
-version = "2.0.0"
+version = "2.0.1"
 requires_python = "<3.13,>=3.10"
 git = "https://github.com/SkynetRTN/skylib.git"
 ref = "master"
-revision = "d708fbdd3c94c288394d0513427bcae5720a3048"
+revision = "a9479d1d3e4213e81f92bf40eb4d444fc6550e30"
 summary = "A Python library for analyzing and processing astronomical image data"
 groups = ["prod"]
 dependencies = [
@@ -1524,11 +1524,11 @@ dependencies = [
 
 [[package]]
 name = "skylib"
-version = "2.0.0"
+version = "2.0.1"
 requires_python = "<3.13,>=3.10"
 git = "https://github.com/SkynetRTN/skylib.git"
 ref = "develop"
-revision = "c7c0ccfafe6ae2bb1b45325c5ae327e9af3b2625"
+revision = "5555d25fbd2df7d25014dbec71a28800cdf5df15"
 summary = "A Python library for analyzing and processing astronomical image data"
 groups = ["dev"]
 dependencies = [
