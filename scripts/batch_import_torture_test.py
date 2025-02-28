@@ -13,6 +13,7 @@ import time
 import traceback
 from datetime import datetime
 from multiprocessing import Event, Lock, Process
+import threading
 import warnings
 
 
@@ -78,7 +79,8 @@ def api_request(method: str, resource: str, args: argparse.Namespace, token: str
         json_data = data
 
     r = requests.request(
-        method, url, verify=False, params=params, headers=headers, json=json_data, auth=auth, timeout=(120, 120))
+        method, url, verify=False, params=params, headers=headers, json=json_data, auth=auth,
+        timeout=(args.conn_timeout, args.read_timeout))
 
     try:
         content_type = r.headers['Content-Type'].split(';')[0].strip()
@@ -111,7 +113,7 @@ def test_process(args: argparse.Namespace, username: str, api_key: str, obs_path
 
         ts = args.tile_size
         cycle = 0
-        while cycle < args.num_cycles and not terminate_event.is_set():
+        while (not args.num_cycles or cycle < args.num_cycles) and not terminate_event.is_set():
             cycle += 1
             for job_no, (provider_id, obs_path) in enumerate(obs_paths):
                 prefix = (
@@ -185,18 +187,34 @@ def test_process(args: argparse.Namespace, username: str, api_key: str, obs_path
                             except Exception as e:
                                 msg += f'error requesting data file info [{e}]; '
                             else:
-                                w, h = df.get('width') or 0, df.get('height') or 0
-                                if w <= 0 or h <= 0:
-                                    msg += 'empty data file; '
+                                try:
+                                    w, h = df.get('width') or 0, df.get('height') or 0
+                                except AttributeError:
+                                    msg += f'error requesting data file info [{df}]; '
                                 else:
-                                    for y in range(0, h, ts):
-                                        for x in range(0, w, ts):
-                                            try:
-                                                api_request(
-                                                    'GET', f'data-files/{file_id}/pixels', args, api_key,
-                                                    x=x + 1, y=y + 1, width=min(ts, w - x), height=min(ts, h - y))
-                                            except Exception as e:
-                                                msg += f'error retrieving pixel data [{e}]; '
+                                    if w <= 0 or h <= 0:
+                                        msg += 'empty data file; '
+                                    else:
+                                        msgs = []
+                                        msg_lock = threading.Lock()
+                                        threads = []
+                                        for y in range(0, h, ts):
+                                            for x in range(0, w, ts):
+                                                def req_thread():
+                                                    try:
+                                                        api_request(
+                                                            'GET', f'data-files/{file_id}/pixels', args, api_key,
+                                                            x=x + 1, y=y + 1, width=min(ts, w - x), height=min(ts, h - y))
+                                                    except Exception as e:
+                                                        with msg_lock:
+                                                            msgs.append(str(e))
+                                                threads.append(threading.Thread(target=req_thread))
+                                        for t in threads:
+                                            t.start()
+                                        for t in threads:
+                                            t.join()
+                                        if msgs:
+                                            msg += f'; error retrieving tile [{"; ".join(msgs)}]; '
                         msg += f'pixels {time.time() - t0:.1f} s'
                     with console_lock:
                         print(f'{datetime.now().isoformat(" ")} {prefix} {msg}')
@@ -250,6 +268,8 @@ def main():
     parser.add_argument('-p', '--password', help='authenticate with this password')
     parser.add_argument('-t', '--token', help='authenticate with this personal token')
     parser.add_argument('-k', '--skynet-token', help='Skynet API access token')
+    parser.add_argument('--conn-timeout', metavar='SECONDS', default=60, help='Afterglow connection timeout')
+    parser.add_argument('--read-timeout', metavar='SECONDS', default=300, help='Server response timeout')
     parser.add_argument(
         '-n', '--num-cycles', metavar='N', type=int, default=0, help='number of test cycles; 0 = infinite')
     parser.add_argument(
