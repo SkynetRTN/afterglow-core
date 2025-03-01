@@ -1528,7 +1528,7 @@ version = "2.0.1"
 requires_python = "<3.13,>=3.10"
 git = "https://github.com/SkynetRTN/skylib.git"
 ref = "develop"
-revision = "ebe6fc8ec979022dca10511a0ad213c0abb42a3e"
+revision = "ebd21115ac69d118abba855a360a781f701fb462"
 summary = "A Python library for analyzing and processing astronomical image data"
 groups = ["dev"]
 dependencies = [
