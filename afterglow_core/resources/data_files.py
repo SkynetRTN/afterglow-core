@@ -7,9 +7,8 @@ import os
 import errno
 import re
 from glob import glob
-from datetime import datetime
+from datetime import datetime, timezone
 import json
-import time
 from io import BytesIO
 from typing import BinaryIO, Dict as TDict, List as TList, Optional, Tuple, Union
 import warnings
@@ -89,9 +88,9 @@ class DbDataFile(db.Model):
     asset_type = Column(String(255), server_default='FITS')
     asset_metadata = Column(JSONType)
     layer = Column(String(255))
-    created_on = Column(DateTime, default=datetime.utcnow)
+    created_on = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     modified = Column(Boolean, default=False)
-    modified_on = Column(DateTime, onupdate=datetime.utcnow)
+    modified_on = Column(DateTime, onupdate=datetime.now(timezone.utc))
     session_id = Column(
         Integer, ForeignKey('sessions.id', name='fk_sessions_id', ondelete='cascade'), nullable=True, index=True)
     group_name = Column(String(1023), nullable=False, index=True)
@@ -294,7 +293,6 @@ def create_data_file(user_id: Optional[int], name: Optional[str], root: str, dat
 
     :return: data file instance
     """
-    t0 = time.time()
     if size is not None:
         width, height = size
     elif data.dtype.fields is None:
@@ -305,7 +303,7 @@ def create_data_file(user_id: Optional[int], name: Optional[str], root: str, dat
         height, width = len(data), len(data.dtype.fields)
 
     if not name:
-        name = datetime.utcnow().isoformat('_').replace('-', '').replace(':', '')
+        name = datetime.now(timezone.utc).isoformat('_').replace('-', '').replace(':', '')
         try:
             name = name[:name.index('.')]
         except ValueError:
@@ -396,11 +394,7 @@ def create_data_file(user_id: Optional[int], name: Optional[str], root: str, dat
             db.session.add(db_data_file)
             db.session.flush()  # obtain the new row ID by flushing db
 
-        current_app.logger.info('PROFILE create_data_file %s %s %.3f', user_id, path, time.time() - t0)
-
-        t0 = time.time()
         save_data_file(root, db_data_file.id, data, hdr, modified=False, origin=origin, size=size)
-        current_app.logger.info('PROFILE save_data_file %s %s %.3f', user_id, path, time.time() - t0)
     except Exception:
         db.session.rollback()
         raise
@@ -1345,30 +1339,30 @@ def update_data_file_group_asset(user_id: Optional[int], group_name: str,
         raise
 
 
-def delete_data_file(user_id: Optional[int], id: int) -> None:
+def delete_data_file(user_id: Optional[int], file_id: int) -> None:
     """
     Remove the given data file from database and delete all associated disk files
 
     :param user_id: current user ID (None if user auth is disabled)
-    :param id: data file ID
+    :param file_id: data file ID
     """
     root = get_root(user_id)
     try:
-        db_data_file = DbDataFile.query.get(id)
+        db_data_file = DbDataFile.query.get(file_id)
         if db_data_file is None or db_data_file.user_id != user_id:
-            raise UnknownDataFileError(file_id=id)
+            raise UnknownDataFileError(file_id=file_id)
         db.session.delete(db_data_file)
         db.session.commit()
     except Exception:
         db.session.rollback()
         raise
 
-    for filename in glob(os.path.join(root, '{}.*'.format(id))):
+    for filename in glob(os.path.join(root, '{}.*'.format(file_id))):
         try:
             os.remove(filename)
         except Exception as e:
             # noinspection PyUnresolvedReferences
-            current_app.logger.warning('Error removing data file "%s" (ID %d) [%s]', filename, id, e)
+            current_app.logger.warning('Error removing data file "%s" (ID %d) [%s]', filename, file_id, e)
 
 
 def get_session(user_id: Optional[int], session_id: Union[int, str]) -> Session:
