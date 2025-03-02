@@ -206,12 +206,18 @@ class VizierCatalog(Catalog):
                             continue
                     # noinspection PyBroadException
                     try:
-                        val = row[mag_col.replace("'", '_')]
+                        try:
+                            val = row[mag_col]
+                        except KeyError:
+                            val = row[mag_col.replace("'", '_')]
                         if val and val < 99:
                             m = Mag(value=val)
                             # noinspection PyBroadException
                             try:
-                                val = row[mag_err_col.replace("'", '_')]
+                                try:
+                                    val = row[mag_err_col]
+                                except KeyError:
+                                    val = row[mag_err_col.replace("'", '_')]
                                 if val:
                                     m.error = val
                             except Exception:
