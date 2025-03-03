@@ -625,7 +625,12 @@ def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float, f
          source.ref_mag, getattr(source, 'ref_mag_error', None) or 0)
         for source in sources
     ])
-    snr = where(mag_errors > 0, 1/(10**(mag_errors/2.5) - 1), 0)
+    if mag_errors.any():
+        good = mag_errors > 0
+        mags, mag_errors, ref_mags, ref_mag_errors = mags[good], mag_errors[good], ref_mags[good], ref_mag_errors[good]
+        snr = 1/(10**(mag_errors/2.5) - 1)
+    else:
+        snr = None
 
     b = ref_mags - mags
     sigmas2 = mag_errors**2 + ref_mag_errors**2
@@ -678,7 +683,8 @@ def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float, f
 
         good = ~rejected
         mags = mags[good]
-        snr = snr[good]
+        if snr is not None:
+            snr = snr[good]
         b = b[good]
         if weights is not None:
             weights = weights[good]
@@ -702,9 +708,8 @@ def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float, f
 
     # Limiting magnitude
     limmag = nan
-    good = snr > 0
-    if good.any():
-        limmag_a, limmag_b = polyfit(mags[good] + m0, log10(snr[good]), 1)
+    if snr is not None:
+        limmag_a, limmag_b = polyfit(mags + m0, log10(snr), 1)
         if limmag_a:
             limmag = (log10(5) - limmag_b)/limmag_a
 
