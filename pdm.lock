@@ -68,13 +68,13 @@ files = [
 
 [[package]]
 name = "astropy-iers-data"
-version = "0.2025.2.24.0.34.4"
+version = "0.2025.3.3.0.34.45"
 requires_python = ">=3.8"
 summary = "IERS Earth Rotation and Leap Second tables for the astropy core package"
 groups = ["default", "dev", "prod"]
 files = [
-    {file = "astropy_iers_data-0.2025.2.24.0.34.4-py3-none-any.whl", hash = "sha256:be8b3b75b09b1aa1d22de9b5243854e00d19936aca6d8f64466d16197c04bb28"},
-    {file = "astropy_iers_data-0.2025.2.24.0.34.4.tar.gz", hash = "sha256:fce62431ce38129d166360f59563f506fbe37b2d1df5e0038a4ad0b0277274f7"},
+    {file = "astropy_iers_data-0.2025.3.3.0.34.45-py3-none-any.whl", hash = "sha256:5c8762ec79dbc67e220d8b1cdf15e1d94a954f57750a5682023f385d41732f66"},
+    {file = "astropy_iers_data-0.2025.3.3.0.34.45.tar.gz", hash = "sha256:22ce2349ee288b09cb4cc13a6e015a3c8d4ace66ed2eae49b42119d943f6d5e8"},
 ]
 
 [[package]]
@@ -1501,7 +1501,7 @@ version = "2.0.1"
 requires_python = "<3.13,>=3.10"
 git = "https://github.com/SkynetRTN/skylib.git"
 ref = "master"
-revision = "06a1ca17153bf781409015db096c7417e1a55ed4"
+revision = "bf97ac0ccb539ab2d258e35177f5414d8beae99d"
 summary = "A Python library for analyzing and processing astronomical image data"
 groups = ["prod"]
 dependencies = [
@@ -1528,7 +1528,7 @@ version = "2.0.1"
 requires_python = "<3.13,>=3.10"
 git = "https://github.com/SkynetRTN/skylib.git"
 ref = "develop"
-revision = "eb8cba9304a1ed597314333f3677c32d9bd074e7"
+revision = "a568770f4c360e251e6fd6bbf2b7a292f43fb6f8"
 summary = "A Python library for analyzing and processing astronomical image data"
 groups = ["dev"]
 dependencies = [
