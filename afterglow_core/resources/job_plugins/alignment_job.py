@@ -953,6 +953,8 @@ def get_transform(job: AlignmentJob, alignment_kwargs: dict[str, object], file_i
             img_stars = np.empty((len(img_sources), 2), np.float64)
             for i, source in enumerate(img_sources):
                 img_stars[i] = get_source_xy(source, user_id, file_id, wcs_cache)
+            img_stars = np.unique(img_stars, axis=0)
+            anonymous_ref_stars = np.unique(anonymous_ref_stars, axis=0)
             # Match two sets of points using pattern matching
             src_stars, dst_stars = [], []
             for k, l in enumerate(pattern_match(
