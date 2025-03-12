@@ -33,11 +33,13 @@ class AlignmentSettingsWCSSchema(AlignmentSettingsSchema):
 
 
 class AlignmentSettingsSourcesSchema(AlignmentSettingsSchema):
-    scale_invariant: bool = Boolean(dump_default=False)
-    match_tol: float = Float(dump_default=0.002)
-    min_edge: float = Float(dump_default=0.003)
+    scale_invariant: bool = Boolean(dump_default=True)
+    match_tol: float = Float(dump_default=2)
     ratio_limit: float = Float(dump_default=10)
-    confidence: float = Float(dump_default=0.15)
+    min_matches: int = Integer(dump_default=5)
+    num_nearest_neighbors: int = Integer(dump_default=8)
+    kdtree_search_radius: float = Float(dump_default=0.02)
+    n_samples: int = Integer(dump_default=1)
 
 
 class AlignmentSettingsSourcesManualSchema(AlignmentSettingsSourcesSchema):

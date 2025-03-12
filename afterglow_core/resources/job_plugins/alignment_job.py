@@ -56,11 +56,13 @@ class AlignmentSettingsWCS(AlignmentSettings):
 
 
 class AlignmentSettingsSources(AlignmentSettings):
-    scale_invariant: bool = Boolean(dump_default=False)
-    match_tol: float = Float(dump_default=0.002)
-    min_edge: float = Float(dump_default=0.003)
+    scale_invariant: bool = Boolean(dump_default=True)
+    match_tol: float = Float(dump_default=2)
     ratio_limit: float = Float(dump_default=10)
-    confidence: float = Float(dump_default=0.15)
+    min_matches: int = Integer(dump_default=5)
+    num_nearest_neighbors: int = Integer(dump_default=8)
+    kdtree_search_radius: float = Float(dump_default=0.02)
+    n_samples: int = Integer(dump_default=1)
 
 
 class AlignmentSettingsSourcesManual(AlignmentSettingsSources):
@@ -957,9 +959,11 @@ def get_transform(job: AlignmentJob, alignment_kwargs: dict[str, object], file_i
                     img_stars, anonymous_ref_stars,
                     scale_invariant=settings.scale_invariant,
                     eps=settings.match_tol,
-                    ksi=settings.min_edge,
                     r_limit=settings.ratio_limit,
-                    confidence=settings.confidence)):
+                    min_matches=settings.min_matches,
+                    num_nearest_neighbors=settings.num_nearest_neighbors,
+                    kdtree_search_radius=settings.kdtree_search_radius,
+                    n_samples=settings.n_samples)):
                 if l >= 0:
                     src_stars.append(img_stars[k])
                     dst_stars.append(anonymous_ref_stars[l])
