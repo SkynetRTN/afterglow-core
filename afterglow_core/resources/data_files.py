@@ -852,7 +852,7 @@ def get_data_file_data(user_id: int | None, file_id: int, x0: int | str | None =
                 # Return a subframe
                 try:
                     data = fits[0].section[y0:y0+h, x0:x0+w]
-                except ValueError:
+                except (TypeError, ValueError):
                     # .section may cause problems for in-memory images
                     data = fits[0].data[y0:y0+h, x0:x0+w]
 
