@@ -395,10 +395,9 @@ class AlignmentJob(Job):
                 shapes[file_id] = data.shape
                 # noinspection PyBroadException
                 try:
+                    hdr['CRVAL1'] %= 360  # Ensure RA is in [0, 360) range
                     wcs = wcs_cache[file_id] = WCS(hdr, relax=True)
-                    if wcs.has_celestial:
-                        wcs.wcs.crval[0] %= 360
-                    else:
+                    if not wcs.has_celestial:
                         raise ValueError()
                 except Exception:
                     wcs_cache[file_id] = None
@@ -786,10 +785,9 @@ def get_wcs(user_id: int | None, file_id: int, wcs_cache: dict[int, WCS]) -> WCS
         # noinspection PyBroadException
         try:
             with get_data_file_fits(user_id, file_id, read_data=False) as fits:
+                fits[0].header['CRVAL1'] %= 360  # Ensure RA is in [0, 360) range
                 wcs = WCS(fits[0].header, relax=True)
-            if wcs.has_celestial:
-                wcs.wcs.crval[0] %= 360
-            else:
+            if not wcs.has_celestial:
                 wcs = None
         except Exception:
             wcs = None

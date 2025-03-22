@@ -156,10 +156,9 @@ class FieldCalJob(Job):
                         epochs[file_id] = epoch
                     # noinspection PyBroadException
                     try:
+                        hdr['CRVAL1'] %= 360  # Ensure RA is in [0, 360) range
                         wcs = WCS(hdr, relax=True)
-                        if wcs.has_celestial:
-                            wcs.wcs.crval[0] %= 360
-                        else:
+                        if not wcs.has_celestial:
                             wcs = None
                     except Exception:
                         wcs = None

@@ -162,9 +162,9 @@ class WcsCalibrationJob(Job):
                     # Guess starting RA and Dec from WCS in the image header
                     # noinspection PyBroadException
                     try:
+                        hdr['CRVAL1'] %= 360  # Ensure RA is in [0, 360) range
                         wcs = WCS(hdr, relax=True)
                         if wcs.has_celestial:
-                            wcs.wcs.crval[0] %= 360
                             ra_hours, dec_degs = wcs.all_pix2world((width - 1)/2, (height - 1)/2, 0)
                             ra_hours %= 360
                             ra_hours /= 15
