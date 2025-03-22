@@ -132,6 +132,7 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
     for file_id in file_ids:
         with get_data_file_fits(job.user_id, file_id, read_data=False) as fits:
             try:
+                fits[0].header['CRVAL1'] %= 360  # Ensure RA is in [0, 360) range
                 wcs = WCS(fits[0].header, relax=True)
             except Exception:
                 if skip_failed:
@@ -139,7 +140,7 @@ def run_catalog_query_job(job: Job, catalogs: TList[str],
                 raise ValueError('Data file ID {} has no WCS'.format(file_id))
             else:
                 if wcs.has_celestial:
-                    wcs.wcs.crval[0] %= 360
+                    pass
                 elif skip_failed:
                     continue
                 else:

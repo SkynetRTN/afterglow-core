@@ -56,11 +56,13 @@ class AlignmentSettingsWCS(AlignmentSettings):
 
 
 class AlignmentSettingsSources(AlignmentSettings):
-    scale_invariant: bool = Boolean(dump_default=False)
-    match_tol: float = Float(dump_default=0.002)
-    min_edge: float = Float(dump_default=0.003)
+    scale_invariant: bool = Boolean(dump_default=True)
+    match_tol: float = Float(dump_default=2)
     ratio_limit: float = Float(dump_default=10)
-    confidence: float = Float(dump_default=0.15)
+    min_matches: int = Integer(dump_default=5)
+    num_nearest_neighbors: int = Integer(dump_default=8)
+    kdtree_search_radius: float = Float(dump_default=0.02)
+    n_samples: int = Integer(dump_default=1)
 
 
 class AlignmentSettingsSourcesManual(AlignmentSettingsSources):
@@ -393,10 +395,9 @@ class AlignmentJob(Job):
                 shapes[file_id] = data.shape
                 # noinspection PyBroadException
                 try:
+                    hdr['CRVAL1'] %= 360  # Ensure RA is in [0, 360) range
                     wcs = wcs_cache[file_id] = WCS(hdr, relax=True)
-                    if wcs.has_celestial:
-                        wcs.wcs.crval[0] %= 360
-                    else:
+                    if not wcs.has_celestial:
                         raise ValueError()
                 except Exception:
                     wcs_cache[file_id] = None
@@ -784,10 +785,9 @@ def get_wcs(user_id: int | None, file_id: int, wcs_cache: dict[int, WCS]) -> WCS
         # noinspection PyBroadException
         try:
             with get_data_file_fits(user_id, file_id, read_data=False) as fits:
+                fits[0].header['CRVAL1'] %= 360  # Ensure RA is in [0, 360) range
                 wcs = WCS(fits[0].header, relax=True)
-            if wcs.has_celestial:
-                wcs.wcs.crval[0] %= 360
-            else:
+            if not wcs.has_celestial:
                 wcs = None
         except Exception:
             wcs = None
@@ -951,15 +951,19 @@ def get_transform(job: AlignmentJob, alignment_kwargs: dict[str, object], file_i
             img_stars = np.empty((len(img_sources), 2), np.float64)
             for i, source in enumerate(img_sources):
                 img_stars[i] = get_source_xy(source, user_id, file_id, wcs_cache)
+            img_stars = np.unique(img_stars, axis=0)
+            anonymous_ref_stars = np.unique(anonymous_ref_stars, axis=0)
             # Match two sets of points using pattern matching
             src_stars, dst_stars = [], []
             for k, l in enumerate(pattern_match(
                     img_stars, anonymous_ref_stars,
                     scale_invariant=settings.scale_invariant,
                     eps=settings.match_tol,
-                    ksi=settings.min_edge,
                     r_limit=settings.ratio_limit,
-                    confidence=settings.confidence)):
+                    min_matches=settings.min_matches,
+                    num_nearest_neighbors=settings.num_nearest_neighbors,
+                    kdtree_search_radius=settings.kdtree_search_radius,
+                    n_samples=settings.n_samples)):
                 if l >= 0:
                     src_stars.append(img_stars[k])
                     dst_stars.append(anonymous_ref_stars[l])
