@@ -14,11 +14,10 @@ from numba import njit
 from marshmallow.fields import String, Integer, List, Nested
 from astropy.wcs import WCS
 import cv2 as cv
-from flask import current_app
 
 from skylib.combine.alignment import *
 from skylib.combine.pattern_matching import pattern_match
-from skylib.combine.cropping import get_auto_crop
+from skylib.combine.cropping import get_edge_crop
 from skylib.util.angle import angdist, average_radec
 from skylib.util.fits import get_fits_fov
 
@@ -357,7 +356,7 @@ class AlignmentJob(Job):
                     del f[0].data
                 mask = np.isnan(data)
                 if mask.any():
-                    left, right, bottom, top = get_auto_crop(mask)
+                    left, right, bottom, top = get_edge_crop(mask)
                     if any([left, right, bottom, top]) and left + right < data.shape[1] and \
                             bottom + top < data.shape[0]:
                         data = data[bottom:data.shape[0]-top, left:data.shape[1]-right]
@@ -721,7 +720,7 @@ class AlignmentJob(Job):
                 # Store only non-masked area
                 origin = size = None
                 if mosaics and isinstance(data, np.ma.MaskedArray) and data.mask is not False and data.mask.any():
-                    left, right, bottom, top = get_auto_crop(data.mask)
+                    left, right, bottom, top = get_edge_crop(data.mask)
                     if any([left, right, bottom, top]) and left + right < data.shape[1] and \
                             bottom + top < data.shape[0]:
                         origin = left, bottom
