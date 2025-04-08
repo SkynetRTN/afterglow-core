@@ -6,9 +6,7 @@ from datetime import datetime, timezone
 
 from marshmallow.fields import Integer, List, Nested
 import numpy
-from numpy import (
-    arange, argsort, array, asarray, clip, cos, deg2rad, degrees, inf,
-    isfinite, log10, nan, ndarray, polyfit, sin, sqrt, transpose, where)
+from numpy import argsort, array, asarray, clip, cos, deg2rad, inf, isfinite, log10, nan, polyfit, sin, sqrt, transpose
 from scipy.spatial import cKDTree
 from scipy.optimize import brenth
 from astropy.wcs import WCS
@@ -16,7 +14,7 @@ from flask import current_app
 
 from skylib.util.angle import angdist
 from skylib.util.fits import get_fits_time
-from skylib.util.stats import chauvenet, weighted_median, weighted_quantile
+from skylib.util.stats import chauvenet
 
 from ...models import (
     Job, JobResult, CatalogSource, FieldCal, FieldCalResult, Mag, PhotSettings,
@@ -640,7 +638,7 @@ def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float, f
     weights= None
 
     while True:
-        while True:
+        for _ in range(100):
             if no_errors:
                 m0 = b.mean()
             else:
@@ -649,7 +647,7 @@ def calc_solution(sources: list[PhotometryData]) -> tuple[float, float, float, f
             prev_sigma2 = sigma2
             sigma2 = ((b - m0)**2).sum()/len(b)
             left, right = 0.9*sigma2, 1.1*sigma2
-            for _ in range(1000):
+            for __ in range(100):
                 if sigma_eq(left, sigmas2, b, m0)*sigma_eq(right, sigmas2, b, m0) < 0:
                     break
                 left *= 0.9
