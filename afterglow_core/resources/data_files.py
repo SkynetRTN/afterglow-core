@@ -491,10 +491,12 @@ def import_data_file(user_id: int | None, root: str, provider_id: int | str | No
                     conv = getattr(cv2, f"COLOR_Bayer{hdr['BAYERPAT']}2RGB")
                     imgs = np.rollaxis(cv2.cvtColor(hdu.data, conv), 2)
                     hdu_layers = ('R', 'G', 'B')
+                    bayer = True
                 else:
                     # Monochrome image
                     imgs = [hdu.data]
                     hdu_layers = (hdr.get('FILTER') or hdr.get('EXTNAME') or str(i + 1),)
+                    bayer = False
 
                 if i and primary_header:
                     # Copy primary header cards to extension header
@@ -526,13 +528,25 @@ def import_data_file(user_id: int | None, root: str, provider_id: int | str | No
                         del hdr[kw]
 
                 try:
-                    for img, layer in zip(imgs, hdu_layers):
+                    for j, (img, layer) in enumerate(zip(imgs, hdu_layers)):
                         # Obtain the unique layer name: filter name, extension name, or just the HDU index
                         layer_base, layer_no = layer, 1
                         while layer in layers:
                             layer = '{}.{}'.format(layer_base, layer_no)
                             layer_no += 1
                         layers.append(layer)
+
+                        if bayer:
+                            match layer:
+                                case 'R':
+                                    hdr['FILTER'] = ('Red', 'Filter name')
+                                    hdr['AGCMAP'] = 'Red'
+                                case 'G':
+                                    hdr['FILTER'] = ('Green', 'Filter name')
+                                    hdr['AGCMAP'] = 'Green'
+                                case 'B':
+                                    hdr['FILTER'] = ('Blue', 'Filter name')
+                                    hdr['AGCMAP'] = 'Blue'
 
                         # When importing multiple HDUs, add layer name to data file name; keep the original file
                         # extension
@@ -542,7 +556,7 @@ def import_data_file(user_id: int | None, root: str, provider_id: int | str | No
                         all_data_files.append(create_data_file(
                                 user_id, name, root, img, hdr, provider=provider_id, path=asset_path, file_type='FITS',
                                 metadata=asset_metadata, layer=layer, duplicates=duplicates, session_id=session_id,
-                                group_name=group_name, group_order=i, allow_duplicate_group_name=i > 0))
+                                group_name=group_name, group_order=j if bayer else i, allow_duplicate_group_name=bayer))
                 except Exception as e:
                     raise CannotCreateDataFileError(reason=str(e))
 
@@ -664,14 +678,16 @@ def import_data_file(user_id: int | None, root: str, provider_id: int | str | No
 
         for i, (layer, data) in enumerate(channels):
             if layer:
-                hdr['FILTER'] = (layer, 'Filter name')
                 if len(channels) > 1:
                     match layer:
                         case 'R':
+                            hdr['FILTER'] = ('Red', 'Filter name')
                             hdr['AGCMAP'] = 'Red'
                         case 'G':
+                            hdr['FILTER'] = ('Green', 'Filter name')
                             hdr['AGCMAP'] = 'Green'
                         case 'B':
+                            hdr['FILTER'] = ('Blue', 'Filter name')
                             hdr['AGCMAP'] = 'Blue'
 
             if len(channels) > 1 and layer:
