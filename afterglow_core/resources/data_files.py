@@ -10,7 +10,7 @@ from glob import glob
 from datetime import datetime, timezone
 import json
 from io import BytesIO
-from typing import BinaryIO, Dict as TDict, List as TList, Optional, Tuple, Union
+from typing import BinaryIO
 import warnings
 
 from sqlalchemy import Boolean, CheckConstraint, Column, ForeignKey, Integer, String, Text, UniqueConstraint
@@ -23,6 +23,7 @@ import astropy.io.fits as pyfits
 from astropy.wcs import FITSFixedWarning
 from astropy.io.fits.verify import VerifyWarning
 from flask import current_app
+import cv2
 
 from .. import errors
 from ..database import db
@@ -109,7 +110,7 @@ class DbSession(db.Model):
     name = Column(String(80), nullable=False)
     data = Column(Text(1 << 31), CheckConstraint('data is null or length(data) <= 1048576'), nullable=True, server_default='')
 
-    data_files: TList[DbDataFile] = relationship('DbDataFile', backref='session')
+    data_files: list[DbDataFile] = relationship('DbDataFile', backref='session')
 
 
 def init_data_files() -> None:
@@ -131,7 +132,7 @@ def init_data_files() -> None:
             alembic_context.run_migrations()
 
 
-def get_root(user_id: Optional[int]) -> str:
+def get_root(user_id: int | None) -> str:
     """
     Return the absolute path to the current authenticated user's data storage
     root directory
@@ -146,8 +147,8 @@ def get_root(user_id: Optional[int]) -> str:
     return os.path.abspath(os.path.expanduser(root))
 
 
-def save_data_file(root: str, file_id: int, data: Union[np.ndarray, np.ma.MaskedArray], hdr, modified: bool = True,
-                   origin: Tuple[int, int] | None = None, size: Tuple[int, int] | None = None) -> None:
+def save_data_file(root: str, file_id: int, data: np.ndarray | np.ma.MaskedArray, hdr, modified: bool = True,
+                   origin: tuple[int, int] | None = None, size: tuple[int, int] | None = None) -> None:
     """
     Save data file to the user's data file directory as a single-HDU FITS or a primary + table HDU FITS, depending on
     whether the input HDU contains an image or a table
@@ -254,11 +255,11 @@ def append_suffix(name: str, suffix: str):
     return name
 
 
-def create_data_file(user_id: Optional[int], name: Optional[str], root: str, data: np.ndarray, hdr=None,
-                     origin: Tuple[int, int] | None = None, size: Tuple[int, int] | None = None,
-                     provider: Optional[str] = None, path: Optional[str] = None, file_type: Optional[str] = None,
-                     metadata: Optional[dict] = None, layer: Optional[str] = None, duplicates: str = 'ignore',
-                     session_id: Optional[int] = None, group_name: Optional[str] = None, group_order: Optional[int] = 0,
+def create_data_file(user_id: int | None, name: str | None, root: str, data: np.ndarray, hdr=None,
+                     origin: tuple[int, int] | None = None, size: tuple[int, int] | None = None,
+                     provider: str | None = None, path: str | None = None, file_type: str | None = None,
+                     metadata: dict | None = None, layer: str | None = None, duplicates: str = 'ignore',
+                     session_id: int | None = None, group_name: str | None = None, group_order: int | None = 0,
                      allow_duplicate_file_name: bool = True, allow_duplicate_group_name: bool = False) -> DbDataFile:
     """
     Create a database entry for a new data file and save it to data file directory as a single (image) or double
@@ -402,9 +403,9 @@ def create_data_file(user_id: Optional[int], name: Optional[str], root: str, dat
     return db_data_file
 
 
-def import_data_file(user_id: Optional[int], root: str, provider_id: Optional[Union[int, str]],
-                     asset_path: Optional[str], asset_metadata: dict, fp, name: str, duplicates: str = 'ignore',
-                     session_id: Optional[int] = None) -> TList[DbDataFile]:
+def import_data_file(user_id: int | None, root: str, provider_id: int | str | None,
+                     asset_path: str | None, asset_metadata: dict, fp, name: str, duplicates: str = 'ignore',
+                     session_id: int | None = None) -> list[DbDataFile]:
     """
     Create data file(s) from a (possibly multi-layer) non-collection data
     provider asset or from an uploaded file
@@ -441,6 +442,7 @@ def import_data_file(user_id: Optional[int], root: str, provider_id: Optional[Un
 
             # Import each HDU as a separate data file
             layers = []
+            group_order = 0
             for i, hdu in enumerate(fits):
                 hdr = hdu.header
                 if isinstance(hdu, pyfits.ImageHDU.__base__) or isinstance(hdu, pyfits.CompImageHDU):
@@ -485,17 +487,17 @@ def import_data_file(user_id: Optional[int], root: str, provider_id: Optional[Un
                         hdr['NAXIS2'], hdr['NAXIS1'] = imshape
                         hdu.data = hdu.data.reshape(imshape)
 
-                # Obtain the unique layer name: filter name, extension name, or just the HDU index
-                layer = hdr.get('FILTER') or hdr.get('EXTNAME') or str(i + 1)
-                layer_base, layer_no = layer, 1
-                while layer in layers:
-                    layer = '{}.{}'.format(layer_base, layer_no)
-                    layer_no += 1
-                layers.append(layer)
-
-                # When importing multiple HDUs, add layer name to data file name; keep the original file extension
-                if len(fits) > 1 and layer:
-                    name = append_suffix(group_name, '.' + layer)
+                if 'BAYERPAT' in hdr:
+                    # Handle MaxIm color images
+                    conv = getattr(cv2, f"COLOR_Bayer{hdr['BAYERPAT']}2RGB")
+                    imgs = np.rollaxis(cv2.cvtColor(hdu.data, conv), 2)
+                    hdu_layers = ('R', 'G', 'B')
+                    bayer = True
+                else:
+                    # Monochrome image
+                    imgs = [hdu.data]
+                    hdu_layers = (hdr.get('FILTER') or hdr.get('EXTNAME') or str(i + 1),)
+                    bayer = False
 
                 if i and primary_header:
                     # Copy primary header cards to extension header
@@ -527,10 +529,37 @@ def import_data_file(user_id: Optional[int], root: str, provider_id: Optional[Un
                         del hdr[kw]
 
                 try:
-                    all_data_files.append(create_data_file(
-                        user_id, name, root, hdu.data, hdr, provider=provider_id, path=asset_path, file_type='FITS',
-                        metadata=asset_metadata, layer=layer, duplicates=duplicates, session_id=session_id,
-                        group_name=group_name, group_order=i, allow_duplicate_group_name=i > 0))
+                    for img, layer in zip(imgs, hdu_layers):
+                        # Obtain the unique layer name: filter name, extension name, or just the HDU index
+                        layer_base, layer_no = layer, 1
+                        while layer in layers:
+                            layer = '{}.{}'.format(layer_base, layer_no)
+                            layer_no += 1
+                        layers.append(layer)
+
+                        if bayer:
+                            match layer:
+                                case 'R':
+                                    hdr['FILTER'] = ('Red', 'Filter name')
+                                    hdr['AGCMAP'] = 'Red'
+                                case 'G':
+                                    hdr['FILTER'] = ('Green', 'Filter name')
+                                    hdr['AGCMAP'] = 'Green'
+                                case 'B':
+                                    hdr['FILTER'] = ('Blue', 'Filter name')
+                                    hdr['AGCMAP'] = 'Blue'
+
+                        # When importing multiple HDUs, add layer name to data file name; keep the original file
+                        # extension
+                        if len(fits) > 1 and layer or bayer:
+                            name = append_suffix(group_name, '.' + layer)
+
+                        all_data_files.append(create_data_file(
+                            user_id, name, root, img, hdr, provider=provider_id, path=asset_path, file_type='FITS',
+                            metadata=asset_metadata, layer=layer, duplicates=duplicates, session_id=session_id,
+                            group_name=group_name, group_order=group_order,
+                            allow_duplicate_group_name=group_order > 0))
+                        group_order += 1
                 except Exception as e:
                     raise CannotCreateDataFileError(reason=str(e))
 
@@ -652,14 +681,16 @@ def import_data_file(user_id: Optional[int], root: str, provider_id: Optional[Un
 
         for i, (layer, data) in enumerate(channels):
             if layer:
-                hdr['FILTER'] = (layer, 'Filter name')
                 if len(channels) > 1:
                     match layer:
                         case 'R':
+                            hdr['FILTER'] = ('Red', 'Filter name')
                             hdr['AGCMAP'] = 'Red'
                         case 'G':
+                            hdr['FILTER'] = ('Green', 'Filter name')
                             hdr['AGCMAP'] = 'Green'
                         case 'B':
+                            hdr['FILTER'] = ('Blue', 'Filter name')
                             hdr['AGCMAP'] = 'Blue'
 
             if len(channels) > 1 and layer:
@@ -705,7 +736,7 @@ def convert_exif_field(val):
     return str(val)
 
 
-def get_data_file_path(user_id: Optional[int], file_id: int) -> str:
+def get_data_file_path(user_id: int | None, file_id: int) -> str:
     """
     Return data file path on disk
 
@@ -720,7 +751,7 @@ def get_data_file_path(user_id: Optional[int], file_id: int) -> str:
     )
 
 
-def get_data_file_fits(user_id: Optional[int], file_id: int, mode: str = 'readonly', read_data: bool = True) \
+def get_data_file_fits(user_id: int | None, file_id: int, mode: str = 'readonly', read_data: bool = True) \
         -> pyfits.HDUList:
     """
     Return FITS file given the data file ID
@@ -873,7 +904,7 @@ def get_data_file_data(user_id: int | None, file_id: int, x0: int | str | None =
     return data, hdr
 
 
-def get_data_file_uint8(user_id: Optional[int], file_id: int) -> np.ndarray:
+def get_data_file_uint8(user_id: int | None, file_id: int) -> np.ndarray:
     """
     Return image file data array scaled to 8-bit unsigned integer format suitable for exporting to PNG, JPEG, etc.
 
@@ -894,7 +925,7 @@ def get_data_file_uint8(user_id: Optional[int], file_id: int) -> np.ndarray:
     return data
 
 
-def get_data_file_bytes(user_id: Optional[int], file_id: Union[int, str], fmt: Optional[str] = None) -> bytes:
+def get_data_file_bytes(user_id: int | None, file_id: int | str, fmt: str | None = None) -> bytes:
     """
     Return FITS file data for data file with the given ID
 
@@ -928,8 +959,8 @@ def get_data_file_bytes(user_id: Optional[int], file_id: Union[int, str], fmt: O
     return buf.getvalue()
 
 
-def get_data_file_group_bytes(user_id: Optional[int], group_name: str, fmt: Optional[str] = None,
-                              mode: Optional[str] = None) -> bytes:
+def get_data_file_group_bytes(user_id: int | None, group_name: str, fmt: str | None = None,
+                              mode: str | None = None) -> bytes:
     """
     Return data combined from a data file group in the original format, suitable for exporting to data provider
 
@@ -1010,7 +1041,7 @@ def get_data_file_group_bytes(user_id: Optional[int], group_name: str, fmt: Opti
     return buf.getvalue()
 
 
-def get_data_file(user_id: Optional[int], file_id: Union[int, str]) -> DataFile:
+def get_data_file(user_id: int | None, file_id: int | str) -> DataFile:
     """
     Return data file object for the given ID
 
@@ -1037,7 +1068,7 @@ def get_data_file(user_id: Optional[int], file_id: Union[int, str]) -> DataFile:
         raise
 
 
-def get_data_file_group(user_id: Optional[int], group_name: str) -> TList[DataFile]:
+def get_data_file_group(user_id: int | None, group_name: str) -> list[DataFile]:
     """
     Return data file objects belonging to the given group
 
@@ -1055,7 +1086,7 @@ def get_data_file_group(user_id: Optional[int], group_name: str) -> TList[DataFi
         raise
 
 
-def query_data_files(user_id: Optional[int], session_id: Optional[Union[int, str]]) -> TList[DataFile]:
+def query_data_files(user_id: int | None, session_id: int | str | None) -> list[DataFile]:
     """
     Return data file objects matching the given criteria
 
@@ -1082,19 +1113,19 @@ def query_data_files(user_id: Optional[int], session_id: Optional[Union[int, str
         raise
 
 
-def import_data_files(user_id: Optional[int],
-                      session_id: Optional[int] = None,
-                      provider_id: Optional[Union[int, str]] = None,
-                      path: Optional[Union[TList[str], str]] = None,
-                      name: Optional[str] = None,
-                      file_id: Optional[int] = None,
+def import_data_files(user_id: int | None,
+                      session_id: int | None = None,
+                      provider_id: int | str | None = None,
+                      path: list[str] | str | None = None,
+                      name: str | None = None,
+                      file_id: int | None = None,
                       duplicates: str = 'ignore',
                       recurse: bool = False,
-                      width: Optional[int] = None,
-                      height: Optional[int] = None,
+                      width: int | None = None,
+                      height: int | None = None,
                       pixel_value: float = 0,
-                      files: Optional[TDict[str, BinaryIO]] = None) \
-        -> TList[DataFile]:
+                      files: dict[str, BinaryIO] | None = None) \
+        -> list[DataFile]:
     """
     Create, import, or upload data files defined by request parameters:
         `provider_id` = None:
@@ -1240,7 +1271,7 @@ def import_data_files(user_id: Optional[int],
     return [DataFile(f) for f in all_data_files]
 
 
-def update_data_file(user_id: Optional[int], data_file_id: int, data_file: DataFile, force: bool = False) -> DataFile:
+def update_data_file(user_id: int | None, data_file_id: int, data_file: DataFile, force: bool = False) -> DataFile:
     """
     Update the existing data file parameters
 
@@ -1281,8 +1312,8 @@ def update_data_file(user_id: Optional[int], data_file_id: int, data_file: DataF
     return data_file
 
 
-def update_data_file_asset(user_id: Optional[int],
-                           data_file_id: Union[int, str],
+def update_data_file_asset(user_id: int | None,
+                           data_file_id: int | str,
                            provider_id: str, asset_path: str,
                            asset_metadata: dict, name: str) -> None:
     """
@@ -1311,7 +1342,7 @@ def update_data_file_asset(user_id: Optional[int],
         raise
 
 
-def update_data_file_group_asset(user_id: Optional[int], group_name: str,
+def update_data_file_group_asset(user_id: int | None, group_name: str,
                                  provider_id: str, asset_path: str,
                                  asset_metadata: dict) -> None:
     """
@@ -1339,7 +1370,7 @@ def update_data_file_group_asset(user_id: Optional[int], group_name: str,
         raise
 
 
-def delete_data_file(user_id: Optional[int], file_id: int) -> None:
+def delete_data_file(user_id: int | None, file_id: int) -> None:
     """
     Remove the given data file from database and delete all associated disk files
 
@@ -1365,7 +1396,7 @@ def delete_data_file(user_id: Optional[int], file_id: int) -> None:
             current_app.logger.warning('Error removing data file "%s" (ID %d) [%s]', filename, file_id, e)
 
 
-def get_session(user_id: Optional[int], session_id: Union[int, str]) -> Session:
+def get_session(user_id: int | None, session_id: int | str) -> Session:
     """
     Return session object with the given ID or name
 
@@ -1388,7 +1419,7 @@ def get_session(user_id: Optional[int], session_id: Union[int, str]) -> Session:
         raise
 
 
-def query_sessions(user_id: Optional[int]) -> TList[Session]:
+def query_sessions(user_id: int | None) -> list[Session]:
     """
     Return all user's sessions
 
@@ -1403,7 +1434,7 @@ def query_sessions(user_id: Optional[int]) -> TList[Session]:
         raise
 
 
-def create_session(user_id: Optional[int], session: Session) -> Session:
+def create_session(user_id: int | None, session: Session) -> Session:
     """
     Create a new session with the given parameters
 
@@ -1440,7 +1471,7 @@ def create_session(user_id: Optional[int], session: Session) -> Session:
     return session
 
 
-def update_session(user_id: Optional[int], session_id: int, session: Session) -> Session:
+def update_session(user_id: int | None, session_id: int, session: Session) -> Session:
     """
     Update the existing session
 
@@ -1473,7 +1504,7 @@ def update_session(user_id: Optional[int], session_id: int, session: Session) ->
     return session
 
 
-def delete_session(user_id: Optional[int], session_id: int) -> None:
+def delete_session(user_id: int | None, session_id: int) -> None:
     """
     Delete session with the given ID
 
