@@ -551,7 +551,7 @@ def import_data_file(user_id: int | None, root: str, provider_id: int | str | No
 
                         # When importing multiple HDUs, add layer name to data file name; keep the original file
                         # extension
-                        if len(fits) > 1 and layer:
+                        if len(fits) > 1 and layer or bayer:
                             name = append_suffix(group_name, '.' + layer)
 
                         all_data_files.append(create_data_file(
