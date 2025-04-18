@@ -442,6 +442,7 @@ def import_data_file(user_id: int | None, root: str, provider_id: int | str | No
 
             # Import each HDU as a separate data file
             layers = []
+            group_order = 0
             for i, hdu in enumerate(fits):
                 hdr = hdu.header
                 if isinstance(hdu, pyfits.ImageHDU.__base__) or isinstance(hdu, pyfits.CompImageHDU):
@@ -528,7 +529,7 @@ def import_data_file(user_id: int | None, root: str, provider_id: int | str | No
                         del hdr[kw]
 
                 try:
-                    for j, (img, layer) in enumerate(zip(imgs, hdu_layers)):
+                    for img, layer in zip(imgs, hdu_layers):
                         # Obtain the unique layer name: filter name, extension name, or just the HDU index
                         layer_base, layer_no = layer, 1
                         while layer in layers:
@@ -554,9 +555,11 @@ def import_data_file(user_id: int | None, root: str, provider_id: int | str | No
                             name = append_suffix(group_name, '.' + layer)
 
                         all_data_files.append(create_data_file(
-                                user_id, name, root, img, hdr, provider=provider_id, path=asset_path, file_type='FITS',
-                                metadata=asset_metadata, layer=layer, duplicates=duplicates, session_id=session_id,
-                                group_name=group_name, group_order=j if bayer else i, allow_duplicate_group_name=bayer))
+                            user_id, name, root, img, hdr, provider=provider_id, path=asset_path, file_type='FITS',
+                            metadata=asset_metadata, layer=layer, duplicates=duplicates, session_id=session_id,
+                            group_name=group_name, group_order=group_order,
+                            allow_duplicate_group_name=group_order > 0))
+                        group_order += 1
                 except Exception as e:
                     raise CannotCreateDataFileError(reason=str(e))
 
