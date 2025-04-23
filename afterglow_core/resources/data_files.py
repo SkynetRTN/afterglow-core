@@ -487,17 +487,17 @@ def import_data_file(user_id: int | None, root: str, provider_id: int | str | No
                         hdr['NAXIS2'], hdr['NAXIS1'] = imshape
                         hdu.data = hdu.data.reshape(imshape)
 
-                if 'BAYERPAT' in hdr:
+                bayer = 'BAYERPAT' in hdr
+                if bayer:
                     # Handle MaxIm color images
                     conv = getattr(cv2, f"COLOR_Bayer{hdr['BAYERPAT']}2RGB")
                     imgs = np.rollaxis(cv2.cvtColor(hdu.data, conv), 2)
                     hdu_layers = ('R', 'G', 'B')
-                    bayer = True
+                    del hdr['BAYERPAT']
                 else:
                     # Monochrome image
                     imgs = [hdu.data]
                     hdu_layers = (hdr.get('FILTER') or hdr.get('EXTNAME') or str(i + 1),)
-                    bayer = False
 
                 if i and primary_header:
                     # Copy primary header cards to extension header
