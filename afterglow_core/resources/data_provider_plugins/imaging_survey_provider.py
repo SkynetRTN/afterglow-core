@@ -8,7 +8,6 @@ from io import BytesIO
 from threading import Lock
 
 from astropy import units as u
-from astropy.coordinates import Angle
 from astroquery.skyview import SkyView
 
 from ...models import DataProvider, DataProviderAsset
@@ -18,6 +17,10 @@ from ..imaging_surveys import survey_scales
 
 
 __all__ = ['ImagingSurveyDataProvider']
+
+
+if SkyView.URL.startswith('http://'):
+    SkyView.URL = SkyView.URL.replace('http://', 'https://', 1)
 
 
 class ImagingSurveyDataProvider(DataProvider):
