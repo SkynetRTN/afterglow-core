@@ -76,7 +76,7 @@ pywin32-ctypes==0.2.3; sys_platform == "win32"
 pyyaml==6.0.2
 rawpy==0.25.0
 redis==5.2.1
-requests==2.32.3
+requests==2.32.4
 requests-oauthlib==2.0.0
 scipy==1.15.3
 secretstorage==3.3.3; sys_platform == "linux"
