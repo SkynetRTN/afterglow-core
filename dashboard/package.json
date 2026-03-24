@@ -4,6 +4,7 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve --proxy-config proxy.config.json --port 4201",
+    "start-job-server": "celery -A afterglow_core.job_server:celery_app worker -E -l INFO -P eventlet",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"

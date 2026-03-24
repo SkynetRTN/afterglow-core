@@ -22,6 +22,7 @@ class StackingSettingsSchema(AfterglowSchema):
     rejection: str = String(dump_default=None)
     lo: float = Float(dump_default=None)
     hi: float = Float(dump_default=None)
+    nu_col: float = Float(dump_default=None)
     propagate_mask: bool = Boolean(dump_default=True)
     equalize_additive: bool = Boolean(dump_default=False)
     equalize_order: int = Integer(dump_default=0)

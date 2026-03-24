@@ -327,14 +327,14 @@ def create_app() -> Flask:
     logger = getLogger()
     logger.setLevel('INFO')
     logger.addHandler(AfterglowLogHandler(
-        os.path.join(os.environ.get('AFTERGLOW_LOGGING_ROOT', '/skynet/logs'), 'afterglow.log'),
+        os.path.join(os.environ.get('AFTERGLOW_LOGGING_ROOT', '/Users/archon/skynet/afterglow/afterglow-logs'), 'afterglow.log'),
         when='D', backupCount=10, max_bytes=1 << 20, encoding='utf8'))
 
     # noinspection PyShadowingNames
     app = Flask(__name__)
     cors = CORS(app, resources={'/api/*': {'origins': '*'}})
     app.config.from_object('afterglow_core.default_cfg')
-    app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=True)
+    app.config.from_envvar('AFTERGLOW_CORE_CONFIG', silent=False)
     app.config.from_envvar('AFTERGLOW_CORE_SECRETS', silent=True)
 
     proxy_count = app.config.get('APP_PROXY')

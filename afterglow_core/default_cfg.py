@@ -8,9 +8,10 @@ APPLICATION_ROOT = '/core'
 DASHBOARD_PREFIX = ''
 
 # Location of the general Afterglow Core data files
-DATA_ROOT = '.'
+DATA_ROOT = ''
 
-
+#Enable Flask debug mode for local dev
+DEBUG = True
 ###############################################################################
 # Database engine options
 ###############################################################################
@@ -18,17 +19,16 @@ DATA_ROOT = '.'
 # Database backend: "Mysql", "mysql+mysqldb", etc.; see
 # https://docs.sqlalchemy.org/en/14/core/engines.html
 # Note: sqlite not supported
-DB_BACKEND = ''
+DB_BACKEND = 'mysql+pymysql'
 
 # Database server address
 DB_HOST = 'localhost'
 DB_PORT = 3306
 
 # Database server username/password
-DB_USER = 'afterglow_core'
+DB_USER = ''
 # Password must be encrypted with afterglow_core/scripts/encrypt.py
 DB_PASS = ''
-
 # Database schema containing all Afterglow Core tables
 DB_SCHEMA = 'afterglow'
 
@@ -169,11 +169,11 @@ JOB_SERVER_USER = 'guest'
 JOB_SERVER_PASS = ''
 
 # RabbitMQ broker virtual host
-JOB_SERVER_VHOST = 'afterglow'
+JOB_SERVER_VHOST = '/'
 
 # Maximum RAM in megabytes allowed to be allocated by certain memory-intensive
 # operations
-JOB_MAX_RAM = 100.0
+JOB_MAX_RAM = 4000
 
 # Maximum allowed job run time in seconds; None = no limit
 JOB_TIMEOUT = 3600
