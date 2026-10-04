@@ -57,7 +57,7 @@ class SkynetGOOAuthPlugin(OAuthServerPluginBase):
     def __init__(self,
                  description: Optional[str] =
                  'Login via Skynet Global Observatory',
-                 icon: Optional[str] = 'skynet_btn_icon.png',
+                 icon: Optional[str] = 'skynetgo_btn_icon.png',
                  register_users: Optional[bool] = None,
                  authorize_url: str = 'https://auth.skynetgo.org/authorize',
                  access_token_url: str =
