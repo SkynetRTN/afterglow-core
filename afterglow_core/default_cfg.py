@@ -54,6 +54,14 @@ AUTH_ENABLED = True
 #          'authorize_url': 'https://api.twitter.com/oauth/authenticate',
 #          'client_id': '<client id>', 'client_secret': '<client secret'}
 #     ]
+#
+# Sign in with a Skynet Global Observatory (skynetgo.org) account — see
+# auth_plugins/skynetgo_oauth.py. Endpoints default to production SkynetGO;
+# only the client credentials are required:
+#     AUTH_PLUGINS = [
+#         {'name': 'skynetgo', 'client_id': 'afterglow-legacy',
+#          'client_secret': '<secret on the SkynetGO oauth_clients row>'},
+#     ]
 AUTH_PLUGINS = []
 
 # Automatically register authenticated users if missing from the local user
