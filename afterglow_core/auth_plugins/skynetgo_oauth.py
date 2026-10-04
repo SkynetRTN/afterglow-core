@@ -83,11 +83,15 @@ class SkynetGOOAuthPlugin(OAuthServerPluginBase):
         :param client_id: client ID
         :param client_secret: client secret
         :param request_token_params: extra authorization-request parameters;
-            defaults to ``{'scope': scope}`` -- the dashboard adds
-            ``response_type=code`` itself
+            defaults to ``{'response_type': 'code', 'scope': scope}``
         """
         if request_token_params is None:
-            request_token_params = {'scope': scope}
+            # The core's own Angular sign-in page (served at /core/sign-in in
+            # production) forwards only state, client_id, redirect_uri and
+            # these params -- it does NOT add response_type itself, and
+            # SkynetGO rejects an authorize request without one. The legacy
+            # Skynet plugin carries response_type for the same reason.
+            request_token_params = {'response_type': 'code', 'scope': scope}
 
         # Always set id=name so the plugin is addressable as "skynetgo"
         super(SkynetGOOAuthPlugin, self).__init__(
