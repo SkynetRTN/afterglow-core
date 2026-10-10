@@ -36,5 +36,4 @@ def init_db(app: Flask, cipher: Fernet) -> None:
     app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('pool_size', app.config['DB_POOL_SIZE'])
     app.config['SQLALCHEMY_ENGINE_OPTIONS'].setdefault('pool_pre_ping', False)
     app.config.setdefault('SQLALCHEMY_TRACK_MODIFICATIONS', False)
-
     db.init_app(app)

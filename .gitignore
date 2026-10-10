@@ -4,6 +4,7 @@ plugins/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
+.DS_store
 *.py[cod]
 *$py.class
 

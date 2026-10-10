@@ -26,6 +26,7 @@ class StackingSettings(AfterglowSchema):
     rejection: str = String(dump_default=None)
     lo: float = Float(dump_default=None)
     hi: float = Float(dump_default=None)
+    nu_col: float = Float(dump_default=None)
     propagate_mask: bool = Boolean(dump_default=True)
     equalize_additive: bool = Boolean(dump_default=False)
     equalize_order: int = Integer(dump_default=0)
@@ -83,6 +84,7 @@ class StackingJob(Job):
             settings.scaling = None
 
         lo, hi = settings.lo, settings.hi
+        nu_col = settings.nu_col
         if settings.rejection == 'iraf':
             if lo is not None:
                 if lo % 1:
@@ -102,6 +104,10 @@ class StackingJob(Job):
                     raise ValueError('Positive clipping flag for rejection=chauvenet|rcr must be 0 or 1')
                 hi = bool(int(hi))
 
+        if settings.rejection == "chauvenet":
+            if nu_col is not None:
+                if nu_col !=0 and nu_col != 1 and nu_col !=2 and nu_col !=4:
+                    raise ValueError('Nu col flag for rejection=chauvenet must be 0, 1, 2, or 4')
         if settings.smart_stacking is not None:
             if settings.smart_stacking not in ('none', 'SNR', 'sharpness'):
                 raise ValueError(f'Unsupported smart stacking mode "{settings.smart_stacking}"')
@@ -137,6 +143,7 @@ class StackingJob(Job):
                 rejection=settings.rejection,
                 lo=lo,
                 hi=hi,
+                nu=nu_col,
                 propagate_mask=settings.propagate_mask,
                 equalize_additive=settings.equalize_additive,
                 equalize_order=settings.equalize_order,
